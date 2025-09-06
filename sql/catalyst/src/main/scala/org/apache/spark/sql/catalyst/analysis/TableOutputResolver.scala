@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType, UserDefinedType}
+import org.apache.spark.sql.types._
 
 object TableOutputResolver extends SQLConfHelper with Logging {
 
@@ -87,30 +87,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         tableName, expected.map(_.name), query.output)
     }
 
-    val errors = new mutable.ArrayBuffer[String]()
-    val resolved: Seq[NamedExpression] = if (byName) {
-      // If a top-level column does not have a corresponding value in the input query, fill with
-      // the column's default value. We need to pass `fillDefaultValue` as true here, if the
-      // `supportColDefaultValue` parameter is also true.
-      reorderColumnsByName(
-        tableName,
-        query.output,
-        expected,
-        conf,
-        errors += _,
-        fillDefaultValue = supportColDefaultValue)
-    } else {
-      if (expected.size > query.output.size) {
-        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, expected.map(_.name), query.output)
-      }
-      resolveColumnsByPosition(tableName, query.output, expected, conf, errors += _)
-    }
-
-    if (errors.nonEmpty) {
-      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
-        tableName, expected.map(_.name).map(toSQLId).mkString(", "))
-    }
+    val resolved = resolveColumns(tableName, query.output, expected,
+      conf, byName, supportColDefaultValue)
 
     if (resolved == query.output) {
       query
@@ -119,50 +97,36 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
   }
 
-  def resolveUpdate(
+  def resolveField(
       tableName: String,
       value: Expression,
       col: Attribute,
+      byName: Boolean,
       conf: SQLConf,
-      addError: String => Unit,
-      colPath: Seq[String]): Expression = {
-
-    (value.dataType, col.dataType) match {
+      colPath: Seq[String]): NamedExpression = {
+    val resolved = (value.dataType, col.dataType) match {
       // no need to reorder inner fields or cast if types are already compatible
       case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
-        val canWriteExpr = canWrite(
-          tableName, valueType, colType, byName = true, conf, addError, colPath)
-        if (canWriteExpr) {
-          applyColumnMetadata(checkNullability(value, col, conf, colPath), col)
-        } else {
-          value
-        }
+        verifyCanWrite(tableName, valueType, colType, byName, conf, colPath)
+        withNullabilityChecked(value, col, conf, colPath)
       case (valueType: StructType, colType: StructType) =>
-        val resolvedValue = resolveStructType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath)
-        resolvedValue.getOrElse(value)
+        resolveStructType(tableName, value, valueType, col, colType, byName, conf, colPath)
       case (valueType: ArrayType, colType: ArrayType) =>
-        val resolvedValue = resolveArrayType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath)
-        resolvedValue.getOrElse(value)
+        resolveArrayType(tableName, value, valueType, col, colType, byName, conf, colPath)
       case (valueType: MapType, colType: MapType) =>
-        val resolvedValue = resolveMapType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath)
-        resolvedValue.getOrElse(value)
+        resolveMapType(tableName, value, valueType, col, colType, byName, conf, colPath)
       case _ =>
-        checkUpdate(tableName, value, col, conf, addError, colPath)
+        resolveBasicType(tableName, value, col, conf, colPath)
     }
+
+    applyColumnMetadata(resolved, col)
   }
 
-  private def checkUpdate(
+  private def resolveBasicType(
       tableName: String,
       value: Expression,
       attr: Attribute,
       conf: SQLConf,
-      addError: String => Unit,
       colPath: Seq[String]): Expression = {
 
     val attrTypeHasCharVarchar = CharVarcharUtils.hasCharVarchar(attr.dataType)
@@ -172,22 +136,18 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       attr.dataType
     }
 
-    val canWriteValue = canWrite(
-      tableName, value.dataType, attrTypeWithoutCharVarchar,
-      byName = true, conf, addError, colPath)
+    verifyCanWrite(tableName, value.dataType, attrTypeWithoutCharVarchar, byName = true,
+      conf, colPath)
 
-    if (canWriteValue) {
-      val nullCheckedValue = checkNullability(value, attr, conf, colPath)
-      val casted = cast(nullCheckedValue, attrTypeWithoutCharVarchar, conf, colPath.quoted)
-      val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
-        casted
-      } else {
-        CharVarcharUtils.stringLengthCheck(casted, attr.dataType)
+    var expr = unwrapUDT(value)
+    expr = withNullabilityChecked(expr, attr, conf, colPath)
+    if (!DataTypeUtils.sameType(attr.dataType, expr.dataType)) {
+      expr = cast(expr, attrTypeWithoutCharVarchar, conf, colPath.quoted)
+      if (!conf.charVarcharAsString && attrTypeHasCharVarchar) {
+        expr = CharVarcharUtils.stringLengthCheck(expr, attr.dataType)
       }
-      applyColumnMetadata(exprWithStrLenCheck, attr)
-    } else {
-      value
     }
+    expr
   }
 
 
@@ -214,6 +174,17 @@ object TableOutputResolver extends SQLConfHelper with Logging {
    *
    * See SPARK-52772 for a discussion on rewrites that caused trouble with
    * going from resolved to unresolved.
+   *
+   * There are some rewrites the undo our efforts to set the metadata (see below).
+   * If we return the two inherited childMetadata, this may cause some
+   * writers to behave incorrectly, or if the childMetadata has
+   * the char/varchar key, then the update will flip from resolved back to unresolved,
+   * which causes validateOptimizedPlan to throw exception.
+   *
+   * So we choose representations that:
+   *   - keep the table attr metadata when nonempty
+   *   - never keeps the char/varchar key
+   *   - may leak the query meta
    */
   private def applyColumnMetadata(expr: Expression, column: Attribute): NamedExpression = {
     // We have dealt with the required write-side char/varchar processing.
@@ -244,23 +215,47 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
   }
 
-
-  private def canWrite(
+  private def verifyCanWrite(
       tableName: String,
       valueType: DataType,
       expectedType: DataType,
       byName: Boolean,
       conf: SQLConf,
-      addError: String => Unit,
-      colPath: Seq[String]): Boolean = {
+      colPath: Seq[String]): Unit = {
     conf.storeAssignmentPolicy match {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
-        DataTypeUtils.canWrite(
+        DataTypeUtils.verifyCanWrite(
           tableName, valueType, expectedType, byName, conf.resolver, colPath.quoted,
-          conf.storeAssignmentPolicy, addError)
-      case _ =>
-        true
+          conf.storeAssignmentPolicy)
+      case StoreAssignmentPolicy.LEGACY =>
+        // LEGACY mode just adds Casts blindly, and Spark will only fail
+        // if the type is not castable. The error is the same as a user-specified CAST.
     }
+  }
+
+  private def resolveColumns(
+      tableName: String,
+      inputCols: Seq[NamedExpression],
+      expectedCols: Seq[Attribute],
+      conf: SQLConf,
+      byName: Boolean,
+      fillDefaultValue: Boolean,
+      colPath: Seq[String] = Nil): Seq[NamedExpression] = {
+    val actualExpectedCols = expectedCols.map { c =>
+      CharVarcharUtils.getRawType(c.metadata).map(c.withDataType).getOrElse(c)
+    }
+
+    val resolved = if (byName) {
+      reorderColumnsByName(tableName, inputCols, actualExpectedCols, conf,
+        colPath, fillDefaultValue)
+    } else {
+      resolveColumnsByPosition(tableName, inputCols, actualExpectedCols, conf, colPath)
+    }
+    assert(resolved.length == expectedCols.length,
+      s"expected number of resolved byName=$byName columns" +
+          s"${expectedCols.length} != ${resolved.length}")
+
+    resolved
   }
 
   private def reorderColumnsByName(
@@ -268,11 +263,10 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       inputCols: Seq[NamedExpression],
       expectedCols: Seq[Attribute],
       conf: SQLConf,
-      addError: String => Unit,
       colPath: Seq[String] = Nil,
       fillDefaultValue: Boolean = false): Seq[NamedExpression] = {
     val matchedCols = mutable.HashSet.empty[String]
-    val reordered = expectedCols.flatMap { expectedCol =>
+    val reordered = expectedCols.map { expectedCol =>
       val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
@@ -281,12 +275,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         } else {
           None
         }
-        if (defaultExpr.isEmpty) {
+        defaultExpr.getOrElse {
           throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
             tableName, newColPath.quoted
           )
         }
-        Some(applyColumnMetadata(defaultExpr.get, expectedCol))
+        applyColumnMetadata(defaultExpr.get, expectedCol)
       } else if (matched.length > 1) {
         throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
           tableName, newColPath.quoted
@@ -294,45 +288,21 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       } else {
         matchedCols += matched.head.name
         val matchedCol = matched.head
-        val actualExpectedCol = expectedCol.withDataType {
-          CharVarcharUtils.getRawType(expectedCol.metadata).getOrElse(expectedCol.dataType)
-        }
-        (matchedCol.dataType, actualExpectedCol.dataType) match {
-          case (matchedType: StructType, expectedType: StructType) =>
-            resolveStructType(
-              tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath)
-          case (matchedType: ArrayType, expectedType: ArrayType) =>
-            resolveArrayType(
-              tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath)
-          case (matchedType: MapType, expectedType: MapType) =>
-            resolveMapType(
-              tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath)
-          case _ =>
-            checkField(
-              tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath)
-        }
+        resolveField(tableName, matchedCol, expectedCol, byName = true, conf, newColPath)
       }
     }
 
-    if (reordered.length == expectedCols.length) {
-      if (matchedCols.size < inputCols.length) {
-        val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-          .map(col => s"${toSQLId(col.name)}").mkString(", ")
-        if (colPath.isEmpty) {
-          throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(tableName,
-            extraCols)
-        } else {
-          throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-            tableName, colPath.quoted, extraCols)
-        }
+    if (matchedCols.size < inputCols.length) {
+      val extraCols = columnsToString(inputCols.filterNot(col => matchedCols.contains(col.name)))
+      if (colPath.isEmpty) {
+        throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(tableName,
+          extraCols)
       } else {
-        reordered
+        throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+          tableName, colPath.quoted, extraCols)
       }
     } else {
-      Nil
+      reordered
     }
   }
 
@@ -341,30 +311,22 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       inputCols: Seq[NamedExpression],
       expectedCols: Seq[Attribute],
       conf: SQLConf,
-      addError: String => Unit,
       colPath: Seq[String] = Nil): Seq[NamedExpression] = {
-    val actualExpectedCols = expectedCols.map { attr =>
-      attr.withDataType { CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType) }
-    }
-    if (inputCols.size > actualExpectedCols.size) {
-      val extraColsStr = inputCols.takeRight(inputCols.size - actualExpectedCols.size)
-        .map(col => toSQLId(col.name))
-        .mkString(", ")
+    if (inputCols.size > expectedCols.size) {
+      val extraColsStr = columnsToString(inputCols.drop(expectedCols.size))
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName,
-          actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
+          expectedCols.map(_.name), inputCols.map(_.toAttribute))
       } else {
         throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
           tableName, colPath.quoted, extraColsStr
         )
       }
-    } else if (inputCols.size < actualExpectedCols.size) {
-      val missingColsStr = actualExpectedCols.takeRight(actualExpectedCols.size - inputCols.size)
-        .map(col => toSQLId(col.name))
-        .mkString(", ")
+    } else if (inputCols.size < expectedCols.size) {
+      val missingColsStr = columnsToString(expectedCols.drop(inputCols.size))
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
-          actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
+          expectedCols.map(_.name), inputCols.map(_.toAttribute))
       } else {
         throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
           tableName, colPath.quoted, missingColsStr
@@ -372,28 +334,17 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       }
     }
 
-    inputCols.zip(actualExpectedCols).flatMap { case (inputCol, expectedCol) =>
+    inputCols.zip(expectedCols).map { case (inputCol, expectedCol) =>
       val newColPath = colPath :+ expectedCol.name
-      (inputCol.dataType, expectedCol.dataType) match {
-        case (inputType: StructType, expectedType: StructType) =>
-          resolveStructType(
-            tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath)
-        case (inputType: ArrayType, expectedType: ArrayType) =>
-          resolveArrayType(
-            tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath)
-        case (inputType: MapType, expectedType: MapType) =>
-          resolveMapType(
-            tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath)
-        case _ =>
-          checkField(tableName, expectedCol, inputCol, byName = false, conf, addError, newColPath)
-      }
+      resolveField(tableName, inputCol, expectedCol, byName = false, conf, newColPath)
     }
   }
 
-  private[sql] def checkNullability(
+  private def columnsToString(cols: Seq[NamedExpression]): String =
+    cols.map(col => toSQLId(col.name)).mkString(", ")
+
+
+  private[sql] def withNullabilityChecked(
       input: Expression,
       expected: Attribute,
       conf: SQLConf,
@@ -420,28 +371,21 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedType: StructType,
       byName: Boolean,
       conf: SQLConf,
-      addError: String => Unit,
-      colPath: Seq[String]): Option[NamedExpression] = {
-    val nullCheckedInput = checkNullability(input, expected, conf, colPath)
+      colPath: Seq[String]): Expression = {
+    val nullCheckedInput = withNullabilityChecked(input, expected, conf, colPath)
     val fields = inputType.zipWithIndex.map { case (f, i) =>
+      // todo: this blows up input evaluation by each field!
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
     }
-    val resolved = if (byName) {
-      reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath)
+    val resolved = resolveColumns(tableName, fields, toAttributes(expectedType),
+      conf, byName, fillDefaultValue = false, colPath)
+
+    // This may reconstruct a struct unnecessarily, but hopefully it gets cleaned up by rewrites.
+    val struct = CreateStruct(resolved)
+    if (nullCheckedInput.nullable) {
+      If(IsNull(nullCheckedInput), Literal(null, struct.dataType), struct)
     } else {
-      resolveColumnsByPosition(
-        tableName, fields, toAttributes(expectedType), conf, addError, colPath)
-    }
-    if (resolved.length == expectedType.length) {
-      val struct = CreateStruct(resolved)
-      val res = if (nullCheckedInput.nullable) {
-        If(IsNull(nullCheckedInput), Literal(null, struct.dataType), struct)
-      } else {
-        struct
-      }
-      Some(applyColumnMetadata(res, expected))
-    } else {
-      None
+      struct
     }
   }
 
@@ -453,29 +397,20 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedType: ArrayType,
       byName: Boolean,
       conf: SQLConf,
-      addError: String => Unit,
-      colPath: Seq[String]): Option[NamedExpression] = {
-    val nullCheckedInput = checkNullability(input, expected, conf, colPath)
+      colPath: Seq[String]): Expression = {
+    val nullCheckedInput = withNullabilityChecked(input, expected, conf, colPath)
     val param = NamedLambdaVariable("element", inputType.elementType, inputType.containsNull)
     val fakeAttr =
       AttributeReference("element", expectedType.elementType, expectedType.containsNull)()
-    val res = if (byName) {
-      reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
+    val res = resolveColumns(tableName, Seq(param), Seq(fakeAttr),
+      conf, byName, fillDefaultValue = false, colPath)
+    if (res.head == param) {
+      // If the element type is the same, we can reuse the input array directly.
+      nullCheckedInput
     } else {
-      resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
-    }
-    if (res.length == 1) {
-      val castedArray =
-        if (res.head == param) {
-          // If the element type is the same, we can reuse the input array directly.
-          nullCheckedInput
-        } else {
-          val func = LambdaFunction(res.head, Seq(param))
-          ArrayTransform(nullCheckedInput, func)
-        }
-      Some(applyColumnMetadata(castedArray, expected))
-    } else {
-      None
+      // todo: can't we just use a cast here?
+      val func = LambdaFunction(res.head, Seq(param))
+      ArrayTransform(nullCheckedInput, func)
     }
   }
 
@@ -487,60 +422,47 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedType: MapType,
       byName: Boolean,
       conf: SQLConf,
-      addError: String => Unit,
-      colPath: Seq[String]): Option[NamedExpression] = {
-    val nullCheckedInput = checkNullability(input, expected, conf, colPath)
+      colPath: Seq[String]): Expression = {
+    val nullCheckedInput = withNullabilityChecked(input, expected, conf, colPath)
 
     val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
     val fakeKeyAttr = AttributeReference("key", expectedType.keyType, nullable = false)()
-    val resKey = if (byName) {
-      reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
-    } else {
-      resolveColumnsByPosition(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
-    }
+    val resKey = resolveColumns(tableName, Seq(keyParam), Seq(fakeKeyAttr),
+      conf, byName, fillDefaultValue = false, colPath)
 
     val valueParam =
       NamedLambdaVariable("value", inputType.valueType, inputType.valueContainsNull)
     val fakeValueAttr =
       AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
-    val resValue = if (byName) {
-      reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
-    } else {
-      resolveColumnsByPosition(
-        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
-    }
+    val resValue = resolveColumns(tableName, Seq(valueParam), Seq(fakeValueAttr),
+      conf, byName, fillDefaultValue = false, colPath)
 
-    if (resKey.length == 1 && resValue.length == 1) {
-      // If the key and value expressions have not changed, we just check original map field.
-      // Otherwise, we construct a new map by adding transformations to the keys and values.
-      val casted =
-        if (resKey.head == keyParam && resValue.head == valueParam) {
-          nullCheckedInput
-        } else {
-          val newKeys = if (resKey.head != keyParam) {
-            val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
-            ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
-          } else {
-            MapKeys(nullCheckedInput)
-          }
-          val newValues = if (resValue.head != valueParam) {
-            val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
-            ArrayTransform(MapValues(nullCheckedInput), valueFunc)
-          } else {
-            MapValues(nullCheckedInput)
-          }
-          MapFromArrays(newKeys, newValues)
-        }
-      Some(applyColumnMetadata(casted, expected))
+    // If the key and value expressions have not changed, we just check original map field.
+    // Otherwise, we construct a new map by adding transformations to the keys and values.
+    if (resKey.head == keyParam && resValue.head == valueParam) {
+      nullCheckedInput
     } else {
-      None
+      // todo: can't we use a cast or cast-like function instead of the transforms?
+      val newKeys = if (resKey.head != keyParam) {
+        val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
+        ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
+      } else {
+        MapKeys(nullCheckedInput)
+      }
+      val newValues = if (resValue.head != valueParam) {
+        val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
+        ArrayTransform(MapValues(nullCheckedInput), valueFunc)
+      } else {
+        MapValues(nullCheckedInput)
+      }
+      MapFromArrays(newKeys, newValues)
     }
   }
 
   // For table insertions, capture the overflow errors and show proper message.
   // Without this method, the overflow errors of castings will show hints for turning off ANSI SQL
   // mode, which are not helpful since the behavior is controlled by the store assignment policy.
-  def checkCastOverflowInTableInsert(cast: Cast, columnName: String): Expression = {
+  private def checkCastOverflowInTableInsert(cast: Cast, columnName: String): Expression = {
     if (canCauseCastOverflow(cast)) {
       CheckOverflowInTableInsert(cast, columnName)
     } else {
@@ -573,83 +495,49 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
   private def canCauseCastOverflow(cast: Cast): Boolean = {
     containsIntegralOrDecimalType(cast.dataType) &&
-      !Cast.canUpCast(cast.child.dataType, cast.dataType)
+        !Cast.canUpCast(cast.child.dataType, cast.dataType)
   }
 
-  private def checkField(
-      tableName: String,
-      tableAttr: Attribute,
-      queryExpr: NamedExpression,
-      byName: Boolean,
-      conf: SQLConf,
-      addError: String => Unit,
-      colPath: Seq[String]): Option[NamedExpression] = {
-
-    val attrTypeHasCharVarchar = CharVarcharUtils.hasCharVarchar(tableAttr.dataType)
-    val attrTypeWithoutCharVarchar = if (attrTypeHasCharVarchar) {
-      CharVarcharUtils.replaceCharVarcharWithString(tableAttr.dataType)
+  private def unwrapUDT(expr: Expression): Expression = {
+    if (!expr.dataType.existsRecursively(_.isInstanceOf[UserDefinedType[_]])) {
+      // todo: this is now N^2 in the type depth.  We could instead check the
+      //       return value is eq to expr.
+      expr
     } else {
-      tableAttr.dataType
-    }
+      expr.dataType match {
+        case ArrayType(et, containsNull) =>
+          val param = NamedLambdaVariable("element", et, containsNull)
+          val func = LambdaFunction(unwrapUDT(param), Seq(param))
+          ArrayTransform(expr, func)
 
-    val canWriteExpr = canWrite(
-      tableName, queryExpr.dataType, attrTypeWithoutCharVarchar,
-      byName, conf, addError, colPath)
+        case MapType(kt, vt, valueContainsNull) =>
+          val keyParam = NamedLambdaVariable("key", kt, nullable = false)
+          val valueParam = NamedLambdaVariable("value", vt, valueContainsNull)
+          val keyFunc = LambdaFunction(unwrapUDT(keyParam), Seq(keyParam))
+          val valueFunc = LambdaFunction(unwrapUDT(valueParam), Seq(valueParam))
+          // This duplicates expr evaluation
+          val newKeys = ArrayTransform(MapKeys(expr), keyFunc)
+          val newValues = ArrayTransform(MapValues(expr), valueFunc)
+          MapFromArrays(newKeys, newValues)
 
-    if (canWriteExpr) {
-      val prepared =
-        if (DataTypeUtils.sameType(tableAttr.dataType, queryExpr.dataType)) {
-          // If the types are an exact match, we can leave UDTs alone,
-          // we obviously do not need a cast, and the constraints of the target
-          // table char/varchar types must be met.
-          queryExpr
-        } else {
-          val udtUnwrapped = unwrapUDT(queryExpr)
-          val casted = cast(udtUnwrapped, attrTypeWithoutCharVarchar, conf, colPath.quoted)
-          if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
-            casted
+        case st: StructType =>
+          val struct = CreateNamedStruct(st.zipWithIndex.flatMap { case (field, i) =>
+            // todo: this blows up the expr evaluation by num fields
+            val fieldExpr = unwrapUDT(GetStructField(expr, i))
+            Seq(Literal(field.name), fieldExpr)
+          })
+          if (expr.nullable) {
+            // todo: this adds yet another expr evaluation.
+            If(IsNull(expr), Literal(null, struct.dataType), struct)
           } else {
-            CharVarcharUtils.stringLengthCheck(casted, tableAttr.dataType)
+            struct
           }
-        }
-      val nullChecked = checkNullability(prepared, tableAttr, conf, colPath)
-      Some(applyColumnMetadata(nullChecked, tableAttr))
-    } else {
-      None
+
+        case _: UserDefinedType[_] => UnwrapUDT(expr)
+
+        case _ => expr
+      }
     }
-  }
-
-  private def unwrapUDT(expr: Expression): Expression = expr.dataType match {
-    case ArrayType(et, containsNull) =>
-      val param = NamedLambdaVariable("element", et, containsNull)
-      val func = LambdaFunction(unwrapUDT(param), Seq(param))
-      ArrayTransform(expr, func)
-
-    case MapType(kt, vt, valueContainsNull) =>
-      val keyParam = NamedLambdaVariable("key", kt, nullable = false)
-      val valueParam = NamedLambdaVariable("value", vt, valueContainsNull)
-      val keyFunc = LambdaFunction(unwrapUDT(keyParam), Seq(keyParam))
-      val valueFunc = LambdaFunction(unwrapUDT(valueParam), Seq(valueParam))
-      val newKeys = ArrayTransform(MapKeys(expr), keyFunc)
-      val newValues = ArrayTransform(MapValues(expr), valueFunc)
-      MapFromArrays(newKeys, newValues)
-
-    case st: StructType =>
-      val newFieldExprs = st.indices.map { i =>
-        unwrapUDT(GetStructField(expr, i))
-      }
-      val struct = CreateNamedStruct(st.zip(newFieldExprs).flatMap {
-        case (field, newExpr) => Seq(Literal(field.name), newExpr)
-      })
-      if (expr.nullable) {
-        If(IsNull(expr), Literal(null, struct.dataType), struct)
-      } else {
-        struct
-      }
-
-    case _: UserDefinedType[_] => UnwrapUDT(expr)
-
-    case _ => expr
   }
 
   private def cast(
