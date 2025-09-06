@@ -22,7 +22,7 @@ import java.nio.channels.Channels
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkEnv, SparkPythonException}
+import org.apache.spark.{PythonWorkerArgs, SparkEnv, SparkPythonException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PYTHON_WORKER_MODULE, PYTHON_WORKER_RESPONSE, SESSION_ID}
 import org.apache.spark.internal.config.BUFFER_SIZE
@@ -74,9 +74,15 @@ private[spark] class StreamingPythonRunner(
       envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
     }
 
-    val workerFactory =
-      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
-    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
+    val workerArgs = PythonWorkerArgs(
+      pythonExec,
+      workerModule,
+      envVars.asScala.toMap,
+      useDaemon = false,
+      daemonModule = PythonWorkerFactory.defaultDaemonModule
+    )
+    val workerFactory = new PythonWorkerFactory(workerArgs)
+    val worker: PythonWorker = workerFactory.createSimpleWorker(blockingMode = true)
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
@@ -158,7 +164,7 @@ private[spark] class StreamingPythonRunner(
     try {
       pythonWorkerFactory.foreach { factory =>
         pythonWorker.foreach { worker =>
-          factory.stopWorker(worker)
+          factory.stopWorker(worker, None)
           factory.stop()
         }
       }
