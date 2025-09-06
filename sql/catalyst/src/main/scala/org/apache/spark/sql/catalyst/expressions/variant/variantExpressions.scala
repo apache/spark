@@ -479,6 +479,9 @@ case object VariantGet {
             catch {
               case _: ArithmeticException => invalidCast()
             }
+          case LongType if dataType.isInstanceOf[TimeType] =>
+            // TIME values are stored as Long in Variant.
+            input.value.asInstanceOf[Long]
           case _: DecimalType if dataType == TimestampType =>
             try castDecimalToTimestamp(input.value.asInstanceOf[Decimal])
             catch {
