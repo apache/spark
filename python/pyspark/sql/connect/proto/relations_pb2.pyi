@@ -108,6 +108,7 @@ class Relation(google.protobuf.message.Message):
     TRANSPOSE_FIELD_NUMBER: builtins.int
     UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
     LATERAL_JOIN_FIELD_NUMBER: builtins.int
+    REFERENCED_PLAN_ID_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -215,6 +216,14 @@ class Relation(google.protobuf.message.Message):
     def unresolved_table_valued_function(self) -> global___UnresolvedTableValuedFunction: ...
     @property
     def lateral_join(self) -> global___LateralJoin: ...
+    referenced_plan_id: builtins.int
+    """Reference to a node else where in the tree. There are two use cases for this:
+    1. Reduce tree duplication. In this case the tree contains two or more subtrees that are
+       identical. The referenced plan can only be a back reference, to a subtree that was
+       already visited by the planner. The planner is expected to visit the tree bottom-up from
+       left to right.
+    1. Reduce tree depth.
+    """
     @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
@@ -301,6 +310,7 @@ class Relation(google.protobuf.message.Message):
         transpose: global___Transpose | None = ...,
         unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
         lateral_join: global___LateralJoin | None = ...,
+        referenced_plan_id: builtins.int = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -394,6 +404,8 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
+            "referenced_plan_id",
+            b"referenced_plan_id",
             "rel_type",
             b"rel_type",
             "repartition",
@@ -519,6 +531,8 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
+            "referenced_plan_id",
+            b"referenced_plan_id",
             "rel_type",
             b"rel_type",
             "repartition",
@@ -614,6 +628,7 @@ class Relation(google.protobuf.message.Message):
             "transpose",
             "unresolved_table_valued_function",
             "lateral_join",
+            "referenced_plan_id",
             "fill_na",
             "drop_na",
             "replace",
@@ -1051,8 +1066,29 @@ class WithRelations(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class _ResolutionMethod:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _ResolutionMethodEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            WithRelations._ResolutionMethod.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        LEGACY: WithRelations._ResolutionMethod.ValueType  # 0
+        BY_NAME: WithRelations._ResolutionMethod.ValueType  # 1
+        BY_REFERENCE_ID: WithRelations._ResolutionMethod.ValueType  # 2
+
+    class ResolutionMethod(_ResolutionMethod, metaclass=_ResolutionMethodEnumTypeWrapper): ...
+    LEGACY: WithRelations.ResolutionMethod.ValueType  # 0
+    BY_NAME: WithRelations.ResolutionMethod.ValueType  # 1
+    BY_REFERENCE_ID: WithRelations.ResolutionMethod.ValueType  # 2
+
     ROOT_FIELD_NUMBER: builtins.int
     REFERENCES_FIELD_NUMBER: builtins.int
+    RESOLUTION_METHOD_FIELD_NUMBER: builtins.int
     @property
     def root(self) -> global___Relation:
         """(Required) Plan at the root of the query tree. This plan is expected to contain one or more
@@ -1065,15 +1101,27 @@ class WithRelations(google.protobuf.message.Message):
         """(Required) Plans referenced by the root plan. Relations in this list are also allowed to
         contain references to other relations in this list, as long they do not form cycles.
         """
+    resolution_method: global___WithRelations.ResolutionMethod.ValueType
+    """(Required) Resolution method used to resolve the relations in the root relation. This can
+    either be by name (like a CTE) or by reference id. For resolution by name, all references need
+    to be a SubqueryAlias. For resolution by id, all references need to have a plan_id. The default
+    is legacy mode. In most cases Legacy mode is uses BY_REFERENCE_ID resolution. However,it makes
+    an exception for a case where the root is a SQL relation, and all the references are subquery
+    aliases, in that case we use BY_NAME resolution.
+    """
     def __init__(
         self,
         *,
         root: global___Relation | None = ...,
         references: collections.abc.Iterable[global___Relation] | None = ...,
+        resolution_method: global___WithRelations.ResolutionMethod.ValueType = ...,
     ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["root", b"root"]) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["references", b"references", "root", b"root"]
+        self,
+        field_name: typing_extensions.Literal[
+            "references", b"references", "resolution_method", b"resolution_method", "root", b"root"
+        ],
     ) -> None: ...
 
 global___WithRelations = WithRelations
