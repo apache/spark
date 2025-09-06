@@ -50,11 +50,12 @@ class BaseStreamingArrowWriter(
    *
    * @param dataRow The row to write for current batch.
    */
-  def writeRow(dataRow: InternalRow): Unit = {
+  def writeRow(dataRow: InternalRow): Boolean = {
     // If it exceeds the condition of batch (number of records) and there is more data for the
     // same group, finalize and construct a new batch.
 
-    if (totalNumRowsForBatch >= arrowMaxRecordsPerBatch) {
+    val isCurrentBatchFull = totalNumRowsForBatch >= arrowMaxRecordsPerBatch
+    if (isCurrentBatchFull) {
       finalizeCurrentChunk(isLastChunkForGroup = false)
       finalizeCurrentArrowBatch()
     }
@@ -63,6 +64,7 @@ class BaseStreamingArrowWriter(
 
     numRowsForCurrentChunk += 1
     totalNumRowsForBatch += 1
+    isCurrentBatchFull
   }
 
   /**
