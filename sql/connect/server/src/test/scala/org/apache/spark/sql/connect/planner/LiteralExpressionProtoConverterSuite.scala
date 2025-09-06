@@ -20,10 +20,14 @@ package org.apache.spark.sql.connect.planner
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.ToLiteralProtoOptions
 import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
@@ -50,6 +54,8 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     }
   }
 
+  val utf8String = UTF8String.fromString("string")
+
   Seq(
     (
       (1, "string", true),
@@ -57,7 +63,8 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
         Seq(
           StructField("a", IntegerType),
           StructField("b", StringType),
-          StructField("c", BooleanType)))),
+          StructField("c", BooleanType))),
+      new GenericInternalRow(Array(1, utf8String, true))),
     (
       Array((1, "string", true), (2, "string", false), (3, "string", true)),
       ArrayType(
@@ -65,7 +72,12 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
           Seq(
             StructField("a", IntegerType),
             StructField("b", StringType),
-            StructField("c", BooleanType))))),
+            StructField("c", BooleanType)))),
+      new GenericArrayData(
+        Array(
+          new GenericInternalRow(Array(1, utf8String, true)),
+          new GenericInternalRow(Array(2, utf8String, false)),
+          new GenericInternalRow(Array(3, utf8String, true))))),
     (
       (1, (2, 3)),
       StructType(
@@ -73,25 +85,27 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
           StructField("a", IntegerType),
           StructField(
             "b",
-            StructType(
-              Seq(StructField("c", IntegerType), StructField("d", IntegerType)))))))).zipWithIndex
-    .foreach { case ((v, t), idx) =>
+            StructType(Seq(StructField("c", IntegerType), StructField("d", IntegerType)))))),
+      new GenericInternalRow(Array(1, new GenericInternalRow(Array[Any](2, 3)))))).zipWithIndex
+    .foreach { case ((v, t, expected), idx) =>
       test(s"complex proto value and catalyst value conversion #$idx") {
-        assertResult(v)(
-          LiteralValueProtoConverter.toCatalystValue(
-            LiteralValueProtoConverter.toLiteralProtoWithOptions(
-              v,
-              Some(t),
-              ToLiteralProtoOptions(useDeprecatedDataTypeFields = false))))
+        assertResult(expressions.Literal(expected, t))(
+          LiteralExpressionProtoConverter
+            .toCatalystExpression(
+              LiteralValueProtoConverter.toLiteralProtoWithOptions(
+                v,
+                Some(t.asInstanceOf[DataType]),
+                ToLiteralProtoOptions(useDeprecatedDataTypeFields = false))))
       }
 
       test(s"complex proto value and catalyst value conversion #$idx - backward compatibility") {
-        assertResult(v)(
-          LiteralValueProtoConverter.toCatalystValue(
-            LiteralValueProtoConverter.toLiteralProtoWithOptions(
-              v,
-              Some(t),
-              ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))))
+        assertResult(expressions.Literal(expected, t))(
+          LiteralExpressionProtoConverter
+            .toCatalystExpression(
+              LiteralValueProtoConverter.toLiteralProtoWithOptions(
+                v,
+                Some(t.asInstanceOf[DataType]),
+                ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))))
       }
     }
 
@@ -197,12 +211,12 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     val result = LiteralValueProtoConverter.toCatalystStruct(structProto)
     val resultType = LiteralValueProtoConverter.getProtoStructType(structProto)
 
-    // Verify the result is a tuple with correct values
-    assert(result.isInstanceOf[Product])
-    val product = result.asInstanceOf[Product]
-    assert(product.productArity == 2)
-    assert(product.productElement(0) == 1)
-    assert(product.productElement(1) == "test")
+    // Verify the result is a GenericRowWithSchema with correct values
+    assert(result.isInstanceOf[org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema])
+    val row = result.asInstanceOf[org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema]
+    assert(row.length == 2)
+    assert(row.get(0) == 1)
+    assert(row.get(1) == "test")
 
     // Verify the returned struct type matches the original
     assert(resultType.getFieldsCount == 2)
