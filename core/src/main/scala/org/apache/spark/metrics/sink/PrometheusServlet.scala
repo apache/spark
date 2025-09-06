@@ -59,71 +59,80 @@ private[spark] class PrometheusServlet(
   def getMetricsSnapshot(): String = {
     import scala.jdk.CollectionConverters._
 
-    val gaugesLabel = """{type="gauges"}"""
-    val countersLabel = """{type="counters"}"""
-    val metersLabel = countersLabel
-    val histogramslabels = """{type="histograms"}"""
-    val timersLabels = """{type="timers"}"""
+    val PERCENTILE_P50 = "0.5"
+    val PERCENTILE_P75 = "0.75"
+    val PERCENTILE_P95 = "0.95"
+    val PERCENTILE_P98 = "0.98"
+    val PERCENTILE_P99 = "0.99"
+    val PERCENTILE_P999 = "0.999"
 
     val sb = new StringBuilder()
     registry.getGauges.asScala.foreach { case (k, v) =>
-      if (!v.getValue.isInstanceOf[String]) {
-        sb.append(s"${normalizeKey(k)}Number$gaugesLabel ${v.getValue}\n")
-        sb.append(s"${normalizeKey(k)}Value$gaugesLabel ${v.getValue}\n")
+      v.getValue match {
+        case n: Number =>
+          sb.append(s"# HELP ${normalizeKey(k)} Gauge metric\n")
+          sb.append(s"# TYPE ${normalizeKey(k)} gauge\n")
+          sb.append(s"${normalizeKey(k)} ${n.doubleValue()}\n")
+        case _ => // non-numeric gauges
       }
     }
     registry.getCounters.asScala.foreach { case (k, v) =>
-      sb.append(s"${normalizeKey(k)}Count$countersLabel ${v.getCount}\n")
+      val name = normalizeKey(k)
+      sb.append(s"# HELP ${name} Counter metric\n")
+      sb.append(s"# TYPE ${name} counter\n")
+      sb.append(s"$name ${v.getCount}\n")
     }
     registry.getHistograms.asScala.foreach { case (k, h) =>
       val snapshot = h.getSnapshot
+      val values = snapshot.getValues.map(_.toDouble)
       val prefix = normalizeKey(k)
-      sb.append(s"${prefix}Count$histogramslabels ${h.getCount}\n")
-      sb.append(s"${prefix}Max$histogramslabels ${snapshot.getMax}\n")
-      sb.append(s"${prefix}Mean$histogramslabels ${snapshot.getMean}\n")
-      sb.append(s"${prefix}Min$histogramslabels ${snapshot.getMin}\n")
-      sb.append(s"${prefix}50thPercentile$histogramslabels ${snapshot.getMedian}\n")
-      sb.append(s"${prefix}75thPercentile$histogramslabels ${snapshot.get75thPercentile}\n")
-      sb.append(s"${prefix}95thPercentile$histogramslabels ${snapshot.get95thPercentile}\n")
-      sb.append(s"${prefix}98thPercentile$histogramslabels ${snapshot.get98thPercentile}\n")
-      sb.append(s"${prefix}99thPercentile$histogramslabels ${snapshot.get99thPercentile}\n")
-      sb.append(s"${prefix}999thPercentile$histogramslabels ${snapshot.get999thPercentile}\n")
-      sb.append(s"${prefix}StdDev$histogramslabels ${snapshot.getStdDev}\n")
+      sb.append(s"# HELP ${prefix} Histogram metric\n")
+      sb.append(s"# TYPE ${prefix} summary\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P50}\"} ${snapshot.getMedian}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P75}\"} ${snapshot.get75thPercentile}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P95}\"} ${snapshot.get95thPercentile}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P98}\"} ${snapshot.get98thPercentile}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P99}\"} ${snapshot.get99thPercentile}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P999}\"} ${snapshot.get999thPercentile}\n")
+      sb.append(s"${prefix}_count ${h.getCount}\n")
+      sb.append(s"${prefix}_sum ${values.sum}\n")
     }
     registry.getMeters.entrySet.iterator.asScala.foreach { kv =>
       val prefix = normalizeKey(kv.getKey)
       val meter = kv.getValue
-      sb.append(s"${prefix}Count$metersLabel ${meter.getCount}\n")
-      sb.append(s"${prefix}MeanRate$metersLabel ${meter.getMeanRate}\n")
-      sb.append(s"${prefix}OneMinuteRate$metersLabel ${meter.getOneMinuteRate}\n")
-      sb.append(s"${prefix}FiveMinuteRate$metersLabel ${meter.getFiveMinuteRate}\n")
-      sb.append(s"${prefix}FifteenMinuteRate$metersLabel ${meter.getFifteenMinuteRate}\n")
+      sb.append(s"# HELP ${prefix} Meter metric\n")
+      sb.append(s"# TYPE ${prefix} gauge\n")
+      sb.append(s"${prefix}_count ${meter.getCount}\n")
+      sb.append(s"${prefix}_m1_rate ${meter.getOneMinuteRate}\n")
+      sb.append(s"${prefix}_m5_rate ${meter.getFiveMinuteRate}\n")
+      sb.append(s"${prefix}_m15_rate ${meter.getFifteenMinuteRate}\n")
     }
     registry.getTimers.entrySet.iterator.asScala.foreach { kv =>
       val prefix = normalizeKey(kv.getKey)
       val timer = kv.getValue
       val snapshot = timer.getSnapshot
-      sb.append(s"${prefix}Count$timersLabels ${timer.getCount}\n")
-      sb.append(s"${prefix}Max$timersLabels ${snapshot.getMax}\n")
-      sb.append(s"${prefix}Mean$timersLabels ${snapshot.getMean}\n")
-      sb.append(s"${prefix}Min$timersLabels ${snapshot.getMin}\n")
-      sb.append(s"${prefix}50thPercentile$timersLabels ${snapshot.getMedian}\n")
-      sb.append(s"${prefix}75thPercentile$timersLabels ${snapshot.get75thPercentile}\n")
-      sb.append(s"${prefix}95thPercentile$timersLabels ${snapshot.get95thPercentile}\n")
-      sb.append(s"${prefix}98thPercentile$timersLabels ${snapshot.get98thPercentile}\n")
-      sb.append(s"${prefix}99thPercentile$timersLabels ${snapshot.get99thPercentile}\n")
-      sb.append(s"${prefix}999thPercentile$timersLabels ${snapshot.get999thPercentile}\n")
-      sb.append(s"${prefix}StdDev$timersLabels ${snapshot.getStdDev}\n")
-      sb.append(s"${prefix}FifteenMinuteRate$timersLabels ${timer.getFifteenMinuteRate}\n")
-      sb.append(s"${prefix}FiveMinuteRate$timersLabels ${timer.getFiveMinuteRate}\n")
-      sb.append(s"${prefix}OneMinuteRate$timersLabels ${timer.getOneMinuteRate}\n")
-      sb.append(s"${prefix}MeanRate$timersLabels ${timer.getMeanRate}\n")
+      sb.append(s"# HELP ${prefix} Timer summary metric\n")
+      sb.append(s"# TYPE ${prefix} summary\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P50}\"} ${snapshot.getMedian}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P75}\"} ${snapshot.get75thPercentile}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P95}\"} ${snapshot.get95thPercentile}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P98}\"} ${snapshot.get98thPercentile}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P99}\"} ${snapshot.get99thPercentile}\n")
+      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P999}\"} ${snapshot.get999thPercentile}\n")
+      sb.append(s"${prefix}_count ${timer.getCount}\n")
+      sb.append(s"${prefix}_sum ${snapshot.getValues.sum}\n")
+      sb.append(s"# HELP ${prefix} Timer rate metric\n")
+      sb.append(s"# TYPE ${prefix} gauge\n")
+      sb.append(s"${prefix}_count ${timer.getCount}\n")
+      sb.append(s"${prefix}_m1_rate ${timer.getOneMinuteRate}\n")
+      sb.append(s"${prefix}_m5_rate ${timer.getFiveMinuteRate}\n")
+      sb.append(s"${prefix}_m15_rate ${timer.getFifteenMinuteRate}\n")
     }
     sb.toString()
   }
 
   private def normalizeKey(key: String): String = {
-    s"metrics_${key.replaceAll("[^a-zA-Z0-9]", "_")}_"
+    s"metrics_${key.replaceAll("[^a-zA-Z0-9]", "_")}"
   }
 
   override def start(): Unit = { }
