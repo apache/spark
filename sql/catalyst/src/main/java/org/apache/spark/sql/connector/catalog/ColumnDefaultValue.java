@@ -56,7 +56,7 @@ public class ColumnDefaultValue extends DefaultValue {
    * will be the evaluated current_date() at the time the column was added/altered.
    * Spark always sets this value when passing ColumnDefaultValue to createTable/alterTable,
    * but {@link Table#columns()} may not do so as some data sources have its own system to do
-   * back-fill.
+   * column default value back-fill.
    */
   @Nullable
   public Literal<?> getValue() {
