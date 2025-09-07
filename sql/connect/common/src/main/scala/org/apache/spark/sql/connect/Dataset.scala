@@ -1015,6 +1015,22 @@ class Dataset[T] private[sql] (
     }
   }
 
+  private def buildRepartitionById(
+    numPartitions: Int,
+    partitionExpr: Column): Dataset[T] = {
+    val exprBuilder = proto.Expression.newBuilder()
+    val directShufflePartitionIdExpr = exprBuilder.setDirectShufflePartitionId(
+      exprBuilder.getDirectShufflePartitionIdBuilder
+        .setChild(toExpr(partitionExpr))
+    ).build()
+    sparkSession.newDataset(agnosticEncoder, partitionExpr :: Nil) { builder =>
+      val repartitionBuilder = builder.getRepartitionByExpressionBuilder
+        .setInput(plan.getRoot)
+        .addAllPartitionExprs(Seq(directShufflePartitionIdExpr).asJava)
+      repartitionBuilder.setNumPartitions(numPartitions)
+    }
+  }
+
   /** @inheritdoc */
   def repartition(numPartitions: Int): Dataset[T] = {
     buildRepartition(numPartitions, shuffle = true)
@@ -1046,18 +1062,9 @@ class Dataset[T] private[sql] (
     buildRepartitionByExpression(numPartitions, sortExprs)
   }
 
-  /**
-   * Repartitions the Dataset into the given number of partitions using the specified
-   * partition ID expression.
-   *
-   * @param numPartitions the number of partitions to use.
-   * @param partitionIdExpr the expression to be used as the partition ID. Must be an integer type.
-   *
-   * @group typedrel
-   * @since 4.1.0
-   */
+  /** @inheritdoc */
   def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T] = {
-    repartitionByExpression(Some(numPartitions), Seq(partitionIdExpr))
+    buildRepartitionById(numPartitions, partitionIdExpr)
   }
 
   /** @inheritdoc */

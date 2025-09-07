@@ -1775,7 +1775,7 @@ class SparkConnectPlanner(
       case proto.Expression.ExprTypeCase.SUBQUERY_EXPRESSION =>
         transformSubqueryExpression(exp.getSubqueryExpression)
       case proto.Expression.ExprTypeCase.DIRECT_SHUFFLE_PARTITION_ID =>
-        transformDirectShufflePartitionID(exp.getDirectShufflePartitionID)
+        transformDirectShufflePartitionID(exp.getDirectShufflePartitionId)
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, exp.getDescriptorForType)
     }
@@ -4112,7 +4112,7 @@ class SparkConnectPlanner(
   }
 
   private def transformDirectShufflePartitionID(
-       directShufflePartitionID: proto.DirectShufflePartitionID): Expression = {
+       directShufflePartitionID: proto.Expression.DirectShufflePartitionID): Expression = {
     DirectShufflePartitionID(transformExpression(directShufflePartitionID.getChild))
   }
 
