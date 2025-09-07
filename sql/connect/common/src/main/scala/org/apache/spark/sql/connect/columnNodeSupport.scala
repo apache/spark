@@ -233,12 +233,6 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
         assert(relation.hasCommon && relation.getCommon.hasPlanId)
         b.setPlanId(relation.getCommon.getPlanId)
 
-      case _ @ DirectShufflePartitionID(child, _) =>
-        builder.setDirectShufflePartitionId(
-          builder.getDirectShufflePartitionIdBuilder
-            .setChild(apply(child, e, additionalTransformation))
-        )
-
       case ProtoColumnNode(e, _) =>
         return e
 

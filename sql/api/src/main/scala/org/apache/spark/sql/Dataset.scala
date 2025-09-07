@@ -2968,7 +2968,7 @@ abstract class Dataset[T] extends Serializable {
   }
 
   /**
-   * Repartitions the Dataset into the given number of partitions using the specified
+   * Repartition the Dataset into the given number of partitions using the specified
    * partition ID expression.
    *
    * @param numPartitions the number of partitions to use.
