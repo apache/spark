@@ -59,6 +59,8 @@ import org.apache.spark.util.NextIterator
  *                                  store providers being used in this class. If true, Spark will
  *                                  take care of management for state store providers, e.g. running
  *                                  maintenance task for these providers.
+ * @param snapshotOptions       Options controlling snapshot-based state replay for the state data
+ *                              source reader.
  * @param joinStoreGenerator    The generator to create state store instances, re-using the same
  *                              instance when the join implementation uses virtual column families
  *                              for join version 3.
@@ -525,7 +527,7 @@ abstract class SymmetricHashJoinStateManager(
             .replayStateFromSnapshot(
               opts.snapshotVersion,
               opts.endVersion,
-              readOnly = false,
+              readOnly = true,
               opts.startStateStoreCkptId,
               opts.endStateStoreCkptId)
         } else {
@@ -1300,7 +1302,7 @@ object SymmetricHashJoinStateManager {
 }
 
 /**
- * Options controlling snapshot-based state replay.
+ * Options controlling snapshot-based state replay for state data source reader.
  */
 case class SnapshotOptions(
     snapshotVersion: Long,
@@ -1325,7 +1327,7 @@ case class SnapshotOptions(
     }
 
 /** Snapshot options specialized for a single state store handler. */
-case class HandlerSnapshotOptions(
+private[join] case class HandlerSnapshotOptions(
     snapshotVersion: Long,
     endVersion: Long,
     startStateStoreCkptId: Option[String],

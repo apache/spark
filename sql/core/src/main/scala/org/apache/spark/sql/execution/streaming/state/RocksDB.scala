@@ -677,6 +677,8 @@ class RocksDB(
    *
    * @param snapshotVersion version of the snapshot to start with
    * @param endVersion end version
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return A RocksDB instance loaded with the state endVersion replayed from snapshotVersion.
    *         Note that the instance will be read-only since this method is only used in State Data
    *         Source.
@@ -729,6 +731,8 @@ class RocksDB(
    *
    * @param snapshotVersion start checkpoint version
    * @param endVersion end version
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    */
   private def replayFromCheckpoint(
       snapshotVersion: Long,

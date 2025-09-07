@@ -844,6 +844,9 @@ private[sql] class RocksDBStateStoreProvider
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[StateStore]]
    */
   override def replayStateFromSnapshot(

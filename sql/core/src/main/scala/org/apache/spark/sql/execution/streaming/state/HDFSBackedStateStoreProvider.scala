@@ -972,6 +972,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[HDFSBackedStateStore]]
    */
   override def replayStateFromSnapshot(
@@ -999,6 +1002,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[HDFSBackedReadStateStore]]
    */
   override def replayReadStateFromSnapshot(

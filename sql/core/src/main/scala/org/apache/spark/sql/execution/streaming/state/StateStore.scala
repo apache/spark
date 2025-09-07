@@ -799,6 +799,10 @@ trait SupportsFineGrainedReplay {
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
+   * @return An instance of [[StateStore]] representing state data of the given version
    */
   def replayStateFromSnapshot(
       snapshotVersion: Long,
@@ -816,6 +820,9 @@ trait SupportsFineGrainedReplay {
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
+   * @return An instance of [[ReadStateStore]] representing state data of the given version
    */
   def replayReadStateFromSnapshot(
       snapshotVersion: Long,
@@ -842,6 +849,7 @@ trait SupportsFineGrainedReplay {
    * @param startVersion starting changelog version
    * @param endVersion ending changelog version
    * @param colFamilyNameOpt optional column family name to read from
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
    *         nested value: [[UnsafeRow]], batchId: [[Long]])
    */
