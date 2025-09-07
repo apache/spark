@@ -354,7 +354,7 @@ class ArrowUDTFTestsMixin:
         with self.assertRaisesRegex(
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF\\] "
-            "Column names of the returned pyarrow.Table do not match "
+            "Column names of the returned pyarrow.Table or pyarrow.RecordBatch do not match "
             "specified schema. Expected: int32 Actual: string",
         ):
             result_df = StringToIntUDTF()
