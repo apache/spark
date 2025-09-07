@@ -1834,6 +1834,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DATA_SOURCE_V2_EXPR_FOLDING =
+    buildConf("spark.sql.optimizer.datasourceV2ExprFolding")
+      .internal()
+      .doc("When this config is set to true, do safe constant folding for the " +
+        "expressions before translation and pushdown.")
+      .booleanConf
+      .createWithDefault(true)
+
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")

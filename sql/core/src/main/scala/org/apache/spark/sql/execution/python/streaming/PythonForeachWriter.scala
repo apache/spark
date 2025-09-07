@@ -184,8 +184,7 @@ object PythonForeachWriter {
     }
 
     def add(row: UnsafeRow): Unit = withLock {
-      assert(queue.add(row), s"Failed to add row to HybridRowQueue while sending data to Python" +
-        s"[count = $count, allAdded = $allAdded, exception = $exception]")
+      queue.add(row)
       count += 1
       unblockRemove.signal()
       logTrace(s"Added $row, $count left")

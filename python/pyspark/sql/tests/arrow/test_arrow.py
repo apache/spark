@@ -749,6 +749,18 @@ class ArrowTestsMixin:
                 t2 = from_arrow_type(arrow_type)
                 self.assertEqual(t, t2)
 
+    def test_arrow_type_conversion_roundtrip(self):
+        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
+
+        m1 = ArrayType(StringType(), True)
+        m2 = ArrayType(StringType(), False)
+
+        for t in [m1, m2]:
+            with self.subTest(map_type=t):
+                arrow_type = to_arrow_type(t)
+                t2 = from_arrow_type(arrow_type)
+                self.assertEqual(t, t2)
+
     def test_createDataFrame_with_ndarray(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):

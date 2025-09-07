@@ -314,11 +314,20 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+        spark_type = ArrayType(
+            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            containsNull=at.value_field.nullable,
+        )
     elif types.is_fixed_size_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+        spark_type = ArrayType(
+            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            containsNull=at.value_field.nullable,
+        )
     elif types.is_large_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+        spark_type = ArrayType(
+            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            containsNull=at.value_field.nullable,
+        )
     elif types.is_map(at):
         spark_type = MapType(
             keyType=from_arrow_type(at.key_type, prefer_timestamp_ntz),

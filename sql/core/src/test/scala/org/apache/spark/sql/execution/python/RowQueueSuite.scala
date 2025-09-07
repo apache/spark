@@ -111,7 +111,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
       var i = 0
       while (i < n) {
         row.setLong(0, i)
-        assert(queue.add(row), "fail to add")
+        queue.add(row)
         i += 1
       }
       assert(queue.numQueues() > 1, "should have more than one queue")
@@ -128,7 +128,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
       i = 0
       while (i < n) {
         row.setLong(0, i)
-        assert(queue.add(row), "fail to add")
+        queue.add(row)
         i += 1
       }
       assert(queue.numQueues() > 1, "should have more than one queue")

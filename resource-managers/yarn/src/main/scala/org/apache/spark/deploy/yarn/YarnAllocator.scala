@@ -587,7 +587,7 @@ private[yarn] class YarnAllocator(
         if (log.isInfoEnabled()) {
           val (localized, anyHost) = newLocalityRequests.partition(_.getNodes() != null)
           if (anyHost.nonEmpty) {
-            logInfo(log"Submitted ${MDC(LogKeys.COUNT, anyHost.size)}} unlocalized container " +
+            logInfo(log"Submitted ${MDC(LogKeys.COUNT, anyHost.size)} unlocalized container " +
               log"requests.")
           }
           localized.foreach { request =>

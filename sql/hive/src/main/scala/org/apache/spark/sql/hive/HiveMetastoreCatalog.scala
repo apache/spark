@@ -349,7 +349,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     if (shouldInfer) {
       val tableName = tableMeta.identifier.unquotedString
       logInfo(log"Inferring case-sensitive schema for table ${MDC(TABLE_NAME, tableName)} " +
-        log"(inference mode:  ${MDC(INFERENCE_MODE, inferenceMode)})})")
+        log"(inference mode: ${MDC(INFERENCE_MODE, inferenceMode)})")
       val fileIndex = fileIndexOpt.getOrElse {
         val rootPath = new Path(tableMeta.location)
         new InMemoryFileIndex(sparkSession, Seq(rootPath), options, None)

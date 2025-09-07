@@ -18,11 +18,10 @@
 package org.apache.spark.deploy
 
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkUserAppException
 
-class SparkPipelinesSuite extends SparkSubmitTestUtils with Matchers with BeforeAndAfterEach {
+class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
   test("only spark submit args") {
     val args = Array(
       "--remote",

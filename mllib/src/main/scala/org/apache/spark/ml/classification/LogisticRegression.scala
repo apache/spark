@@ -836,7 +836,7 @@ class LogisticRegression @Since("1.2.0") (
           (_initialModel.getFitIntercept == $(fitIntercept))
         if (!modelIsValid) {
           instr.logWarning(log"Initial coefficients will be ignored! Its dimensions " +
-            log"(${MDC(LogKeys.NUM_ROWS, providedCoefs.numRows)}}, " +
+            log"(${MDC(LogKeys.NUM_ROWS, providedCoefs.numRows)}, " +
             log"${MDC(LogKeys.NUM_COLUMNS, providedCoefs.numCols)}) did not match the " +
             log"expected size (${MDC(LogKeys.NUM_COEFFICIENTS, numCoefficientSets)}, " +
             log"${MDC(LogKeys.NUM_FEATURES, numFeatures)})")
