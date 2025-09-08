@@ -533,28 +533,6 @@ class TransformWithStateInPySparkStateServer(
     }
   }
 
-  private def sendIteratorForListState(iter: Iterator[Row]): Unit = {
-    // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-    // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
-    // when there are multiple state variables, user tries to access a different state variable
-    // while the current state variable is not exhausted yet.
-    var rowCount = 0
-    while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
-      val data = iter.next()
-
-      // Serialize the value row as a byte array
-      val valueBytes = PythonSQLUtils.toPyRow(data)
-      val lenBytes = valueBytes.length
-
-      outputStream.writeInt(lenBytes)
-      outputStream.write(valueBytes)
-
-      rowCount += 1
-    }
-    outputStream.writeInt(-1)
-    outputStream.flush()
-  }
-
   private[sql] def handleMapStateRequest(message: MapStateCall): Unit = {
     val stateName = message.getStateName
     if (!mapStates.contains(stateName)) {
