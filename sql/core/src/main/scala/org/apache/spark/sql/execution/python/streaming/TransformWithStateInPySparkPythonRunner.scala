@@ -245,7 +245,6 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 class TransformWithStateInPySparkPythonPreInitRunner(
     func: PythonFunction,
     workerModule: String,
-    timeZoneId: String,
     groupingKeySchema: StructType,
     processorHandleImpl: DriverStatefulProcessorHandleImpl)
   extends StreamingPythonRunner(func, "", "", workerModule)
