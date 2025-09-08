@@ -24,7 +24,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, ThetaSketchUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -184,13 +184,13 @@ case class ThetaSketchAgg(
     left.dataType match {
       case ArrayType(IntegerType, _) =>
         val arr = v.asInstanceOf[ArrayData].toIntArray()
-        if (arr.nonEmpty) sketch.update(arr)
+        sketch.update(arr)
       case ArrayType(LongType, _) =>
         val arr = v.asInstanceOf[ArrayData].toLongArray()
-        if (arr.nonEmpty) sketch.update(arr)
+        sketch.update(arr)
       case BinaryType =>
         val bytes = v.asInstanceOf[Array[Byte]]
-        if (bytes.nonEmpty) sketch.update(bytes)
+        sketch.update(bytes)
       case DoubleType =>
         sketch.update(v.asInstanceOf[Double])
       case FloatType =>
@@ -201,8 +201,8 @@ case class ThetaSketchAgg(
         sketch.update(v.asInstanceOf[Long])
       case st: StringType =>
         val cKey =
-          CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-        sketch.update(cKey.toString)
+          CollationFactory.getCollationKeyBytes(v.asInstanceOf[UTF8String], st.collationId)
+        sketch.update(cKey)
       case _ =>
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3121",
@@ -474,10 +474,8 @@ case class ThetaUnionAgg(
  *
  * See [[https://datasketches.apache.org/docs/Theta/ThetaSketches.html]] for more information.
  *
- * @param left
+ * @param child
  *   Child expression against which unique counting will occur
- * @param right
- *   the log-base-2 of nomEntries decides the number of buckets for the sketch
  * @param mutableAggBufferOffset
  *   offset for mutable aggregation buffer
  * @param inputAggBufferOffset
@@ -486,9 +484,8 @@ case class ThetaUnionAgg(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's Compact binary representation.
-      `lgNomEntries` (optional) the log-base-2 of Nominal Entries, with Nominal Entries deciding
-      the number buckets or slots for the ThetaSketch.""",
+    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's Compact binary representation
+      by intersecting all the Theta sketches in the input column.""",
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(sketch)) FROM (SELECT theta_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT theta_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));
@@ -498,34 +495,17 @@ case class ThetaUnionAgg(
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaIntersectionAgg(
-    left: Expression,
-    right: Expression,
+    child: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[ThetaSketchState]
-    with BinaryLike[Expression]
+    with UnaryLike[Expression]
     with ExpectsInputTypes {
 
-  // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
-
-  lazy val lgNomEntries: Int = {
-    val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
-    lgNomEntriesInput
-  }
-
-  // Constructors
+  // Constructor
 
   def this(child: Expression) = {
-    this(child, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS), 0, 0)
-  }
-
-  def this(child: Expression, lgNomEntries: Expression) = {
-    this(child, lgNomEntries, 0, 0)
-  }
-
-  def this(child: Expression, lgNomEntries: Int) = {
-    this(child, Literal(lgNomEntries), 0, 0)
+    this(child, 0, 0)
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -537,16 +517,14 @@ case class ThetaIntersectionAgg(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ThetaIntersectionAgg =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): ThetaIntersectionAgg =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildInternal(newChild: Expression): ThetaIntersectionAgg =
+    copy(child = newChild)
 
   // Overrides for TypedImperativeAggregate
 
   override def prettyName: String = "theta_intersection_agg"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override def dataType: DataType = BinaryType
 
@@ -559,10 +537,7 @@ case class ThetaIntersectionAgg(
    *   an Intersection instance wrapped with IntersectionAggregationBuffer
    */
   override def createAggregationBuffer(): ThetaSketchState = {
-    IntersectionAggregationBuffer(
-      SetOperation.builder
-        .setLogNominalEntries(lgNomEntries)
-        .buildIntersection)
+    IntersectionAggregationBuffer(SetOperation.builder.buildIntersection)
   }
 
   /**
@@ -577,11 +552,11 @@ case class ThetaIntersectionAgg(
       intersectionBuffer: ThetaSketchState,
       input: InternalRow): ThetaSketchState = {
     // Return early for null input values.
-    val v = left.eval(input)
+    val v = child.eval(input)
     if (v == null) return intersectionBuffer
 
     // Sketches must be in binary form to be aggregated, else error out.
-    left.dataType match {
+    child.dataType match {
       case BinaryType => // Continue processing with a BinaryType.
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
@@ -623,7 +598,7 @@ case class ThetaIntersectionAgg(
       // The program should never make it here, the cases are for defensive programming.
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
         val intersection =
-          SetOperation.builder.setLogNominalEntries(lgNomEntries).buildIntersection
+          SetOperation.builder.buildIntersection
         intersection.intersect(sketch1)
         intersection.intersect(sketch2)
         IntersectionAggregationBuffer(intersection)

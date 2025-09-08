@@ -2632,11 +2632,11 @@ class DataFrameAggregateSuite extends QueryTest
     val res5 = all_sketches
       .groupBy("id")
       .agg(
-        theta_sketch_estimate(theta_intersection_agg("sketch")).as("intersection_count_1"),
-        theta_sketch_estimate(theta_intersection_agg("sketch", 15)).as("intersection_count_2"))
+        theta_sketch_estimate(theta_intersection_agg("sketch")).as("intersection_count_1")
+      )
 
     // df1={a,b,c,d}, df2={a,c,d,e,f}, df3={c,d,g,h}, so intersection should be {c,d} = 2.
-    checkAnswer(res5, Row(1, 2, 2))
+    checkAnswer(res5, Row(1, 2))
 
     // Test theta_intersection_agg via SQL.
     val res6 = sql("""with all_sketches as (
@@ -2649,12 +2649,11 @@ class DataFrameAggregateSuite extends QueryTest
       |
       |select
       | id,
-      | theta_sketch_estimate(theta_intersection_agg(sketch)) as intersection_count_1,
-      | theta_sketch_estimate(theta_intersection_agg(sketch, 15)) as intersection_count_2
+      | theta_sketch_estimate(theta_intersection_agg(sketch)) as intersection_count_1
       |from all_sketches
       |group by 1
       |""".stripMargin)
-    checkAnswer(res6, Row(1, 2, 2))
+    checkAnswer(res6, Row(1, 2))
 
     // Test with different lgNomEntries parameters.
     val res7 = sql("""with sketches1 as (
@@ -2722,41 +2721,6 @@ class DataFrameAggregateSuite extends QueryTest
     val df1 = Seq((1, "a"), (1, "b"), (1, "c"), (1, "d")).toDF("id", "value")
     df1.createOrReplaceTempView("df1")
 
-    // Test invalid lgNomEntries for theta_intersection_agg.
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("""with sketches as (
-          |select id, theta_sketch_agg(value) as sketch from df1 group by 1
-          |)
-          |select theta_sketch_estimate(theta_intersection_agg(sketch, 3)) from sketches
-          |""".stripMargin).collect()
-      },
-      condition = "THETA_INVALID_LG_NOM_ENTRIES",
-      parameters = Map(
-        "function" -> "`theta_intersection_agg`",
-        "min" -> "4",
-        "max" -> "26",
-        "value" -> "3"
-      )
-    )
-
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("""with sketches as (
-          |select id, theta_sketch_agg(value) as sketch from df1 group by 1
-          |)
-          |select theta_sketch_estimate(theta_intersection_agg(sketch, 27)) from sketches
-          |""".stripMargin).collect()
-      },
-      condition = "THETA_INVALID_LG_NOM_ENTRIES",
-      parameters = Map(
-        "function" -> "`theta_intersection_agg`",
-        "min" -> "4",
-        "max" -> "26",
-        "value" -> "27"
-      )
-    )
-
     // Test invalid parameter types for theta_difference.
     checkError(
       exception = intercept[AnalysisException] {
@@ -2768,7 +2732,7 @@ class DataFrameAggregateSuite extends QueryTest
       },
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"theta_difference(sketch, invalid, 12)\"",
+        "sqlExpr" -> "\"theta_difference(sketch, invalid)\"",
         "paramIndex" -> "second",
         "inputSql" -> "\"invalid\"",
         "inputType" -> "\"STRING\"",
@@ -2787,7 +2751,7 @@ class DataFrameAggregateSuite extends QueryTest
       },
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"theta_intersection(sketch, 123, 12)\"",
+        "sqlExpr" -> "\"theta_intersection(sketch, 123)\"",
         "paramIndex" -> "second",
         "inputSql" -> "\"123\"",
         "inputType" -> "\"INT\"",
@@ -2801,20 +2765,20 @@ class DataFrameAggregateSuite extends QueryTest
         sql("""with sketches as (
           |select id, theta_sketch_agg(value) as sketch from df1 group by 1
           |)
-          |select theta_intersection_agg(sketch, 'invalid') from sketches
+          |select theta_intersection_agg('invalid') from sketches
           |""".stripMargin).collect()
       },
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"theta_intersection_agg(sketch, invalid)\"",
-        "paramIndex" -> "second",
+        "sqlExpr" -> "\"theta_intersection_agg(invalid)\"",
+        "paramIndex" -> "first",
         "inputSql" -> "\"invalid\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "\"INT\""),
+        "requiredType" -> "\"BINARY\""),
       context = ExpectedContext(
-        fragment = "theta_intersection_agg(sketch, 'invalid')",
+        fragment = "theta_intersection_agg('invalid')",
         start = 93,
-        stop = 133))
+        stop = 125))
 
     // Test theta_difference with non-sketch input.
     checkError(
@@ -2823,7 +2787,7 @@ class DataFrameAggregateSuite extends QueryTest
       },
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"theta_difference(not_a_sketch, also_not_a_sketch, 12)\"",
+        "sqlExpr" -> "\"theta_difference(not_a_sketch, also_not_a_sketch)\"",
         "paramIndex" -> "first",
         "inputSql" -> "\"not_a_sketch\"",
         "inputType" -> "\"STRING\"",
@@ -2840,7 +2804,7 @@ class DataFrameAggregateSuite extends QueryTest
       },
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"theta_intersection(not_a_sketch, also_not_a_sketch, 12)\"",
+        "sqlExpr" -> "\"theta_intersection(not_a_sketch, also_not_a_sketch)\"",
         "paramIndex" -> "first",
         "inputSql" -> "\"not_a_sketch\"",
         "inputType" -> "\"STRING\"",
@@ -2921,14 +2885,14 @@ class DataFrameAggregateSuite extends QueryTest
       df.selectExpr("theta_sketch_agg(col) as sketch")
         .unionAll(df.selectExpr("theta_sketch_agg(col, 20) as sketch"))
         .unionAll(df.filter(col("col") === 1).selectExpr("theta_sketch_agg(col) as sketch"))
-        .selectExpr("theta_sketch_estimate(theta_intersection_agg(sketch, 15))"),
+        .selectExpr("theta_sketch_estimate(theta_intersection_agg(sketch))"),
       Seq(Row(1)) // The intersection of {1,2}, {1,2}, {1} = {1}.
     )
     checkAnswer(
       df.select(theta_sketch_agg(col("col")).as("sketch"))
         .unionAll(df.select(theta_sketch_agg(col("col"), lit(20)).as("sketch")))
         .unionAll(df.filter(col("col") === 1).select(theta_sketch_agg(col("col")).as("sketch")))
-        .select(theta_sketch_estimate(theta_intersection_agg(col("sketch"), lit(15)))),
+        .select(theta_sketch_estimate(theta_intersection_agg(col("sketch")))),
       Seq(Row(1)))
   }
 

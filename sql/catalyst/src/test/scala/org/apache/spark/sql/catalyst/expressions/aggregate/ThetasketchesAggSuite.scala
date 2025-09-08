@@ -160,7 +160,7 @@ class ThetasketchesAggSuite extends SparkFunSuite {
 
     // Intersect the sketches.
     val intersectionAgg =
-      new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true), 12)
+      new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true))
     val intersection = intersectionAgg.createAggregationBuffer()
     intersectionAgg.update(intersection, InternalRow(binary1))
     intersectionAgg.update(intersection, InternalRow(binary2))

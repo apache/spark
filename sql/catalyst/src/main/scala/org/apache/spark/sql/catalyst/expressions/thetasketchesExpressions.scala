@@ -122,10 +122,9 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(first, second, lgNomEntries) - Subtracts two binary representations of
-    Datasketches ThetaSketch objects using a ThetaSketch AnotB object. Users can set
-    lgNomEntries to a value between 4 and 26 to find the difference of sketches with different
-    AnotB buffer size values (defaults to 12). """,
+    _FUNC_(first, second) - Subtracts two binary representations of
+    Datasketches ThetaSketch objects from two input columns using a
+    ThetaSketch AnotB object. """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2);
@@ -134,45 +133,34 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
   group = "misc_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
-case class ThetaDifference(first: Expression, second: Expression, third: Expression)
-    extends TernaryExpression
+case class ThetaDifference(first: Expression, second: Expression)
+    extends BinaryExpression
     with CodegenFallback
     with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
 
-  def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))
-  }
-
-  def this(first: Expression, second: Expression, third: Int) = {
-    this(first, second, Literal(third))
-  }
+  override def left: Expression = first
+  override def right: Expression = second
 
   override protected def withNewChildrenInternal(
       newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): ThetaDifference =
-    copy(first = newFirst, second = newSecond, third = newThird)
+      newSecond: Expression): ThetaDifference =
+    copy(first = newFirst, second = newSecond)
 
   override def prettyName: String = "theta_difference"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
 
   override def dataType: DataType = BinaryType
 
-  override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
-    val logNominalEntries = value3.asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(logNominalEntries, prettyName)
-
+  override def nullSafeEval(value1: Any, value2: Any): Any = {
     val sketch1Bytes = value1.asInstanceOf[Array[Byte]]
     val sketch1 = ThetaSketchUtils.wrapCompactSketch(sketch1Bytes, prettyName)
 
     val sketch2Bytes = value2.asInstanceOf[Array[Byte]]
     val sketch2 = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
-    val difference = SetOperation.builder
-      .setLogNominalEntries(logNominalEntries)
-      .buildANotB
+    val difference = SetOperation.builder.buildANotB
       .aNotB(sketch1, sketch2)
 
     difference.toByteArrayCompressed
@@ -182,10 +170,9 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(first, second, lgNomEntries) - Intersects two binary representations of
-    Datasketches ThetaSketch objects using a ThetaSketch Intersect object. Users can set
-    lgNomEntries to a value between 4 and 26 to find the intersection of sketches with different
-    intersection buffer size values (defaults to 12). """,
+    _FUNC_(first, second) - Intersects two binary representations of
+    Datasketches ThetaSketch objects from two input columns using a
+    ThetaSketch Intersect object. """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2);
@@ -194,45 +181,34 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
   group = "misc_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
-case class ThetaIntersection(first: Expression, second: Expression, third: Expression)
-    extends TernaryExpression
+case class ThetaIntersection(first: Expression, second: Expression)
+    extends BinaryExpression
     with CodegenFallback
     with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
 
-  def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))
-  }
-
-  def this(first: Expression, second: Expression, third: Int) = {
-    this(first, second, Literal(third))
-  }
+  override def left: Expression = first
+  override def right: Expression = second
 
   override protected def withNewChildrenInternal(
       newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): ThetaIntersection =
-    copy(first = newFirst, second = newSecond, third = newThird)
+      newSecond: Expression): ThetaIntersection =
+    copy(first = newFirst, second = newSecond)
 
   override def prettyName: String = "theta_intersection"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
 
   override def dataType: DataType = BinaryType
 
-  override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
-    val logNominalEntries = value3.asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(logNominalEntries, prettyName)
-
+  override def nullSafeEval(value1: Any, value2: Any): Any = {
     val sketch1Bytes = value1.asInstanceOf[Array[Byte]]
     val sketch1 = ThetaSketchUtils.wrapCompactSketch(sketch1Bytes, prettyName)
 
     val sketch2Bytes = value2.asInstanceOf[Array[Byte]]
     val sketch2 = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
-    val intersection = SetOperation.builder
-      .setLogNominalEntries(logNominalEntries)
-      .buildIntersection
+    val intersection = SetOperation.builder.buildIntersection
       .intersect(sketch1, sketch2)
 
     intersection.toByteArrayCompressed

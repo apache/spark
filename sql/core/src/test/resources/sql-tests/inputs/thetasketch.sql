@@ -142,7 +142,7 @@ SELECT theta_sketch_estimate(
 SELECT theta_sketch_estimate(
   theta_intersection(
     theta_sketch_agg(col1, 5),
-    theta_sketch_agg(col2, 12), 15)) FROM t_long_1_5_through_7_11;
+    theta_sketch_agg(col2, 12))) FROM t_long_1_5_through_7_11;
 
 -- Test theta_intersection function with DoubleType sketches
 SELECT theta_sketch_estimate(
@@ -166,7 +166,7 @@ SELECT theta_sketch_estimate(
 SELECT theta_sketch_estimate(
   theta_intersection(
     theta_sketch_agg(col1),
-    theta_sketch_agg(col2), 22)) FROM t_binary_a_b_through_e_f;
+    theta_sketch_agg(col2, 22))) FROM t_binary_a_b_through_e_f;
 
 -- Test theta_intersection function with ArrayType(IntegerType) sketches
 SELECT theta_sketch_estimate(
@@ -190,7 +190,7 @@ SELECT theta_sketch_estimate(
 SELECT theta_sketch_estimate(
   theta_difference(
     theta_sketch_agg(col1),
-    theta_sketch_agg(col2), 15)) FROM t_long_1_5_through_7_11;
+    theta_sketch_agg(col2, 5))) FROM t_long_1_5_through_7_11;
 
 -- Test theta_difference function with DoubleType sketches
 SELECT theta_sketch_estimate(
@@ -214,7 +214,7 @@ SELECT theta_sketch_estimate(
 SELECT theta_sketch_estimate(
   theta_difference(
     theta_sketch_agg(col1, 6),
-    theta_sketch_agg(col2, 8), 20)) FROM t_binary_a_b_through_e_f;
+    theta_sketch_agg(col2, 8))) FROM t_binary_a_b_through_e_f;
 
 -- Test theta_difference function with ArrayType(IntegerType) sketches
 SELECT theta_sketch_estimate(
@@ -276,38 +276,38 @@ SELECT theta_sketch_estimate(theta_union_agg(sketch, 16))
           UNION ALL
           SELECT theta_sketch_agg(col2) as sketch FROM t_array_long_1_3_through_4_6);
 
--- Test theta_intersection_agg with IntegerType and explicit lgNomEntries parameter
-SELECT theta_sketch_estimate(theta_intersection_agg(sketch, 15))
+-- Test theta_intersection_agg with IntegerType sketches
+SELECT theta_sketch_estimate(theta_intersection_agg(sketch))
     FROM (SELECT theta_sketch_agg(col1) as sketch FROM t_int_1_5_through_7_11
           UNION ALL
           SELECT theta_sketch_agg(col2) as sketch FROM t_int_1_5_through_7_11);
 
--- Test theta_intersection_agg with LongType sketches and explicit lgNomEntries parameter
-SELECT theta_sketch_estimate(theta_intersection_agg(sketch, 10))
+-- Test theta_intersection_agg with LongType sketches
+SELECT theta_sketch_estimate(theta_intersection_agg(sketch))
     FROM (SELECT theta_sketch_agg(col1) as sketch FROM t_long_1_5_through_7_11
           UNION ALL
           SELECT theta_sketch_agg(col2) as sketch FROM t_long_1_5_through_7_11);
 
--- Test theta_intersection_agg with FloatType sketches and explicit lgNomEntries parameter
-SELECT theta_sketch_estimate(theta_intersection_agg(sketch, 8))
+-- Test theta_intersection_agg with FloatType sketches
+SELECT theta_sketch_estimate(theta_intersection_agg(sketch))
     FROM (SELECT theta_sketch_agg(col1) as sketch FROM t_float_1_1_1_4_through_1_5_1_8
           UNION ALL
           SELECT theta_sketch_agg(col2) as sketch FROM t_float_1_1_1_4_through_1_5_1_8);
 
--- Test theta_intersection_agg with DoubleType sketches and explicit lgNomEntries parameter
-SELECT theta_sketch_estimate(theta_intersection_agg(sketch, 12))
+-- Test theta_intersection_agg with DoubleType sketches
+SELECT theta_sketch_estimate(theta_intersection_agg(sketch))
     FROM (SELECT theta_sketch_agg(col1) as sketch FROM t_double_1_1_1_4_through_1_5_1_8
           UNION ALL
           SELECT theta_sketch_agg(col2) as sketch FROM t_double_1_1_1_4_through_1_5_1_8);
 
--- Test theta_intersection_agg with StringType sketches and explicit lgNomEntries parameter
-SELECT theta_sketch_estimate(theta_intersection_agg(sketch, 14))
+-- Test theta_intersection_agg with StringType sketches
+SELECT theta_sketch_estimate(theta_intersection_agg(sketch))
     FROM (SELECT theta_sketch_agg(col1) as sketch FROM t_string_a_d_through_e_h
           UNION ALL
           SELECT theta_sketch_agg(col2) as sketch FROM t_string_a_d_through_e_h);
 
--- Test theta_intersection_agg with BinaryType sketches and explicit lgNomEntries parameter
-SELECT theta_sketch_estimate(theta_intersection_agg(sketch, 18))
+-- Test theta_intersection_agg with BinaryType sketches
+SELECT theta_sketch_estimate(theta_intersection_agg(sketch))
     FROM (SELECT theta_sketch_agg(col1) as sketch FROM t_binary_a_b_through_e_f
           UNION ALL
           SELECT theta_sketch_agg(col2) as sketch FROM t_binary_a_b_through_e_f);
@@ -318,8 +318,8 @@ SELECT theta_sketch_estimate(theta_intersection_agg(sketch))
           UNION ALL
           SELECT theta_sketch_agg(col2) as sketch FROM t_array_int_1_3_through_4_6);
 
--- Test theta_intersection_agg with ArrayType(LongType) sketches and explicit lgNomEntries parameter
-SELECT theta_sketch_estimate(theta_intersection_agg(sketch, 9))
+-- Test theta_intersection_agg with ArrayType(LongType) sketches
+SELECT theta_sketch_estimate(theta_intersection_agg(sketch))
     FROM (SELECT theta_sketch_agg(col1) as sketch FROM t_array_long_1_3_through_4_6
           UNION ALL
           SELECT theta_sketch_agg(col2) as sketch FROM t_array_long_1_3_through_4_6);
@@ -356,6 +356,26 @@ FROM VALUES (ARRAY(1, 2)), (null), (ARRAY(3, 4)), (null), (ARRAY(5, 6)) tab(col)
 SELECT theta_sketch_estimate(theta_sketch_agg(col))
 FROM VALUES (ARRAY(10L, 20L)), (null), (ARRAY(30L, 40L)), (null), (ARRAY(50L, 60L)) tab(col);
 
+-- Test theta_sketch_agg with arrays containing null elements
+SELECT theta_sketch_estimate(theta_sketch_agg(col))
+FROM VALUES (ARRAY(1, null)), (ARRAY(1)), (ARRAY(2, null, 3)), (ARRAY(4)) tab(col);
+
+-- Test theta_sketch_agg with arrays containing null elements (LongType)
+SELECT theta_sketch_estimate(theta_sketch_agg(col))
+FROM VALUES (ARRAY(10L, null)), (ARRAY(10L)), (ARRAY(20L, null, 30L)), (ARRAY(40L)) tab(col);
+
+-- Test theta_sketch_agg with empty arrays
+SELECT theta_sketch_estimate(theta_sketch_agg(col))
+FROM VALUES (ARRAY()), (ARRAY(1, 2)), (ARRAY()), (ARRAY(3, 4)) tab(col);
+
+-- Test theta_sketch_agg with empty strings
+SELECT theta_sketch_estimate(theta_sketch_agg(col))
+FROM VALUES (''), ('a'), (''), ('b'), ('c') tab(col);
+
+-- Test theta_sketch_agg with empty binary data
+SELECT theta_sketch_estimate(theta_sketch_agg(col))
+FROM VALUES (X''), (X'01'), (X''), (X'02'), (X'03') tab(col);
+
 -- Comprehensive test using all ThetaSketch functions in a single query
 -- This query demonstrates the full workflow: aggregation -> union -> intersection -> difference -> estimate
 WITH sketches AS (
@@ -379,9 +399,9 @@ SELECT
   -- Union of two individual sketches
   theta_sketch_estimate(theta_union(sketch1, sketch2, 15)) as binary_union_estimate,
   -- Intersection of two individual sketches
-  theta_sketch_estimate(theta_intersection(sketch1, sketch2, 15)) as intersection_estimate,
+  theta_sketch_estimate(theta_intersection(sketch1, sketch2)) as intersection_estimate,
   -- Difference of two individual sketches
-  theta_sketch_estimate(theta_difference(sketch1, sketch2, 15)) as difference_estimate
+  theta_sketch_estimate(theta_difference(sketch1, sketch2)) as difference_estimate
 FROM individual_sketches;
 
 -- Negative test cases
@@ -404,14 +424,6 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
 
 -- Test theta_union_agg with lgNomEntries value of 27 (too high, maximum is 26) - should fail
 SELECT theta_union_agg(sketch, 27)
-FROM (SELECT theta_sketch_agg(col, 12) as sketch
-        FROM VALUES (1) AS tab(col)
-      UNION ALL
-      SELECT theta_sketch_agg(col, 20) as sketch
-        FROM VALUES (1) AS tab(col));
-
--- Test theta_intersection_agg with lgNomEntries value of 3 (too low, minimum is 4) - should fail
-SELECT theta_intersection_agg(sketch, 3)
 FROM (SELECT theta_sketch_agg(col, 12) as sketch
         FROM VALUES (1) AS tab(col)
       UNION ALL
@@ -457,11 +469,6 @@ SELECT theta_intersection(
     (2, 5),
     (3, 6) AS tab(col1, col2);
 
--- Test theta_intersection_agg with string 'invalid' instead of integer for lgNomEntries parameter - should fail
-SELECT theta_intersection_agg(sketch, 'invalid')
-FROM (SELECT theta_sketch_agg(col) as sketch
-        FROM VALUES (1) AS tab(col));
-
 -- Test theta_sketch_estimate with invalid binary data ('abc') that is not a valid theta sketch - should fail
 SELECT theta_sketch_estimate(CAST('abc' AS BINARY));
 
@@ -479,7 +486,7 @@ SELECT theta_union_agg(buffer, 15)
 FROM (SELECT CAST('abc' AS BINARY) AS buffer);
 
 -- Test theta_intersection_agg with invalid binary data ('abc') that is not a valid theta sketch - should fail
-SELECT theta_intersection_agg(buffer, 15)
+SELECT theta_intersection_agg(buffer)
 FROM (SELECT CAST('abc' AS BINARY) AS buffer);
 
 -- Clean up
