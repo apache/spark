@@ -239,7 +239,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                 # when safe is True, the cast will fail if there's a overflow or other
                 # unsafe conversion.
                 # RecordBatch.cast(...) isn't used as minimum PyArrow version
-                # required for RecordBatch.cast(...) is v21.0.0
+                # required for RecordBatch.cast(...) is v16.0
                 return arr.cast(target_type=arrow_type, safe=True)
             except (pa.ArrowInvalid, pa.ArrowTypeError):
                 raise PySparkRuntimeError(
