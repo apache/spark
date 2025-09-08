@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.python.streaming
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.nio.channels.{Channels, ServerSocketChannel}
+import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException, InterruptedIOException}
+import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel}
 import java.time.Duration
 
 import scala.collection.mutable
@@ -181,7 +181,7 @@ class TransformWithStateInPySparkStateServer(
           logWarning(log"No more data to read from the socket")
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
-        case _: InterruptedException =>
+        case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
           logInfo(log"Thread interrupted, shutting down state server")
           Thread.currentThread().interrupt()
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
