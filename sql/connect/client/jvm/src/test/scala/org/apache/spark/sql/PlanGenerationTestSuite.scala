@@ -748,7 +748,7 @@ class PlanGenerationTestSuite
   }
 
   test("repartitionById") {
-    simple.repartitionById(10, fn.col("partition_id"))
+    simple.repartitionById(10, fn.col("id"))
   }
 
   test("coalesce") {
