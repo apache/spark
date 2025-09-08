@@ -607,6 +607,7 @@ class SparkConnectClient(object):
         retry_policy: Optional[Dict[str, Any]] = None,
         use_reattachable_execute: bool = True,
         session_hooks: Optional[list["SparkSession.Hook"]] = None,
+        allow_arrow_batch_chunking: bool = True,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -639,6 +640,16 @@ class SparkConnectClient(object):
             Enable reattachable execution.
         session_hooks: list[SparkSession.Hook], optional
             List of session hooks to call.
+        allow_arrow_batch_chunking: bool
+            Whether to allow the server to split large Arrow batches into smaller chunks.
+            Although Arrow results are split into batches with a size limit according to estimation,
+            the size of the batches is not guaranteed to be less than the limit, especially when a
+            single row is larger than the limit, in which case the server will fail to split it
+            further into smaller batches. As a result, the client may encounter a gRPC error stating
+            "Received message larger than max" when a batch is too large.
+            If true, the server will split large Arrow batches into smaller chunks, and the client
+            is expected to handle the chunked Arrow batches.
+            If false, the server will not chunk large Arrow batches.
         """
         self.thread_local = threading.local()
 
@@ -678,6 +689,7 @@ class SparkConnectClient(object):
             self._user_id, self._session_id, self._channel, self._builder.metadata()
         )
         self._use_reattachable_execute = use_reattachable_execute
+        self._allow_arrow_batch_chunking = allow_arrow_batch_chunking
         self._session_hooks = session_hooks or []
         # Configure logging for the SparkConnect client.
 
@@ -1495,32 +1507,65 @@ class SparkConnectClient(object):
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
+                    f"Number of chunks in batch={b.arrow_batch.num_chunks_in_batch} "
+                    f"Chunk index={b.arrow_batch.chunk_index} "
                     f"size={len(b.arrow_batch.data)}"
                 )
 
+                if arrow_batch_chunks_to_assemble:
+                    # Expect next chunk of the same batch
+                    if b.arrow_batch.chunk_index != len(arrow_batch_chunks_to_assemble):
+                        raise SparkConnectException(
+                            f"Expected chunk index {len(arrow_batch_chunks_to_assemble)} of the arrow batch "
+                            f"but got {b.arrow_batch.chunk_index}."
+                        )
+                else:
+                    # Expect next batch
+                    if (
+                        b.arrow_batch.HasField("start_offset")
+                        and num_records != b.arrow_batch.start_offset
+                    ):
+                        # Expect next batch
+                        raise SparkConnectException(
+                            f"Expected arrow batch to start at row offset {num_records} in results, "
+                            + "but received arrow batch starting at offset "
+                            + f"{b.arrow_batch.start_offset}."
+                        )
+                    if b.arrow_batch.chunk_index != 0:
+                        raise SparkConnectException(
+                            f"Expected chunk index 0 of the next arrow batch "
+                            f"but got {b.arrow_batch.chunk_index}."
+                        )
+
+                arrow_batch_chunks_to_assemble.append(b.arrow_batch.data)
+                # Assemble the chunks to an arrow batch to process if
+                # (a) chunking is not enabled (num_chunks_in_batch is not set or is 0,
+                #  in this case, it is the single chunk in the batch)
+                # (b) or the client has received all chunks of the batch.
                 if (
-                    b.arrow_batch.HasField("start_offset")
-                    and num_records != b.arrow_batch.start_offset
+                    not b.arrow_batch.HasField("num_chunks_in_batch")
+                    or b.arrow_batch.num_chunks_in_batch == 0
+                    or len(arrow_batch_chunks_to_assemble) == b.arrow_batch.num_chunks_in_batch
                 ):
-                    raise SparkConnectException(
-                        f"Expected arrow batch to start at row offset {num_records} in results, "
-                        + "but received arrow batch starting at offset "
-                        + f"{b.arrow_batch.start_offset}."
+                    arrow_batch_data = b"".join(arrow_batch_chunks_to_assemble)
+                    arrow_batch_chunks_to_assemble.clear()
+                    logger.debug(
+                        f"Assembling arrow batch of size {len(arrow_batch_data)} from "
+                        f"{b.arrow_batch.num_chunks_in_batch} chunks."
                     )
 
-                num_records_in_batch = 0
-                with pa.ipc.open_stream(b.arrow_batch.data) as reader:
-                    for batch in reader:
-                        assert isinstance(batch, pa.RecordBatch)
-                        num_records_in_batch += batch.num_rows
-                        yield batch
-
-                if num_records_in_batch != b.arrow_batch.row_count:
-                    raise SparkConnectException(
-                        f"Expected {b.arrow_batch.row_count} rows in arrow batch but got "
-                        + f"{num_records_in_batch}."
-                    )
-                num_records += num_records_in_batch
+                    num_records_in_batch = 0
+                    with pa.ipc.open_stream(arrow_batch_data) as reader:
+                        for batch in reader:
+                            assert isinstance(batch, pa.RecordBatch)
+                            num_records_in_batch += batch.num_rows
+                            if num_records_in_batch != b.arrow_batch.row_count:
+                                raise SparkConnectException(
+                                    f"Expected {b.arrow_batch.row_count} rows in arrow batch but got "
+                                    + f"{num_records_in_batch}."
+                                )
+                            num_records += num_records_in_batch
+                            yield batch
             if b.HasField("create_resource_profile_command_result"):
                 profile_id = b.create_resource_profile_command_result.profile_id
                 yield {"create_resource_profile_command_result": profile_id}
@@ -1634,6 +1679,14 @@ class SparkConnectClient(object):
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
+        # Add request option to allow result chunking.
+        req.request_options.append(
+            pb2.ExecutePlanRequest.RequestOption(
+                result_chunking_options=pb2.ResultChunkingOptions(
+                    allow_arrow_batch_chunking=self._allow_arrow_batch_chunking
+                )
+            )
+        )
         return req
 
     def get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:

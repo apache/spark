@@ -392,4 +392,20 @@ object Connect {
       .internal()
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10g")
+
+  val CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE =
+    buildConf("spark.connect.session.resultChunking.maxChunkSize")
+      .doc("The max size of a chunk in responses for a result batch. Result chunking is enabled" +
+        " if this config is set to a value greater than 0 and if the client allows it in" +
+        " ResultChunkingOptions. Otherwise, for example if set to -1, this feature is disabled." +
+        " While spark.connect.grpc.arrow.maxBatchSize determines the max size of a result batch," +
+        " maxChunkSize defines the max size of each individual chunk that is part of the batch" +
+        " that will be sent in a response. This allows the server to send large rows to clients." +
+        " However, excessively large plans remain unsupported due to Spark internals and JVM" +
+        " limitations.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      // 90% of the max message size by default to allow for some overhead.
+      .createWithDefault((ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE * 0.9).toInt)
 }

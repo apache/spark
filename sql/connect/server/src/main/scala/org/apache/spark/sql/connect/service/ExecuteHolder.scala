@@ -29,7 +29,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Observation
 import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_ENABLED
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_ENABLED, CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE}
 import org.apache.spark.sql.connect.execution.{ExecuteGrpcResponseSender, ExecuteResponseObserver, ExecuteThreadRunner}
 import org.apache.spark.util.SystemClock
 
@@ -73,6 +73,18 @@ private[connect] class ExecuteHolder(
     SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_ENABLED) &&
     request.getRequestOptionsList.asScala.exists { option =>
       option.hasReattachOptions && option.getReattachOptions.getReattachable == true
+    }
+  }
+
+  /**
+   * If result chunking is enabled, it will split large arrow batches into smaller chunks in
+   * responses.
+   * */
+  val resultChunkingEnabled: Boolean = {
+    sessionHolder.session.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE) > 0 &&
+    request.getRequestOptionsList.asScala.exists { option =>
+      option.hasResultChunkingOptions &&
+      option.getResultChunkingOptions.getAllowArrowBatchChunking == true
     }
   }
 
