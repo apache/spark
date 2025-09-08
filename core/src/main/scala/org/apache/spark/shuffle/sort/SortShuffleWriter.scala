@@ -50,7 +50,11 @@ private[spark] class SortShuffleWriter[K, V, C](
   private var partitionLengths: Array[Long] = _
 
   def getRowBasedChecksums: Array[RowBasedChecksum] = {
-    if (sorter != null) sorter.getRowBasedChecksums else new Array[RowBasedChecksum](0)
+    if (sorter != null) {
+      sorter.getRowBasedChecksums
+    } else {
+      ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS
+    }
   }
 
   def getAggregatedChecksumValue: Long = {

@@ -61,7 +61,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
 }
 
 object ShuffleDependency {
-  private val EMPTY_ROW_BASED_CHECKSUMS: Array[RowBasedChecksum] = Array.empty
+  private[spark] val EMPTY_ROW_BASED_CHECKSUMS: Array[RowBasedChecksum] = Array.empty
 }
 
 /**
@@ -91,26 +91,6 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
     val rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS)
   extends Dependency[Product2[K, V]] with Logging {
-
-  def this(
-      rdd: RDD[_ <: Product2[K, V]],
-      partitioner: Partitioner,
-      serializer: Serializer,
-      keyOrdering: Option[Ordering[K]],
-      aggregator: Option[Aggregator[K, V, C]],
-      mapSideCombine: Boolean,
-      shuffleWriterProcessor: ShuffleWriteProcessor) = {
-    this(
-      rdd,
-      partitioner,
-      serializer,
-      keyOrdering,
-      aggregator,
-      mapSideCombine,
-      shuffleWriterProcessor,
-      ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS
-    )
-  }
 
   if (mapSideCombine) {
     require(aggregator.isDefined, "Map-side combine without Aggregator specified!")

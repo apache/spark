@@ -207,7 +207,7 @@ private[spark] class ExternalSorter[K, V, C](
         val partitionId = actualPartitioner.getPartition(kv._1)
         map.changeValue((partitionId, kv._1), update)
         maybeSpillCollection(usingMap = true)
-        if (!rowBasedChecksums.isEmpty) {
+        if (rowBasedChecksums.nonEmpty) {
           rowBasedChecksums(partitionId).update(kv._1, kv._2)
         }
       }
@@ -219,7 +219,7 @@ private[spark] class ExternalSorter[K, V, C](
         val partitionId = actualPartitioner.getPartition(kv._1)
         buffer.insert(partitionId, kv._1, kv._2.asInstanceOf[C])
         maybeSpillCollection(usingMap = false)
-        if (!rowBasedChecksums.isEmpty) {
+        if (rowBasedChecksums.nonEmpty) {
           rowBasedChecksums(partitionId).update(kv._1, kv._2)
         }
       }
