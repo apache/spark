@@ -23,21 +23,9 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, CreateVariable, ExceptionHandler, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SearchedCaseStatement, SetVariable, SimpleCaseStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
-import org.apache.spark.sql.internal.SQLConf
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
-
-  // Tests setup
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    conf.setConfString(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
-  }
-
-  protected override def afterAll(): Unit = {
-    conf.unsetConf(SQLConf.SQL_SCRIPTING_ENABLED.key)
-    super.afterAll()
-  }
 
   // Tests
   test("single select") {
