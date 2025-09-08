@@ -299,4 +299,11 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
       }
     }
   }
+
+  test("SPARK-53518: No truncation for catalogString of User Defined Type") {
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "3") {
+      val string = new ExampleIntRowUDT(4).catalogString
+      assert(string == "struct<col0:int,col1:int,col2:int,col3:int>")
+    }
+  }
 }
