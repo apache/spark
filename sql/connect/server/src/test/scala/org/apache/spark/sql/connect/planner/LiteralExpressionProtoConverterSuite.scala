@@ -46,7 +46,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
   test("basic proto value and catalyst value conversion") {
     val values = Array(null, true, 1.toByte, 1.toShort, 1, 1L, 1.1d, 1.1f, "spark")
     for (v <- values) {
-      assertResult(v)(LiteralValueProtoConverter.toCatalystValue(toLiteralProto(v)))
+      assertResult(v)(LiteralValueProtoConverter.toScalaValue(toLiteralProto(v)))
     }
   }
 
@@ -78,7 +78,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     .foreach { case ((v, t), idx) =>
       test(s"complex proto value and catalyst value conversion #$idx") {
         assertResult(v)(
-          LiteralValueProtoConverter.toCatalystValue(
+          LiteralValueProtoConverter.toScalaValue(
             LiteralValueProtoConverter.toLiteralProtoWithOptions(
               v,
               Some(t),
@@ -87,7 +87,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
 
       test(s"complex proto value and catalyst value conversion #$idx - backward compatibility") {
         assertResult(v)(
-          LiteralValueProtoConverter.toCatalystValue(
+          LiteralValueProtoConverter.toScalaValue(
             LiteralValueProtoConverter.toLiteralProtoWithOptions(
               v,
               Some(t),
@@ -194,7 +194,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
       .addElements(LiteralValueProtoConverter.toLiteralProto("test"))
       .build()
 
-    val result = LiteralValueProtoConverter.toCatalystStruct(structProto)
+    val result = LiteralValueProtoConverter.toScalaStruct(structProto)
     val resultType = LiteralValueProtoConverter.getProtoStructType(structProto)
 
     // Verify the result is a tuple with correct values
