@@ -1247,6 +1247,14 @@ class SparkConnectClient(object):
             req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
+        # Add request option to allow result chunking.
+        req.request_options.append(
+            pb2.ExecutePlanRequest.RequestOption(
+                result_chunking_options=pb2.ResultChunkingOptions(
+                    allow_arrow_batch_chunking=self._allow_arrow_batch_chunking
+                )
+            )
+        )
         if operation_id is not None:
             try:
                 uuid.UUID(operation_id, version=4)
@@ -1679,14 +1687,6 @@ class SparkConnectClient(object):
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
-        # Add request option to allow result chunking.
-        req.request_options.append(
-            pb2.ExecutePlanRequest.RequestOption(
-                result_chunking_options=pb2.ResultChunkingOptions(
-                    allow_arrow_batch_chunking=self._allow_arrow_batch_chunking
-                )
-            )
-        )
         return req
 
     def get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
