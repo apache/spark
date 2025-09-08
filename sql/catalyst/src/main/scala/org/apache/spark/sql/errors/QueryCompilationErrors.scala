@@ -1511,8 +1511,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "continuousSources" -> continuousSources.mkString(", ")))
   }
 
-  def noSuchTableError(ident: Identifier): NoSuchTableException = {
-    new NoSuchTableException(ident.asMultipartIdentifier)
+  def noSuchTableError(catalogName: String, ident: Identifier): NoSuchTableException = {
+    new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
   }
 
   def noSuchTableError(nameParts: Seq[String]): Throwable = {
