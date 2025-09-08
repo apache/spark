@@ -55,7 +55,6 @@ class TransformWithStateInPySparkStateServer(
     stateServerSocket: ServerSocketChannel,
     statefulProcessorHandle: StatefulProcessorHandleImplBase,
     groupingKeySchema: StructType,
-    timeZoneId: String,
     arrowTransformWithStateInPySparkMaxRecordsPerBatch: Int,
     batchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForEviction: Option[Long] = None,

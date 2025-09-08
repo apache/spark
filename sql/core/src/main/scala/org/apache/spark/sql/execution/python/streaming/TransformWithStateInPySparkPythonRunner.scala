@@ -220,7 +220,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 
     executionContext.execute(
       new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandle,
-        groupingKeySchema, timeZoneId,
+        groupingKeySchema,
         sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch,
         batchTimestampMs, eventTimeWatermarkForEviction))
 
@@ -299,7 +299,7 @@ class TransformWithStateInPySparkPythonPreInitRunner(
       override def run(): Unit = {
         try {
           new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandleImpl,
-            groupingKeySchema, timeZoneId,
+            groupingKeySchema,
             sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch).run()
         } catch {
           case e: Exception =>

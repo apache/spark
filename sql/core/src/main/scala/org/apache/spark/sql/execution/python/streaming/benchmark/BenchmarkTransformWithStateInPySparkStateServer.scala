@@ -351,7 +351,6 @@ object BenchmarkTransformWithStateInPySparkStateServer extends App {
     serverSocketChannel,
     stateHandleImpl,
     groupingKeySchema,
-    timeZoneId,
     arrowTransformWithStateInPySparkMaxRecordsPerBatch
   )
   // scalastyle:off println
