@@ -364,10 +364,6 @@
             "integer": 6
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            },
             "containsNull": true
           }
         }
