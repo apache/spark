@@ -20,11 +20,9 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
-
 import scala.collection.parallel.immutable.ParRange
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
@@ -32,9 +30,12 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
+
+import scala.collection.mutable.ListBuffer
 
 class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
 

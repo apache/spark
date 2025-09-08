@@ -273,6 +273,8 @@ private[ui] class ExecutionPagedTable(
 
   private val showSubExecutions = subExecutions.exists(_._2.nonEmpty)
 
+  private val showScriptId = data.exists(_.sqlScriptId.isDefined)
+
   override def tableId: String = s"$executionTag-table"
 
   override def tableCssClass: String =
@@ -302,6 +304,12 @@ private[ui] class ExecutionPagedTable(
       ("Submitted", true, None),
       ("Duration", true, Some("Time from query submission to completion (or if still executing," +
         " time since submission)"))) ++ {
+      if (showScriptId) {
+        Seq(("SQL Script ID", true, None))
+      } else {
+        Nil
+      }
+    } ++ {
       if (showRunningJobs && showSucceededJobs && showFailedJobs) {
         Seq(
           ("Running Job IDs", true, None),
@@ -381,6 +389,11 @@ private[ui] class ExecutionPagedTable(
         <td sorttable_customkey={duration.toString}>
           {UIUtils.formatDuration(duration)}
         </td>
+        {if (showScriptId) {
+        <td sorttable_customkey={executionUIData.sqlScriptId.getOrElse("")}>
+          {executionUIData.sqlScriptId.getOrElse("")}
+        </td>
+        }}
         {if (showRunningJobs) {
           <td>
             {jobLinks(executionTableRow.runningJobData)}
@@ -437,6 +450,11 @@ private[ui] class ExecutionPagedTable(
                     <td sorttable_customkey={duration.toString}>
                       {UIUtils.formatDuration(duration)}
                     </td>
+                    {if (showScriptId) {
+                    <td sorttable_customkey={executionUIData.sqlScriptId.getOrElse("")}>
+                      {executionUIData.sqlScriptId.getOrElse("")}
+                    </td>
+                    }}
                     {if (showRunningJobs) {
                       <td>
                         {jobLinks(rowData.runningJobData)}
@@ -569,6 +587,7 @@ private[ui] class ExecutionDataSource(
       case "Description" => Ordering.by(_.executionUIData.description)
       case "Submitted" => Ordering.by(_.executionUIData.submissionTime)
       case "Duration" => Ordering.by(_.duration)
+      case "SQL Script ID" => Ordering.by(_.executionUIData.sqlScriptId)
       case "Job IDs" | "Succeeded Job IDs" => Ordering by (_.completedJobData.headOption)
       case "Running Job IDs" => Ordering.by(_.runningJobData.headOption)
       case "Failed Job IDs" => Ordering.by(_.failedJobData.headOption)

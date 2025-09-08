@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkContext, SparkThrowable}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody,
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
+
+import java.util.UUID
 
 /**
  * SQL scripting executor - executes script and returns result statements.
@@ -41,13 +43,14 @@ import org.apache.spark.sql.types.StructType
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
     session: SparkSession,
+    scriptId: UUID,
     args: Map[String, Expression]) {
 
   private val interpreter = SqlScriptingInterpreter(session)
 
   // Frames to keep what is being executed.
   private val context: SqlScriptingExecutionContext = {
-    val ctx = new SqlScriptingExecutionContext()
+    val ctx = new SqlScriptingExecutionContext(scriptId)
     val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
     // Add frame which represents SQL Script to the context.
     ctx.frames.append(
@@ -68,7 +71,14 @@ class SqlScriptingExecution(
    * with this method.
    */
   def withContextManager[R](f: => R): R = {
-    contextManagerHandle.runWith(f)
+    contextManagerHandle.runWith {
+      val sc = session.sparkContext
+      val old = sc.getLocalProperty(SparkContext.SQL_SCRIPT_ID)
+      sc.setLocalProperty(
+        SparkContext.SQL_SCRIPT_ID, context.scriptId.toString)
+      try f
+      finally sc.setLocalProperty(SparkContext.SQL_SCRIPT_ID, old)
+    }
   }
 
   /**
@@ -208,7 +218,8 @@ object SqlScriptingExecution {
       session: SparkSession,
       script: CompoundBody,
       args: Map[String, Expression] = Map.empty): LogicalPlan = {
-    val sse = new SqlScriptingExecution(script, session, args)
+    val scriptId: UUID = UUID.randomUUID()
+    val sse = new SqlScriptingExecution(script, session, scriptId, args)
     sse.withContextManager {
       var result: Option[Seq[Row]] = None
 

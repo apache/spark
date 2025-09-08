@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.scripting
 
-import scala.collection.mutable.ListBuffer
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 
+import java.util.UUID
+import scala.collection.mutable.ListBuffer
 import org.apache.spark.{SparkArithmeticException, SparkConf}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -48,7 +51,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       args: Map[String, Expression] = Map.empty): Seq[Array[Row]] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
 
-    val sse = new SqlScriptingExecution(compoundBody, spark, args)
+    val sse = new SqlScriptingExecution(compoundBody, spark, UUID.randomUUID(), args)
     sse.withContextManager {
       val result: ListBuffer[Array[Row]] = ListBuffer.empty
 
@@ -3103,5 +3106,24 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin
       verifySqlScriptResult(sqlScript2, expected)
     }
+  }
+
+  test("sqlScriptId is populated in SparkListenerSQLExecutionStart") {
+    val scriptIds = new ListBuffer[Option[String]]
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+        case start: SparkListenerSQLExecutionStart =>
+          scriptIds.append(start.sqlScriptId)
+      }
+    })
+
+    spark.sql("begin select 1; select 2; end")
+
+    // Assert script id exist and is identical for all events.
+    assert(scriptIds.forall(_.isDefined))
+    assert(scriptIds.distinct.size == 1)
+    assert(scriptIds.head.exists(_ != ""))
+
+    spark.stop()
   }
 }

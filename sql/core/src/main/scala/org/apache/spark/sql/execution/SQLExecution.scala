@@ -149,7 +149,8 @@ object SQLExecution extends Logging {
               time = System.currentTimeMillis(),
               modifiedConfigs = redactedConfigs,
               jobTags = sc.getJobTags(),
-              jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
+              jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)),
+              sqlScriptId = queryExecution.sqlScriptId.map(_.toString)
             )
             try {
               body match {

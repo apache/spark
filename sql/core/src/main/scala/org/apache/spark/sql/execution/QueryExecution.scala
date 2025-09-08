@@ -20,17 +20,14 @@ package org.apache.spark.sql.execution
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.Path
-
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
-import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
+import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.analysis.{LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -52,6 +49,8 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
+import scala.util.Try
+
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
  * access to the intermediate phases of query execution for developers.
@@ -67,6 +66,20 @@ class QueryExecution(
     val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
+
+  // The ID of the SQL script that executed this query (if any).
+  // This is derived from SqlScriptingContextManager if available,
+  // falling back to SparkContext local properties if not.
+  // The local property is set and reset in SqlScriptingExecution.withContextManager.
+  @volatile var sqlScriptId: Option[UUID] = {
+    SqlScriptingContextManager.get().map(_.getContext.scriptId)
+      .orElse(
+        Option(
+          sparkSession.sparkContext.getLocalProperty(
+            SparkContext.SQL_SCRIPT_ID)
+          // Try just in case, to avoid throwing if s cannot be converted to a UUID.
+        ).flatMap(s => Try(UUID.fromString(s)).toOption))
+  }
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
@@ -152,6 +165,7 @@ class QueryExecution(
       tracker.setReadyForExecution()
       val qe = new QueryExecution(sparkSession, p, mode = mode,
         shuffleCleanupMode = shuffleCleanupMode)
+      qe.sqlScriptId = this.sqlScriptId
       val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
         SQLExecution.withNewExecutionId(qe, Some(name)) {
           qe.executedPlan.executeCollect()

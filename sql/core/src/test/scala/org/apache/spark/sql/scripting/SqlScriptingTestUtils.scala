@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util.UUID
+
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
@@ -50,7 +52,7 @@ trait SqlScriptingTestUtils {
 
     val interpreter = SqlScriptingInterpreter(spark)
 
-    val context = new SqlScriptingExecutionContext()
+    val context = new SqlScriptingExecutionContext(UUID.randomUUID())
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
     context.frames.append(
       new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRIPT)
