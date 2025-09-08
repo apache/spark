@@ -44,7 +44,7 @@ import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
-import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
+import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
@@ -1091,9 +1091,20 @@ class SparkConnectPlanner(
       // for backward compatibility
       rel.getRenameColumnsMapMap.asScala.toSeq.unzip
     }
-    Project(
-      Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
-      transformRelation(rel.getInput))
+
+    val child = transformRelation(rel.getInput)
+    try {
+      // Try the eager analysis first.
+      Dataset
+        .ofRows(session, child)
+        .withColumnsRenamed(colNames, newColNames)
+        .logicalPlan
+    } catch {
+      case _: AnalysisException | _: SparkException =>
+        Project(
+          Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
+          child)
+    }
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
@@ -1113,13 +1124,23 @@ class SparkConnectPlanner(
         (alias.getName(0), transformExpression(alias.getExpr), metadata)
       }.unzip3
 
-    Project(
-      Seq(
-        UnresolvedStarWithColumns(
-          colNames = colNames,
-          exprs = exprs,
-          explicitMetadata = Some(metadata))),
-      transformRelation(rel.getInput))
+    val child = transformRelation(rel.getInput)
+    try {
+      // Try the eager analysis first.
+      Dataset
+        .ofRows(session, child)
+        .withColumns(colNames, exprs.map(expr => Column(expr)), metadata)
+        .logicalPlan
+    } catch {
+      case _: AnalysisException | _: SparkException =>
+        Project(
+          Seq(
+            UnresolvedStarWithColumns(
+              colNames = colNames,
+              exprs = exprs,
+              explicitMetadata = Some(metadata))),
+          child)
+    }
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {
