@@ -379,8 +379,7 @@ class SparkConnectServiceSuite
       val overriddenMaxChunkSize = 100
       withSparkConf(
         Connect.CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE.key ->
-          overriddenMaxChunkSize.toString
-      ) {
+          overriddenMaxChunkSize.toString) {
         val instance = new SparkConnectService(false)
         val connect = new MockRemoteSession()
         val context = proto.UserContext
@@ -397,13 +396,11 @@ class SparkConnectServiceSuite
           .addRequestOptions(
             proto.ExecutePlanRequest.RequestOption
               .newBuilder()
-              .setResultChunkingOptions(
-                proto.ResultChunkingOptions
-                  .newBuilder()
-                  .setAllowArrowBatchChunking(true)
-                  .build()
-              ).build()
-          )
+              .setResultChunkingOptions(proto.ResultChunkingOptions
+                .newBuilder()
+                .setAllowArrowBatchChunking(true)
+                .build())
+              .build())
           .setUserContext(context)
           .setSessionId(UUID.randomUUID.toString())
           .build()
@@ -476,9 +473,8 @@ class SparkConnectServiceSuite
           }
 
           // Reassemble the chunks into a single Arrow batch and validate its content.
-          val batchData: ByteString = ByteString.copyFrom(
-            batch.map(_.getArrowBatch.getData).asJava
-          )
+          val batchData: ByteString =
+            ByteString.copyFrom(batch.map(_.getArrowBatch.getData).asJava)
           val reader = new ArrowStreamReader(batchData.newInput(), allocator)
           while (reader.loadNextBatch()) {
             val root = reader.getVectorSchemaRoot

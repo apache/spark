@@ -1515,6 +1515,7 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
 
         original_verify_response_integrity = self.connect._client._verify_response_integrity
         captured_chunks = []
+
         def patched_verify_response_integrity(response):
             original_verify_response_integrity(response)
             if isinstance(response, ExecutePlanResponse) and response.HasField("arrow_batch"):
@@ -1525,7 +1526,9 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
             self.connect._client._verify_response_integrity = patched_verify_response_integrity
             # Override the chunk size to 100 bytes for testing
             overridden_max_chunk_size = 100
-            self.connect.conf.set("spark.connect.session.resultChunking.maxChunkSize", overridden_max_chunk_size)
+            self.connect.conf.set(
+                "spark.connect.session.resultChunking.maxChunkSize", overridden_max_chunk_size
+            )
 
             # Execute the query, and assert the results are correct.
             self.assertEqual(cdf.collect(), sdf.collect())
@@ -1537,10 +1540,11 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
                 n = len(chunks)
                 while i < n:
                     num_chunks = chunks[i].num_chunks_in_batch
-                    batch = chunks[i: i + num_chunks]
+                    batch = chunks[i : i + num_chunks]
                     batches.append(batch)
                     i += num_chunks
                 return batches
+
             batches = split_into_batches(captured_chunks)
             # There are 4 batches (partitions) in total.
             self.assertEqual(len(batches), 4)
