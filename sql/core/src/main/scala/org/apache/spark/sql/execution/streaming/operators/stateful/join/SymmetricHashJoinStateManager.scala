@@ -1311,20 +1311,21 @@ case class SnapshotOptions(
     startKeyWithIndexToValueStateStoreCkptId: Option[String] = None,
     endKeyToNumValuesStateStoreCkptId: Option[String] = None,
     endKeyWithIndexToValueStateStoreCkptId: Option[String] = None) {
-      def getKeyToNumValuesHandlerOpts(): HandlerSnapshotOptions =
-        HandlerSnapshotOptions(
-          snapshotVersion = snapshotVersion,
-          endVersion = endVersion,
-          startStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
-          endStateStoreCkptId = endKeyToNumValuesStateStoreCkptId)
 
-      def getKeyWithIndexToValueHandlerOpts(): HandlerSnapshotOptions =
-        HandlerSnapshotOptions(
-          snapshotVersion = snapshotVersion,
-          endVersion = endVersion,
-          startStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
-          endStateStoreCkptId = endKeyWithIndexToValueStateStoreCkptId)
-    }
+  def getKeyToNumValuesHandlerOpts(): HandlerSnapshotOptions =
+    HandlerSnapshotOptions(
+      snapshotVersion = snapshotVersion,
+      endVersion = endVersion,
+      startStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
+      endStateStoreCkptId = endKeyToNumValuesStateStoreCkptId)
+
+  def getKeyWithIndexToValueHandlerOpts(): HandlerSnapshotOptions =
+    HandlerSnapshotOptions(
+      snapshotVersion = snapshotVersion,
+      endVersion = endVersion,
+      startStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
+      endStateStoreCkptId = endKeyWithIndexToValueStateStoreCkptId)
+}
 
 /** Snapshot options specialized for a single state store handler. */
 private[join] case class HandlerSnapshotOptions(
