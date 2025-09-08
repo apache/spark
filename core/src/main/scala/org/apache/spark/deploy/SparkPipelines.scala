@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.util
+import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -62,16 +63,16 @@ object SparkPipelines extends Logging {
         if (opt == "--remote") {
           remote = value
         } else if (opt == "--class") {
-          logInfo("--class argument not supported.")
+          logError("--class argument not supported.")
           throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
-        } else if (opt == "--conf" &&
-          value.startsWith("spark.api.mode=") &&
-          value != "spark.api.mode=connect") {
-          logInfo(
-            "--spark.api.mode must be 'connect'. " +
-            "Declarative Pipelines currently only supports Spark Connect."
-          )
-          throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
+        } else if (opt == "--conf" && value.startsWith("spark.api.mode=")) {
+          if (value.toLowerCase(Locale.ROOT) != "spark.api.mode=connect") {
+            logError(
+              "--spark.api.mode must be 'connect'. " +
+                "Declarative Pipelines currently only supports Spark Connect."
+            )
+            throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
+          }
         } else if (Seq("--name", "-h", "--help").contains(opt)) {
           pipelinesArgs += opt
           if (value != null && value.nonEmpty) {
