@@ -1727,9 +1727,9 @@ class ClientE2ETestSuite
     val negativeDf = spark.range(10).toDF("id")
     val negativeRepartitioned = negativeDf.repartitionById(10, (col("id") - 5).cast("int"))
     val negativeResult =
-     negativeRepartitioned
-     .withColumn("actual_p_id", spark_partition_id())
-     .collect()
+      negativeRepartitioned
+        .withColumn("actual_p_id", spark_partition_id())
+        .collect()
 
     assert(negativeResult.forall(row => {
       val actualPartitionId = row.getAs[Int]("actual_p_id")

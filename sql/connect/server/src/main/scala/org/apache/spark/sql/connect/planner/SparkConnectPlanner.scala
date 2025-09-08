@@ -4112,7 +4112,7 @@ class SparkConnectPlanner(
   }
 
   private def transformDirectShufflePartitionID(
-       directShufflePartitionID: proto.Expression.DirectShufflePartitionID): Expression = {
+      directShufflePartitionID: proto.Expression.DirectShufflePartitionID): Expression = {
     DirectShufflePartitionID(transformExpression(directShufflePartitionID.getChild))
   }
 

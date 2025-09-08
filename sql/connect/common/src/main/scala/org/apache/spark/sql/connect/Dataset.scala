@@ -1015,14 +1015,13 @@ class Dataset[T] private[sql] (
     }
   }
 
-  private def buildRepartitionById(
-    numPartitions: Int,
-    partitionExpr: Column): Dataset[T] = {
+  private def buildRepartitionById(numPartitions: Int, partitionExpr: Column): Dataset[T] = {
     val exprBuilder = proto.Expression.newBuilder()
-    val directShufflePartitionIdExpr = exprBuilder.setDirectShufflePartitionId(
-      exprBuilder.getDirectShufflePartitionIdBuilder
-        .setChild(toExpr(partitionExpr))
-    ).build()
+    val directShufflePartitionIdExpr = exprBuilder
+      .setDirectShufflePartitionId(
+        exprBuilder.getDirectShufflePartitionIdBuilder
+          .setChild(toExpr(partitionExpr)))
+      .build()
     sparkSession.newDataset(agnosticEncoder, partitionExpr :: Nil) { builder =>
       val repartitionBuilder = builder.getRepartitionByExpressionBuilder
         .setInput(plan.getRoot)
