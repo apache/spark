@@ -69,10 +69,7 @@ name: Release Apache Spark
 
 on:
   schedule:
-    # Dry-run schedule for `master`, `branch-4.0`, and `branch-3.5`
     - cron: '0 7 * * *'
-    - cron: '0 14 * * *'
-    - cron: '0 21 * * *'
   workflow_dispatch:
     inputs:
       branch:
@@ -112,26 +109,14 @@ jobs:
         )
       )
     steps:
-      - name: Set dry run branch
-        run: |
-          if [ "${{ inputs.branch != '' }}" ]; then
-            echo "GIT_BRANCH=${{ inputs.branch }}" >> $GITHUB_ENV
-          else
-            if [ "${{ github.event.schedule }}" == "0 14 * * *" ]; then
-              echo "GIT_BRANCH=branch-4.0" >> $GITHUB_ENV
-            elif [ "${{ github.event.schedule }}" == "0 21 * * *" ]; then
-              echo "GIT_BRANCH=branch-3.5" >> $GITHUB_ENV
-            else
-              echo "GIT_BRANCH=master" >> $GITHUB_ENV
-            fi
-          fi
       - name: Checkout Spark repository
         uses: actions/checkout@v4
         with:
           repository: apache/spark
-          ref: "$GIT_BRANCH"
+          ref: "${{ inputs.branch }}"
       - name: Release Apache Spark
         env:
+          GIT_BRANCH: "${{ inputs.branch }}"
           RELEASE_VERSION: "${{ inputs.release-version }}"
           SPARK_RC_COUNT: "${{ inputs.rc-count }}"
           IS_FINALIZE: "${{ inputs.finalize }}"
