@@ -141,9 +141,7 @@ class UDFInputTypeTests(ReusedSQLTestCase):
                             return tuple(convert_to_numpy_printable(elem) for elem in x)
                         elif isinstance(x, dict):
                             return {k: convert_to_numpy_printable(v) for k, v in x.items()}
-                        elif (
-                            isinstance(x, np.generic) and hasattr(x, "dtype") and hasattr(x, "item")
-                        ):
+                        elif isinstance(x, np.generic):
                             return NpPrintable(x)
                         else:
                             return x
