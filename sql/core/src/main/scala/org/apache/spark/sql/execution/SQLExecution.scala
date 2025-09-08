@@ -54,7 +54,7 @@ object SQLExecution extends Logging {
   private val testing = sys.props.contains(IS_TESTING.key)
 
   private[sql] def executionIdJobTag(session: SparkSession, id: Long) =
-    s"${session.sessionJobTag}-execution-root-id-$id"
+    s"${session.sessionJobTag}-execution-root-id-$id-thread-${session.threadUuid.get()}"
 
   private[sql] def checkSQLExecutionId(sparkSession: SparkSession): Unit = {
     val sc = sparkSession.sparkContext
