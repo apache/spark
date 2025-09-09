@@ -299,7 +299,7 @@ class SparkConnectServiceSuite
             done = true
           }
         })
-      verifyEvents.assertCompleted()
+      verifyEvents.assertClosed()
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
