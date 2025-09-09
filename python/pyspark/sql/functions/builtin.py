@@ -25891,15 +25891,14 @@ def theta_sketch_estimate(col: "ColumnOrName") -> Column:
     |                                                 3|
     +--------------------------------------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
 
     fn = "theta_sketch_estimate"
-    return _invoke_function(fn, _to_java_column(col))
+    return _invoke_function_over_columns(fn, col)
 
 
 @_try_remote_functions
 def theta_union(
-    col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
+    col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[Union[int, Column]] = None
 ) -> Column:
     """
     Merges two binary representations of Datasketches ThetaSketch objects, using a
@@ -25911,7 +25910,7 @@ def theta_union(
     ----------
     col1 : :class:`~pyspark.sql.Column` or column name
     col2 : :class:`~pyspark.sql.Column` or column name
-    lgNomEntries : int, optional
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries for the union operation
         (must be between 4 and 26, defaults to 12)
 
@@ -25941,18 +25940,17 @@ def theta_union(
     |                                                       6|
     +--------------------------------------------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
 
     fn = "theta_union"
     if lgNomEntries is not None:
-        return _invoke_function(
+        return _invoke_function_over_columns(
             fn,
-            _to_java_column(col1),
-            _to_java_column(col2),
-            _enum_to_value(lgNomEntries),
+            col1,
+            col2,
+            lit(lgNomEntries),
         )
     else:
-        return _invoke_function(fn, _to_java_column(col1), _to_java_column(col2))
+        return _invoke_function_over_columns(fn, col1, col2)
 
 
 @_try_remote_functions
@@ -25994,10 +25992,9 @@ def theta_intersection(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     |                                                          3|
     +-----------------------------------------------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
 
     fn = "theta_intersection"
-    return _invoke_function(fn, _to_java_column(col1), _to_java_column(col2))
+    return _invoke_function_over_columns(fn, col1, col2)
 
 
 @_try_remote_functions
@@ -26040,10 +26037,9 @@ def theta_difference(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     |                                                        3|
     +---------------------------------------------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
 
     fn = "theta_difference"
-    return _invoke_function(fn, _to_java_column(col1), _to_java_column(col2))
+    return _invoke_function_over_columns(fn, col1, col2)
 
 
 # ---------------------- Predicates functions ------------------------------

@@ -3798,6 +3798,17 @@ object functions {
   }
 
   /**
+   * Unions two binary representations of Datasketches ThetaSketch objects in the input columns
+   * using a Datasketches Union object. It allows the configuration of `lgNomEntries` log nominal
+   * entries for the union buffer.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def theta_union(c1: Column, c2: Column, lgNomEntries: Column): Column =
+    Column.fn("theta_union", c1, c2, lgNomEntries)
+
+  /**
    * Returns the user name of current execution context.
    *
    * @group misc_funcs
