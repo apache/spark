@@ -886,6 +886,39 @@ class GroupedAggArrowUDFTestsMixin:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
 
+    def test_return_numpy_scalar(self):
+        import numpy as np
+        import pyarrow as pa
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def np_max_udf(v) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.max(v)
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def np_min_udf(v) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.min(v)
+
+        @arrow_udf("double", ArrowUDFType.GROUPED_AGG)
+        def np_avg_udf(v) -> np.float64:
+            assert isinstance(v, pa.Array)
+            return np.mean(v)
+
+        df = self.spark.range(10)
+        expected = df.select(
+            sf.max("id").alias("max"),
+            sf.min("id").alias("min"),
+            sf.avg("id").alias("avg"),
+        )
+
+        result = df.select(
+            np_max_udf("id").alias("max"),
+            np_min_udf("id").alias("min"),
+            np_avg_udf("id").alias("avg"),
+        )
+        self.assertEqual(expected.collect(), result.collect())
+
     def test_unsupported_return_types(self):
         import pyarrow as pa
 
