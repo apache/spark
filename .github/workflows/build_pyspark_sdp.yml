@@ -20,9 +20,9 @@
 name: "Build pyspark spark-pipelines"
 
 on:
-  push:
-    branches:
-      - '**'
+  pull_request:
+    # TODO: narrow file path triggers
+    branches: [ master ]
 
 jobs:
   # Build: build Spark and run the tests for specified modules using SBT
