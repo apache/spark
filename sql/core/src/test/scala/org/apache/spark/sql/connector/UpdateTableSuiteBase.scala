@@ -619,7 +619,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(2) :: Nil)
   }
 
-  test("update with nondeterministic assignments and no wholestage codegen") {
+  test("SPARK-53538: update with nondeterministic assignments and no wholestage codegen") {
     val extraColCount = SQLConf.get.wholeStageMaxNumFields - 4
     val schema = "pk INT NOT NULL, id INT, value DOUBLE, dep STRING, " +
       ((1 to extraColCount).map(i => s"col$i INT").mkString(", "))
