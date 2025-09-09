@@ -407,17 +407,14 @@ object GeneratorNestedColumnAliasing {
         attrToExtractValuesOnGenerator.flatMap(_._2).toSeq, Seq.empty,
         collectNestedGetStructFields)
 
-      // Pruning on `Generator`'s output. We only process single field case.
-      // For multiple field case, we cannot directly move field extractor into
-      // the generator expression. A workaround is to re-construct array of struct
-      // from multiple fields. But it will be more complicated and may not worth.
-      // TODO(SPARK-34956): support multiple fields.
+      // Enhanced pruning on `Generator`'s output supporting multiple fields.
+      // For multiple field case, we reconstruct the struct with only the needed fields
+      // and update the explode operation to work on this pruned struct.
       val nestedFieldsOnGenerator = attrToExtractValuesOnGenerator.values.flatten.toSet
-      if (nestedFieldsOnGenerator.size > 1 || nestedFieldsOnGenerator.isEmpty) {
+      if (nestedFieldsOnGenerator.isEmpty) {
         Some(pushedThrough)
-      } else {
-        // Only one nested column accessor.
-        // E.g., df.select(explode($"items").as("item")).select($"item.a")
+      } else if (nestedFieldsOnGenerator.size == 1) {
+        // Single field optimization (existing logic)
         val nestedFieldOnGenerator = nestedFieldsOnGenerator.head
         pushedThrough match {
           case p @ Project(_, newG: Generate) =>
@@ -448,6 +445,46 @@ object GeneratorNestedColumnAliasing {
               case f: GetStructField if nestedFieldsOnGenerator.contains(f) =>
                 updatedGenerate.output
                   .find(a => attrExprIdsOnGenerator.contains(a.exprId))
+                  .getOrElse(f)
+            }
+            Some(updatedProject)
+
+          case other =>
+            // We should not reach here.
+            throw new IllegalStateException(s"Unreasonable plan after optimization: $other")
+        }
+      } else {
+        // Multiple field optimization - reconstruct struct with only needed fields
+        pushedThrough match {
+          case p @ Project(_, newG: Generate) =>
+            val rewrittenG = newG.transformExpressions {
+              case e: ExplodeBase =>
+                // Create struct reconstruction expression with only the needed fields
+                val structReconstructionExpr = createStructReconstructionForMultipleFields(
+                  e, nestedFieldsOnGenerator)
+                e.withNewChildren(Seq(structReconstructionExpr))
+            }
+
+            // As we change the child of the generator, its output data type must be updated.
+            val updatedGeneratorOutput = rewrittenG.generatorOutput
+              .zip(toAttributes(rewrittenG.generator.elementSchema))
+              .map { case (oldAttr, newAttr) =>
+                newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
+              }
+            assert(updatedGeneratorOutput.length == rewrittenG.generatorOutput.length,
+              "Updated generator output must have the same length " +
+                "with original generator output.")
+            val updatedGenerate = rewrittenG.copy(generatorOutput = updatedGeneratorOutput)
+
+            // Replace nested column accessors with generator output fields
+            val attrExprIdsOnGenerator = attrToExtractValuesOnGenerator.keys.map(_.exprId).toSet
+            val updatedProject = p.withNewChildren(Seq(updatedGenerate)).transformExpressions {
+              case f: GetStructField if nestedFieldsOnGenerator.contains(f) =>
+                updatedGenerate.output
+                  .find(a => attrExprIdsOnGenerator.contains(a.exprId))
+                  .map(attr => GetStructField(attr,
+                    getFieldOrdinalInReconstructedStruct(f, nestedFieldsOnGenerator),
+                    Some(f.extractFieldName)))
                   .getOrElse(f)
             }
             Some(updatedProject)
@@ -488,6 +525,74 @@ object GeneratorNestedColumnAliasing {
       case other =>
         other.mapChildren(replaceGenerator(generator, _))
     }
+  }
+
+  /**
+   * Create a struct reconstruction expression that extracts only the needed fields
+   * from the array elements. This is used for multi-field optimization.
+   *
+   * For now, we use a simplified approach that creates an array of structs containing
+   * only the needed fields by using array transform with a lambda function.
+   */
+  private def createStructReconstructionForMultipleFields(
+      generator: ExplodeBase,
+      nestedFields: Set[ExtractValue]): Expression = {
+    // Extract field information from the nested fields and sort for consistent ordering
+    val fieldInfos = nestedFields.toSeq.map { field =>
+      field match {
+        case gsf: GetStructField =>
+          val fieldName = gsf.extractFieldName
+          val fieldOrdinal = gsf.ordinal
+          (fieldName, fieldOrdinal, gsf.dataType)
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Unsupported field type for multi-field extraction: ${field.getClass}")
+      }
+    }.sortBy(_._1) // Sort by field name for consistent ordering
+
+    // Create array transformation: transform(array_col, elem ->
+    // named_struct('field1', elem.field1, 'field2', elem.field2, ...))
+    val arrayChild = generator.child
+
+    // Build the named struct creation with only the needed fields
+    val structExprs = fieldInfos.flatMap { case (fieldName, ordinal, dataType) =>
+      Seq(
+        Literal(fieldName),
+        GetArrayStructFields(
+          UnresolvedNamedLambdaVariable("x" :: Nil),
+          StructField(fieldName, dataType),
+          ordinal,
+          fieldInfos.length,
+          containsNull = true
+        )
+      )
+    }
+
+    val namedStruct = CreateNamedStruct(structExprs)
+    val lambda = LambdaFunction(namedStruct, UnresolvedNamedLambdaVariable("x" :: Nil) :: Nil)
+
+    // Use array transform to reconstruct each element
+    ArrayTransform(arrayChild, lambda)
+  }
+
+  /**
+   * Get the ordinal of a field in the reconstructed struct.
+   * Since we sort fields by name during reconstruction, we need to find the field's position
+   * in the sorted order.
+   */
+  private def getFieldOrdinalInReconstructedStruct(
+      field: GetStructField,
+      nestedFields: Set[ExtractValue]): Int = {
+    val fieldName = field.extractFieldName
+    val sortedFieldNames = nestedFields.toSeq.map {
+      case gsf: GetStructField => gsf.extractFieldName
+      case _ => throw new IllegalArgumentException("Unsupported field type")
+    }.sorted
+    val ordinal = sortedFieldNames.indexOf(fieldName)
+    if (ordinal == -1) {
+      throw new IllegalStateException(s"Field $fieldName not found in reconstructed struct")
+    }
+    ordinal
   }
 
   /**
