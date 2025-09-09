@@ -283,7 +283,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                         coerced_array = self._create_array(original_array, field.type)
                         coerced_arrays.append(coerced_array)
                     coerced_batch = pa.RecordBatch.from_arrays(
-                        coerced_arrays, names=[field.name for field in arrow_return_type]
+                        coerced_arrays, names=expected_field_names
                     )
                 yield coerced_batch, arrow_return_type
 
