@@ -147,6 +147,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     // getting an INVALID_HANDLE.OPERATION_ABANDONED error on a retry.
     if (abandoned) {
       abandonedTombstones.put(key, executeHolder.getExecuteInfo)
+      executeHolder.sessionHolder.closeOperation(executeHolder.operationId)
     }
 
     // Remove the execution from the map *after* putting it in abandonedTombstones.
