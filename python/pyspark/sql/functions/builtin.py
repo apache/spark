@@ -25949,7 +25949,7 @@ def theta_union(
             fn,
             _to_java_column(col1),
             _to_java_column(col2),
-            lit(lgNomEntries),
+            _enum_to_value(lgNomEntries),
         )
     else:
         return _invoke_function(fn, _to_java_column(col1), _to_java_column(col2))
