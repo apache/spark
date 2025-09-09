@@ -14,17 +14,42 @@
     "partitionExprs": [{
       "directShufflePartitionId": {
         "child": {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "id"
+          "cast": {
+            "expr": {
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "id"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.functions$",
+                      "methodName": "col",
+                      "fileName": "functions.scala"
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                      "methodName": "~~trimmed~anonfun~~",
+                      "fileName": "PlanGenerationTestSuite.scala"
+                    }]
+                  }
+                }
+              }
+            },
+            "type": {
+              "integer": {
+              }
+            }
           },
           "common": {
             "origin": {
               "jvmOrigin": {
                 "stackTrace": [{
                   "classLoaderName": "app",
-                  "declaringClass": "org.apache.spark.sql.functions$",
-                  "methodName": "col",
-                  "fileName": "functions.scala"
+                  "declaringClass": "org.apache.spark.sql.Column",
+                  "methodName": "cast",
+                  "fileName": "Column.scala"
                 }, {
                   "classLoaderName": "app",
                   "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
