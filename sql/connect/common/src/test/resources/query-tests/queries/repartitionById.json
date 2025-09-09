@@ -15,7 +15,7 @@
       "directShufflePartitionId": {
         "child": {
           "unresolvedAttribute": {
-            "unparsedIdentifier": "partition_id"
+            "unparsedIdentifier": "id"
           },
           "common": {
             "origin": {
