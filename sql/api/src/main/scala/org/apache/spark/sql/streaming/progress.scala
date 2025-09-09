@@ -317,6 +317,7 @@ private[sql] object SinkProgress {
 }
 
 private object SafeJsonSerializer {
+
   /** Convert Double to JValue while handling empty or infinite values */
   def safeDoubleToJValue(value: Double): JValue = {
     if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
