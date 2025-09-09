@@ -469,6 +469,13 @@ class FractionalOps(NumericOps):
 
         return column_op(wrapped_mul)(left, new_right)
 
+    def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+        if is_ansi and _is_decimal_float_mixed(left, right):
+            raise TypeError("Modulo can not be applied to given types.")
+
+        return super().mod(left, right)
+
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
@@ -571,6 +578,13 @@ class FractionalOps(NumericOps):
         if is_ansi and _is_decimal_float_mixed(left, right):
             raise TypeError("Multiplication can not be applied to given types.")
         return super().rmul(left, right)
+
+    def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+        if is_ansi and _is_decimal_float_mixed(left, right):
+            raise TypeError("Modulo can not be applied to given types.")
+
+        return super().rmod(left, right)
 
     def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:
         return index_ops._with_new_scol(
