@@ -19,7 +19,6 @@
 # Extends the base image with:
 # - Java 17
 # - Python 3.9/3.10 with required packages
-# - PyPy 3.10 for testing
 
 FROM spark-rm-base:latest
 
@@ -79,14 +78,6 @@ RUN python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' 
     'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' \
     'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' \
     'sphinxcontrib-serializinghtml==1.1.5'
-
-# Install PyPy 3.10 for testing
-RUN mkdir -p /usr/local/pypy/pypy3.10 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.10-v7.3.17-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.10 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3.10 && \
-    ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3 && \
-    curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3 && \
-    pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.2.3' scipy coverage matplotlib lxml
 
 # Set Python 3.9 as the default (branch-4.0 uses 3.9 for docs)
 RUN ln -sf "$(which python3.9)" "/usr/local/bin/python" && \
