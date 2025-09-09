@@ -619,9 +619,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(2) :: Nil)
   }
 
-  test("update with nondeterministic assignments without wholestage codegen") {
+  test("update with nondeterministic assignments and no wholestage codegen") {
     val extraColCount = SQLConf.get.wholeStageMaxNumFields - 4
-    print(s"extra column count is $extraColCount\n")
     val schema = "pk INT NOT NULL, id INT, value DOUBLE, dep STRING, " +
       ((1 to extraColCount).map(i => s"col$i INT").mkString(", "))
     val data = (1 to 3).map { i =>
@@ -631,7 +630,6 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     }.mkString("\n")
     createAndInitTable(schema, data)
 
-    sql(s"SELECT * FROM $tableNameAsString").show(false)
     // rand() always generates values in [0, 1) range
     sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")
 
