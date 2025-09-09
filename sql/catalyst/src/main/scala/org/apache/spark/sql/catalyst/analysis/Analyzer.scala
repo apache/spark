@@ -1945,7 +1945,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               f1.nameParts == Seq("count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
-              case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
+              case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
                 throw QueryCompilationErrors
                   .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
               case _ => // do nothing
