@@ -226,7 +226,7 @@ END;
 -- EXPECTED: Random price updates, orders and items added, possible error count increment
 -- EXECUTES: FOR loop, IF, WHILE, REPEAT, DML, nested BEGIN...END
 
--- Script 5
+-- Script 2
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_inventory_threshold INT DEFAULT 20;
@@ -275,7 +275,7 @@ END;
 -- EXPECTED: Random restock orders, supplier inserts, status logic
 -- EXECUTES: FOR, CASE, IF, nested BEGIN...END
 
--- Script 6
+-- Script 3
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_city_count INT;
@@ -331,7 +331,7 @@ END;
 -- EXPECTED: Random customer inserts, geo checks, possible city shortage
 -- EXECUTES: FOR, IF, WHILE, nested BEGIN...END, exception handler
 
--- Script 7
+-- Script 4
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_total_orders INT;
@@ -410,7 +410,7 @@ END;
 -- EXPECTED: Orders and items created, updated, or deleted; conditional logic on customer activity
 -- EXECUTES: FOR, IF, WHILE, REPEAT, nested BEGIN...END, exception handler
 
--- Script 8
+-- Script 5
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_first_name STRING;
@@ -468,7 +468,7 @@ END;
 -- EXPECTED: Customer and supplier inserts based on staff data, string manipulation, manager checks
 -- EXECUTES: FOR, IF, CASE, REPEAT, nested BEGIN...END, exception handler
 
--- Script 9
+-- Script 6
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_category STRING;
@@ -535,7 +535,7 @@ END;
 -- EXPECTED: Random product updates, inserts, and deletes; fake reviews if needed; checks for missing colors
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 11
+-- Script 7
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_hq_state STRING DEFAULT 'CA';
@@ -623,7 +623,7 @@ END;
 -- EXPECTED: Random supplier inserts based on city, region, and state logic
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 12
+-- Script 8
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_total_orders INT DEFAULT 0;
@@ -701,7 +701,7 @@ END;
 -- EXPECTED: Random order status updates, inserts, and status logic
 -- EXECUTES: FOR, IF, WHILE, REPEAT, nested BEGIN...END, exception handler
 
--- Script 13
+-- Script 9
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_id INT;
@@ -834,7 +834,7 @@ END;
 -- EXPECTED: Random product inserts, supplier updates, order item deletes, and discount logic
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 15
+-- Script 10
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_id INT;
@@ -878,7 +878,7 @@ END;
 -- EXPECTED: Random commission updates based on order logic
 -- EXECUTES: FOR, IF, WHILE, REPEAT, nested BEGIN...END, exception handler
 
--- Script 16
+-- Script 11
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_category STRING;
@@ -946,7 +946,7 @@ END;
 -- EXPECTED: Random order/item inserts, conditional logic on customer types
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 17
+-- Script 12
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_max_manager_id INT DEFAULT 2;
@@ -1000,7 +1000,7 @@ END;
 -- EXPECTED: Random employee inserts, hierarchy construction, loop termination
 -- EXECUTES: WHILE, REPEAT, IF, nested BEGIN...END, exception handler
 
--- Script 19
+-- Script 13
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_shipping_cost DOUBLE DEFAULT 0.0;
@@ -1074,7 +1074,7 @@ END;
 -- EXPECTED: Random shipping cost adjustments, customer/order inserts for local cities
 -- EXECUTES: FOR, IF, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 20
+-- Script 14
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_rating DOUBLE DEFAULT 0.0;
@@ -1127,7 +1127,7 @@ END;
 -- EXPECTED: Random product rating and review updates, description tagging
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 21
+-- Script 15
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_contact_count INT DEFAULT 0;
@@ -1220,7 +1220,7 @@ END;
 -- EXPECTED: Random supplier rating adjustments, product inserts, supplier contact actions
 -- EXECUTES: FOR, IF, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 22
+-- Script 16
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_hire_year INT;
@@ -1302,7 +1302,7 @@ END;
 -- EXPECTED: Random salary/commission adjustments, employee inserts based on tenure and salary
 -- EXECUTES: FOR, IF, CASE, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 23
+-- Script 17
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_source STRING;
@@ -1392,7 +1392,7 @@ END;
 -- EXPECTED: Random order inserts, source analysis, fake order generation
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 25
+-- Script 18
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_active BOOLEAN;
@@ -1481,7 +1481,7 @@ END;
 -- EXPECTED: Random order inserts, discount updates, customer lifecycle manipulation
 -- EXECUTES: FOR, IF, CASE, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 26
+-- Script 19
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_region_count INT DEFAULT 0;
@@ -1568,7 +1568,7 @@ END;
 -- EXPECTED: Random supplier rating updates, product inserts, supplier inserts as needed
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 27
+-- Script 20
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_birth_year INT;
@@ -1690,7 +1690,7 @@ END;
 -- EXPECTED: Random employee/customer inserts, commission updates, age-based logic
 -- EXECUTES: FOR, IF, CASE, REPEAT, WHILE, nested BEGIN...END, exception handlers
 
--- Script 28
+-- Script 21
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_launch_year INT;
@@ -1777,7 +1777,7 @@ END;
 -- EXPECTED: Random order item and product inserts, launch cohort logic
 -- EXECUTES: FOR, IF, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 29
+-- Script 22
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_billing_contact STRING;
@@ -1832,7 +1832,7 @@ END;
 -- EXPECTED: Random billing contact and VAT updates, compliance enforcement
 -- EXECUTES: FOR, IF, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 30
+-- Script 23
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_cost_change DOUBLE DEFAULT 0.0;
@@ -1886,7 +1886,7 @@ END;
 -- EXPECTED: Random cost and status updates, last update refresh, activation logic
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 31
+-- Script 24
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_shipping_cost DOUBLE;
@@ -1955,7 +1955,7 @@ END;
 -- EXPECTED: Random shipping cost adjustments, supplier inserts, orphaned order cleanup
 -- EXECUTES: FOR, IF, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 32
+-- Script 25
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_color STRING;
@@ -2046,7 +2046,7 @@ END;
 -- EXPECTED: Random product inserts, price adjustments, ensures color diversity
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 33
+-- Script 26
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_total_tax DOUBLE;
@@ -2144,7 +2144,7 @@ END;
 -- EXPECTED: Random tax increases, item additions, status updates, order completions
 -- EXECUTES: FOR, IF, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 34
+-- Script 27
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_size STRING;
@@ -2209,7 +2209,7 @@ END;
 -- EXPECTED: Random product inserts, discount updates, ensures size diversity
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 35
+-- Script 28
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_department STRING;
@@ -2276,7 +2276,7 @@ END;
 -- EXPECTED: Random employee inserts, salary adjustments, department balancing
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 36
+-- Script 29
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_rating DOUBLE;
@@ -2318,7 +2318,7 @@ END;
 -- EXPECTED: Random reviews and rating updates, rating boosting, review inflation
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 37
+-- Script 30
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_shipping_city STRING;
@@ -2386,7 +2386,7 @@ END;
 -- EXPECTED: Random shipping fee and tax updates, order volume manipulation
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 38
+-- Script 31
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_salary DOUBLE;
@@ -2465,7 +2465,7 @@ END;
 -- EXPECTED: Random salary adjustments, subordinate creation, manager checks
 -- EXECUTES: FOR, IF, WHILE, REPEAT, nested BEGIN...END, exception handler
 
--- Script 39
+-- Script 32
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_creation_date TIMESTAMP;
@@ -2535,7 +2535,7 @@ END;
 -- EXPECTED: Random status updates, shipping changes, order inserts for backlog maintenance
 -- EXECUTES: FOR, IF, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 40
+-- Script 33
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_id INT;
@@ -2601,7 +2601,7 @@ END;
 -- EXPECTED: Random item discount and status updates, shipped item guarantees
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 41
+-- Script 34
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_contact_emails INT DEFAULT 0;
@@ -2659,7 +2659,7 @@ END;
 -- EXPECTED: Random supplier contact and product updates, ensures active supplier content
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 44
+-- Script 35
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_discount_avg DOUBLE;
@@ -2720,7 +2720,7 @@ END;
 -- EXPECTED: Random discount changes and product inserts, category balancing
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 45
+-- Script 36
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_gender STRING;
@@ -2801,7 +2801,7 @@ END;
 -- EXPECTED: Random employee inserts, gender diversity, position filling
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 46
+-- Script 37
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_channel STRING;
@@ -2899,7 +2899,7 @@ END;
 -- EXPECTED: Multi-channel order and item updates, random DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 47
+-- Script 38
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_type STRING;
@@ -2976,7 +2976,7 @@ END;
 -- EXPECTED: Order and customer inserts, ensures coverage by customer type
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 49
+-- Script 39
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_zip_code STRING;
@@ -3066,7 +3066,7 @@ END;
 -- EXPECTED: Order and customer inserts, zip-level discount logic, balancing
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 50
+-- Script 40
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_shipping_region STRING;
@@ -3157,7 +3157,7 @@ END;
 -- EXPECTED: Shipping and product updates, region-specific logic, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 51
+-- Script 41
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_email_domain STRING;
@@ -3236,7 +3236,7 @@ END;
 -- EXPECTED: Order and item inserts, email domain logic, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 54
+-- Script 42
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_department_emp_count INT;
@@ -3300,7 +3300,7 @@ END;
 -- EXPECTED: Random salary and department updates, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 55
+-- Script 43
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_status STRING;
@@ -3360,7 +3360,7 @@ END;
 -- EXPECTED: Random order inserts, status balancing, revenue control
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 56
+-- Script 44
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_emp_department_size_counts INT;
@@ -3471,7 +3471,7 @@ END;
 -- EXPECTED: Employee inserts, age and gender balancing, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 57
+-- Script 45
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_type STRING;
@@ -3560,7 +3560,7 @@ END;
 -- EXPECTED: Random product inserts, supplier-category matching, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 59
+-- Script 46
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_zip_orders_total DOUBLE;
@@ -3623,7 +3623,7 @@ END;
 -- EXPECTED: Order inserts, local revenue control, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 60
+-- Script 47
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_device_type STRING;
@@ -3672,7 +3672,7 @@ END;
 -- EXPECTED: Order inserts, device diversity, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 61
+-- Script 48
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_cost DOUBLE;
@@ -3717,7 +3717,7 @@ END;
 -- EXPECTED: Random price and discount updates, margin control, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 63
+-- Script 49
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_address_2_count INT DEFAULT 0;
@@ -3762,7 +3762,7 @@ END;
 -- EXPECTED: Address and timestamp updates, address2 enforcement, DML
 -- EXECUTES: FOR, IF, REPEAT, WHILE, nested BEGIN...END, exception handler
 
--- Script 65
+-- Script 50
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_count INT;
@@ -3820,7 +3820,7 @@ END;
 -- EXPECTED: Order item and total updates, order content enforcement, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 66
+-- Script 51
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_payment_balance DOUBLE;
@@ -3911,7 +3911,7 @@ END;
 -- EXPECTED: Payment status updates, customer/order inserts, unpaid order control
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 67
+-- Script 52
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_active BOOLEAN;
@@ -3993,7 +3993,7 @@ END;
 -- EXPECTED: Supplier inserts, region balancing, diversity control
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 68
+-- Script 53
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_color_diversity INT;
@@ -4085,7 +4085,7 @@ END;
 -- EXPECTED: Product color diversity, inserts, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 69
+-- Script 54
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_origin_diversity INT;
@@ -4192,7 +4192,7 @@ END;
 -- EXPECTED: Product and supplier origin diversity, international coverage, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 70
+-- Script 55
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_city STRING;
@@ -4285,7 +4285,7 @@ END;
 -- EXPECTED: Order, supplier, and status updates, city diversity, DML
 -- EXECUTES: FOR, IF, CASE, nested BEGIN...END, exception handler
 
--- Script 71
+-- Script 56
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_size STRING;
@@ -4378,7 +4378,7 @@ END;
 -- EXPECTED: Product size balancing, inserts, size coverage enforcement, DML
 -- EXECUTES: FOR, IF, CASE, WHILE, nested BEGIN...END, exception handler
 
--- Script 73
+-- Script 57
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_country STRING;
@@ -4480,7 +4480,7 @@ END;
 -- EXPECTED: Order, customer, and supplier inserts, country diversity, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 74
+-- Script 58
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_weight DOUBLE;
@@ -4537,7 +4537,7 @@ END;
 -- EXPECTED: Product weight inserts, weight diversity, DML
 -- EXECUTES: FOR, IF, WHILE, nested BEGIN...END, exception handler
 
--- Script 75
+-- Script 59
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_opt_in BOOLEAN;
@@ -4599,7 +4599,7 @@ END;
 -- EXPECTED: Opt-in updates, customer inserts, opt-in balance, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 77
+-- Script 60
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_city STRING;
@@ -4698,7 +4698,7 @@ END;
 -- EXPECTED: Customer age inserts, city age balancing, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 78
+-- Script 61
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_review DOUBLE;
@@ -4758,7 +4758,7 @@ END;
 -- EXPECTED: Product review and rating updates, review coverage, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 79
+-- Script 62
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_id INT;
@@ -4839,7 +4839,7 @@ END;
 -- EXPECTED: Product description diversity, updates and inserts, DML
 -- EXECUTES: FOR, CASE, REPEAT, IF, nested BEGIN...END, exception handler
 
--- Script 80
+-- Script 63
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_status_nulls INT DEFAULT 0;
@@ -4893,7 +4893,7 @@ END;
 -- EXPECTED: Item status filling, status logic, DML
 -- EXECUTES: FOR, CASE, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 143
+-- Script 64
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_is_prime BOOLEAN DEFAULT false;
@@ -4945,7 +4945,7 @@ END;
 -- EXPECTED: Prime customer status updates/inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 83
+-- Script 65
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_department STRING;
@@ -4995,7 +4995,7 @@ END;
 -- EXPECTED: Commission balancing, updates, null handling, DML
 -- EXECUTES: FOR, IF, WHILE, REPEAT, nested BEGIN...END, exception handler
 
--- Script 144
+-- Script 66
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_customizable_flag BOOLEAN DEFAULT false;
@@ -5067,7 +5067,7 @@ END;
 -- EXPECTED: Customized order item updates/inserts, item personalization, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 85
+-- Script 67
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_status STRING;
@@ -5171,7 +5171,7 @@ END;
 -- EXPECTED: Order-item binding, status-based item creation, DML
 -- EXECUTES: FOR, IF, CASE, nested BEGIN...END, exception handler
 
--- Script 88
+-- Script 68
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_site_count INT;
@@ -5208,7 +5208,7 @@ END;
 -- EXPECTED: Supplier website diversity, format updates, DML
 -- EXECUTES: FOR, IF, LEAVE, nested BEGIN...END, exception handler
 
--- Script 92
+-- Script 69
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_units_sold DOUBLE;
@@ -5279,7 +5279,7 @@ END;
 -- EXPECTED: Product and sales velocity inserts, category balancing, DML
 -- EXECUTES: FOR, WHILE, nested BEGIN...END, exception handler
 
--- Script 93
+-- Script 70
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_product_match INT;
@@ -5361,7 +5361,7 @@ END;
 -- EXPECTED: Supplier-product category matching, updates and inserts, DML
 -- EXECUTES: FOR, IF, FOREACH, nested BEGIN...END, exception handler
 
--- Script 95
+-- Script 71
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_no_last_order_customers INT;
@@ -5447,7 +5447,7 @@ END;
 -- EXPECTED: Customer last order date fixing, "no-sale" customer logic, DML
 -- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 97
+-- Script 72
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_tenure_years INT;
@@ -5511,7 +5511,7 @@ END;
 -- EXPECTED: Tenure-based salary adjustments, diversity hire, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 101
+-- Script 73
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_shipping_region STRING;
@@ -5581,7 +5581,7 @@ END;
 -- EXPECTED: Regional order and customer inserts, geographical isolation, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 102
+-- Script 74
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_tax_percent DOUBLE;
@@ -5637,7 +5637,7 @@ END;
 -- EXPECTED: Country tax inserts, tax rate balancing, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 103
+-- Script 75
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_id INT;
@@ -5693,7 +5693,7 @@ END;
 -- EXPECTED: Review counter updates, unreviewed product insertion, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 105
+-- Script 76
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_active_missing INT;
@@ -5742,7 +5742,7 @@ END;
 -- EXPECTED: Customer active status setting, forced unset case, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 106
+-- Script 77
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_type_count INT;
@@ -5808,7 +5808,7 @@ END;
 -- EXPECTED: Order inserts for customer type diversity, type balancing, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 107
+-- Script 78
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_offer_count INT;
@@ -5843,7 +5843,7 @@ END;
 -- EXPECTED: Offer code insertion, offer logic, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 108
+-- Script 79
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_dept_stagnant INT;
@@ -5902,7 +5902,7 @@ END;
 -- EXPECTED: Employee department balancing insert, department stagnation logic, DML
 -- EXECUTES: IF, nested BEGIN...END, exception handler
 
--- Script 109
+-- Script 80
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_product_min INT DEFAULT 2;
@@ -5958,7 +5958,7 @@ END;
 -- EXPECTED: Supplier-product linkage, product inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 110
+-- Script 81
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_discount_high INT;
@@ -6021,7 +6021,7 @@ END;
 -- EXPECTED: Discount rate balancing, high-discount product control, DML
 -- EXECUTES: IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 111
+-- Script 82
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_last_product_update_days INT;
@@ -6078,7 +6078,7 @@ END;
 -- EXPECTED: Product freshness updates, fresh item inserts, DML
 -- EXECUTES: FOR, REPEAT, nested BEGIN...END, exception handler
 
--- Script 112
+-- Script 83
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_total_min DOUBLE DEFAULT 10.0;
@@ -6130,7 +6130,7 @@ END;
 -- EXPECTED: Order minimum value enforcement, low-value order creation, DML
 -- EXECUTES: IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 114
+-- Script 84
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_transfers_required INT DEFAULT 2;
@@ -6195,7 +6195,7 @@ END;
 -- EXPECTED: Department balancing via transfer, staffing logic, DML
 -- EXECUTES: IF, nested BEGIN...END, exception handler
 
--- Script 115
+-- Script 85
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_region_imbalance INT;
@@ -6292,7 +6292,7 @@ END;
 -- EXPECTED: Regional SKU balancing, supplier/product inserts, DML
 -- EXECUTES: IF, WHILE, nested BEGIN...END, exception handler
 
--- Script 117
+-- Script 86
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_bulk_flag BOOLEAN DEFAULT false;
@@ -6377,7 +6377,7 @@ END;
 -- EXPECTED: Order/item inserts for bulk sales, DML
 -- EXECUTES: WHILE, REPEAT, IF, nested BEGIN...END, exception handler
 
--- Script 118
+-- Script 87
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_company_flag_count INT;
@@ -6411,7 +6411,7 @@ END;
 -- EXPECTED: Customer metadata updates, company flag logic, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 119
+-- Script 88
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_comment_required BOOLEAN DEFAULT false;
@@ -6440,7 +6440,7 @@ END;
 -- EXPECTED: Order item note filling, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 121
+-- Script 89
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_tags_count INT;
@@ -6501,7 +6501,7 @@ END;
 -- EXPECTED: Product metadata tag updates, tagged product inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 123
+-- Script 90
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_multiple_statuses BOOLEAN DEFAULT false;
@@ -6553,7 +6553,7 @@ END;
 -- EXPECTED: Order workflow type diversity, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 124
+-- Script 91
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_inactive_supplier_count INT;
@@ -6626,7 +6626,7 @@ END;
 -- EXPECTED: Clearance product inserts, inactive supplier coverage, DML
 -- EXECUTES: IF, nested BEGIN...END, exception handler
 
--- Script 125
+-- Script 92
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_returns BOOLEAN DEFAULT false;
@@ -6679,7 +6679,7 @@ END;
 -- EXPECTED: Returned item updates, return state coverage, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 126
+-- Script 93
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_orders_no_discount INT;
@@ -6740,7 +6740,7 @@ END;
 -- EXPECTED: Discount application, discount coverage logic, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 127
+-- Script 94
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_product_threshold INT DEFAULT 3;
@@ -6815,7 +6815,7 @@ END;
 -- EXPECTED: Critical category product inserts, order item coverage, DML
 -- EXECUTES: FOR, IF, WHILE, nested BEGIN...END, exception handler
 
--- Script 128
+-- Script 95
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_status_aging BOOLEAN DEFAULT false;
@@ -6884,7 +6884,7 @@ END;
 -- EXPECTED: Status workflow updates, order and item inserts, DML
 -- EXECUTES: IF, nested BEGIN...END, exception handler
 
--- Script 132
+-- Script 96
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_missing_weight INT;
@@ -6936,7 +6936,7 @@ END;
 -- EXPECTED: Product weight updates, weighted product inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 135
+-- Script 97
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_opt_in_newsletter_count INT;
@@ -6987,7 +6987,7 @@ END;
 -- EXPECTED: Newsletter opt-in diversity, customer updates/inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 137
+-- Script 98
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_product_diversity_count INT;
@@ -7046,7 +7046,7 @@ END;
 -- EXPECTED: Supplier-product category diversity inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 139
+-- Script 99
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_bundled_flag BOOLEAN DEFAULT false;
@@ -7116,7 +7116,7 @@ END;
 -- EXPECTED: Product bundle inserts, bundle order item inserts, DML
 -- EXECUTES: IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 140
+-- Script 100
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_is_foreign_flag BOOLEAN DEFAULT false;
