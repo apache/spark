@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.Cross
+import org.apache.spark.sql.catalyst.plans.{Cross, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, MapType, StringType, StructField, StructType}
@@ -1030,7 +1030,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"data".getField("events")), outputNames = Seq("event"))
       .generate(Explode($"event".getField("sessions")), outputNames = Seq("session"))
       .generate(Explode($"session".getField("actions")), outputNames = Seq("action"))
-      .filter($"action".getField("actionType") === "click")
+      .where($"action".getField("actionType") === "click")
       .select($"action".getField("actionId"), $"action".getField("metadata").getField("userId"))
       .analyze
     
@@ -1052,14 +1052,16 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       ))))
 
     // First explode uses single field, second explode uses multiple fields
-    val query = mixedData
+    val leftPart = mixedData
       .generate(Explode($"groups".getField("groupId")), outputNames = Seq("groupId"))
-      .crossJoin(
-        mixedData
-          .generate(Explode($"groups"), outputNames = Seq("group"))
-          .generate(Explode($"group".getField("members")), outputNames = Seq("member"))
-          .select($"member".getField("memberId"), $"member".getField("memberName"))
-      )
+      
+    val rightPart = mixedData
+      .generate(Explode($"groups"), outputNames = Seq("group"))
+      .generate(Explode($"group".getField("members")), outputNames = Seq("member"))
+      .select($"member".getField("memberId"), $"member".getField("memberName"))
+      
+    val query = leftPart
+      .join(rightPart, Cross, None)
       .analyze
       
     val optimized = Optimize.execute(query)
