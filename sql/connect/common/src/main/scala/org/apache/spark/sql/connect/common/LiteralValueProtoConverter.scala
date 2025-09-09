@@ -434,11 +434,16 @@ object LiteralValueProtoConverter {
       case proto.DataType.KindCase.BOOLEAN => v => v.getBoolean
       case proto.DataType.KindCase.STRING => v => v.getString
       case proto.DataType.KindCase.BINARY => v => v.getBinary.toByteArray
-      case proto.DataType.KindCase.DATE => v => v.getDate
-      case proto.DataType.KindCase.TIMESTAMP => v => v.getTimestamp
-      case proto.DataType.KindCase.TIMESTAMP_NTZ => v => v.getTimestampNtz
-      case proto.DataType.KindCase.DAY_TIME_INTERVAL => v => v.getDayTimeInterval
-      case proto.DataType.KindCase.YEAR_MONTH_INTERVAL => v => v.getYearMonthInterval
+      case proto.DataType.KindCase.DATE =>
+        v => SparkDateTimeUtils.toJavaDate(v.getDate)
+      case proto.DataType.KindCase.TIMESTAMP =>
+        v => SparkDateTimeUtils.toJavaTimestamp(v.getTimestamp)
+      case proto.DataType.KindCase.TIMESTAMP_NTZ =>
+        v => SparkDateTimeUtils.microsToLocalDateTime(v.getTimestampNtz)
+      case proto.DataType.KindCase.DAY_TIME_INTERVAL =>
+        v => SparkIntervalUtils.microsToDuration(v.getDayTimeInterval)
+      case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
+        v => SparkIntervalUtils.monthsToPeriod(v.getYearMonthInterval)
       case proto.DataType.KindCase.DECIMAL => v => Decimal(v.getDecimal.getValue)
       case proto.DataType.KindCase.CALENDAR_INTERVAL =>
         v =>
