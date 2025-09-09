@@ -65,10 +65,10 @@ object SparkPipelines extends Logging {
         } else if (opt == "--class") {
           logError("--class argument not supported.")
           throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
-        } else if (opt == "--conf" && value.startsWith("spark.api.mode=")) {
-          if (value.toLowerCase(Locale.ROOT) != "spark.api.mode=connect") {
+        } else if ((opt == "--conf" || opt == "-c") && value.startsWith("spark.api.mode=")) {
+          if (value.stripPrefix("spark.api.mode=").trim.toLowerCase(Locale.ROOT) != "connect") {
             logError(
-              "--spark.api.mode must be 'connect'. " +
+              "spark.api.mode must be 'connect'. " +
                 "Declarative Pipelines currently only supports Spark Connect."
             )
             throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
