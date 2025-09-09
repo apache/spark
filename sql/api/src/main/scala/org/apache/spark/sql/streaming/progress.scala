@@ -331,12 +331,8 @@ private object SafeJsonSerializer {
 
   /** Convert BigDecimal to JValue while handling empty or infinite values */
   def safeDecimalToJValue(value: Double): JValue = {
-    if (value.isNaN || value.isInfinity) {
-      JNothing
-    }
-    else {
-      val valueWithScale = BigDecimal(value).setScale(1, RoundingMode.HALF_UP)
-      JDecimal(valueWithScale)
+    if (value.isNaN || value.isInfinity) { JNothing } else {
+      JDecimal(BigDecimal(value).setScale(1, RoundingMode.HALF_UP))
     }
   }
 }
