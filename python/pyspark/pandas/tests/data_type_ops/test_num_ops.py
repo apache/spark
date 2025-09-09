@@ -140,16 +140,19 @@ class NumOpsTestsMixin:
         if is_ansi_mode_test:  # TODO: match non-ansi behavior with pandas
             self.assert_eq(pdf["int"] == pdf["str"], psdf["int"] == psdf["str"])
         self.assert_eq(pdf["float"] == pdf["bool"], psdf["float"] == psdf["bool"])
+        self.assert_eq(pdf["str"] == "x", psdf["str"] == "x")
 
     def test_eq(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             self.assert_eq(pdf[col] == pdf[col], psdf[col] == psdf[col])
+            self.assert_eq(pdf[col] == np.nan, psdf[col] == np.nan)
 
     def test_ne(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             self.assert_eq(pdf[col] != pdf[col], psdf[col] != psdf[col])
+            self.assert_eq(pdf[col] != np.nan, psdf[col] != np.nan)
 
     def test_lt(self):
         pdf, psdf = self.pdf, self.psdf
