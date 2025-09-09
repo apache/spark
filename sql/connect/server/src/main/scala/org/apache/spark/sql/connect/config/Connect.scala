@@ -401,8 +401,7 @@ object Connect {
         " While spark.connect.grpc.arrow.maxBatchSize determines the max size of a result batch," +
         " maxChunkSize defines the max size of each individual chunk that is part of the batch" +
         " that will be sent in a response. This allows the server to send large rows to clients." +
-        " However, excessively large plans remain unsupported due to Spark internals and JVM" +
-        " limitations.")
+        " The size is in bytes.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
