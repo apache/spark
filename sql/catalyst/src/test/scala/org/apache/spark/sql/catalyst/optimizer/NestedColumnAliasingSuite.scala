@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtract
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{Cross, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, MapType, StringType, StructField, StructType}
@@ -1006,7 +1007,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       StructField("events", ArrayType(StructType(Seq(
         StructField("eventId", IntegerType),
         StructField("sessions", ArrayType(StructType(Seq(
-          StructField("sessionId", IntegerType), 
+          StructField("sessionId", IntegerType),
           StructField("actions", ArrayType(StructType(Seq(
             StructField("actionId", IntegerType),
             StructField("actionType", StringType),
@@ -1020,7 +1021,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         ))))
       ))))
     ))
-    
+
     val complexData = LocalRelation($"data".struct(complexSchema))
 
     // Multi-level explode with complex filtering - should optimize deeply nested access
@@ -1031,7 +1032,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .where($"action".getField("actionType") === "click")
       .select($"action".getField("actionId"), $"action".getField("metadata").getField("userId"))
       .analyze
-    
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(aliases.nonEmpty, "Complex multi-level optimization should create aliases")
@@ -1052,16 +1053,16 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     // First explode uses single field, second explode uses multiple fields
     val leftPart = mixedData
       .generate(Explode($"groups".getField("groupId")), outputNames = Seq("groupId"))
-      
+
     val rightPart = mixedData
       .generate(Explode($"groups"), outputNames = Seq("group"))
       .generate(Explode($"group".getField("members")), outputNames = Seq("member"))
       .select($"member".getField("memberId"), $"member".getField("memberName"))
-      
+
     val query = leftPart
       .join(rightPart, Cross, None)
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(aliases.nonEmpty, "Mixed optimization scenarios should work")
@@ -1089,7 +1090,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         ($"item".getField("itemValue") * $"item".getField("itemCount")).as("totalValue")
       )
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(aliases.nonEmpty, "Complex expressions should still enable optimization")
@@ -1106,7 +1107,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         )), nullable = true)
       ))))
     ))
-    
+
     val nullableData = LocalRelation($"data".struct(nullableSchema))
 
     val query = nullableData
@@ -1117,7 +1118,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         $"record".getField("optionalData").getField("field2")
       )
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(aliases.nonEmpty, "Nullable fields should be handled correctly")
@@ -1125,10 +1126,10 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("SPARK-XXXXX: very wide structs with many fields") {
     // Create a struct with many fields to test field pruning efficiency
-    val wideStructFields = (1 to 50).map(i => 
+    val wideStructFields = (1 to 50).map(i =>
       StructField(s"field$i", StringType))
     val wideStruct = StructType(wideStructFields)
-    
+
     val wideData = LocalRelation(
       $"items".array(wideStruct)
     )
@@ -1138,11 +1139,11 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"items"), outputNames = Seq("item"))
       .select(
         $"item".getField("field1"),
-        $"item".getField("field25"), 
+        $"item".getField("field25"),
         $"item".getField("field50")
       )
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(aliases.nonEmpty, "Wide structs should benefit from field pruning")
@@ -1156,7 +1157,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         StructField("leftValue", DoubleType)
       )))
     )
-    
+
     val rightData = LocalRelation(
       $"rightRecords".array(StructType(Seq(
         StructField("id", IntegerType),
@@ -1170,7 +1171,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"leftRecords"), outputNames = Seq("left"))
       .select($"left".getField("id"), $"left".getField("leftName"))
       .analyze
-      
+
     val optimized = Optimize.execute(leftExploded)
     val aliases = collectGeneratedAliases(optimized)
     // Should optimize by pruning leftValue
@@ -1187,7 +1188,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"simpleArray"), outputNames = Seq("item"))
       .select($"item")
       .analyze
-      
+
     val optimized = Optimize.execute(simpleQuery)
     // For simple types, no nested column aliasing should occur
     val aliases = collectGeneratedAliases(optimized)
@@ -1198,13 +1199,13 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("SPARK-XXXXX: negative test - unsupported generator types") {
     val data = LocalRelation($"data".string)
-    
+
     // Stack generator is supported, but test with custom unsupported generator
     val query = data
       .generate(JsonTuple(Seq($"data", Literal("field1"), Literal("field2"))), outputNames = Seq("f1", "f2"))
       .select($"f1", $"f2")
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     // Should not crash, should handle gracefully
     assert(optimized != null)
@@ -1223,7 +1224,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"items"), outputNames = Seq("item"))
       .select($"item") // Selecting entire struct, not nested fields
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     // Should not create aliases when no field pruning is possible
@@ -1242,7 +1243,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"emptyItems"), outputNames = Seq("item"))
       .select($"item".getField("id"))
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     // Should handle empty arrays gracefully
     assert(optimized != null)
@@ -1263,7 +1264,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"nullableItems"), outputNames = Seq("item"))
       .select($"item".getField("data").getField("field1"))
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     // Should handle nullable struct fields
@@ -1282,7 +1283,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         ))))
       ))))
     ))
-    
+
     val circularData = LocalRelation($"root".struct(complexSchema))
 
     val query = circularData
@@ -1290,7 +1291,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"item".getField("children")), outputNames = Seq("child"))
       .select($"child".getField("childId"), $"child".getField("value"))
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(optimized != null, "Complex schemas should not cause failures")
@@ -1302,7 +1303,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       StructField("leaf", StringType),
       StructField("leafId", IntegerType)
     ))
-    
+
     // Build 10 levels deep
     for (i <- 1 to 10) {
       currentStruct = StructType(Seq(
@@ -1310,7 +1311,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         StructField(s"id$i", IntegerType)
       ))
     }
-    
+
     val deepData = LocalRelation($"items".array(currentStruct))
 
     // Access the deepest field
@@ -1324,7 +1325,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"items"), outputNames = Seq("item"))
       .select(fieldAccess)
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(optimized != null, "Very deep nesting should not cause stack overflow")
@@ -1342,14 +1343,14 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         StructField("simpleField", StringType)
       )))
     ))
-    
+
     val mixedData = LocalRelation($"data".struct(mixedSchema))
 
     val query = mixedData
       .generate(Explode($"data".getField("arrayOfStructs")), outputNames = Seq("item"))
       .select($"item".getField("structId"))
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(optimized != null, "Mixed array/struct types should be handled")
@@ -1366,7 +1367,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         StructField("🔥field", StringType) // Emoji
       ))))
     ))
-    
+
     val unicodeData = LocalRelation($"root".struct(unicodeSchema))
 
     val query = unicodeData
@@ -1376,7 +1377,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         $"item".getField("フィールド")
       )
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(optimized != null, "Unicode field names should be handled correctly")
@@ -1390,14 +1391,14 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         StructField("FIELDNAME", StringType)  // All caps
       ))))
     ))
-    
+
     val caseData = LocalRelation($"root".struct(caseSchema))
 
     val query = caseData
       .generate(Explode($"root".getField("Items")), outputNames = Seq("item"))
       .select($"item".getField("FieldName"), $"item".getField("fieldname"))
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(optimized != null, "Case sensitive field names should work")
@@ -1420,7 +1421,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .generate(Explode($"data3"), outputNames = Seq("item3"))
       .select($"item1", $"item2", $"item3".getField("id"))
       .analyze
-      
+
     val optimized = Optimize.execute(query)
     val aliases = collectGeneratedAliases(optimized)
     assert(optimized != null, "Multiple explodes should not interfere with each other")
