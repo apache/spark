@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import java.io.SequenceInputStream
 import java.util.UUID
 import java.util.concurrent.Semaphore
 
@@ -473,9 +474,9 @@ class SparkConnectServiceSuite
           }
 
           // Reassemble the chunks into a single Arrow batch and validate its content.
-          val batchData: ByteString =
-            ByteString.copyFrom(batch.map(_.getArrowBatch.getData).asJava)
-          val reader = new ArrowStreamReader(batchData.newInput(), allocator)
+          val input = new SequenceInputStream(
+            batch.iterator.map(_.getArrowBatch.getData.newInput()).asJavaEnumeration)
+          val reader = new ArrowStreamReader(input, allocator)
           while (reader.loadNextBatch()) {
             val root = reader.getVectorSchemaRoot
             val idVector = root.getVector(0).asInstanceOf[BigIntVector]
