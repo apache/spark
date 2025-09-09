@@ -406,7 +406,7 @@ class SparkConnectServiceSuite
           .build()
 
         // Execute plan.
-        @volatile var done = false
+        var done = false
         val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
         instance.executePlan(
           request,
