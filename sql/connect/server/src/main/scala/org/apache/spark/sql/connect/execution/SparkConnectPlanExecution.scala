@@ -154,7 +154,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         val maxChunkSize = spark.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE).toInt
         val numChunks = (bytes.length + maxChunkSize - 1) / maxChunkSize
 
-        for (i <- 0 until numChunks) {
+        (0 until numChunks).foreach { i =>
           val from = i * maxChunkSize
           val to = math.min(from + maxChunkSize, bytes.length)
           val length = to - from
