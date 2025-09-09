@@ -20,8 +20,12 @@ package org.apache.spark.sql.execution
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+
+import scala.util.Try
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
@@ -48,8 +52,6 @@ import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
-
-import scala.util.Try
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy

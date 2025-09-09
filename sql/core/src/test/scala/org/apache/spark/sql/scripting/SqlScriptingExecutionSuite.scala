@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
-
 import java.util.UUID
+
 import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.{SparkArithmeticException, SparkConf}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody

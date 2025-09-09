@@ -56,7 +56,7 @@ case class SparkListenerSQLExecutionStart(
     modifiedConfigs: Map[String, String] = Map.empty,
     jobTags: Set[String] = Set.empty,
     jobGroupId: Option[String] = None,
-    sqlScriptId: Option[String])
+    sqlScriptId: Option[String] = None)
   extends SparkListenerEvent
 
 @DeveloperApi

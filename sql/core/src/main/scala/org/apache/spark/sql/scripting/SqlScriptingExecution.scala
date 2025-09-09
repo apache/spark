@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util.UUID
+
 import org.apache.spark.{SparkContext, SparkThrowable}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
@@ -25,8 +27,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody,
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
-
-import java.util.UUID
 
 /**
  * SQL scripting executor - executes script and returns result statements.

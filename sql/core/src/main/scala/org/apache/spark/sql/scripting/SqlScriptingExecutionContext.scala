@@ -18,8 +18,10 @@
 package org.apache.spark.sql.scripting
 
 import java.util.{Locale, UUID}
+
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.catalog.{SqlScriptingExecutionContextExtension, VariableDefinition}
 import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
