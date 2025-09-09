@@ -747,6 +747,10 @@ class PlanGenerationTestSuite
     simple.repartitionByRange(fn.col("a").asc, fn.col("id").desc_nulls_first)
   }
 
+  test("repartitionById") {
+    simple.repartitionById(10, fn.col("id").cast("int"))
+  }
+
   test("coalesce") {
     simple.coalesce(5)
   }
