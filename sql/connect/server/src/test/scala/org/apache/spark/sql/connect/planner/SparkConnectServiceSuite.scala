@@ -193,10 +193,11 @@ class SparkConnectServiceSuite
           }
 
           override def onCompleted(): Unit = {
+            verifyEvents.onCompleted(Some(100))
             done = true
           }
         })
-      verifyEvents.onCompleted(Some(100))
+      verifyEvents.assertClosed()
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
@@ -294,10 +295,11 @@ class SparkConnectServiceSuite
           }
 
           override def onCompleted(): Unit = {
+            verifyEvents.onCompleted(Some(6))
             done = true
           }
         })
-      verifyEvents.onCompleted(Some(6))
+      verifyEvents.assertClosed()
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
@@ -656,10 +658,11 @@ class SparkConnectServiceSuite
           }
 
           override def onCompleted(): Unit = {
+            verifyEvents.onCompleted(producedNumRows)
             done = true
           }
         })
-      verifyEvents.onCompleted(producedNumRows)
+      verifyEvents.assertClosed()
       // The current implementation is expected to be blocking.
       // This is here to make sure it is.
       assert(done)
@@ -747,7 +750,7 @@ class SparkConnectServiceSuite
           }
         })
       thread.join()
-      verifyEvents.onCompleted()
+      verifyEvents.assertClosed()
     }
   }
 
@@ -810,7 +813,7 @@ class SparkConnectServiceSuite
           }
         })
       assert(failures.isEmpty, s"this should have no failures but got $failures")
-      verifyEvents.onCompleted()
+      verifyEvents.assertClosed()
     }
   }
 
@@ -1052,6 +1055,8 @@ class SparkConnectServiceSuite
     }
     def onCompleted(producedRowCount: Option[Long] = None): Unit = {
       assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)
+    }
+    def assertClosed(): Unit = {
       // The eventsManager is closed asynchronously
       Eventually.eventually(EVENT_WAIT_TIMEOUT) {
         assert(
