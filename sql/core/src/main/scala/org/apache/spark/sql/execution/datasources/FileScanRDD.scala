@@ -47,28 +47,25 @@ import org.apache.spark.util.NextIterator
  * that need to be prepended to each row.
  *
  * @param partitionValues value of partition columns to be prepended to each row.
- * @param filePath URI of the file to read
  * @param start the beginning offset (in bytes) of the block.
  * @param length number of bytes to read.
  * @param fileStatus The FileStatus instance of the file to read.
- * @param modificationTime The modification time of the input file, in milliseconds.
- * @param fileSize The length of the input file (not the block), in bytes.
  * @param otherConstantMetadataColumnValues The values of any additional constant metadata columns.
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
-    filePath: SparkPath,
     start: Long,
     length: Long,
     fileStatus: FileStatus,
     @transient locations: Array[String] = Array.empty,
-    modificationTime: Long = 0L,
-    fileSize: Long = 0L,
     otherConstantMetadataColumnValues: Map[String, Any] = Map.empty) {
 
+  @transient lazy val filePath: SparkPath = SparkPath.fromFileStatus(fileStatus)
   def pathUri: URI = filePath.toUri
   def toPath: Path = filePath.toPath
   def urlEncodedPath: String = filePath.urlEncoded
+  def modificationTime: Long = fileStatus.getModificationTime
+  def fileSize: Long = fileStatus.getLen
 
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"

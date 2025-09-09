@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapC
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
+import org.apache.spark.util.{SerializableConfiguration, ThreadUtils, Utils}
 
 class ParquetFileFormat
   extends FileFormat
@@ -227,13 +227,15 @@ class ParquetFileFormat
 
       val inputFile = HadoopInputFile.fromStatus(file.fileStatus, sharedConf)
       val inputStream = inputFile.newStream()
-      val fileReader = ParquetFileReader.open(inputFile, readOptions, inputStream)
-      val fileFooter = fileReader.getFooter
-      if (enableVectorizedReader) {
-        // Keep the file input stream open so it can be reused later
-        fileReader.detachFileInputStream()
+      val fileFooter = Utils.tryWithResource(
+        ParquetFileReader.open(inputFile, readOptions, inputStream)) { fileReader =>
+        val footer = fileReader.getFooter
+        if (enableVectorizedReader) {
+          // Keep the file input stream open so it can be reused later
+          fileReader.detachFileInputStream()
+        }
+        footer
       }
-      fileReader.close()
 
       val footerFileMetaData = fileFooter.getFileMetaData
       val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
@@ -309,7 +311,7 @@ class ParquetFileFormat
         val iter = new RecordReaderIterator(vectorizedReader)
         try {
           vectorizedReader.initialize(
-            split, hadoopAttemptContext, Some(inputFile), Some(inputStream), Some(fileFooter))
+            split, hadoopAttemptContext, Option(inputFile), Option(inputStream), Option(fileFooter))
           logDebug(s"Appending $partitionSchema ${file.partitionValues}")
           vectorizedReader.initBatch(partitionSchema, file.partitionValues)
           if (returningBatch) {

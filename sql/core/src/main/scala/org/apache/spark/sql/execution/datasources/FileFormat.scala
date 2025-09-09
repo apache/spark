@@ -22,7 +22,6 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -315,9 +314,6 @@ object FileFormat {
   def createMetadataInternalRow(
       partitionValues: InternalRow,
       fieldNames: Seq[String],
-      filePath: SparkPath,
-      fileSize: Long,
-      fileModificationTime: Long,
       fileStatus: FileStatus): InternalRow = {
     // When scanning files directly from the filesystem, we only support file-constant metadata
     // fields whose values can be derived from a file status. In particular, we don't have accurate
@@ -328,13 +324,10 @@ object FileFormat {
     assert(fieldNames.forall(validFieldNames.contains))
     val pf = PartitionedFile(
       partitionValues = partitionValues,
-      filePath = filePath,
       start = 0L,
-      length = fileSize,
+      length = fileStatus.getLen,
       fileStatus = fileStatus,
       locations = Array.empty,
-      modificationTime = fileModificationTime,
-      fileSize = fileSize,
       otherConstantMetadataColumnValues = Map.empty)
     updateMetadataInternalRow(new GenericInternalRow(fieldNames.length), fieldNames, pf, extractors)
   }

@@ -286,13 +286,13 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test("Locality support for FileScanRDD") {
     val partition = FilePartition(0, Array(
-      PartitionedFile(InternalRow.empty, sp("fakePath0"), 0, 10,
+      PartitionedFile(InternalRow.empty, 0, 10,
         new FileStatus(20, false, 3, 0, 0, sp("fakePath0").toPath), Array("host0", "host1")),
-      PartitionedFile(InternalRow.empty, sp("fakePath0"), 10, 20,
+      PartitionedFile(InternalRow.empty, 10, 20,
         new FileStatus(20, false, 3, 0, 0, sp("fakePath0").toPath), Array("host1", "host2")),
-      PartitionedFile(InternalRow.empty, sp("fakePath1"), 0, 5,
+      PartitionedFile(InternalRow.empty, 0, 5,
         new FileStatus(5, false, 3, 0, 0, sp("fakePath1").toPath), Array("host3")),
-      PartitionedFile(InternalRow.empty, sp("fakePath2"), 0, 5,
+      PartitionedFile(InternalRow.empty, 0, 5,
         new FileStatus(5, false, 3, 0, 0, sp("fakePath2").toPath), Array("host4"))
     ))
 
@@ -610,7 +610,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
   test(s"SPARK-44021: Test ${SQLConf.FILES_MAX_PARTITION_NUM.key} works as expected") {
     val files = Range(0, 300000).map { p =>
-      PartitionedFile(InternalRow.empty, sp(s"$p"), 0, 50000000,
+      PartitionedFile(InternalRow.empty, 0, 50000000,
         new FileStatus(0, false, 1, 0, 0, sp(s"$p").toPath))
     }
     val maxPartitionBytes = conf.filesMaxPartitionBytes

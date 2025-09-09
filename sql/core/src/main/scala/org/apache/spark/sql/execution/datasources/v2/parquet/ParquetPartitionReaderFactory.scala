@@ -90,7 +90,7 @@ case class ParquetPartitionReaderFactory(
 
   private val parquetReaderCallback = new ParquetReaderCallback()
 
-  private def getFooter(file: PartitionedFile):
+  private def openFileAndReadFooter(file: PartitionedFile):
       (Option[HadoopInputFile], Option[SeekableInputStream], ParquetMetadata) = {
     val hadoopConf = broadcastedConf.value.value
     if (aggregation.isDefined) {
@@ -115,13 +115,15 @@ case class ParquetPartitionReaderFactory(
 
       val inputFile = HadoopInputFile.fromStatus(file.fileStatus, hadoopConf)
       val inputStream = inputFile.newStream()
-      val fileReader = ParquetFileReader.open(inputFile, readOptions, inputStream)
-      val fileFooter = fileReader.getFooter
-      if (enableVectorizedReader) {
-        // Keep the file input stream open so it can be reused later
-        fileReader.detachFileInputStream()
+      val fileFooter = Utils.tryWithResource(
+        ParquetFileReader.open(inputFile, readOptions, inputStream)) { fileReader =>
+        val footer = fileReader.getFooter
+        if (enableVectorizedReader) {
+          // Keep the file input stream open so it can be reused later
+          fileReader.detachFileInputStream()
+        }
+        footer
       }
-      fileReader.close()
       if (enableVectorizedReader) {
         (Some(inputFile), Some(inputStream), fileFooter)
       } else {
@@ -160,7 +162,7 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[InternalRow] {
         private var hasNext = true
         private lazy val row: InternalRow = {
-          val (_, _, footer) = getFooter(file)
+          val (_, _, footer) = openFileAndReadFooter(file)
 
           if (footer != null && footer.getBlocks.size > 0) {
             ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
@@ -205,7 +207,7 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[ColumnarBatch] {
         private var hasNext = true
         private val batch: ColumnarBatch = {
-          val (_, _, footer) = getFooter(file)
+          val (_, _, footer) = openFileAndReadFooter(file)
           if (footer != null && footer.getBlocks.size > 0) {
             val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
               dataSchema, partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
@@ -243,7 +245,7 @@ case class ParquetPartitionReaderFactory(
 
     val filePath = file.toPath
     val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
-    val (inputFile, inputStream, fileFooter) = getFooter(file)
+    val (inputFile, inputStream, fileFooter) = openFileAndReadFooter(file)
     val footerFileMetaData = fileFooter.getFileMetaData
     val datetimeRebaseSpec = getDatetimeRebaseSpec(footerFileMetaData)
     // Try to push down filters when filter push-down is enabled.

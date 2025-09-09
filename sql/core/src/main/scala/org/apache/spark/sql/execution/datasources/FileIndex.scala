@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs._
 
-import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
@@ -84,8 +83,7 @@ class FilePruningRunner(filters: Seq[Expression]) {
     // use option.forall, so if there is no filter no metadata struct, return true
     boundedFilterMetadataStructOpt.forall { boundedFilter =>
       val row =
-        FileFormat.createMetadataInternalRow(partitionValues, requiredMetadataColumnNames.toSeq,
-          SparkPath.fromFileStatus(f), f.getLen, f.getModificationTime, f)
+        FileFormat.createMetadataInternalRow(partitionValues, requiredMetadataColumnNames.toSeq, f)
       boundedFilter.eval(row)
     }
   }

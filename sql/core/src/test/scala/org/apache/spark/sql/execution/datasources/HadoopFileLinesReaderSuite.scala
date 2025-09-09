@@ -42,7 +42,6 @@ class HadoopFileLinesReaderSuite extends SharedSparkSession {
       val sp = SparkPath.fromPathString(path.getCanonicalPath)
       val file = PartitionedFile(
         InternalRow.empty,
-        sp,
         start,
         length,
         new FileStatus(path.length(), false, 1, 0, 0, sp.toPath))
