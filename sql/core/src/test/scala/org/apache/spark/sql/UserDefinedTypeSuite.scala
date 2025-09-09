@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -281,5 +282,13 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
     java.util.Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0))
     java.util.Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0))
+  }
+
+
+  test("SPARK-53518: No truncation for catalogString of User Defined Type") {
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "3") {
+      val string = new ExampleIntRowUDT(4).catalogString
+      assert(string == "struct<col0:int,col1:int,col2:int,col3:int>")
+    }
   }
 }
