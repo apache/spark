@@ -890,18 +890,18 @@ class GroupedAggArrowUDFTestsMixin:
         import numpy as np
         import pyarrow as pa
 
-        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
-        def np_max_udf(v) -> np.int64:
+        @arrow_udf("long")
+        def np_max_udf(v: pa.Array) -> np.int64:
             assert isinstance(v, pa.Array)
             return np.max(v)
 
-        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
-        def np_min_udf(v) -> np.int64:
+        @arrow_udf("long")
+        def np_min_udf(v: pa.Array) -> np.int64:
             assert isinstance(v, pa.Array)
             return np.min(v)
 
-        @arrow_udf("double", ArrowUDFType.GROUPED_AGG)
-        def np_avg_udf(v) -> np.float64:
+        @arrow_udf("double")
+        def np_avg_udf(v: pa.Array) -> np.float64:
             assert isinstance(v, pa.Array)
             return np.mean(v)
 
