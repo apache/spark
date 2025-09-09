@@ -168,9 +168,9 @@ class ErrorClassesReader:
 
         main_message_template = "\n".join(main_error_class_info_map["message"])
         if "breaking_change_info" in main_error_class_info_map:
-            main_message_template += (
-                " " +
-                "\n".join(main_error_class_info_map["breaking_change_info"]["migration_message"]))
+            main_message_template += " " + "\n".join(
+                main_error_class_info_map["breaking_change_info"]["migration_message"]
+            )
 
         has_sub_class = len_error_classes == 2
 
@@ -187,17 +187,14 @@ class ErrorClassesReader:
 
             sub_message_template = "\n".join(sub_error_class_info_map["message"])
             if "breaking_change_info" in sub_error_class_info_map:
-                sub_message_template += (
-                    " " +
-                    "\n".join(
-                        sub_error_class_info_map["breaking_change_info"]["migration_message"]
-                    )
+                sub_message_template += " " + "\n".join(
+                    sub_error_class_info_map["breaking_change_info"]["migration_message"]
                 )
             message_template = main_message_template + " " + sub_message_template
 
         return message_template
 
-    def get_breaking_change_info(self, errorClass: str):
+    def get_breaking_change_info(self, errorClass: str) -> Optional[Dict[str, Any]]:
         """
         Returns the breaking change info for an error if it is present.
         """

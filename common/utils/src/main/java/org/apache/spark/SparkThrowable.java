@@ -62,7 +62,8 @@ public interface SparkThrowable {
   }
 
   default Optional<BreakingChangeInfo> getBreakingChangeInfo() {
-    return Optional.ofNullable(SparkThrowableHelper.getBreakingChangeInfo(this.getCondition()).getOrElse(() -> null));
+    return Optional.ofNullable(SparkThrowableHelper.getBreakingChangeInfo(
+        this.getCondition()).getOrElse(() -> null));
   }
 
   default Map<String, String> getMessageParameters() {

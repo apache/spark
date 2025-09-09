@@ -17,7 +17,7 @@
 import grpc
 import json
 from grpc import StatusCode
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
@@ -107,17 +107,20 @@ def _convert_exception(
                 for c in root_error.spark_throwable.query_contexts
             ]
             # Extract breaking change info if present
-            if (hasattr(root_error.spark_throwable, "breaking_change_info") and
-                root_error.spark_throwable.HasField("breaking_change_info")):
+            if hasattr(
+                root_error.spark_throwable, "breaking_change_info"
+            ) and root_error.spark_throwable.HasField("breaking_change_info"):
                 bci = root_error.spark_throwable.breaking_change_info
                 breaking_change_info = {
                     "migration_message": list(bci.migration_message),
-                    "auto_mitigation": bci.auto_mitigation if bci.HasField("auto_mitigation") else False
+                    "auto_mitigation": bci.auto_mitigation
+                    if bci.HasField("auto_mitigation")
+                    else False,
                 }
                 if bci.HasField("mitigation_spark_config"):
                     breaking_change_info["mitigation_spark_config"] = {
                         "key": bci.mitigation_spark_config.key,
-                        "value": bci.mitigation_spark_config.value
+                        "value": bci.mitigation_spark_config.value,
                     }
 
     if "org.apache.spark.api.python.PythonException" in classes:
@@ -209,7 +212,7 @@ class SparkConnectGrpcException(SparkConnectException):
         display_server_stacktrace: bool = False,
         contexts: Optional[List[BaseQueryContext]] = None,
         grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
-        breaking_change_info: Optional[Dict[str, any]] = None,
+        breaking_change_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         if contexts is None:
             contexts = []
@@ -238,7 +241,7 @@ class SparkConnectGrpcException(SparkConnectException):
         self._display_stacktrace: bool = display_server_stacktrace
         self._contexts: List[BaseQueryContext] = contexts
         self._grpc_status_code = grpc_status_code
-        self._breaking_change_info: Optional[Dict[str, any]] = breaking_change_info
+        self._breaking_change_info: Optional[Dict[str, Any]] = breaking_change_info
         self._log_exception()
 
     def getSqlState(self) -> Optional[str]:
@@ -259,7 +262,7 @@ class SparkConnectGrpcException(SparkConnectException):
     def getGrpcStatusCode(self) -> grpc.StatusCode:
         return self._grpc_status_code
 
-    def getBreakingChangeInfo(self):
+    def getBreakingChangeInfo(self) -> Optional[Dict[str, Any]]:
         """
         Returns the breaking change info for an error, or None.
 
@@ -290,7 +293,7 @@ class UnknownException(SparkConnectGrpcException, BaseUnknownException):
         display_server_stacktrace: bool = False,
         contexts: Optional[List[BaseQueryContext]] = None,
         grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
-        breaking_change_info: Optional[Dict[str, any]] = None,
+        breaking_change_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(
             message=message,

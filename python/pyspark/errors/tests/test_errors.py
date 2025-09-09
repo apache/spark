@@ -62,12 +62,9 @@ class ErrorsTest(unittest.TestCase):
                 "message": ["Error message 1 with <param>."],
                 "breaking_change_info": {
                     "migration_message": ["Migration message with <param2>."],
-                    "mitigation_spark_config": {
-                        "key": "config.key1",
-                        "value": "config.value1"
-                    },
+                    "mitigation_spark_config": {"key": "config.key1", "value": "config.value1"},
                     "autoMitigation": True,
-                }
+                },
             },
             "TEST_ERROR_WITH_SUB_CLASS": {
                 "message": ["Error message 2 with <param>."],
@@ -78,30 +75,33 @@ class ErrorsTest(unittest.TestCase):
                             "migration_message": ["Subclass migration message with <param3>."],
                             "mitigation_spark_config": {
                                 "key": "config.key2",
-                                "value": "config.value2"
+                                "value": "config.value2",
                             },
                             "autoMitigation": False,
-                        }
+                        },
                     }
-                }
-            }
+                },
+            },
         }
-        error_message1 = error_reader.get_error_message("TEST_ERROR", {
-            "param": "value1",
-            "param2": "value2"
-        })
-        self.assertEqual(error_message1, "Error message 1 with value1. Migration message with value2.")
-        error_message2 = error_reader.get_error_message("TEST_ERROR_WITH_SUB_CLASS.SUBCLASS", {
-            "param": "value1",
-            "param2": "value2",
-            "param3": "value3"
-        })
-        self.assertEqual(error_message2,
+        error_message1 = error_reader.get_error_message(
+            "TEST_ERROR", {"param": "value1", "param2": "value2"}
+        )
+        self.assertEqual(
+            error_message1, "Error message 1 with value1. Migration message with value2."
+        )
+        error_message2 = error_reader.get_error_message(
+            "TEST_ERROR_WITH_SUB_CLASS.SUBCLASS",
+            {"param": "value1", "param2": "value2", "param3": "value3"},
+        )
+        self.assertEqual(
+            error_message2,
             "Error message 2 with value1. Subclass message with value2."
-            " Subclass migration message with value3.")
+            " Subclass migration message with value3.",
+        )
         breaking_change_info1 = error_reader.get_breaking_change_info("TEST_ERROR")
-        self.assertEqual(breaking_change_info1,
-            error_reader.error_info_map["TEST_ERROR"]["breaking_change_info"])
+        self.assertEqual(
+            breaking_change_info1, error_reader.error_info_map["TEST_ERROR"]["breaking_change_info"]
+        )
         breaking_change_info2 = error_reader.get_breaking_change_info(
             "TEST_ERROR_WITH_SUB_CLASS.SUBCLASS"
         )

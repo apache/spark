@@ -17,7 +17,7 @@
 import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
+from typing import Any, Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
 
 from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.errors.utils import ErrorClassesReader
@@ -138,8 +138,7 @@ class PySparkException(Exception):
         """
         return f"[{self.getCondition()}] {self._message}"
 
-
-    def getBreakingChangeInfo(self):
+    def getBreakingChangeInfo(self) -> Optional[Dict[str, Any]]:
         """
         Returns the breaking change info for an error, or None.
 
@@ -155,7 +154,6 @@ class PySparkException(Exception):
                 breaking change.
         """
         return self._error_reader.get_breaking_change_info(cast(str, self._errorClass))
-
 
     def getQueryContext(self) -> List["QueryContext"]:
         """

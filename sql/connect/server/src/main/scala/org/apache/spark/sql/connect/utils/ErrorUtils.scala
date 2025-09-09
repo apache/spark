@@ -148,7 +148,8 @@ private[connect] object ErrorUtils extends Logging {
             val breakingChangeInfoBuilder = FetchErrorDetailsResponse.BreakingChangeInfo
               .newBuilder()
             import scala.jdk.CollectionConverters._
-            breakingChangeInfoBuilder.addAllMigrationMessage(breakingChangeInfo.migrationMessage.asJava)
+            breakingChangeInfoBuilder
+              .addAllMigrationMessage(breakingChangeInfo.migrationMessage.asJava)
             if (breakingChangeInfo.mitigationSparkConfig.isDefined) {
               val mitigationConfig = breakingChangeInfo.mitigationSparkConfig.get
               val mitigationConfigBuilder = FetchErrorDetailsResponse.MitigationSparkConfig

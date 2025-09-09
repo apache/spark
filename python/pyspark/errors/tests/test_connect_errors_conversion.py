@@ -198,21 +198,21 @@ class ConnectErrorsTest(unittest.TestCase):
         # Create mock FetchErrorDetailsResponse with breaking change info
         resp = pb2.FetchErrorDetailsResponse()
         resp.root_error_idx = 0
-        
+
         error = resp.errors.add()
         error.message = "Test error with breaking change"
         error.error_type_hierarchy.append("org.apache.spark.SparkException")
-        
+
         # Add SparkThrowable with breaking change info
         spark_throwable = error.spark_throwable
         spark_throwable.error_class = "TEST_BREAKING_CHANGE_ERROR"
-        
+
         # Add breaking change info
         bci = spark_throwable.breaking_change_info
         bci.migration_message.append("Please update your code to use new API")
         bci.migration_message.append("See documentation for details")
         bci.auto_mitigation = True
-        
+
         # Add mitigation config
         mitigation_config = bci.mitigation_spark_config
         mitigation_config.key = "spark.sql.legacy.behavior.enabled"
@@ -232,12 +232,16 @@ class ConnectErrorsTest(unittest.TestCase):
         # Verify breaking change info is correctly extracted
         breaking_change_info = exception.getBreakingChangeInfo()
         self.assertIsNotNone(breaking_change_info)
-        self.assertEqual(breaking_change_info["migration_message"], 
-                         ["Please update your code to use new API", "See documentation for details"])
+        self.assertEqual(
+            breaking_change_info["migration_message"],
+            ["Please update your code to use new API", "See documentation for details"],
+        )
         self.assertEqual(breaking_change_info["auto_mitigation"], True)
         self.assertIn("mitigation_spark_config", breaking_change_info)
-        self.assertEqual(breaking_change_info["mitigation_spark_config"]["key"], 
-                         "spark.sql.legacy.behavior.enabled")
+        self.assertEqual(
+            breaking_change_info["mitigation_spark_config"]["key"],
+            "spark.sql.legacy.behavior.enabled",
+        )
         self.assertEqual(breaking_change_info["mitigation_spark_config"]["value"], "true")
 
     def test_convert_exception_without_breaking_change_info(self):
@@ -249,11 +253,11 @@ class ConnectErrorsTest(unittest.TestCase):
         # Create mock FetchErrorDetailsResponse without breaking change info
         resp = pb2.FetchErrorDetailsResponse()
         resp.root_error_idx = 0
-        
+
         error = resp.errors.add()
         error.message = "Test error without breaking change"
         error.error_type_hierarchy.append("org.apache.spark.SparkException")
-        
+
         # Add SparkThrowable without breaking change info
         spark_throwable = error.spark_throwable
         spark_throwable.error_class = "REGULAR_ERROR"
@@ -279,48 +283,44 @@ class ConnectErrorsTest(unittest.TestCase):
 
         breaking_change_info = {
             "migration_message": ["Test migration message"],
-            "mitigation_spark_config": {
-                "key": "test.config.key",
-                "value": "test.config.value"
-            },
-            "auto_mitigation": False
+            "mitigation_spark_config": {"key": "test.config.key", "value": "test.config.value"},
+            "auto_mitigation": False,
         }
-        
+
         exception = SparkConnectGrpcException(
-            message="Test error",
-            errorClass="TEST_ERROR",
-            breaking_change_info=breaking_change_info
+            message="Test error", errorClass="TEST_ERROR", breaking_change_info=breaking_change_info
         )
-        
+
         stored_info = exception.getBreakingChangeInfo()
         self.assertEqual(stored_info, breaking_change_info)
 
     def test_breaking_change_info_inheritance(self):
-        """Test that subclasses of SparkConnectGrpcException correctly inherit breaking change info."""
+        """Test that subclasses of SparkConnectGrpcException
+        correctly inherit breaking change info."""
         from pyspark.errors.exceptions.connect import AnalysisException, UnknownException
 
         breaking_change_info = {
             "migration_message": ["Inheritance test message"],
-            "auto_mitigation": True
+            "auto_mitigation": True,
         }
-        
+
         # Test AnalysisException
         analysis_exception = AnalysisException(
             message="Analysis error with breaking change",
             errorClass="TEST_ANALYSIS_ERROR",
-            breaking_change_info=breaking_change_info
+            breaking_change_info=breaking_change_info,
         )
-        
+
         stored_info = analysis_exception.getBreakingChangeInfo()
         self.assertEqual(stored_info, breaking_change_info)
-        
+
         # Test UnknownException
         unknown_exception = UnknownException(
             message="Unknown error with breaking change",
             errorClass="TEST_UNKNOWN_ERROR",
-            breaking_change_info=breaking_change_info
+            breaking_change_info=breaking_change_info,
         )
-        
+
         stored_info = unknown_exception.getBreakingChangeInfo()
         self.assertEqual(stored_info, breaking_change_info)
 
@@ -333,15 +333,15 @@ class ConnectErrorsTest(unittest.TestCase):
         # Create mock FetchErrorDetailsResponse with breaking change info (no mitigation config)
         resp = pb2.FetchErrorDetailsResponse()
         resp.root_error_idx = 0
-        
+
         error = resp.errors.add()
         error.message = "Test error with breaking change"
         error.error_type_hierarchy.append("org.apache.spark.SparkException")
-        
+
         # Add SparkThrowable with breaking change info
         spark_throwable = error.spark_throwable
         spark_throwable.error_class = "TEST_BREAKING_CHANGE_ERROR"
-        
+
         # Add breaking change info without mitigation config
         bci = spark_throwable.breaking_change_info
         bci.migration_message.append("Migration message only")

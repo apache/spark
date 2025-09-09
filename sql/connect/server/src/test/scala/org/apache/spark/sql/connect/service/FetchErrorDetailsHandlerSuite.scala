@@ -41,7 +41,9 @@ import org.apache.spark.util.ThreadUtils
 class TestSparkThrowableWithBreakingChange(
     val errorClass: String,
     val messageParams: Map[String, String],
-    val breakingChangeInfo: Option[BreakingChangeInfo]) extends Exception(s"Test error for $errorClass") with SparkThrowable {
+    val breakingChangeInfo: Option[BreakingChangeInfo])
+    extends Exception(s"Test error for $errorClass")
+    with SparkThrowable {
 
   override def getCondition: String = errorClass
   override def getErrorClass: String = errorClass
@@ -231,7 +233,9 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
   }
 
   test("breaking change info is not present when error has no breaking change") {
-    val testError = new AnalysisException("Regular error without breaking change")
+    val testError = new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON",
+      messageParameters = Map.empty)
     val errorId = UUID.randomUUID().toString()
 
     val sessionHolder = SparkConnectService
@@ -279,21 +283,25 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     // - sparkThrowableProto.hasBreakingChangeInfo == true
     // - sparkThrowableProto.getBreakingChangeInfo.getMigrationMessageCount > 0
     // - sparkThrowableProto.getBreakingChangeInfo.getAutoMitigation == expected_value
-    // - If mitigation config exists: sparkThrowableProto.getBreakingChangeInfo.hasMitigationSparkConfig
+    // - If mitigation config exists:
+    //     sparkThrowableProto.getBreakingChangeInfo.hasMitigationSparkConfig
   }
 
   test("throwableToFetchErrorDetailsResponse includes breaking change info") {
-    val migrationMessages = Seq("Please update your code to use new API", "See documentation for details")
-    val mitigationConfig = Some(MitigationSparkConfig("spark.sql.legacy.behavior.enabled", "true"))
-    val breakingChangeInfo = BreakingChangeInfo(migrationMessages, mitigationConfig, autoMitigation = true)
+    val migrationMessages =
+      Seq("Please update your code to use new API", "See documentation for details")
+    val mitigationConfig =
+      Some(MitigationSparkConfig("spark.sql.legacy.behavior.enabled", "true"))
+    val breakingChangeInfo =
+      BreakingChangeInfo(migrationMessages, mitigationConfig, autoMitigation = true)
 
     val testError = new TestSparkThrowableWithBreakingChange(
       "TEST_BREAKING_CHANGE_ERROR",
       Map("param" -> "value"),
-      Some(breakingChangeInfo)
-    )
+      Some(breakingChangeInfo))
 
-    val response = ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
+    val response =
+      ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
 
     assert(response.hasRootErrorIdx)
     assert(response.getRootErrorIdx == 0)
@@ -319,13 +327,11 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
   }
 
   test("throwableToFetchErrorDetailsResponse without breaking change info") {
-    val testError = new TestSparkThrowableWithBreakingChange(
-      "REGULAR_ERROR",
-      Map("param" -> "value"),
-      None
-    )
+    val testError =
+      new TestSparkThrowableWithBreakingChange("REGULAR_ERROR", Map("param" -> "value"), None)
 
-    val response = ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
+    val response =
+      ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
 
     assert(response.hasRootErrorIdx)
     val sparkThrowableProto = response.getErrors(0).getSparkThrowable
@@ -333,17 +339,18 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     assert(!sparkThrowableProto.hasBreakingChangeInfo)
   }
 
-  test("throwableToFetchErrorDetailsResponse with breaking change info without mitigation config") {
+  test(
+    "throwableToFetchErrorDetailsResponse with breaking change info without mitigation config") {
     val migrationMessages = Seq("Migration message only")
     val breakingChangeInfo = BreakingChangeInfo(migrationMessages, None, autoMitigation = false)
 
     val testError = new TestSparkThrowableWithBreakingChange(
       "TEST_BREAKING_CHANGE_NO_MITIGATION",
       Map.empty,
-      Some(breakingChangeInfo)
-    )
+      Some(breakingChangeInfo))
 
-    val response = ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
+    val response =
+      ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
 
     val bciProto = response.getErrors(0).getSparkThrowable.getBreakingChangeInfo
     assert(bciProto.getMigrationMessageCount == 1)
@@ -355,7 +362,8 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
   test("throwableToFetchErrorDetailsResponse with non-SparkThrowable") {
     val testError = new RuntimeException("Regular runtime exception")
 
-    val response = ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
+    val response =
+      ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
 
     assert(response.hasRootErrorIdx)
     val error = response.getErrors(0)
