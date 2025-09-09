@@ -156,8 +156,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       "VALUES (array[array[1],array[2]]), (array[3])").executeUpdate()
   }
 
-  override def dialectTranslatesBooleanLiteralsAsComparison: Boolean = true
-
   test("Test multi-dimensional column types") {
     // This test is used to verify that the multi-dimensional
     // column types are supported by the JDBC V2 data source.

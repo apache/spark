@@ -391,21 +391,11 @@ abstract class JdbcDialect extends Serializable with Logging {
     protected def predicateToIntSQL(input: String): String =
       "CASE WHEN " + input + " THEN 1 ELSE 0 END"
 
-    /**
-     * For third-party JDBC dialects, we are not sure if WHERE ([TRUE/FALSE]) can be
-     * executed. Therefore, by default, it will be replaced with WHERE ([1 = 1 / 1 = 0]).
-     */
-    protected def translateBooleanLiteralsAsComparison: Boolean = true
-
     override def visitLiteral(literal: Literal[_]): String = {
       literal match {
-        case _: AlwaysTrue
-          if !SQLConf.get.legacyJdbcConnectorBooleanLiteralTranslation &&
-            translateBooleanLiteralsAsComparison =>
+        case _: AlwaysTrue if !SQLConf.get.legacyJdbcConnectorBooleanLiteralTranslation =>
           "1=1"
-        case _: AlwaysFalse
-          if !SQLConf.get.legacyJdbcConnectorBooleanLiteralTranslation &&
-            translateBooleanLiteralsAsComparison =>
+        case _: AlwaysFalse if !SQLConf.get.legacyJdbcConnectorBooleanLiteralTranslation =>
           "1=0"
         case _ =>
           Option(literal.value()).map(v =>

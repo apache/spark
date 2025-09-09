@@ -55,7 +55,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   }
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
-    override protected def translateBooleanLiteralsAsComparison: Boolean = false
 
     override def visitExtract(extract: Extract): String = {
       val field = extract.field

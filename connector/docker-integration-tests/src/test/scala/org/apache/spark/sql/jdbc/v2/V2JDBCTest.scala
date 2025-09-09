@@ -1300,13 +1300,11 @@ private[v2] trait V2JDBCTest
 
   val alwaysTrueFalseTestCases = Seq(("true", "1=1"), ("false", "1=0"))
 
-  protected def dialectTranslatesBooleanLiteralsAsComparison: Boolean
-
-  gridTest("Test literal pushdown")(alwaysTrueFalseTestCases) {
+  gridTest("Test boolean literal pushdown")(alwaysTrueFalseTestCases) {
     case (condition, expected) =>
       import org.apache.spark.sql._
       val rows: Seq[Row] = withSQLConf(
-        "spark.databricks.connector.jdbcTranslateAlwaysTrueFalseToComparissonExpression" -> "false"
+        SQLConf.LEGACY_JDBC_CONNECTOR_BOOLEAN_LITERAL_TRANSLATION.key -> "false"
       ) {
         val df = spark.sql(
           s"""
@@ -1321,8 +1319,7 @@ private[v2] trait V2JDBCTest
       withSQLConf(
         (SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
           "org.apache.spark.sql.catalyst.optimizer.PruneFilters"),
-        (SQLConf.LEGACY_JDBC_CONNECTOR_BOOLEAN_LITERAL_TRANSLATION.key ->
-          "true")
+        (SQLConf.LEGACY_JDBC_CONNECTOR_BOOLEAN_LITERAL_TRANSLATION.key -> "true")
       ) {
         val df = sql(
           s"""
@@ -1333,12 +1330,7 @@ private[v2] trait V2JDBCTest
 
         val sqlText = getExternalEngineQuery(df.queryExecution.sparkPlan)
 
-        if (dialectTranslatesBooleanLiteralsAsComparison) {
-          assert(sqlText.toLowerCase(Locale.ROOT).contains(s"where ($expected)"))
-        } else {
-          assert(sqlText.toLowerCase(Locale.ROOT).contains(s"where ($condition)"))
-        }
-
+        assert(sqlText.toLowerCase(Locale.ROOT).contains(s"where ($expected)"))
         checkAnswer(df, rows)
       }
   }

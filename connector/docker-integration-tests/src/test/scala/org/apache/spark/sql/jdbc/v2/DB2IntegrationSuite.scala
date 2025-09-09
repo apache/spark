@@ -18,7 +18,6 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
-import java.util.Locale
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
@@ -120,8 +119,4 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
       .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
   }
-
-  override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
-
-  override def dialectTranslatesBooleanLiteralsAsComparison: Boolean = false
 }

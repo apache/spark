@@ -152,8 +152,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       condition = "UNSUPPORTED_FEATURE.UPDATE_COLUMN_NULLABILITY")
   }
 
-  override def dialectTranslatesBooleanLiteralsAsComparison: Boolean = true
-
   test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {
     val df1 = sql("SELECT name FROM " +
       s"$catalogName.employee WHERE ((name LIKE 'am%') = (name LIKE '%y'))")
