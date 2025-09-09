@@ -122,7 +122,7 @@
     <slf4j.version>2.0.17</slf4j.version>
     <log4j.version>2.24.3</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.2.0.16-EE-SNAPSHOT</hadoop.version>
+    <hadoop.version>3.2.0.17-EE-RC1</hadoop.version>
     <hadoop.group>io.hops</hadoop.group>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>3.23.4</protobuf.version>
@@ -133,8 +133,8 @@
     <hive.group>io.hops.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>3.0.0.13.5</hive.version>
-    <hive23.version>3.0.0.13.5</hive23.version>
+    <hive.version>3.0.0.13.10-HWORKS-2203-SNAPSHOT</hive.version>
+    <hive23.version>3.0.0.13.10-HWORKS-2203-SNAPSHOT</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>3.0</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
@@ -227,7 +227,7 @@
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>12.0.1</arrow.version>
+    <arrow.version>17.0.0</arrow.version>
     <ammonite.version>2.5.9</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
