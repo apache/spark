@@ -143,6 +143,12 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
+      def newResponseBuilder = {
+        proto.ExecutePlanResponse
+          .newBuilder()
+          .setSessionId(sessionId)
+          .setServerSideSessionId(sessionHolder.serverSessionId)
+      }
       if (isResultChunkingEnabled) {
         // Result chunking is enabled. Split the result batch into multiple chunks if needed.
         val maxChunkSize = spark.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE).toInt
@@ -153,11 +159,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
           val to = math.min(from + maxChunkSize, bytes.length)
           val length = to - from
 
-          val response = proto.ExecutePlanResponse
-            .newBuilder()
-            .setSessionId(sessionId)
-            .setServerSideSessionId(sessionHolder.serverSessionId)
-
+          val response = newResponseBuilder
           val batch = proto.ExecutePlanResponse.ArrowBatch
             .newBuilder()
             .setRowCount(count) // same for all chunks - total rows
@@ -171,11 +173,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         }
       } else {
         // Result chunking is not enabled. Return the entire batch without chunking.
-        val response = proto.ExecutePlanResponse
-          .newBuilder()
-          .setSessionId(sessionId)
-          .setServerSideSessionId(sessionHolder.serverSessionId)
-
+        val response = newResponseBuilder
         val batch = proto.ExecutePlanResponse.ArrowBatch
           .newBuilder()
           .setRowCount(count)
