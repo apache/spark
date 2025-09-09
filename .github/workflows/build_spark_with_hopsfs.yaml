@@ -1,0 +1,204 @@
+name: Build Spark with hopsfs
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The ref to checkout for the spark repo, default is branch-3.5'
+        required: false
+        type: string
+        default: 'branch-3.5'
+      jira_tag:
+        description: 'The tag to use for the jira release, default is the version from version.txt'
+        required: false
+        type: string
+        default: 'NOJIRA'
+      runner:
+        description: 'The type of runner to use, default is ghrunner-ee8'
+        required: false
+        type: string
+        default: 'ghrunner-ee8'
+      build:
+        description: 'Whether to build spark or not, default is false. If this is false then the workflow will only prepare the versioning related outputs.'
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      NEXUS_HARBOR_PASSWORD:
+        required: true
+    outputs:
+      pom_version_no_jira:
+        value: ${{ jobs.build-spark.outputs.pom_version_no_jira }}
+        description: 'The pom version without the jira tag'
+      pom_version:
+        value: ${{ jobs.build-spark.outputs.pom_version }}
+        description: 'The pom version with the jira tag'
+      commit_hash:
+        value: ${{ jobs.build-spark.outputs.commit_hash }}
+        description: 'The commit hash of the spark repo'
+      jira_tag:
+        value: ${{ jobs.build-spark.outputs.jira_tag }}
+        description: 'The jira tag used for the build'
+      spark_tar_name:
+        value: ${{ jobs.build-spark.outputs.spark_tar_name }}
+        description: 'The name of the spark tar file'
+      spark_tar_url:
+        value: ${{ jobs.build-spark.outputs.spark_tar_url }}
+        description: 'The url of the spark tar file'
+      hopsfs_version:
+        value: ${{ jobs.build-spark.outputs.hopsfs_version }}
+        description: 'The version of hopsfs used in the build'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'The ref to checkout for the spark repo, default is branch-3.5'
+        required: false
+        type: string
+        default: 'branch-3.5'
+      jira_tag:
+        description: 'The tag to use for the jira release, default is the version from version.txt'
+        required: false
+        type: string
+        default: 'NOJIRA'
+      runner:
+        description: 'The type of runner to use, default is ghrunner-ee8'
+        required: false
+        type: string
+        default: 'ghrunner-ee8'
+      build:
+        description: 'Whether to build spark or not, default is false. If this is false then the workflow will only prepare the versioning related outputs.'
+        required: false
+        type: boolean
+        default: true
+  pull_request:
+    
+concurrency:
+  group: build-spark-${{ github.workflow }}-${{ github.job }}-${{ inputs.jira_tag || 'NOJIRA' }}
+  cancel-in-progress: true
+
+# Used to avoid error on PRs
+env:
+  # SPARK_REF: ${{ inputs.ref || 'branch-3.5' }}
+  SPARK_REF: ${{ inputs.ref || 'HWORKS-2203-vatj' }}
+  JIRA_TAG: ${{ inputs.jira_tag || 'NOJIRA' }}
+
+jobs:
+  build-spark:
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      pom_version_no_jira: ${{ steps.prep_version.outputs.pom_version_no_jira }}
+      pom_version: ${{ steps.prep_version.outputs.pom_version }}
+      commit_hash: ${{ steps.prep_version.outputs.commit_hash }}
+      jira_tag: ${{ env.JIRA_TAG }}
+      spark_tar_name: ${{ steps.prep_version.outputs.spark_tar_name }}
+      spark_tar_url: ${{ steps.prep_version.outputs.spark_tar_url }}
+      hopsfs_version: ${{ steps.prep_version.outputs.hopsfs_version }}
+    steps:
+      - name: Checkout spark repo
+        uses: actions/checkout@v4
+        with:
+          repository: logicalclocks/spark
+          ref: ${{ env.SPARK_REF }}
+          path: ${{ github.workspace }}/spark
+
+      - name: To build or not to build
+        id: to_build_or_not_to_build
+        shell: bash
+        env:
+          BUILD_SPARK: ${{ (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ','), 'build-spark')) || inputs.build }}
+        run: |
+          if [[ "${{ env.BUILD_SPARK }}" != "true" ]]; then
+            echo "# :recycle: Not building Spark" >> $GITHUB_STEP_SUMMARY
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              echo "This is a pull request and the 'build-spark' label is not present." >> $GITHUB_STEP_SUMMARY
+              echo "pull_request_labels=${{ join(github.event.pull_request.labels.*.name, ', ') }}" >> $GITHUB_STEP_SUMMARY
+            elif [[ "${{ inputs.build || 'false'}}" != "true" ]]; then
+              echo "The input 'build' is set to false." >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "BUILD_SPARK=$BUILD_SPARK" >> $GITHUB_OUTPUT
+          else
+            echo "# :white_check_mark: Building Spark" >> $GITHUB_STEP_SUMMARY
+            echo "BUILD_SPARK=$BUILD_SPARK" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prep step version
+        shell: bash
+        id: prep_version
+        working-directory: ${{ github.workspace }}/spark
+        run: |
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          POM_VERSION_NO_JIRA=$(mvn -q -Dexec.executable="echo" -Dexec.args='${project.version}' --non-recursive exec:exec)
+          find . -name "pom.xml" -exec sed -i "s|<version>${POM_VERSION_NO_JIRA}</version>|<version>${POM_VERSION_NO_JIRA%-SNAPSHOT}-${JIRA_TAG}-SNAPSHOT</version>|g" {} \;
+          POM_VERSION=$(mvn -q -Dexec.executable="echo" -Dexec.args='${project.version}' --non-recursive exec:exec)
+          SPARK_TAR_NAME=spark-${POM_VERSION}-bin-without-hadoop-with-hive.tgz
+          SPARK_TAR_URL="${{ vars.NEXUS_DEV_SPARK_URL }}/${JIRA_TAG}/${SPARK_TAR_NAME}"
+          HOPSFS_VERSION=$(mvn -q -Dexec.executable="echo" -Dexec.args='${hadoop.version}' --non-recursive exec:exec)
+
+          echo "POM_VERSION_NO_JIRA=${POM_VERSION_NO_JIRA}" >> $GITHUB_ENV
+          echo "POM_VERSION=${POM_VERSION}" >> $GITHUB_ENV
+          echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
+          echo "SPARK_TAR_NAME=${SPARK_TAR_NAME}" >> $GITHUB_ENV
+          echo "SPARK_TAR_URL=${SPARK_TAR_URL}" >> $GITHUB_ENV
+          echo "HOPSFS_VERSION=${HOPSFS_VERSION}" >> $GITHUB_ENV
+
+          echo "POM_VERSION_NO_JIRA=${POM_VERSION_NO_JIRA}" >> $GITHUB_STEP_SUMMARY
+          echo "POM_VERSION=${POM_VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_STEP_SUMMARY
+          echo "SPARK_TAR_NAME=${SPARK_TAR_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "SPARK_TAR_URL=${SPARK_TAR_URL}" >> $GITHUB_STEP_SUMMARY
+          echo "HOPSFS_VERSION=${HOPSFS_VERSION}" >> $GITHUB_STEP_SUMMARY
+
+          echo "POM_VERSION=${POM_VERSION}" >> $GITHUB_OUTPUT
+          echo "POM_VERSION_NO_JIRA=${POM_VERSION_NO_JIRA}" >> $GITHUB_OUTPUT
+          echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_OUTPUT
+          echo "SPARK_TAR_NAME=${SPARK_TAR_NAME}" >> $GITHUB_OUTPUT
+          echo "SPARK_TAR_URL=${SPARK_TAR_URL}" >> $GITHUB_OUTPUT
+          echo "HOPSFS_VERSION=${HOPSFS_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Set up .m2 settings.xml
+        shell: bash
+        if: steps.to_build_or_not_to_build.outputs.BUILD_SPARK == 'true'
+        env:
+          M2_HOME: ~/.m2
+        run: |
+          echo "M2_HOME var is $M2_HOME" >> $GITHUB_STEP_SUMMARY
+          mkdir -p ~/.m2
+          echo "<settings><servers>" > ~/.m2/settings.xml
+          echo "<server><id>HopsEE</id><username>${{ vars.NEXUS_HARBOR_USER }}</username><password>${{ secrets.NEXUS_HARBOR_PASSWORD }}</password><configuration></configuration></server>" >> ~/.m2/settings.xml
+          echo "<server><id>HiveEE</id><username>${{ vars.NEXUS_HARBOR_USER }}</username><password>${{ secrets.NEXUS_HARBOR_PASSWORD }}</password><configuration></configuration></server>" >> ~/.m2/settings.xml
+          echo "</servers></settings>" >> ~/.m2/settings.xml
+
+
+      - name: Cache maven
+        id: cache-maven
+        if: steps.to_build_or_not_to_build.outputs.BUILD_SPARK == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            !~/.m2/settings.xml
+          key: ${{ runner.os }}-maven-spark-${{ hashFiles('spark/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-spark-
+            
+
+      - name: Build spark and spark-packaging
+        shell: bash
+        if: steps.to_build_or_not_to_build.outputs.BUILD_SPARK == 'true'
+        working-directory: ${{ github.workspace }}/spark
+        env:
+          POM_VERSION: ${{ env.POM_VERSION }}
+          M2_HOME: ~/.m2
+        run: |
+          ./dev/make-distribution.sh --name without-hadoop-with-hive --tgz "-Pkubernetes,hadoop-provided,parquet-provided,hive,hadoop-cloud,bigtop-dist"
+          
+      - name: Upload spark-packaging artifact to Nexus
+        shell: bash
+        if: steps.to_build_or_not_to_build.outputs.BUILD_SPARK == 'true'
+        working-directory: ${{ github.workspace }}/spark
+        env:
+          M2_HOME: ~/.m2
+        run: |
+          curl -u ${{ vars.NEXUS_HARBOR_USER }}:${{ secrets.NEXUS_HARBOR_PASSWORD }} --upload-file spark-$POM_VERSION-bin-without-hadoop-with-hive.tgz "${SPARK_TAR_URL}"
+          export MAVEN_OPTS="${MAVEN_OPTS:--Xss128m -Xmx4g -XX:ReservedCodeCacheSize=128m}"
+          ./build/mvn deploy -DskipTests -Dmaven.javadoc.skip=true -Dmaven.scaladoc.skip=true -Dmaven.source.skip -Dcyclonedx.skip=true -Pkubernetes,hadoop-provided,parquet-provided,hive,hadoop-cloud
