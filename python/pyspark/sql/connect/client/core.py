@@ -1428,6 +1428,7 @@ class SparkConnectClient(object):
             req = hook.on_execute_plan(req)
 
         num_records = 0
+        arrow_batch_chunks_to_assemble = []
 
         def handle_response(
             b: pb2.ExecutePlanResponse,
