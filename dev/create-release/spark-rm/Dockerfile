@@ -91,16 +91,6 @@ RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
 # See more in SPARK-39735
 ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-
-RUN add-apt-repository ppa:pypy/ppa
-RUN mkdir -p /usr/local/pypy/pypy3.10 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.10-v7.3.17-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.10 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3.10 && \
-    ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.2' scipy coverage matplotlib lxml
-
-
 ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.2 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 twine==3.4.1"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.29.1 googleapis-common-protos==1.65.0 graphviz==0.20.3"
