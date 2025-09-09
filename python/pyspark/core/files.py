@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 
 
 class SparkFiles:
-
     """
     Resolves paths to files added through :meth:`SparkContext.addFile`.
 
