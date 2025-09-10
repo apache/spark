@@ -80,7 +80,7 @@ private[connect] class ExecuteHolder(
    * If result chunking is enabled, it will split large arrow batches into smaller chunks in
    * responses.
    */
-  def resultChunkingEnabled: Boolean = {
+  lazy val resultChunkingEnabled: Boolean = {
     sessionHolder.session.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE) > 0 &&
     request.getRequestOptionsList.asScala.exists { option =>
       option.hasResultChunkingOptions &&
@@ -91,7 +91,7 @@ private[connect] class ExecuteHolder(
   /**
    * The optional preferred arrow chunk size set by the client.
    */
-  val preferredArrowChunkSize: Option[Int] = {
+  lazy val preferredArrowChunkSize: Option[Int] = {
     if (resultChunkingEnabled) {
       request.getRequestOptionsList.asScala.iterator.collectFirst {
         case option
