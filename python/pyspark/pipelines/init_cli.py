@@ -19,7 +19,7 @@ from pathlib import Path
 
 SPEC = """
 name: {{ name }}
-definitions:
+libraries:
   - glob:
       include: transformations/**/*.py
   - glob:
