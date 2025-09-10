@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedPlanId
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InSubquery, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, UnaryNode}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, VariableReference}
+import org.apache.spark.sql.catalyst.plans.logical.{ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, SupportsSubquery, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -38,7 +37,7 @@ case class UnresolvedExecuteImmediate(
     sqlStmtStr: Expression,
     args: Seq[Expression],
     targetVariables: Seq[Expression])
-  extends UnresolvedLeafNode {
+  extends UnresolvedLeafNode with SupportsSubquery {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
@@ -91,9 +90,6 @@ class ResolveExecuteImmediate(
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case node @ UnresolvedExecuteImmediate(sqlStmtStr, args, targetVariables) =>
         if (sqlStmtStr.resolved && targetVariables.forall(_.resolved) && args.forall(_.resolved)) {
-          // Validate expressions before transformation
-          validateExpressions(args :+ sqlStmtStr)
-
           // All resolved - transform based on whether we have target variables
           if (targetVariables.nonEmpty) {
             // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan
@@ -137,28 +133,4 @@ class ResolveExecuteImmediate(
           node
         }
     }
-
-  /**
-   * Validates that expressions don't contain unsupported constructs like subqueries.
-   * Variable references and expressions like string concatenation are allowed.
-   * This validation catches both resolved and unresolved subqueries.
-   */
-  private def validateExpressions(expressions: Seq[Expression]): Unit = {
-    expressions.foreach { expr =>
-      // Check the expression and its children for unsupported constructs
-      expr.foreach {
-        case subquery: SubqueryExpression =>
-          // Resolved subqueries (ScalarSubquery, ListQuery, etc.)
-          throw QueryCompilationErrors.unsupportedParameterExpression(subquery)
-        case inSubquery: InSubquery =>
-          // InSubquery doesn't extend SubqueryExpression directly but contains a subquery
-          throw QueryCompilationErrors.unsupportedParameterExpression(inSubquery)
-        case unresolvedPlanId: UnresolvedPlanId =>
-          // Unresolved subqueries (UnresolvedScalarSubqueryPlanId, etc.)
-          throw QueryCompilationErrors.unsupportedParameterExpression(unresolvedPlanId)
-        case _ => // Other expressions including variables and concatenations are fine
-      }
-    }
-  }
-
 }

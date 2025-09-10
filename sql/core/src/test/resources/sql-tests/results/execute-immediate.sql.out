@@ -584,19 +584,19 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING (SELECT 42)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
   "messageParameters" : {
-    "message" : "Found the unresolved operator: 'Project [unresolvedalias(42)]"
+    "invalidExprSql" : "\"scalarsubquery()\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 71,
-    "stopIndex" : 79,
-    "fragment" : "SELECT 42"
+    "startIndex" : 70,
+    "stopIndex" : 80,
+    "fragment" : "(SELECT 42)"
   } ]
 }
 
@@ -918,19 +918,19 @@ EXECUTE IMMEDIATE 'SELECT ?' USING (SELECT 1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
   "messageParameters" : {
-    "message" : "Found the unresolved operator: 'Project [unresolvedalias(1)]"
+    "invalidExprSql" : "\"scalarsubquery()\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 37,
-    "stopIndex" : 44,
-    "fragment" : "SELECT 1"
+    "startIndex" : 36,
+    "stopIndex" : 45,
+    "fragment" : "(SELECT 1)"
   } ]
 }
 
@@ -955,20 +955,13 @@ EXECUTE IMMEDIATE (SELECT c FROM (VALUES(1)) AS T(c))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "objectName" : "`c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 27,
-    "stopIndex" : 27,
-    "fragment" : "c"
-  } ]
+    "exprType" : "\"INT\""
+  }
 }
 
 
