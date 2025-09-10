@@ -725,8 +725,8 @@ SnapshotOptions
    * state format version - please refer implementations of [[KeyWithIndexToValueRowConverter]].
    */
   protected class KeyWithIndexToValueStore(
-    stateFormatVersion: Int,
-    handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None)
+      stateFormatVersion: Int,
+      handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None)
     extends StateStoreHandler(
       KeyWithIndexToValueType, keyWithIndexToValueStateStoreCkptId, handlerSnapshotOptions) {
 
