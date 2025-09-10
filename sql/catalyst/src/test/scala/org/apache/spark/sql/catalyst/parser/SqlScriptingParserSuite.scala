@@ -2842,28 +2842,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(6))
   }
 
-  test("continue handler not supported") {
-    val sqlScript =
-      """
-        |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
-        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
-        |  BEGIN
-        |    SET flag = 1;
-        |  END;
-        |  SELECT 1/0;
-        |  SELECT flag;
-        |END
-        |""".stripMargin
-    checkError(
-      exception = intercept[SqlScriptingException] {
-        parsePlan(sqlScript)
-      },
-      condition = "UNSUPPORTED_FEATURE.CONTINUE_EXCEPTION_HANDLER",
-      parameters = Map.empty)
-  }
-
-  test("declare handler for qualified condition name that is not supported") {
+  test("declare exit handler for qualified condition name that is not supported") {
     val sqlScript =
       """
         |BEGIN
@@ -2884,7 +2863,28 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("condition" -> "QUALIFIED.CONDITION.NAME"))
   }
 
-  test("declare handler for undefined condition") {
+  test("declare continue handler for qualified condition name that is not supported") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR qualified.condition.name
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "INVALID_HANDLER_DECLARATION.CONDITION_NOT_FOUND",
+      parameters = Map("condition" -> "QUALIFIED.CONDITION.NAME"))
+  }
+
+  test("declare exit handler for undefined condition") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2901,7 +2901,24 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(2))
   }
 
-  test("declare handler in wrong place") {
+  test("declare continue handler for undefined condition") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR undefined_condition BEGIN SELECT 1; END;
+        |  SELECT 1;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "INVALID_HANDLER_DECLARATION.CONDITION_NOT_FOUND",
+      parameters = Map("condition" -> "UNDEFINED_CONDITION"))
+    assert(exception.origin.line.contains(2))
+  }
+
+  test("declare exit handler in wrong place") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2918,7 +2935,24 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(2))
   }
 
-  test("duplicate condition in handler declaration") {
+  test("declare continue handler in wrong place") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO BEGIN SELECT 1; END;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "INVALID_HANDLER_DECLARATION.WRONG_PLACE_OF_DECLARATION",
+      parameters = Map.empty)
+    assert(exception.origin.line.contains(2))
+  }
+
+  test("duplicate condition in exit handler declaration") {
     val sqlScript =
       """
         |BEGIN
@@ -2940,7 +2974,29 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("condition" -> "DUPLICATE_CONDITION"))
   }
 
-  test("duplicate sqlState in handler declaration") {
+  test("duplicate condition in continue handler declaration") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE DUPLICATE_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  DECLARE CONTINUE HANDLER FOR duplicate_condition, duplicate_condition
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "INVALID_HANDLER_DECLARATION.DUPLICATE_CONDITION_IN_HANDLER_DECLARATION",
+      parameters = Map("condition" -> "DUPLICATE_CONDITION"))
+  }
+
+  test("duplicate sqlState in exit handler declaration") {
     val sqlScript =
       """
         |BEGIN
@@ -2961,7 +3017,28 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("sqlState" -> "12345"))
   }
 
-  test("invalid condition combination in handler declaration") {
+  test("duplicate sqlState in continue handler declaration") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '12345', SQLSTATE '12345'
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "INVALID_HANDLER_DECLARATION.DUPLICATE_SQLSTATE_IN_HANDLER_DECLARATION",
+      parameters = Map("sqlState" -> "12345"))
+  }
+
+  test("invalid condition combination in exit handler declaration") {
     val sqlScript =
       """
         |BEGIN
@@ -2982,7 +3059,28 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map.empty)
   }
 
-  test("declare handler with compound body") {
+  test("invalid condition combination in continue handler declaration") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION, SQLSTATE '12345'
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "INVALID_HANDLER_DECLARATION.INVALID_CONDITION_COMBINATION",
+      parameters = Map.empty)
+  }
+
+  test("declare exit handler with compound body") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2999,9 +3097,26 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .parsedPlan.isInstanceOf[Project])
   }
 
+  test("declare continue handler with compound body") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO BEGIN SELECT 1; END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[Project])
+  }
+
   // This test works because END is not keyword here but a part of the statement.
   // It represents the name of the column in returned dataframe.
-  test("declare handler single statement with END") {
+  test("declare exit handler single statement with END") {
     val sqlScriptText =
       """
         |BEGIN
@@ -3018,7 +3133,24 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .parsedPlan.isInstanceOf[Project])
   }
 
-  test("declare handler single statement") {
+  test("declare continue handler single statement with END") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO SELECT 1 END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[Project])
+  }
+
+  test("declare exit handler single statement") {
     val sqlScriptText =
       """
         |BEGIN
@@ -3035,7 +3167,24 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .parsedPlan.isInstanceOf[Project])
   }
 
-  test("declare handler set statement") {
+  test("declare continue handler single statement") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO SELECT 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[Project])
+  }
+
+  test("declare exit handler set statement") {
     val sqlScriptText =
       """
         |BEGIN
@@ -3052,7 +3201,24 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .parsedPlan.isInstanceOf[SetVariable])
   }
 
-  test("declare handler with multiple conditions/sqlstates") {
+  test("declare continue handler set statement") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("DIVIDE_BY_ZERO"))
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[SetVariable])
+  }
+
+  test("declare exit handler with multiple conditions/sqlstates") {
     val sqlScriptText =
       """
         |BEGIN
@@ -3075,7 +3241,30 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .parsedPlan.isInstanceOf[SetVariable])
   }
 
-  test("declare handler for SQLEXCEPTION") {
+  test("declare continue handler with multiple conditions/sqlstates") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION_1 CONDITION FOR SQLSTATE '12345';
+        |  DECLARE TEST_CONDITION_2 CONDITION FOR SQLSTATE '54321';
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012', TEST_CONDITION_1, test_condition_2
+        |    SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.size == 2)
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION_1"))
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION_2"))
+    assert(tree.handlers.head.exceptionHandlerTriggers.sqlStates.size == 1)
+    assert(tree.handlers.head.exceptionHandlerTriggers.sqlStates.contains("22012"))
+    assert(tree.handlers.head.body.collection.size == 1)
+    assert(tree.handlers.head.body.collection.head.isInstanceOf[SingleStatement])
+    assert(tree.handlers.head.body.collection.head.asInstanceOf[SingleStatement]
+      .parsedPlan.isInstanceOf[SetVariable])
+  }
+
+  test("declare exit handler for SQLEXCEPTION") {
     val sqlScriptText =
       """
         |BEGIN
@@ -3091,7 +3280,23 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.body.collection.size == 1)
   }
 
-  test("declare handler for NOT FOUND") {
+  test("declare continue handler for SQLEXCEPTION") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.isEmpty)
+    assert(tree.handlers.head.exceptionHandlerTriggers.sqlStates.isEmpty)
+    assert(tree.handlers.head.exceptionHandlerTriggers.sqlException) // true
+    assert(!tree.handlers.head.exceptionHandlerTriggers.notFound) // false
+    assert(tree.handlers.head.body.collection.size == 1)
+  }
+
+  test("declare exit handler for NOT FOUND") {
     val sqlScriptText =
       """
         |BEGIN
@@ -3107,7 +3312,23 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.body.collection.size == 1)
   }
 
-  test("declare handler with condition and sqlstate with same value") {
+  test("declare continue handler for NOT FOUND") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.isEmpty)
+    assert(tree.handlers.head.exceptionHandlerTriggers.sqlStates.isEmpty)
+    assert(!tree.handlers.head.exceptionHandlerTriggers.sqlException) // true
+    assert(tree.handlers.head.exceptionHandlerTriggers.notFound) // false
+    assert(tree.handlers.head.body.collection.size == 1)
+  }
+
+  test("declare exit handler with condition and sqlstate with same value") {
     val sqlScriptText =
       """
         |BEGIN
@@ -3126,7 +3347,26 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.body.collection.size == 1)
   }
 
-  test("declare handler for condition in parent scope") {
+  test("declare continue handler with condition and sqlstate with same value") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE K2000 CONDITION FOR SQLSTATE '12345';
+        |  DECLARE CONTINUE HANDLER FOR K2000, SQLSTATE VALUE 'K2000' SET test_var = 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.handlers.length == 1)
+    assert(tree.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
+    assert(tree.handlers.head.exceptionHandlerTriggers.conditions.contains("K2000"))
+    assert(tree.handlers.head.exceptionHandlerTriggers.sqlStates.size == 1)
+    assert(tree.handlers.head.exceptionHandlerTriggers.sqlStates.contains("K2000"))
+    assert(!tree.handlers.head.exceptionHandlerTriggers.sqlException) // true
+    assert(!tree.handlers.head.exceptionHandlerTriggers.notFound) // false
+    assert(tree.handlers.head.body.collection.size == 1)
+  }
+
+  test("declare exit handler for condition in parent scope") {
     val sqlScriptText =
       """
         |BEGIN
@@ -3144,7 +3384,25 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(handlerBody.handlers.head.body.collection.size == 1)
   }
 
-  test("declare nested handler for condition in parent scope of parent handler") {
+  test("declare continue handler for condition in parent scope") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR TEST_CONDITION SET test_var = 1;
+        |  END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    val handlerBody = tree.collection.head.asInstanceOf[CompoundBody]
+    assert(handlerBody.handlers.length == 1)
+    assert(handlerBody.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
+    assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
+    assert(handlerBody.handlers.head.body.collection.size == 1)
+  }
+
+  test("declare nested exit handler for condition in parent scope of parent handler") {
     val sqlScriptText =
       """
         |BEGIN
@@ -3153,6 +3411,26 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |    DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
         |      BEGIN
         |        DECLARE EXIT HANDLER FOR TEST_CONDITION SET test_var = 1;
+        |      END;
+        |  END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    val handlerBody = tree
+      .collection.head.asInstanceOf[CompoundBody]
+      .handlers.head.body.asInstanceOf[CompoundBody]
+      .handlers.head
+    assert(handlerBody.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
+  }
+
+  test("declare nested continue handler for condition in parent scope of parent handler") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |      BEGIN
+        |        DECLARE CONTINUE HANDLER FOR TEST_CONDITION SET test_var = 1;
         |      END;
         |  END;
         |END""".stripMargin

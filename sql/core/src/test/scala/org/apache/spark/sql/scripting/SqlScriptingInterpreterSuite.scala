@@ -3467,7 +3467,7 @@ class SqlScriptingInterpreterSuite
     }
   }
 
-  test("Duplicate SQLEXCEPTION Handler") {
+  test("Duplicate SQLEXCEPTION EXIT/EXIT Handler") {
     val sqlScript =
       """
         |BEGIN
@@ -3490,11 +3490,146 @@ class SqlScriptingInterpreterSuite
     )
   }
 
-  test("Duplicate NOT FOUND Handler") {
+  test("Duplicate NOT FOUND EXIT/EXIT Handler") {
     val sqlScript =
       """
         |BEGIN
         |  DECLARE EXIT HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "NOT FOUND")
+    )
+  }
+
+  test("Duplicate SQLEXCEPTION CONTINUE/CONTINUE Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "SQLEXCEPTION")
+    )
+  }
+
+  test("Duplicate NOT FOUND CONTINUE/CONTINUE Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "NOT FOUND")
+    )
+  }
+
+  test("Duplicate SQLEXCEPTION EXIT/CONTINUE Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "SQLEXCEPTION")
+    )
+  }
+
+  test("Duplicate NOT FOUND EXIT/CONTINUE Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "NOT FOUND")
+    )
+  }
+
+  test("Duplicate SQLEXCEPTION CONTINUE/EXIT Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "SQLEXCEPTION")
+    )
+  }
+
+  test("Duplicate NOT FOUND CONTINUE/EXIT Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
         |  BEGIN
         |    SELECT 1;
         |  END;
