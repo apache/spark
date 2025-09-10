@@ -50,14 +50,6 @@ import org.apache.spark.util.{SystemClock, Utils}
 case class SessionKey(userId: String, sessionId: String)
 
 /**
- * Enumeration representing the status of an operation.
- */
-private[service] object OperationStatus extends Enumeration {
-  type OperationStatus = Value
-  val Active, Inactive, Abandoned = Value
-}
-
-/**
  * Object used to hold the Spark Connect session state.
  */
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
@@ -104,8 +96,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Set of active operation IDs for this session.
   private val activeOperationIds: mutable.Set[String] = mutable.Set.empty
 
-  // Cache of inactive operation IDs for this session.
-  // The value carries specifies if the operation was abandoned.
+  // Cache of inactive operation IDs for this session, either completed, interrupted or abandoned.
+  // The Boolean is just a placeholder since Guava needs a <K, V> pair.
   private val inactiveOperationIds: Cache[String, Boolean] =
     CacheBuilder.newBuilder()
       .ticker(Ticker.systemTicker())
@@ -188,23 +180,24 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   /**
    * Returns the status of the operation in this session given the operation id.
+   * Operations are cached for XX minutes once they are inactive (completed, interrupted
+   * or abandoned).
    *
    * @param operationId
    * @return
-   *   if the operation was active recently (in the last XX minutes),
-   *   None if no operation with this id is found in this session,
+   *   Some(true) if the operation is currently active,
+   *   Some(false) if the operation was completed, interrupted or abandoned recently,
+   *   None if no operation with this id is found in this session.
    */
-  private[service] def getOperationStatus(operationId: String): Option[OperationStatus.Value] = {
+  private[service] def getOperationStatus(operationId: String): Option[Boolean] = {
     if (activeOperationIds.contains(operationId)) {
-      Some(OperationStatus.Active)
+      return Some(true)
     }
     Option(inactiveOperationIds.getIfPresent(operationId)) match {
+      case Some(_) =>
+        return Some(false)
       case None =>
-        None
-      case Some(true) =>
-        Some(OperationStatus.Abandoned)
-      case Some(false) =>
-        Some(OperationStatus.Inactive)
+        return None
     }
   }
 

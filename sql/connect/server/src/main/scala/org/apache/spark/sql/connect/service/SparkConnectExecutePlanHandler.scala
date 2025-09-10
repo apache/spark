@@ -21,8 +21,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.sql.connect.service.OperationStatus.{Abandoned, Active}
+import org.apache.spark.internal.Logging
 
 class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.ExecutePlanResponse])
     extends Logging {
@@ -36,29 +35,16 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
       .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId, previousSessionId)
     val executeKey = ExecuteKey(v, sessionHolder)
 
-    val executeHolder = SparkConnectService.executionManager.getExecuteHolder(executeKey)
-    val opStatus = sessionHolder.getOperationStatus(executeKey.operationId)
-
-    (opStatus, executeHolder) match {
-      case (None, _) =>
-        logInfo(log"Creating a new execute holder for execution " +
-          log"${MDC(LogKeys.EXECUTE_KEY, executeKey)}.")
+    SparkConnectService.executionManager.getExecuteHolder(executeKey) match {
+      case None =>
         // Create a new execute holder and attach to it.
         SparkConnectService.executionManager
           .createExecuteHolderAndAttach(executeKey, v, sessionHolder, responseObserver)
-      case (Some(Active), Some(holder)) if holder.request.getPlan.equals(v.getPlan) =>
-        logInfo(log"Attaching execution ${MDC(LogKeys.EXECUTE_KEY, executeKey)} " +
-          log"to existing execute holder.")
+      case Some(executeHolder) if executeHolder.request.getPlan.equals(v.getPlan) =>
         // If the execute holder already exists with the same plan, reattach to it.
         SparkConnectService.executionManager
-          .reattachExecuteHolder(holder, responseObserver, None)
-      case (Some(Abandoned), _) =>
-        throw new SparkSQLException(
-          errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
-          messageParameters = Map("handle" -> executeKey.operationId))
-      case _ =>
-        logInfo(log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)} " +
-          log"with status ${MDC(LogKeys.STATUS, opStatus)}.")
+          .reattachExecuteHolder(executeHolder, responseObserver, None)
+      case Some(_) =>
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
           messageParameters = Map("handle" -> executeKey.operationId))
