@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.{Alias, EmptyRow, Expression, Literal, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CommandResult, CompoundBody, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CommandResult, CompoundBody, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -77,9 +77,8 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
         CommandResult(
           command.output, command, result.queryExecution.executedPlan, commandRows.toSeq)
       case _ =>
-        // Regular queries - return the results as a LocalRelation
-        val internalRows = result.queryExecution.executedPlan.executeCollect()
-        LocalRelation(result.queryExecution.analyzed.output, internalRows.toSeq)
+        // Regular queries - return the analyzed plan directly (no eager evaluation)
+        result.queryExecution.analyzed
     }
   }
 

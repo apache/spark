@@ -69,7 +69,17 @@ CommandResult []
 -- !query
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view_tmp'
 -- !query analysis
-LocalRelation [id#x, name#x]
+Project [id#x, name#x]
++- SubqueryAlias tbl_view_tmp
+   +- View (`tbl_view_tmp`, [id#x, name#x])
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x]
+         +- Project [id#x, name#x]
+            +- SubqueryAlias tbl_view
+               +- View (`tbl_view`, [id#x, name#x, data#x])
+                  +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                     +- Project [id#x, name#x, data#x]
+                        +- SubqueryAlias tbl_view
+                           +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -82,13 +92,27 @@ CommandResult []
 -- !query
 EXECUTE IMMEDIATE sql_string
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter (name#x = name1)
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = \'name1\''
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter (name#x = name1)
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -117,31 +141,66 @@ SetVariable [variablereference(system.session.a=CAST(NULL AS STRING))]
 -- !query
 EXECUTE IMMEDIATE sql_string USING 'name1', 'name3'
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((name#x = name1) OR (name#x = name3))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE sql_string USING a, 'name2'
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((name#x = name1) OR (name#x = name2))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING 'name1', 'name3'
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((name#x = name1) OR (name#x = name3))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING a, 'name2'
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((name#x = name1) OR (name#x = name2))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, 'name2')
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((name#x = name1) OR (name#x = name2))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -187,31 +246,66 @@ SetVariable [variablereference(system.session.b=CAST(NULL AS INT))]
 -- !query
 EXECUTE IMMEDIATE sql_string USING 40 as second, 'name7' as first
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((name#x = name7) OR (id#x = 40))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE sql_string USING b as second, 'name7' as first
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((name#x = name7) OR (id#x = 40))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' USING 40 as second, 'name7' as first
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((name#x = name7) OR (id#x = 40))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' USING 'name7' as first, b as second
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((name#x = name7) OR (id#x = 40))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT tbl_view.*, :first as p FROM tbl_view WHERE name = :first' USING 'name7' as first
 -- !query analysis
-LocalRelation [id#x, name#x, data#x, p#x]
+Project [id#x, name#x, data#x, name7 AS p#x]
++- Filter (name#x = name7)
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -241,7 +335,16 @@ CreateVariable defaultvalueexpression(null, null), false
 EXECUTE IMMEDIATE sql_string INTO res_id USING 'name7' as first
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=CAST(NULL AS INT))]
-+- LocalRelation [id#x]
++- GlobalLimit 2
+   +- LocalLimit 2
+      +- Project [id#x]
+         +- Filter (name#x = name7)
+            +- SubqueryAlias tbl_view
+               +- View (`tbl_view`, [id#x, name#x, data#x])
+                  +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                     +- Project [id#x, name#x, data#x]
+                        +- SubqueryAlias tbl_view
+                           +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -255,7 +358,16 @@ Project [variablereference(system.session.res_id=70) AS res_id#x]
 EXECUTE IMMEDIATE sql_string INTO res_id USING a as first
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=70)]
-+- LocalRelation [id#x]
++- GlobalLimit 2
+   +- LocalLimit 2
+      +- Project [id#x]
+         +- Filter (name#x = name1)
+            +- SubqueryAlias tbl_view
+               +- View (`tbl_view`, [id#x, name#x, data#x])
+                  +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                     +- Project [id#x, name#x, data#x]
+                        +- SubqueryAlias tbl_view
+                           +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -277,7 +389,8 @@ SetVariable [variablereference(system.session.sql_string='SELECT id from tbl_vie
 EXECUTE IMMEDIATE 'SELECT 42' INTO res_id
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=10)]
-+- LocalRelation [42#x]
++- Project [42 AS 42#x]
+   +- OneRowRelation
 
 
 -- !query
@@ -291,7 +404,16 @@ Project [variablereference(system.session.res_id=42) AS res_id#x]
 EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO b, a USING 10
 -- !query analysis
 SetVariable [variablereference(system.session.b=40), variablereference(system.session.a='name1')]
-+- LocalRelation [id#x, name#x]
++- GlobalLimit 2
+   +- LocalLimit 2
+      +- Project [id#x, name#x]
+         +- Filter (id#x = 10)
+            +- SubqueryAlias tbl_view
+               +- View (`tbl_view`, [id#x, name#x, data#x])
+                  +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                     +- Project [id#x, name#x, data#x]
+                        +- SubqueryAlias tbl_view
+                           +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -304,14 +426,23 @@ Project [variablereference(system.session.b=10) AS b#x, variablereference(system
 -- !query
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where id = ? AND name = ?' USING b as first, a
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter ((id#x = 10) AND (name#x = name1))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT 42 WHERE 2 = 1' INTO res_id
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=42)]
-+- LocalRelation <empty>, [42#x]
++- Project [42 AS 42#x]
+   +- Filter (2 = 1)
+      +- OneRowRelation
 
 
 -- !query
@@ -326,7 +457,8 @@ EXECUTE IMMEDIATE 'SELECT \'1707\'' INTO res_id
 -- !query analysis
 SetVariable [variablereference(system.session.res_id=CAST(NULL AS INT))]
 +- Project [cast(1707#x as int) AS res_id#x]
-   +- LocalRelation [1707#x]
+   +- Project [1707 AS 1707#x]
+      +- OneRowRelation
 
 
 -- !query
@@ -509,7 +641,14 @@ SetVariable [variablereference(system.session.a='name1')]
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , "me1") as first
 -- !query analysis
-LocalRelation [id#x, name#x, data#x]
+Project [id#x, name#x, data#x]
++- Filter (name#x = name1)
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -637,7 +776,14 @@ CreateVariable defaultvalueexpression(10, 10), false
 -- !query
 EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p
 -- !query analysis
-LocalRelation [id#x]
+Project [id#x]
++- Filter (id#x = 10)
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -669,7 +815,14 @@ org.apache.spark.sql.AnalysisException
 -- !query
 EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ?\' USING 10'
 -- !query analysis
-LocalRelation [id#x]
+Project [id#x]
++- Filter (id#x = 10)
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
