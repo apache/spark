@@ -1525,8 +1525,8 @@ class SparkConnectClient(object):
                     # Expect next chunk of the same batch
                     if b.arrow_batch.chunk_index != len(arrow_batch_chunks_to_assemble):
                         raise SparkConnectException(
-                            f"Expected chunk index {len(arrow_batch_chunks_to_assemble)} of the arrow batch "
-                            f"but got {b.arrow_batch.chunk_index}."
+                            f"Expected chunk index {len(arrow_batch_chunks_to_assemble)} of the "
+                            f"arrow batch but got {b.arrow_batch.chunk_index}."
                         )
                 else:
                     # Expect next batch
@@ -1536,8 +1536,8 @@ class SparkConnectClient(object):
                     ):
                         # Expect next batch
                         raise SparkConnectException(
-                            f"Expected arrow batch to start at row offset {num_records} in results, "
-                            + "but received arrow batch starting at offset "
+                            f"Expected arrow batch to start at row offset {num_records} in "
+                            + "results, but received arrow batch starting at offset "
                             + f"{b.arrow_batch.start_offset}."
                         )
                     if b.arrow_batch.chunk_index != 0:
@@ -1570,8 +1570,8 @@ class SparkConnectClient(object):
                             num_records_in_batch += batch.num_rows
                             if num_records_in_batch != b.arrow_batch.row_count:
                                 raise SparkConnectException(
-                                    f"Expected {b.arrow_batch.row_count} rows in arrow batch but got "
-                                    + f"{num_records_in_batch}."
+                                    f"Expected {b.arrow_batch.row_count} rows in arrow batch but "
+                                    + f"got {num_records_in_batch}."
                                 )
                             num_records += num_records_in_batch
                             yield batch
