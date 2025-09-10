@@ -104,9 +104,12 @@ class DataFrameRepartitionTestsMixin:
             actualPartitionId = row["actual_p_id"]
             id_val = row["id"]
             expectedPartitionId = int((id_val - 5) % 10)
-            self.assertEqual(actualPartitionId, expectedPartitionId,
+            self.assertEqual(
+                actualPartitionId,
+                expectedPartitionId,
                 f"Row with id={id_val} should be in partition {expectedPartitionId}, "
-                f"but was in partition {actualPartitionId}")
+                f"but was in partition {actualPartitionId}",
+            )
 
     def test_repartition_by_id_null_values(self):
         # Test that null partition ids go to partition 0
@@ -118,18 +121,24 @@ class DataFrameRepartitionTestsMixin:
         nullRows = [row for row in result if row["id"] >= 5]
         self.assertTrue(len(nullRows) > 0, "Should have rows with null partition expression")
         for row in nullRows:
-            self.assertEqual(row["actual_p_id"], 0,
+            self.assertEqual(
+                row["actual_p_id"],
+                0,
                 f"Row with null partition id should go to partition 0, "
-                f"but went to partition {row['actual_p_id']}")
+                f"but went to partition {row['actual_p_id']}",
+            )
 
         nonNullRows = [row for row in result if row["id"] < 5]
         for row in nonNullRows:
             id_val = row["id"]
             actualPartitionId = row["actual_p_id"]
             expectedPartitionId = id_val % 10
-            self.assertEqual(actualPartitionId, expectedPartitionId,
+            self.assertEqual(
+                actualPartitionId,
+                expectedPartitionId,
                 f"Row with id={id_val} should be in partition {expectedPartitionId}, "
-                f"but was in partition {actualPartitionId}")
+                f"but was in partition {actualPartitionId}",
+            )
 
     def test_repartition_by_id_error_non_int_type(self):
         # Test error for non-integer partition column type
@@ -139,7 +148,7 @@ class DataFrameRepartitionTestsMixin:
 
     def test_repartition_by_id_error_invalid_num_partitions(self):
         df = self.spark.range(5)
-        
+
         with self.assertRaises(PySparkTypeError) as pe:
             df.repartitionById("5", col("id").cast("int"))
         self.check_error(
@@ -176,10 +185,12 @@ class DataFrameRepartitionTestsMixin:
 
     def test_repartition_by_id_string_column_name(self):
         numPartitions = 5
-        df = self.spark.range(25).withColumn("partition_id", (col("id") % numPartitions).cast("int"))
+        df = self.spark.range(25).withColumn(
+            "partition_id", (col("id") % numPartitions).cast("int")
+        )
         repartitioned = df.repartitionById(numPartitions, "partition_id")
         result = repartitioned.withColumn("actual_p_id", spark_partition_id())
-        
+
         mismatches = result.filter(col("partition_id") != col("actual_p_id")).count()
         self.assertEqual(mismatches, 0)
 
