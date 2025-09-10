@@ -106,7 +106,7 @@ case class UnionLoopExec(
   private def executeAndCacheAndCount(plan: LogicalPlan, currentLimit: Int) = {
     // In case limit is defined, we create a (local) limit node above the plan and execute
     // the newly created plan.
-    val planWithLimit = if (limit.isDefined && limit.get != -1) {
+    val planWithLimit = if (limit.isDefined && limit.get >= 0) {
       LocalLimit(Literal(currentLimit), plan)
     } else {
       plan

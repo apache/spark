@@ -4288,10 +4288,10 @@ object ApplyLimitAll extends Rule[LogicalPlan] {
       case la: LimitAll =>
         applyLimitAllToPlan(la.child, isInLimitAll = true)
       case cteRef: CTERelationRef if isInLimitAll =>
-        cteRef.copy(isUnlimitedRecursion = Some(true))
+        cteRef.copy(isUnlimitedRecursion = true)
       // Allow-list for pushing down Limit All.
       case _: Project | _: Filter | _: Join | _: Union | _: Offset |
-           _: BatchEvalPython | _: ArrowEvalPython | _: SubqueryAlias =>
+           _: BaseEvalPython | _: Aggregate | _: Window | _: SubqueryAlias =>
         plan.withNewChildren(plan.children
           .map(child => applyLimitAllToPlan(child, isInLimitAll)))
       case other =>

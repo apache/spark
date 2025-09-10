@@ -1346,7 +1346,8 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // LIMIT
-    if (forPipeOperators && clause.nonEmpty && clause != PipeOperators.offsetClause) {
+    if (forPipeOperators && clause.nonEmpty
+      && clause != PipeOperators.offsetClause && limit != null) {
       throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
         ctx, clause, PipeOperators.limitClause)
     }

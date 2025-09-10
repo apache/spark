@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, ExprId, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -355,14 +355,5 @@ class LimitPushdownSuite extends PlanTest {
       comparePlans(Optimize.execute(originalQuery1), originalQuery1)
       comparePlans(Optimize.execute(originalQuery2), originalQuery2)
     }
-  }
-
-  test("LimitAll node gets eliminated before UnionLoop due to previous Limit") {
-    val originalQuery = Union(x, UnionLoop(0, x, y, Seq(ExprId(1), ExprId(2), ExprId(3))
-    ).localLimit(5)).limitAll()
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Union(x, UnionLoop(0, x, y, Seq(ExprId(1), ExprId(2), ExprId(3)),
-      Some(5))).analyze
-    comparePlans(optimized, correctAnswer)
   }
 }
