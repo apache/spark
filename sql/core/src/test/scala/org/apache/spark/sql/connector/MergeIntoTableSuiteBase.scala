@@ -2728,8 +2728,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           sql(mergeStmt)
           checkAnswer(
             sql(s"SELECT * FROM $tableNameAsString"),
-            // TODO- InMemoryBaseTable does not return null for nested schema evolution.
-            Seq(Row(0, Map(Row(10, true) -> Row("c", true)), "hr"),
+            Seq(Row(0, Map(Row(10, null) -> Row("c", null)), "hr"),
               Row(1, Map(Row(10, true) -> Row("y", false)), "sales"),
               Row(2, Map(Row(20, false) -> Row("z", true)), "engineering")))
         } else {

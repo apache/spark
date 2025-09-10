@@ -136,7 +136,7 @@ class InMemoryRowLevelOperationTable(
       val readPartitions = readRows.map(r => getKey(r, schema)).distinct
       dataMap --= readPartitions
       replacedPartitions = readPartitions
-      withData(newData, schema)
+      withData(newData, schema, newData = true)
       lastWriteLog = newData.flatMap(buffer => buffer.log).toImmutableArraySeq
     }
   }
@@ -184,13 +184,13 @@ class InMemoryRowLevelOperationTable(
 
   private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
-      DeltaBufferedRowsWriterFactory
+      new DeltaBufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       withDeletes(newData)
-      withData(newData)
+      withData(newData, CatalogV2Util.v2ColumnsToStructType(columns()), newData = true)
       lastWriteLog = newData.flatMap(buffer => buffer.log).toIndexedSeq
     }
 
@@ -198,13 +198,14 @@ class InMemoryRowLevelOperationTable(
   }
 }
 
-private object DeltaBufferedRowsWriterFactory extends DeltaWriterFactory {
+private class DeltaBufferedRowsWriterFactory(schema: StructType) extends DeltaWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DeltaWriter[InternalRow] = {
-    new DeltaBufferWriter
+    new DeltaBufferWriter(schema)
   }
 }
 
-private class DeltaBufferWriter extends BufferWriter with DeltaWriter[InternalRow] {
+private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
+  with DeltaWriter[InternalRow] {
 
   private final val DELETE = UTF8String.fromString(Delete.toString)
   private final val UPDATE = UTF8String.fromString(Update.toString)

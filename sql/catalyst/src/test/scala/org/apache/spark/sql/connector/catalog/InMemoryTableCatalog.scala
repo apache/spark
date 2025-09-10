@@ -157,7 +157,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       partitioning = finalPartitioning,
       properties = properties,
       constraints = constraints)
-      .withData(table.data)
+      .withData(table.data, schema, newData = false)
     newTable.setCurrentVersion(currentVersion)
     changes.foreach {
       case a: TableChange.AddConstraint =>

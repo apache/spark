@@ -71,28 +71,35 @@ class InMemoryTable(
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {
-    withData(data, schema)
+    withData(data, schema(), newData = true)
   }
 
   override def withData(
       data: Array[BufferedRows],
-      writeSchema: StructType): InMemoryTable = {
+      writeSchema: StructType,
+      newData: Boolean): InMemoryTable = {
     dataMap.synchronized {
-      data.foreach(_.rows.foreach { row =>
-        val key = getKey(row, writeSchema)
-        dataMap += dataMap.get(key)
-          .map { splits =>
-            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-              splits :+ new BufferedRows(key)
-            } else {
-              splits
-            }
-            newSplits.last.withRow(row)
-            key -> newSplits
+      data.foreach {
+        bufferedRow => {
+          val rowSchema = if (newData) writeSchema else bufferedRow.schema
+          bufferedRow.rows.foreach { row =>
+            val key = getKey(row, writeSchema)
+            dataMap += dataMap.get(key)
+              .map { splits =>
+                val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
+                  (splits.last.schema != rowSchema)) {
+                  splits :+ new BufferedRows(key, rowSchema)
+                } else {
+                  splits
+                }
+                newSplits.last.withRow(row)
+                key -> newSplits
+              }
+              .getOrElse(key -> Seq(new BufferedRows(key, rowSchema).withRow(row)))
+            addPartitionKey(key)
           }
-          .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
-        addPartitionKey(key)
-      })
+        }
+      }
 
       if (data.exists(_.rows.exists(row => row.numFields == 1 &&
           row.getInt(0) == InMemoryTable.uncommittableValue()))) {
