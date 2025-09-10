@@ -1301,10 +1301,11 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     //    that are used only once, or are cheap to inline.
     //    But we need to take into account the side effect of adding new pass-through attributes to
     //    the lower node, which can make the node much wider than it was originally.
+    // - `others` contains pass-through attributes needed for the upper node.
     val neverInlines = ListBuffer.empty[NamedExpression]
     val mustInlines = ListBuffer.empty[NamedExpression]
     val maybeInlines = ListBuffer.empty[NamedExpression]
-    val others = ListBuffer.empty[NamedExpression]
+    val others = ListBuffer.empty[Attribute]
     producers.foreach {
       case a: Alias =>
         producerReferences.get(a.toAttribute).foreach { case (count, relatedConsumers) =>
@@ -1327,7 +1328,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           }
         }
 
-      case o => others += o
+      case o => others += o.toAttribute
     }
 
     if (neverInlines.isEmpty) {
@@ -1341,7 +1342,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       // If both `neverInlines` and `mustInlines` are not empty, then inline `mustInlines` and add
       // new pass-through attributes to the lower node.
       val newConsumers = buildCleanedProjectList(consumers, mustInlines)
-      val passthroughAttributes = AttributeSet(others.flatMap(_.references))
+      val passthroughAttributes = AttributeSet(others)
       val newPassthroughAttributes =
         mustInlines.flatMap(_.references).filterNot(passthroughAttributes.contains)
       val newOthers = others ++ newPassthroughAttributes
