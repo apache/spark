@@ -719,7 +719,7 @@ class ArrowUDTFTestsMixin:
 
         # Test SQL registration and usage with named arguments
         self.spark.udtf.register("named_args_udtf", NamedArgsUDTF)
-        
+
         # Test with named arguments in SQL
         sql_result_df = self.spark.sql("SELECT * FROM named_args_udtf(y => 10, x => 5)")
         expected_df = self.spark.createDataFrame([(5, 10, 15)], "x int, y int, sum int")
