@@ -70,7 +70,7 @@ object SparkPipelines extends Logging {
           val v = value.stripPrefix(s"$SPARK_API_MODE=")
           if (v.trim.toLowerCase(Locale.ROOT) != "connect") {
             logError(
-              s"$SPARK_API_MODE must be 'connect', but was '$v'. " +
+              s"$SPARK_API_MODE must be 'connect' (was '$v'). " +
                 "Declarative Pipelines currently only supports Spark Connect."
             )
             throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
