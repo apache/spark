@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, SupportsSubquery, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
-import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -110,15 +108,6 @@ class ResolveExecuteImmediate(
                 varRef.copy(canFold = false)
               case other =>
                 throw QueryCompilationErrors.unsupportedParameterExpression(other)
-            }
-
-            // Check for duplicate variable names (same logic as ResolveSetVariable)
-            val dups = finalTargetVars.groupBy(_.identifier).filter(kv => kv._2.length > 1)
-            if (dups.nonEmpty) {
-              throw new AnalysisException(
-                errorClass = "DUPLICATE_ASSIGNMENTS",
-                messageParameters = Map("nameList" ->
-                  dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
             }
 
             // Create SetVariable plan with the execute immediate query as source
