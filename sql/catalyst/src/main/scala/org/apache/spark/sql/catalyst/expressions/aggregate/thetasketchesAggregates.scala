@@ -163,6 +163,12 @@ case class ThetaSketchAgg(
    * Evaluate the input row and update the UpdateSketch instance with the row's value. The update
    * function only supports a subset of Spark SQL types, and an exception will be thrown for
    * unsupported types.
+   * Notes:
+   *   - Null values are ignored.
+   *   - Empty values are also ignored:
+   *       * Empty strings
+   *       * Empty byte arrays
+   *       * Empty arrays of supported element types
    *
    * @param updateBuffer
    *   A previously initialized UpdateSketch instance

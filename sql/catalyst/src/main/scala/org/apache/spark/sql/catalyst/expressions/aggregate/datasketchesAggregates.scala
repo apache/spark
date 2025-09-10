@@ -130,6 +130,11 @@ case class HllSketchAgg(
    * Evaluate the input row and update the HllSketch instance with the row's value. The update
    * function only supports a subset of Spark SQL types, and an exception will be thrown for
    * unsupported types.
+   * Notes:
+   *   - Null values are ignored.
+   *   - Empty values are also ignored:
+   *       * Empty strings
+   *       * Empty byte arrays
    *
    * @param sketch The HllSketch instance.
    * @param input  an input row
@@ -146,8 +151,9 @@ case class HllSketchAgg(
         case IntegerType => sketch.update(v.asInstanceOf[Int])
         case LongType => sketch.update(v.asInstanceOf[Long])
         case st: StringType =>
-          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-          sketch.update(cKey.toString)
+          val cKey =
+            CollationFactory.getCollationKeyBytes(v.asInstanceOf[UTF8String], st.collationId)
+          sketch.update(cKey)
         case BinaryType => sketch.update(v.asInstanceOf[Array[Byte]])
         case dataType => throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3121",
