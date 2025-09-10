@@ -892,7 +892,7 @@ class GroupedAggArrowUDFTestsMixin:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
 
-    @unittest.skipIf(not a, numpy_requirement_message)
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_return_numpy_scalar(self):
         import numpy as np
         import pyarrow as pa
