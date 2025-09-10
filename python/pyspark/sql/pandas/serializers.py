@@ -267,7 +267,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                 if batch.num_columns == 0:
                     coerced_batch = batch  # skip type coercion
                 else:
-                    expected_field_names = arrow_return_type.names
+                    expected_field_names = [field.name for field in arrow_return_type]
                     actual_field_names = batch.schema.names
 
                     if expected_field_names != actual_field_names:
@@ -283,7 +283,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                         coerced_array = self._create_array(original_array, field.type)
                         coerced_arrays.append(coerced_array)
                     coerced_batch = pa.RecordBatch.from_arrays(
-                        coerced_arrays, names=arrow_return_type.names
+                        coerced_arrays, names=expected_field_names
                     )
                 yield coerced_batch, arrow_return_type
 
