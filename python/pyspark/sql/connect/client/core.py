@@ -608,6 +608,7 @@ class SparkConnectClient(object):
         use_reattachable_execute: bool = True,
         session_hooks: Optional[list["SparkSession.Hook"]] = None,
         allow_arrow_batch_chunking: bool = True,
+        preferred_arrow_chunk_size: Optional[int] = None,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -650,6 +651,11 @@ class SparkConnectClient(object):
             If true, the server will split large Arrow batches into smaller chunks, and the client
             is expected to handle the chunked Arrow batches.
             If false, the server will not chunk large Arrow batches.
+        preferred_arrow_chunk_size: Optional[int]
+            Optional preferred Arrow batch size in bytes for the server to use when sending Arrow
+            results.
+            The server will attempt to use this size if it is set and within the valid range
+            ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
         """
         self.thread_local = threading.local()
 
@@ -690,6 +696,7 @@ class SparkConnectClient(object):
         )
         self._use_reattachable_execute = use_reattachable_execute
         self._allow_arrow_batch_chunking = allow_arrow_batch_chunking
+        self._preferred_arrow_chunk_size = preferred_arrow_chunk_size
         self._session_hooks = session_hooks or []
         # Configure logging for the SparkConnect client.
 
@@ -1251,7 +1258,8 @@ class SparkConnectClient(object):
         req.request_options.append(
             pb2.ExecutePlanRequest.RequestOption(
                 result_chunking_options=pb2.ResultChunkingOptions(
-                    allow_arrow_batch_chunking=self._allow_arrow_batch_chunking
+                    allow_arrow_batch_chunking=self._allow_arrow_batch_chunking,
+                    preferred_arrow_chunk_size=self._preferred_arrow_chunk_size,
                 )
             )
         )

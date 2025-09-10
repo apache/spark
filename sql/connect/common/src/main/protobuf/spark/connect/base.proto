@@ -839,6 +839,11 @@ message ResultChunkingOptions {
   //
   // If false, the server will not chunk large Arrow batches.
   bool allow_arrow_batch_chunking = 1;
+
+  // Optional preferred Arrow batch size in bytes for the server to use when sending Arrow results.
+  // The server will attempt to use this size if it is set and within the valid range
+  // ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
+  optional int64 preferred_arrow_chunk_size = 2;
 }
 
 message ReattachExecuteRequest {

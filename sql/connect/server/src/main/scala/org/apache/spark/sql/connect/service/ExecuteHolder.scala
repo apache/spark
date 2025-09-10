@@ -88,6 +88,22 @@ private[connect] class ExecuteHolder(
     }
   }
 
+  /**
+   * The optional preferred arrow chunk size set by the client.
+   */
+  val preferredArrowChunkSize: Option[Int] = {
+    if (resultChunkingEnabled) {
+      request.getRequestOptionsList.asScala.iterator.collectFirst {
+        case option
+            if option.hasResultChunkingOptions &&
+              option.getResultChunkingOptions.hasPreferredArrowChunkSize =>
+          option.getResultChunkingOptions.getPreferredArrowChunkSize.toInt
+      }
+    } else {
+      None
+    }
+  }
+
   val responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
     new ExecuteResponseObserver[proto.ExecutePlanResponse](this)
 

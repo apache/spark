@@ -151,7 +151,17 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       }
       if (isResultChunkingEnabled) {
         // Result chunking is enabled. Split the result batch into multiple chunks if needed.
-        val maxChunkSize = spark.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE).toInt
+        // The server will attempt to use the preferred chunk size if it is set and within the
+        // valid range ([1KB, max batch size on server]). Otherwise, the server's max batch size
+        // is used.
+        val maxChunkSize = executePlan.preferredArrowChunkSize match {
+          case Some(preferred)
+              if preferred >= 1024 &&
+                preferred <= spark.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE) =>
+            preferred
+          case _ =>
+            spark.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE).toInt
+        }
         val numChunks = (bytes.length + maxChunkSize - 1) / maxChunkSize
 
         (0 until numChunks).foreach { i =>

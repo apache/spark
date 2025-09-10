@@ -2997,6 +2997,7 @@ class ResultChunkingOptions(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     ALLOW_ARROW_BATCH_CHUNKING_FIELD_NUMBER: builtins.int
+    PREFERRED_ARROW_CHUNK_SIZE_FIELD_NUMBER: builtins.int
     allow_arrow_batch_chunking: builtins.bool
     """Although Arrow results are split into batches with a size limit according to estimation, the
     size of the batches is not guaranteed to be less than the limit, especially when a single row
@@ -3008,17 +3009,43 @@ class ResultChunkingOptions(google.protobuf.message.Message):
 
     If false, the server will not chunk large Arrow batches.
     """
+    preferred_arrow_chunk_size: builtins.int
+    """Optional preferred Arrow batch size in bytes for the server to use when sending Arrow results.
+    The server will attempt to use this size if it is set and within the valid range
+    ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
+    """
     def __init__(
         self,
         *,
         allow_arrow_batch_chunking: builtins.bool = ...,
+        preferred_arrow_chunk_size: builtins.int | None = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size",
+            b"_preferred_arrow_chunk_size",
+            "preferred_arrow_chunk_size",
+            b"preferred_arrow_chunk_size",
+        ],
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "allow_arrow_batch_chunking", b"allow_arrow_batch_chunking"
+            "_preferred_arrow_chunk_size",
+            b"_preferred_arrow_chunk_size",
+            "allow_arrow_batch_chunking",
+            b"allow_arrow_batch_chunking",
+            "preferred_arrow_chunk_size",
+            b"preferred_arrow_chunk_size",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size", b"_preferred_arrow_chunk_size"
+        ],
+    ) -> typing_extensions.Literal["preferred_arrow_chunk_size"] | None: ...
 
 global___ResultChunkingOptions = ResultChunkingOptions
 
