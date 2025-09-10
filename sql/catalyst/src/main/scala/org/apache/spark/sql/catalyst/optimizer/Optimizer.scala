@@ -1223,7 +1223,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
             alwaysInline,
             newPythonUDFEvalTypesInUpperProjects,
             pythonUDFArrowFallbackOnUDT)
-          && canCollapseAggregate(p, agg) =>
+            && canCollapseAggregate(p, agg) =>
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
