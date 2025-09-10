@@ -24,9 +24,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil.{SET_TO_DEFAULT_VALUES, SOURCE_SPARK, SOURCE_SPARK_HADOOP, SOURCE_SPARK_HIVE}
 import org.apache.spark.internal.config.BUFFER_SIZE
+import org.apache.spark.util.Utils
 
 class SparkHadoopUtilSuite extends SparkFunSuite {
 
+  private lazy val gcsConnectorAvailable = Utils.classIsLoadable(gcsConnectorClassName)
+  private val gcsConnectorClassName = "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem"
   /**
    * Verify that spark.hadoop options are propagated, and that
    * the default s3a options are set as expected.
@@ -56,6 +59,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
    * Verify that the GCS user agent is set correctly when no custom suffix is provided.
    */
   test("SPARK-52336: GCS user agent should be set when not provided by user") {
+    assume(gcsConnectorAvailable, s"GCS connector '$gcsConnectorClassName' not available.")
     val sparkConf = new SparkConf()
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
@@ -68,6 +72,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
    * Verify that the Spark identifier is prepended to a user-provided GCS user agent suffix.
    */
   test("SPARK-52336: GCS user agent should be prepended when suffix is provided by user") {
+    assume(gcsConnectorAvailable, s"GCS connector '$gcsConnectorClassName' not available.")
     val sparkConf = new SparkConf()
     val userSuffix = "my-awesome-app"
     sparkConf.set("spark.hadoop.fs.gs.application.name.suffix", userSuffix)
@@ -83,6 +88,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
    * Verify that the GCS user agent is set correctly when the user provides an empty suffix.
    */
   test("SPARK-52336: GCS user agent should be set when user provided suffix is empty") {
+    assume(gcsConnectorAvailable, s"GCS connector '$gcsConnectorClassName' not available.")
     val sparkConf = new SparkConf()
     sparkConf.set("spark.hadoop.fs.gs.application.name.suffix", "")
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)

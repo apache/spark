@@ -528,7 +528,12 @@ private[spark] object SparkHadoopUtil extends Logging {
       val sparkGcsPrefix = s"apache-spark/${org.apache.spark.SPARK_VERSION} (GPN:apache-spark)"
       val userGcsSuffix = hadoopConf.get("fs.gs.application.name.suffix")
       val gcsUserAgent = if (userGcsSuffix != null && userGcsSuffix.nonEmpty) {
-        s"$sparkGcsPrefix $userGcsSuffix"
+        if (userGcsSuffix.contains(sparkGcsPrefix)) {
+          // The prefix is already present, so we'll just use the existing suffix.
+          userGcsSuffix
+        } else {
+          s"$sparkGcsPrefix $userGcsSuffix"
+        }
       } else {
         sparkGcsPrefix
       }
