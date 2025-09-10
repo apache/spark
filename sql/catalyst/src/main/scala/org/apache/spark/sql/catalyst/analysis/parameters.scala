@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, SqlScriptingErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types.DataType
 
 sealed trait Parameter extends LeafExpression with Unevaluable {
@@ -214,11 +214,6 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         if !child.containsPattern(UNRESOLVED_WITH) &&
           args.forall(_.resolved) =>
 
-        // Validate: positional parameters are not supported for SQL scripting
-        if (child.isInstanceOf[CompoundBody]) {
-          throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-        }
-
         val indexedArgs = args.zipWithIndex
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
@@ -246,11 +241,6 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         // Validate: no mixing of positional and named parameters
         if (namedParams.nonEmpty && positionalParams.nonEmpty) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
-        }
-
-        // Validate: positional parameters are not supported for SQL scripting
-        if (positionalParams.nonEmpty && child.isInstanceOf[CompoundBody]) {
-          throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
         }
 
         // Validate: if query uses named parameters, all USING expressions must have names

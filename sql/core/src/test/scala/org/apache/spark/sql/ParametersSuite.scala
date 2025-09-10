@@ -21,7 +21,7 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Limit, LocalRelation}
+import org.apache.spark.sql.catalyst.plans.logical.Limit
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -616,21 +616,12 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     val variableDirectly = sql("SELECT 42 WHERE 1 = a").queryExecution.optimizedPlan
     val parameterizedSpark =
       spark.sql("SELECT 42 WHERE 1 = ?", Array(1)).queryExecution.optimizedPlan
+    val parameterizedSql =
+      spark.sql("EXECUTE IMMEDIATE 'SELECT 42 WHERE 1 = ?' USING a").queryExecution.optimizedPlan
 
-    // Test that variable folding works consistently for regular queries and parameterized queries
     comparePlans(expected, variableDirectly)
     comparePlans(expected, parameterizedSpark)
-
-    // EXECUTE IMMEDIATE has different semantics - it executes during analysis and returns
-    // materialized results as LocalRelation, not logical plans for optimization
-    val executeImmediateResult =
-      spark.sql("EXECUTE IMMEDIATE 'SELECT 42 WHERE 1 = ?' USING a")
-
-    // Verify EXECUTE IMMEDIATE produces the correct result (42)
-    checkAnswer(executeImmediateResult, Row(42))
-
-    // Verify EXECUTE IMMEDIATE returns LocalRelation (materialized results), not logical plan
-    assert(executeImmediateResult.queryExecution.optimizedPlan.isInstanceOf[LocalRelation])
+    comparePlans(expected, parameterizedSql)
   }
 
   test("SPARK-49017: bind named parameters with IDENTIFIER clause") {

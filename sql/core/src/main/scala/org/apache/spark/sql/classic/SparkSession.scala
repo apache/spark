@@ -44,10 +44,11 @@ import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NamePa
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.SparkSession.applyAndLoadExtensions
+import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -449,6 +450,10 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
+          // Check for SQL scripting with positional parameters before creating parameterized query
+          if (parsedPlan.isInstanceOf[CompoundBody]) {
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          }
           PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
         } else {
           parsedPlan
@@ -525,6 +530,10 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
+          // Check for SQL scripting with positional parameters before creating parameterized query
+          if (parsedPlan.isInstanceOf[CompoundBody] && paramNames.contains(null)) {
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          }
           // Create a general parameter query that can handle both positional and named parameters
           // The query itself will determine which type to use based on its parameter markers
           GeneralParameterizedQuery(
