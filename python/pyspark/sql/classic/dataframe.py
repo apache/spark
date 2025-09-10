@@ -569,6 +569,20 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 },
             )
 
+    def repartitionById(self, numPartitions: int, partitionIdCol: "ColumnOrName") -> ParentDataFrame:
+        if numPartitions <= 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_value": str(numPartitions),
+                },
+            )
+        return DataFrame(
+            self._jdf.repartitionById(numPartitions, _to_java_column(partitionIdCol)), 
+            self.sparkSession
+        )
+
     def distinct(self) -> ParentDataFrame:
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
