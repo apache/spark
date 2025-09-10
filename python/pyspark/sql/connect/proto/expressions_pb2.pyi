@@ -307,6 +307,28 @@ class Expression(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class DirectShufflePartitionID(google.protobuf.message.Message):
+        """Expression that takes a partition ID value and passes it through directly for use in
+        shuffle partitioning. This is used with RepartitionByExpression to allow users to
+        directly specify target partition IDs.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        CHILD_FIELD_NUMBER: builtins.int
+        @property
+        def child(self) -> global___Expression:
+            """(Required) The expression that evaluates to the partition ID."""
+        def __init__(
+            self,
+            *,
+            child: global___Expression | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["child", b"child"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["child", b"child"]) -> None: ...
+
     class Cast(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1412,6 +1434,7 @@ class Expression(google.protobuf.message.Message):
     MERGE_ACTION_FIELD_NUMBER: builtins.int
     TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: builtins.int
     SUBQUERY_EXPRESSION_FIELD_NUMBER: builtins.int
+    DIRECT_SHUFFLE_PARTITION_ID_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___ExpressionCommon: ...
@@ -1458,6 +1481,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def subquery_expression(self) -> global___SubqueryExpression: ...
     @property
+    def direct_shuffle_partition_id(self) -> global___Expression.DirectShufflePartitionID: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1487,6 +1512,7 @@ class Expression(google.protobuf.message.Message):
         merge_action: global___MergeAction | None = ...,
         typed_aggregate_expression: global___TypedAggregateExpression | None = ...,
         subquery_expression: global___SubqueryExpression | None = ...,
+        direct_shuffle_partition_id: global___Expression.DirectShufflePartitionID | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1502,6 +1528,8 @@ class Expression(google.protobuf.message.Message):
             b"common",
             "common_inline_user_defined_function",
             b"common_inline_user_defined_function",
+            "direct_shuffle_partition_id",
+            b"direct_shuffle_partition_id",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -1553,6 +1581,8 @@ class Expression(google.protobuf.message.Message):
             b"common",
             "common_inline_user_defined_function",
             b"common_inline_user_defined_function",
+            "direct_shuffle_partition_id",
+            b"direct_shuffle_partition_id",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -1615,6 +1645,7 @@ class Expression(google.protobuf.message.Message):
             "merge_action",
             "typed_aggregate_expression",
             "subquery_expression",
+            "direct_shuffle_partition_id",
             "extension",
         ]
         | None
