@@ -80,7 +80,7 @@ private[connect] class ExecuteHolder(
    * If result chunking is enabled, it will split large arrow batches into smaller chunks in
    * responses.
    */
-  val resultChunkingEnabled: Boolean = {
+  def resultChunkingEnabled: Boolean = {
     sessionHolder.session.conf.get(CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE) > 0 &&
     request.getRequestOptionsList.asScala.exists { option =>
       option.hasResultChunkingOptions &&

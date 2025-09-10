@@ -1526,7 +1526,8 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
                     captured_chunks.append(response.arrow_batch)
 
             try:
-                # Patch the response verifier for testing to access the chunked arrow batch responses.
+                # Patch the response verifier for testing to access the chunked arrow batch
+                # responses.
                 self.connect._client._verify_response_integrity = patched_verify_response_integrity
                 # Override the chunk size to 1024 bytes for testing
                 if preferred_chunk_size_optional:
@@ -1556,8 +1557,8 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
                 # There are 4 batches (partitions) in total.
                 self.assertEqual(len(batches), 4)
                 for batch in batches:
-                    # In this example, the max chunk size is set to a small value, so each Arrow batch
-                    # should be split into multiple chunks.
+                    # In this example, the max chunk size is set to a small value, so each Arrow
+                    # batch should be split into multiple chunks.
                     self.assertTrue(len(batch) > 5)
                     row_count = batch[0].row_count
                     row_start_offset = batch[0].start_offset
