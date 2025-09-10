@@ -220,13 +220,13 @@
     <netty.version>4.1.126.Final</netty.version>
     <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
-    <junit-jupiter.version>5.13.1</junit-jupiter.version>
-    <junit-platform.version>1.13.1</junit-platform.version>
+    <junit-jupiter.version>5.13.4</junit-jupiter.version>
+    <junit-platform.version>1.13.4</junit-platform.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
       also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
     -->
-    <sbt-jupiter-interface.version>0.15.0</sbt-jupiter-interface.version>
+    <sbt-jupiter-interface.version>0.15.1</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
