@@ -1291,9 +1291,19 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       .groupMap(_._1)(_._2)
       .view.mapValues(v => v.size -> ExpressionSet(v)))
 
+    // Split the producers from the lower node to 4 categories:
+    // - `neverInlines` contains producer expressions that shouldn't be inlined.
+    //    These include non-deterministic expressions or expensive ones that are referenced multiple
+    //    times.
+    // - `mustInlines` contains expressions with Python UDFs that must be inlined into the upper
+    //    node to avoid performance issues, or expressions with aggregate nodes.
+    // - `maybeInlines` contains expressions that might make sense to inline, such as expressions
+    //    that are used only once, or are cheap to inline.
+    //    But we need to take into account the side effect of adding new pass-through attributes to
+    //    the lover node, which can make the node much wider than it was originally.
+    val neverInlines = ListBuffer.empty[NamedExpression]
     val mustInlines = ListBuffer.empty[NamedExpression]
     val maybeInlines = ListBuffer.empty[NamedExpression]
-    val neverInlines = ListBuffer.empty[NamedExpression]
     val others = ListBuffer.empty[NamedExpression]
     producers.foreach {
       case a: Alias =>
@@ -1306,7 +1316,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
             case _ => false
           }
 
-          if (!a.deterministic) {
+          if (!a.child.deterministic) {
             neverInlines += a
           } else if (alwaysInline || containsUDF) {
             mustInlines += a
@@ -1321,11 +1331,15 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     }
 
     if (neverInlines.isEmpty) {
+      // If `neverInlines` is empty then we can collapse the nodes into one.
       (Seq.empty, buildCleanedProjectList(consumers, producers))
     } else if (mustInlines.isEmpty) {
-      // Let's keep `maybeInlines` in the lower node for now.
+      // Otherwise we can't collapse the nodes into one, but if `mustInlines` is empty then we can
+      // keep `maybeInlines` in the lower node for now, so there is no change to the nodes.
       (consumers, producers)
     } else {
+      // If both `neverInlines` and `mustInlines` are not empty, then inline `mustInlines` and add
+      // new pass-through attributes to the lower node.
       val newConsumers = buildCleanedProjectList(consumers, mustInlines)
       val passthroughAttributes = AttributeSet(others.flatMap(_.references))
       val newPassthroughAttributes =
