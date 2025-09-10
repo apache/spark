@@ -1296,11 +1296,11 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     //    These include non-deterministic expressions or expensive ones that are referenced multiple
     //    times.
     // - `mustInlines` contains expressions with Python UDFs that must be inlined into the upper
-    //    node to avoid performance issues, or expressions with aggregate nodes.
+    //    node to avoid performance issues.
     // - `maybeInlines` contains expressions that might make sense to inline, such as expressions
     //    that are used only once, or are cheap to inline.
     //    But we need to take into account the side effect of adding new pass-through attributes to
-    //    the lover node, which can make the node much wider than it was originally.
+    //    the lower node, which can make the node much wider than it was originally.
     val neverInlines = ListBuffer.empty[NamedExpression]
     val mustInlines = ListBuffer.empty[NamedExpression]
     val maybeInlines = ListBuffer.empty[NamedExpression]
