@@ -284,8 +284,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     val handlerType = if (Option(ctx.CONTINUE()).isDefined) {
       ExceptionHandlerType.CONTINUE
-    }
-    else {
+    } else {
       ExceptionHandlerType.EXIT
     }
 
