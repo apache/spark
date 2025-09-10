@@ -57,7 +57,7 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
         case (k, v) => builder.putMetricValues(k, v)
       }
     }
-    builder.setSqlScriptId(ui.sqlScriptId.orNull)
+    ui.sqlScriptId.foreach(id => builder.setSqlScriptId(id))
     builder.build().toByteArray
   }
 
