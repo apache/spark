@@ -1927,7 +1927,7 @@ class DataFrame:
         Partition rows based on a computed partition ID:
 
         >>> from pyspark.sql import functions as sf
-        >>> df = spark.range(100).withColumn("partition_id", sf.col("id") % 10)
+        >>> df = spark.range(100).withColumn("partition_id", (sf.col("id") % 10).cast("int"))
         >>> repartitioned = df.repartitionById(10, "partition_id")
         >>> repartitioned.select("id", "partition_id", sf.spark_partition_id()).show(5)
         +---+------------+--------------------+
