@@ -1170,9 +1170,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   }
 
   def apply(plan: LogicalPlan, alwaysInline: Boolean): LogicalPlan = {
-    val pythonUDFArrowFallbackOnUDT = conf.pythonUDFArrowFallbackOnUDT
-
-    traverse(plan, alwaysInline, Set.empty, pythonUDFArrowFallbackOnUDT)
+    traverse(plan, alwaysInline, Set.empty, conf.pythonUDFArrowFallbackOnUDT)
   }
 
   private def traverse(
