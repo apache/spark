@@ -67,10 +67,10 @@ object SparkPipelines extends Logging {
           logError("--class argument not supported.")
           throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
         } else if ((opt == "--conf" || opt == "-c") && value.startsWith(s"$SPARK_API_MODE=")) {
-          val v = value.stripPrefix(s"$SPARK_API_MODE=")
-          if (v.trim.toLowerCase(Locale.ROOT) != "connect") {
+          val apiMode = value.stripPrefix(s"$SPARK_API_MODE=").trim
+          if (apiMode.toLowerCase(Locale.ROOT) != "connect") {
             logError(
-              s"$SPARK_API_MODE must be 'connect' (was '$v'). " +
+              s"$SPARK_API_MODE must be 'connect' (was '$apiMode'). " +
                 "Declarative Pipelines currently only supports Spark Connect."
             )
             throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
