@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUserAppException
 import org.apache.spark.internal.Logging
+import org.apache.spark.launcher.SparkLauncher.SPARK_API_MODE
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.util.SparkExitCode
 
@@ -65,10 +66,11 @@ object SparkPipelines extends Logging {
         } else if (opt == "--class") {
           logError("--class argument not supported.")
           throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
-        } else if ((opt == "--conf" || opt == "-c") && value.startsWith("spark.api.mode=")) {
-          if (value.stripPrefix("spark.api.mode=").trim.toLowerCase(Locale.ROOT) != "connect") {
+        } else if ((opt == "--conf" || opt == "-c") && value.startsWith(s"$SPARK_API_MODE=")) {
+          val v = value.stripPrefix(s"$SPARK_API_MODE=")
+          if (v.trim.toLowerCase(Locale.ROOT) != "connect") {
             logError(
-              "spark.api.mode must be 'connect'. " +
+              s"$SPARK_API_MODE must be 'connect', but was '$v'. " +
                 "Declarative Pipelines currently only supports Spark Connect."
             )
             throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
@@ -99,7 +101,7 @@ object SparkPipelines extends Logging {
     }
 
     sparkSubmitArgs += "--conf"
-    sparkSubmitArgs += "spark.api.mode=connect"
+    sparkSubmitArgs += s"$SPARK_API_MODE=connect"
     sparkSubmitArgs += "--remote"
     sparkSubmitArgs += remote
     (sparkSubmitArgs.toSeq, pipelinesArgs.toSeq)
