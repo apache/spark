@@ -101,7 +101,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private val inactiveOperationIds: Cache[String, Boolean] =
     CacheBuilder.newBuilder()
       .ticker(Ticker.systemTicker())
-      .expireAfterAccess(30, TimeUnit.MINUTES)
+      .expireAfterAccess(
+        SparkEnv.get.conf.get(Connect.CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS),
+        TimeUnit.MINUTES)
       .build[String, Boolean]()
 
   // The cache that maps an error id to a throwable. The throwable in cache is independent to
@@ -180,8 +182,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   /**
    * Returns the status of the operation in this session given the operation id.
-   * Operations are cached for XX minutes once they are inactive (completed, interrupted
-   * or abandoned).
+   * Operations are cached for when they are inactive (completed, interrupted or abandoned).
+   * Cache expiration is configured with CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS.
    *
    * @param operationId
    * @return
