@@ -287,7 +287,7 @@ class ParquetFileFormat
         val iter = new RecordReaderIterator(vectorizedReader)
         try {
           vectorizedReader.initialize(
-            split, hadoopAttemptContext, inputFileOpt, inputStreamOpt, Option(fileFooter))
+            split, hadoopAttemptContext, inputFileOpt, inputStreamOpt, Some(fileFooter))
           logDebug(s"Appending $partitionSchema ${file.partitionValues}")
           vectorizedReader.initBatch(partitionSchema, file.partitionValues)
           if (returningBatch) {
