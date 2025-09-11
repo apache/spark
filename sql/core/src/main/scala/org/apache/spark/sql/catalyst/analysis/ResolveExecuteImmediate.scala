@@ -19,54 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
-import org.apache.spark.sql.catalyst.analysis.UnresolvedExecuteImmediate
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, EmptyRow, Expression, Literal,
+import org.apache.spark.sql.catalyst.expressions.{Alias, EmptyRow, Expression, Literal,
   VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CompoundBody,
-  ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StringType
-
-/**
- * Logical plan representing a resolved execute immediate command that will recursively
- * invoke SQL execution.
- *
- * @param sqlStmtStr the resolved query expression
- * @param args parameters from USING clause
- * @param hasIntoClause whether this EXECUTE IMMEDIATE has an INTO clause
- */
-case class ExecuteImmediateCommand(
-    sqlStmtStr: Expression,
-    args: Seq[Expression],
-    hasIntoClause: Boolean = false)
-  extends UnaryNode with ExecutableDuringAnalysis {
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
-
-  override def child: LogicalPlan = LocalRelation(Nil, Nil)
-
-  override def output: Seq[Attribute] = child.output
-
-  override lazy val resolved: Boolean = {
-    // ExecuteImmediateCommand should not be considered resolved until it has been
-    // executed and replaced by ResolveExecuteImmediate rule.
-    // This ensures that SetVariable waits for execution to complete.
-    false
-  }
-
-  override def stageForExplain(): LogicalPlan = {
-    // For EXPLAIN, just show the command without executing it
-    copy()
-  }
-
-  override protected def withNewChildInternal(
-      newChild: LogicalPlan): ExecuteImmediateCommand = {
-    copy()
-  }
-}
 
 /**
  * Analysis rule that resolves and executes EXECUTE IMMEDIATE statements during analysis,
@@ -95,10 +55,6 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
           // Not all resolved yet - wait for next iteration
           node
         }
-      case cmd: ExecuteImmediateCommand =>
-        // Handle any remaining ExecuteImmediateCommand nodes (for backward compatibility during
-        // transition)
-        executeImmediate(cmd)
     }
   }
 
@@ -148,58 +104,12 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       }
     }
 
-    // Check if the executed statement is a Command (like DECLARE, SET VARIABLE, etc.)
-    // Commands should not return result sets
-    result.queryExecution.analyzed match {
-      case command: Command =>
-        // If this EXECUTE IMMEDIATE has an INTO clause, commands are not allowed
-        if (hasIntoClause) {
-          throw QueryCompilationErrors.invalidStatementForExecuteInto(sqlString)
-        }
-        result.queryExecution.commandExecuted
-      case _ =>
-        // Regular queries - return the analyzed plan directly (no eager evaluation)
-        result.queryExecution.analyzed
-    }
-  }
-
-  private def executeImmediate(cmd: ExecuteImmediateCommand): LogicalPlan = {
-    // Extract the query string from the queryParam expression
-    val sqlStmtStr = extractQueryString(cmd.sqlStmtStr)
-
-    // Parse and validate the query
-    val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlStmtStr)
-    validateQuery(sqlStmtStr, parsedPlan)
-
-    // Execute the query recursively with isolated local variable context
-    val result = if (cmd.args.isEmpty) {
-      // No parameters - execute directly
-      withIsolatedLocalVariableContext {
-        sparkSession.sql(sqlStmtStr)
-      }
-    } else {
-      // For parameterized queries, build parameter arrays
-      val (paramValues, paramNames) = buildUnifiedParameters(cmd.args)
-
-      withIsolatedLocalVariableContext {
-        sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
-          .sql(sqlStmtStr, paramValues, paramNames)
-      }
+    // If this EXECUTE IMMEDIATE has an INTO clause, commands are not allowed
+    if (hasIntoClause && result.queryExecution.analyzed.isInstanceOf[Command]) {
+      throw QueryCompilationErrors.invalidStatementForExecuteInto(sqlString)
     }
 
-    // Check if the executed statement is a Command (like DECLARE, SET VARIABLE, etc.)
-    // Commands should not return result sets
-    result.queryExecution.analyzed match {
-      case command: Command =>
-        // If this EXECUTE IMMEDIATE has an INTO clause, commands are not allowed
-        if (cmd.hasIntoClause) {
-          throw QueryCompilationErrors.invalidStatementForExecuteInto(sqlStmtStr)
-        }
-        result.queryExecution.commandExecuted
-      case _ =>
-        // Regular queries - return the analyzed plan directly (no eager evaluation)
-        result.queryExecution.analyzed
-    }
+    result.queryExecution.analyzed
   }
 
   private def extractQueryString(queryExpr: Expression): String = {

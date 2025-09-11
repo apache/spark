@@ -52,7 +52,14 @@ EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
+{
+  "errorClass" : "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+  "sqlState" : "42P07",
+  "messageParameters" : {
+    "relationName" : "`tbl_view_tmp`"
+  }
+}
 
 
 -- !query
@@ -175,6 +182,7 @@ SELECT * from x
 -- !query schema
 struct<id:int>
 -- !query output
+1
 1
 
 
