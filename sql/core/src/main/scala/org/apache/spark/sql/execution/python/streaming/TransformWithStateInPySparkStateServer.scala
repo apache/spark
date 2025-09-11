@@ -457,70 +457,78 @@ class TransformWithStateInPySparkStateServer(
       return
     }
     val listStateInfo = listStates(stateName)
-    val deserializer = if (deserializerForTest != null) {
-      deserializerForTest
-    } else {
-      new TransformWithStateInPySparkDeserializer(listStateInfo.deserializer)
-    }
-    message.getMethodCase match {
-      case ListStateCall.MethodCase.EXISTS =>
-        if (listStateInfo.listState.exists()) {
+    var deserializer: TransformWithStateInPySparkDeserializer = null
+    try {
+      deserializer = if (deserializerForTest != null) {
+        deserializerForTest
+      } else {
+        new TransformWithStateInPySparkDeserializer(listStateInfo.deserializer)
+      }
+      message.getMethodCase match {
+        case ListStateCall.MethodCase.EXISTS =>
+          if (listStateInfo.listState.exists()) {
+            sendResponse(0)
+          } else {
+            // Send status code 2 to indicate that the list state doesn't have a value yet.
+            sendResponse(2, s"state $stateName doesn't exist")
+          }
+        case ListStateCall.MethodCase.LISTSTATEPUT =>
+          val rows = if (message.getListStatePut.getFetchWithArrow) {
+            deserializer.readArrowBatches(inputStream)
+          } else {
+            val elements = message.getListStatePut.getValueList.asScala
+            elements.map { e =>
+              PythonSQLUtils.toJVMRow(
+                e.toByteArray,
+                listStateInfo.schema,
+                listStateInfo.deserializer)
+            }
+          }
+          listStateInfo.listState.put(rows.toArray)
           sendResponse(0)
-        } else {
-          // Send status code 2 to indicate that the list state doesn't have a value yet.
-          sendResponse(2, s"state $stateName doesn't exist")
-        }
-      case ListStateCall.MethodCase.LISTSTATEPUT =>
-        val rows = if (message.getListStatePut.getFetchWithArrow) {
-          deserializer.readArrowBatches(inputStream)
-        } else {
-          val elements = message.getListStatePut.getValueList.asScala
-          elements.map { e =>
-            PythonSQLUtils.toJVMRow(
-              e.toByteArray,
-              listStateInfo.schema,
-              listStateInfo.deserializer)
+        case ListStateCall.MethodCase.LISTSTATEGET =>
+          val iteratorId = message.getListStateGet.getIteratorId
+          var iteratorOption = iterators.get(iteratorId)
+          if (iteratorOption.isEmpty) {
+            iteratorOption = Some(listStateInfo.listState.get())
+            iterators.put(iteratorId, iteratorOption.get)
           }
-        }
-        listStateInfo.listState.put(rows.toArray)
-        sendResponse(0)
-      case ListStateCall.MethodCase.LISTSTATEGET =>
-        val iteratorId = message.getListStateGet.getIteratorId
-        var iteratorOption = iterators.get(iteratorId)
-        if (iteratorOption.isEmpty) {
-          iteratorOption = Some(listStateInfo.listState.get())
-          iterators.put(iteratorId, iteratorOption.get)
-        }
-        if (!iteratorOption.get.hasNext) {
-          sendResponse(2, s"List state $stateName doesn't contain any value.")
-        } else {
-          sendResponseWithListGet(0, iter = iteratorOption.get)
-        }
-      case ListStateCall.MethodCase.APPENDVALUE =>
-        val byteArray = message.getAppendValue.getValue.toByteArray
-        val newRow = PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema,
-          listStateInfo.deserializer)
-        listStateInfo.listState.appendValue(newRow)
-        sendResponse(0)
-      case ListStateCall.MethodCase.APPENDLIST =>
-        val rows = if (message.getAppendList.getFetchWithArrow) {
-          deserializer.readArrowBatches(inputStream)
-        } else {
-          val elements = message.getAppendList.getValueList.asScala
-          elements.map { e =>
-            PythonSQLUtils.toJVMRow(
-              e.toByteArray,
-              listStateInfo.schema,
-              listStateInfo.deserializer)
+          if (!iteratorOption.get.hasNext) {
+            sendResponse(2, s"List state $stateName doesn't contain any value.")
+          } else {
+            sendResponseWithListGet(0, iter = iteratorOption.get)
           }
-        }
-        listStateInfo.listState.appendList(rows.toArray)
-        sendResponse(0)
-      case ListStateCall.MethodCase.CLEAR =>
-        listStates(stateName).listState.clear()
-        sendResponse(0)
-      case _ =>
-        throw new IllegalArgumentException("Invalid method call")
+        case ListStateCall.MethodCase.APPENDVALUE =>
+          val byteArray = message.getAppendValue.getValue.toByteArray
+          val newRow =
+            PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema, listStateInfo.deserializer)
+          listStateInfo.listState.appendValue(newRow)
+          sendResponse(0)
+        case ListStateCall.MethodCase.APPENDLIST =>
+          val rows = if (message.getAppendList.getFetchWithArrow) {
+            deserializer.readArrowBatches(inputStream)
+          } else {
+            val elements = message.getAppendList.getValueList.asScala
+            elements.map { e =>
+              PythonSQLUtils.toJVMRow(
+                e.toByteArray,
+                listStateInfo.schema,
+                listStateInfo.deserializer)
+            }
+          }
+          listStateInfo.listState.appendList(rows.toArray)
+          sendResponse(0)
+        case ListStateCall.MethodCase.CLEAR =>
+          listStates(stateName).listState.clear()
+          sendResponse(0)
+        case _ =>
+          throw new IllegalArgumentException("Invalid method call")
+      }
+    } finally {
+      // Close the deserializer to free up resources.
+      if (deserializer != null) {
+        deserializer.close()
+      }
     }
   }
 
