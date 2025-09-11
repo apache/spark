@@ -1599,7 +1599,7 @@ def read_udtf(pickleSer, infile, eval_type):
             import pyarrow as pa
 
             if self._partition_child_indexes:
-                # Detect partition boundaries (much more efficient than group_by)
+                # Detect partition boundaries.
                 boundaries = self._detect_partition_boundaries(original_batch)
 
                 # Process each contiguous partition
@@ -1630,7 +1630,7 @@ def read_udtf(pickleSer, infile, eval_type):
                         self._udtf = self._create_udtf()
                         self._eval_raised_skip_rest_of_input_table = False
 
-                    # Slice the filtered batch for this partition (efficient - creates a view)
+                    # Slice the filtered batch for this partition
                     partition_batch = filtered_batch.slice(start_idx, end_idx - start_idx)
 
                     # Update the last partition key
