@@ -23,6 +23,7 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 import scala.jdk.CollectionConverters._
+import scala.math.BigDecimal.RoundingMode
 
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
@@ -405,11 +406,34 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     "should never be with scientific notation") {
     val progress = testProgress4.jsonValue
 
+    // Actual values
+    val inputRowsPerSecond: Double = 6.923076923076923E8
+    val processedRowsPerSecond: Double = 2.923076923076923E8
+
+    // Get values from progress metrics JSON and cast back to Double
+    // for numeric comparison
+    val inputRowsPerSecondJSON = (progress \ "inputRowsPerSecond").values.toString
+      .toDouble
+    val processedRowsPerSecondJSON = (progress \ "processedRowsPerSecond").values.toString
+      .toDouble
+
+    // Get expected values after type casting
+    val inputRowsPerSecondExpected = BigDecimal(inputRowsPerSecond)
+      .setScale(1, RoundingMode.HALF_UP).toDouble
+    val processedRowsPerSecondExpected = BigDecimal(processedRowsPerSecond)
+      .setScale(1, RoundingMode.HALF_UP).toDouble
+
     // This should fail if inputRowsPerSecond contains E notation
     (progress \ "inputRowsPerSecond").values.toString should not include "E"
 
     // This should fail if processedRowsPerSecond contains E notation
     (progress \ "processedRowsPerSecond").values.toString should not include "E"
+
+    // Value in progress metrics should be equal to the Decimal conversion of the same
+    // Using epsilon to compare floating-point values
+    val epsilon = 1e-6
+    inputRowsPerSecondJSON shouldBe inputRowsPerSecondExpected +- epsilon
+    processedRowsPerSecondJSON shouldBe processedRowsPerSecondExpected +- epsilon
   }
 
   def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>
@@ -562,8 +586,8 @@ object StreamingQueryStatusAndProgressSuite {
         endOffset = "456",
         latestOffset = "789",
         numInputRows = 678,
-        inputRowsPerSecond = 6.923076923076923E7, // Large double value having exponentials
-        processedRowsPerSecond = 2.923076923076923E7
+        inputRowsPerSecond = 6.923076923076923E8, // Large double value having exponentials
+        processedRowsPerSecond = 2.923076923076923E8
       )
     ),
     sink = SinkProgress("sink", None),
