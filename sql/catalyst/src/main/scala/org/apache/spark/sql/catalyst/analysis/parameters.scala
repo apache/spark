@@ -122,6 +122,9 @@ case class GeneralParameterizedQuery(
     paramNames: Seq[String])
   extends ParameterizedQuery(child) {
   assert(args.nonEmpty)
+  assert(paramNames.isEmpty || paramNames.length == args.length,
+    s"paramNames must be either empty or same length as args. " +
+    s"paramNames.length=${paramNames.length}, args.length=${args.length}")
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
 }
@@ -230,7 +233,18 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         if !child.containsPattern(UNRESOLVED_WITH) &&
           args.forall(_.resolved) =>
 
-        // Collect parameter types used in the query and validate no mixing
+        // Check all arguments for validity (args are already evaluated expressions/literals)
+        val allArgs = args.zipWithIndex.map { case (arg, idx) =>
+          val name = if (idx < paramNames.length && paramNames(idx) != null) {
+            paramNames(idx)
+          } else {
+            s"_$idx"
+          }
+          (name, arg)
+        }
+        checkArgs(allArgs)
+
+        // Collect parameter types used in the query to enforce invariants
         val namedParams = scala.collection.mutable.Set.empty[String]
         val positionalParams = scala.collection.mutable.Set.empty[Int]
         bind(child) {
@@ -255,33 +269,22 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           }
         }
 
-        // Check all arguments for validity (args are already evaluated expressions/literals)
-        val allArgs = args.zipWithIndex.map { case (arg, idx) =>
-          val name = if (idx < paramNames.length && paramNames(idx) != null) {
-            paramNames(idx)
-          } else {
-            s"_$idx"
-          }
-          (name, arg)
-        }
-        checkArgs(allArgs)
-
-        // Single pass binding - args are already literals/evaluated expressions
-        val namedArgsMap = paramNames.zipWithIndex.collect {
-          case (name, index) if name != null => name -> args(index)
-        }.toMap
-        val positionalArgsMap = if (positionalParams.nonEmpty) {
-          val sortedPositions = positionalParams.toSeq.sorted
-          sortedPositions.zipWithIndex.collect { case (pos, index) if index < args.length =>
-            pos -> args(index)
+        // Now we can do simple binding based on which type we determined
+        if (namedParams.nonEmpty) {
+          // Named parameter binding
+          val namedArgsMap = paramNames.zipWithIndex.collect {
+            case (name, index) if name != null => name -> args(index)
           }.toMap
-        } else Map.empty[Int, Expression]
-
-        bind(child) {
-          case NamedParameter(name) if namedArgsMap.contains(name) =>
-            namedArgsMap(name)
-          case PosParameter(pos) if positionalArgsMap.contains(pos) =>
-            positionalArgsMap(pos)
+          bind(child) {
+            case NamedParameter(name) => namedArgsMap.getOrElse(name, NamedParameter(name))
+          }
+        } else {
+          // Positional parameter binding (same logic as PosParameterizedQuery)
+          val posToIndex = positionalParams.toSeq.sorted.zipWithIndex.toMap
+          bind(child) {
+            case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
+              args(posToIndex(pos))
+          }
         }
 
       case other => other

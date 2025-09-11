@@ -56,7 +56,4 @@ case class CommandResult(
     }
     s"CommandResult $outputStr$dataStr"
   }
-
-  // Don't override toString - let the default TreeNode.toString handle tree structure
-  // override def toString: String = simpleString(conf.maxToStringFields)
 }
