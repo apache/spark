@@ -946,6 +946,15 @@ class GroupedApplyInPandasTestsMixin:
                 row = df.groupby("id").apply(test).first()
                 self.assertEqual(row[1], 123)
 
+
+class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
+
+
+class GroupedApplyInPandasWithSlicingTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
     def test_arrow_batch_slicing(self):
         with self.sql_conf(
             {
@@ -980,9 +989,11 @@ class GroupedApplyInPandasTestsMixin:
             )
             self.assertEqual(expected.collect(), result.collect())
 
-
-class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
-    pass
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
 
 
 if __name__ == "__main__":
