@@ -1927,17 +1927,23 @@ class DataFrame:
         Partition rows based on a computed partition ID:
 
         >>> from pyspark.sql import functions as sf
-        >>> df = spark.range(100).withColumn("partition_id", (sf.col("id") % 10).cast("int"))
-        >>> repartitioned = df.repartitionById(10, "partition_id")
-        >>> repartitioned.select("id", "partition_id", sf.spark_partition_id()).show(5)
+        >>> from pyspark.sql.functions import col
+        >>> df = spark.range(10).withColumn("partition_id", (col("id") % 3).cast("int"))
+        >>> repartitioned = df.repartitionById(3, "partition_id")
+        >>> repartitioned.select("id", "partition_id", sf.spark_partition_id()).orderBy("id").show()
         +---+------------+--------------------+
         | id|partition_id|SPARK_PARTITION_ID()|
         +---+------------+--------------------+
         |  0|           0|                   0|
         |  1|           1|                   1|
         |  2|           2|                   2|
-        |  3|           3|                   3|
-        |  4|           4|                   4|
+        |  3|           0|                   0|
+        |  4|           1|                   1|
+        |  5|           2|                   2|
+        |  6|           0|                   0|
+        |  7|           1|                   1|
+        |  8|           2|                   2|
+        |  9|           0|                   0|
         +---+------------+--------------------+
         """
         ...

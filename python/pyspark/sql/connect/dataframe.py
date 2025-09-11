@@ -476,8 +476,8 @@ class DataFrame(ParentDataFrame):
         direct_partition_col = Column(direct_partition_expr)
 
         res = DataFrame(
-            plan.RepartitionByExpression(self._plan, numPartitions, [direct_partition_col._expr]),
-            self.sparkSession,
+            plan.RepartitionByExpression(self._plan, numPartitions, [direct_partition_col]),
+            self._session,
         )
         res._cached_schema = self._cached_schema
         return res
