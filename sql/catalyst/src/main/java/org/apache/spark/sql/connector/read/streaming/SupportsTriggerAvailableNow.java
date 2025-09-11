@@ -39,9 +39,10 @@ public interface SupportsTriggerAvailableNow extends SupportsAdmissionControl {
    * <p>
    * Note that there is an exception on the first uncommitted batch after a restart, where the end
    * offset is not derived from the current latest offset. Sources need to take special
-   * considerations if wanting to assert such relation. One possible way is to have an internal flag
-   * in the source to indicate whether it is Trigger.AvailableNow, set the flag in this method, and
-   * record the target offset in the first call of {@link #latestOffset(Offset, ReadLimit) latestOffset}.
+   * considerations if wanting to assert such relation. One possible way is to have an internal
+   * flag in the source to indicate whether it is Trigger.AvailableNow, set the flag in this method,
+   * and record the target offset in the first call of
+   * {@link #latestOffset(Offset, ReadLimit) latestOffset}.
    */
   void prepareForTriggerAvailableNow();
 }
