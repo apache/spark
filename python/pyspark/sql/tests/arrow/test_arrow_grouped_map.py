@@ -279,6 +279,9 @@ class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
 
         cls.sc.environment["TZ"] = tz
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
+        # Set it to a small odd value to exercise batching logic for all test cases
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
 
     @classmethod
     def tearDownClass(cls):
