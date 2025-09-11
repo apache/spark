@@ -40,6 +40,19 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 object LiteralValueProtoConverter {
 
+  private def setNullValue(
+      builder: proto.Expression.Literal.Builder,
+      dataType: DataType,
+      needDataType: Boolean): proto.Expression.Literal.Builder = {
+    if (needDataType) {
+      builder.setNull(toConnectProtoType(dataType))
+    } else {
+      // No need data type but still set the null type to indicate that
+      // the value is null.
+      builder.setNull(ProtoDataTypes.NullType)
+    }
+  }
+
   private def setArrayTypeAfterAddingElements(
       ab: proto.Expression.Literal.Array.Builder,
       elementType: DataType,
@@ -275,6 +288,14 @@ object LiteralValueProtoConverter {
     }
 
     (literal, dataType) match {
+      case (v: Option[_], _) =>
+        if (v.isDefined) {
+          toLiteralProtoBuilderInternal(v.get, dataType, options, needDataType)
+        } else {
+          setNullValue(builder, dataType, needDataType)
+        }
+      case (null, _) =>
+        setNullValue(builder, dataType, needDataType)
       case (v: mutable.ArraySeq[_], ArrayType(_, _)) =>
         toLiteralProtoBuilderInternal(v.array, dataType, options, needDataType)
       case (v: immutable.ArraySeq[_], ArrayType(_, _)) =>
@@ -287,12 +308,6 @@ object LiteralValueProtoConverter {
         builder.setMap(mapBuilder(v, keyType, valueType, valueContainsNull))
       case (v, structType: StructType) =>
         builder.setStruct(structBuilder(v, structType))
-      case (v: Option[_], _: DataType) =>
-        if (v.isDefined) {
-          toLiteralProtoBuilderInternal(v.get, options, needDataType)
-        } else {
-          builder.setNull(toConnectProtoType(dataType))
-        }
       case (v: LocalTime, timeType: TimeType) =>
         builder.setTime(
           builder.getTimeBuilder
@@ -477,7 +492,7 @@ object LiteralValueProtoConverter {
   }
 
   private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
-    dataType.getKindCase match {
+    val converter: proto.Expression.Literal => Any = dataType.getKindCase match {
       case proto.DataType.KindCase.SHORT => v => v.getShort.toShort
       case proto.DataType.KindCase.INTEGER => v => v.getInteger
       case proto.DataType.KindCase.LONG => v => v.getLong
@@ -513,6 +528,9 @@ object LiteralValueProtoConverter {
       case _ =>
         throw InvalidPlanInput(s"Unsupported Literal Type: ${dataType.getKindCase}")
     }
+    v =>
+      if (v.hasNull) { null }
+      else { converter(v) }
   }
 
   private def getInferredDataType(
