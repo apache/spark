@@ -1104,7 +1104,7 @@ class WithRelations(google.protobuf.message.Message):
     resolution_method: global___WithRelations.ResolutionMethod.ValueType
     """(Required) Resolution method used to resolve the relations in the root relation. This can
     either be by name (like a CTE) or by reference id. For resolution by name, all references need
-    to be a SubqueryAlias. For resolution by id, all references need to have a plan_id. The default
+    to be a SubqueryAlias. For resolution by id, all references must have a plan_id. The default
     is legacy mode. In most cases Legacy mode is uses BY_REFERENCE_ID resolution. However,it makes
     an exception for a case where the root is a SQL relation, and all the references are subquery
     aliases, in that case we use BY_NAME resolution.

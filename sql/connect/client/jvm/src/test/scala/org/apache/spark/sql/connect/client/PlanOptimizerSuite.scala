@@ -252,7 +252,10 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private def testBinaryOperationDeduplication(
       name: String,
       sizeReduction1: Int,
-      sizeReduction2: Int)(f: ((DataFrame, Column), (DataFrame, Column)) => Dataset[_]): Unit = {
+      sizeReduction2: Int,
+      numRelationsReduction1: Int = -1,
+      numRelationsReduction2: Int = 0)(
+      f: ((DataFrame, Column), (DataFrame, Column)) => Dataset[_]): Unit = {
     test("optimize plan with duplicated relations - " + name) {
       val left = spark.range(10).as("a").toDF()
       val right = spark.range(11).as("b").toDF()
@@ -261,10 +264,16 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
       checkNoDeduplication(df1)
       // Deduplication
       val df2 = f((left, left("id")), (left, left("id")))
-      checkDeduplication(df2, numRelationsReduction = -1, sizeReduction = sizeReduction1)
+      checkDeduplication(
+        df2,
+        numRelationsReduction = numRelationsReduction1,
+        sizeReduction = sizeReduction1)
       // Deeper tree
       val df3 = f((df2.toDF(), df2("id")), (left, left("id")))
-      checkDeduplication(df3, numRelationsReduction = 0, sizeReduction = sizeReduction2)
+      checkDeduplication(
+        df3,
+        numRelationsReduction = numRelationsReduction2,
+        sizeReduction = sizeReduction2)
     }
   }
 
@@ -299,8 +308,9 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
       left.select(right.agg(min(rightKey)).scalar())
   }
 
-  testBinaryOperationDeduplication("subquery - in", 3, 24) { case ((left, leftKey), (right, _)) =>
-    left.filter(!leftKey.isin(right))
+  testBinaryOperationDeduplication("subquery - in", 8, 34, 0, 2) {
+    case ((left, leftKey), (right, _)) =>
+      left.filter(!leftKey.isin(right))
   }
 
   testBinaryOperationDeduplication("groupMap", 3, 22) {
@@ -374,7 +384,7 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
         col("id").isin(input1) &&
           col("id").isin(input2) &&
           col("id").isin(input3))
-    checkDeduplication(df, numRelationsReduction = -1, sizeReduction = 14)
+    checkDeduplication(df, numRelationsReduction = 0, sizeReduction = 19)
 
     // Check if the original WithRelations node is retained and has the proper references.
     val root = df.optimizedPlan.getRoot
@@ -382,10 +392,8 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
       if (relation.hasWithRelations && (relation ne root)) {
         val withRelations = relation.getWithRelations
         assert(PlanId(df.plan.getRoot) == PlanId(relation))
-        assert(withRelations.getReferencesCount == 2)
+        assert(withRelations.getReferencesCount == 1)
         assert(withRelations.getReferences(0) eq input2.plan.getRoot)
-        assert(withRelations.getReferences(1).hasReferencedPlanId)
-        assert(withRelations.getReferences(1).getReferencedPlanId == PlanId(input3.plan.getRoot))
       }
       true
     }
