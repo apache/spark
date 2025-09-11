@@ -94,7 +94,7 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
           pythonRunnerConf,
           pythonMetrics,
           jobArtifactUUID,
-          conf.pythonUDFProfiler)
+          conf.pythonUDFProfiler) with GroupedPythonArrowInput
       } else {
         new ArrowPythonRunner(
           chainedFunc,
@@ -106,7 +106,7 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
           pythonRunnerConf,
           pythonMetrics,
           jobArtifactUUID,
-          conf.pythonUDFProfiler) with GroupedPythonArrowInput
+          conf.pythonUDFProfiler)
       }
 
       executePython(data, output, runner)
