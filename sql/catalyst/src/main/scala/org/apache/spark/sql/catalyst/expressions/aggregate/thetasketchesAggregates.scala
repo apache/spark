@@ -206,9 +206,11 @@ case class ThetaSketchAgg(
       case LongType =>
         sketch.update(v.asInstanceOf[Long])
       case st: StringType =>
-        val cKey =
-          CollationFactory.getCollationKeyBytes(v.asInstanceOf[UTF8String], st.collationId)
-        sketch.update(cKey)
+        val str = v.asInstanceOf[UTF8String]
+        if (str != null && str.numBytes > 0) {
+          val cKey = CollationFactory.getCollationKeyBytes(str, st.collationId)
+          sketch.update(cKey)
+        }
       case _ =>
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3121",
