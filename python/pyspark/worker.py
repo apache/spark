@@ -694,9 +694,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
-        import pandas as pd
-
-        values = (pd.concat(x, axis=1) for x in value_series_gen)
+        values = (x for x in value_series_gen)
         result_iter = f(stateful_processor_api_client, mode, key, values)
 
         # TODO(SPARK-49100): add verification that elements in result_iter are
@@ -710,11 +708,10 @@ def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
 
 def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
-        import pandas as pd
 
         state_values_gen, init_states_gen = itertools.tee(value_series_gen, 2)
-        state_values = (df for x, _ in state_values_gen if not (df := pd.concat(x, axis=1)).empty)
-        init_states = (df for _, x in init_states_gen if not (df := pd.concat(x, axis=1)).empty)
+        state_values = (x for x, _ in state_values_gen if not x.empty)
+        init_states = (x for _, x in init_states_gen if not x.empty)
 
         result_iter = f(stateful_processor_api_client, mode, key, state_values, init_states)
 
@@ -2547,7 +2544,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
                 def values_gen():
                     for x in a[2]:
-                        retVal = [x[1][o] for o in parsed_offsets[0][1]]
+                        retVal = x[1].iloc[:, parsed_offsets[0][1]]
                         yield retVal
 
                 # This must be generator comprehension - do not materialize.
@@ -2584,8 +2581,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
                 def values_gen():
                     for x in a[2]:
-                        retVal = [x[1][o] for o in parsed_offsets[0][1]]
-                        initVal = [x[2][o] for o in parsed_offsets[1][1]]
+                        retVal = x[1].iloc[:, parsed_offsets[0][1]]
+                        initVal = x[2].iloc[:, parsed_offsets[1][1]]
                         yield retVal, initVal
 
                 # This must be generator comprehension - do not materialize.

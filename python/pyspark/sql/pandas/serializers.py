@@ -1535,16 +1535,21 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             same time. And data chunks from the same grouping key should appear sequentially.
             """
             import pandas as pd
+            import pyarrow as pa
 
             def row_stream():
                 for batch in batches:
-                    for row in batch.to_pandas().itertuples(index=False):
+                    data_pandas = [
+                        self.arrow_to_pandas(c, i)
+                        for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
+                    ]
+                    for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
                         batch_key = tuple(row[s] for s in self.key_offsets)
                         yield (batch_key, row)
 
             for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
                 df = pd.DataFrame([row for _, row in group_rows])
-                yield (batch_key, [df[col] for col in df.columns])
+                yield (batch_key, df)
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
@@ -1618,7 +1623,21 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             """
 
             import pandas as pd
+            import pyarrow as pa
             from itertools import tee
+
+            def flatten_columns(cur_batch, col_name):
+                state_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
+                state_field_names = [
+                    state_column.type[i].name for i in range(state_column.type.num_fields)
+                ]
+                state_field_arrays = [
+                    state_column.field(i) for i in range(state_column.type.num_fields)
+                ]
+                table_from_fields = pa.Table.from_arrays(
+                    state_field_arrays, names=state_field_names
+                )
+                return table_from_fields
 
             """
             The arrow batch is written in the schema:
@@ -1630,7 +1649,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             """
 
             batches_gent_1, batches_gent_2 = tee(batches)
-            columns_map = {"inputData": None, "initState": None}
+            columns_map: dict[str, Optional[list[str]]] = {"inputData": None, "initState": None}
 
             def data_stream(batch_iter, field_name, key_offsets):
                 nonlocal columns_map
@@ -1641,16 +1660,12 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                             for f in batch.column(batch.schema.get_field_index(field_name)).type
                         ]
 
-                    data_df = pd.DataFrame(
-                        {
-                            f.name: batch.column(batch.schema.get_field_index(field_name))
-                            .field(f.name)
-                            .to_pandas()
-                            for f in batch.column(batch.schema.get_field_index(field_name)).type
-                        }
-                    )
+                    data_pandas = [
+                        self.arrow_to_pandas(c, i)
+                        for i, c in enumerate(flatten_columns(batch, field_name).itercolumns())
+                    ]
 
-                    for row in data_df.itertuples(index=False):
+                    for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
                         batch_key = tuple(row[o] for o in key_offsets)
                         yield batch_key, row
 
@@ -1676,9 +1691,9 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         k2, grp2 = safe_next(g2)
 
             for batch_key, input_data_iterator, init_state_iterator in groupby_pair(
-                data_stream(batches_gent_1, "inputData", self.key_offsets),
-                data_stream(batches_gent_2, "initState", self.init_key_offsets),
-                keyfunc=lambda x: x[0],
+                    data_stream(batches_gent_1, "inputData", self.key_offsets),
+                    data_stream(batches_gent_2, "initState", self.init_key_offsets),
+                    keyfunc=lambda x: x[0],
             ):
                 input_data_pandas = pd.DataFrame(
                     [d for _, d in input_data_iterator], columns=columns_map["inputData"]
@@ -1687,11 +1702,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     [d for _, d in init_state_iterator], columns=columns_map["initState"]
                 )
 
-                yield (
-                    batch_key,
-                    [input_data_pandas[col] for col in input_data_pandas.columns],
-                    [init_state_pandas[col] for col in init_state_pandas.columns],
-                )
+                yield (batch_key,input_data_pandas, init_state_pandas)
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
