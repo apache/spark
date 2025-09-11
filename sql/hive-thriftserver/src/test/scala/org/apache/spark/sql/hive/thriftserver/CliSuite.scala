@@ -31,7 +31,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{RedirectConsolePlugin, SparkHadoopUtil}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -829,5 +829,12 @@ class CliSuite extends SparkFunSuite {
         Seq("--conf", s"spark.sql.defaultCatalog=$catalogName", "--database", "SYS"))(
       "SELECT CURRENT_CATALOG();" -> catalogName,
       "SELECT CURRENT_SCHEMA();" -> "SYS")
+  }
+
+  test("SPARK-52426: do not redirect stderr to stdout in spark-sql") {
+    runCliWithin(
+      2.minute,
+      extraArgs = "--conf" :: s"spark.plugins=${classOf[RedirectConsolePlugin].getName}" :: Nil)(
+      "SELECT 1;" -> "1")
   }
 }
