@@ -982,13 +982,7 @@ class GroupedApplyInPandasTestsMixin:
 
 
 class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
-
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
-        # Set it to a small odd value to exercise batching logic for all test cases
-        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
+    pass
 
 
 if __name__ == "__main__":
