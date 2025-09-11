@@ -329,6 +329,7 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     stateServer.handleListStateRequest(message)
     // Verify that the data is not read from Arrow stream. It is inlined.
     verify(transformWithStateInPySparkDeserializer, times(0)).readArrowBatches(any)
+    verify(transformWithStateInPySparkDeserializer).close()
     verify(listState).put(any)
   }
 
@@ -337,6 +338,7 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
       .setListStatePut(ListStatePut.newBuilder().setFetchWithArrow(true).build()).build()
     stateServer.handleListStateRequest(message)
     verify(transformWithStateInPySparkDeserializer).readArrowBatches(any)
+    verify(transformWithStateInPySparkDeserializer).close()
     verify(listState).put(any)
   }
 
@@ -345,6 +347,7 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     val message = ListStateCall.newBuilder().setStateName(stateName)
       .setAppendValue(AppendValue.newBuilder().setValue(byteString).build()).build()
     stateServer.handleListStateRequest(message)
+    verify(transformWithStateInPySparkDeserializer).close()
     verify(listState).appendValue(any[Row])
   }
 
@@ -354,6 +357,7 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
     stateServer.handleListStateRequest(message)
     // Verify that the data is not read from Arrow stream. It is inlined.
     verify(transformWithStateInPySparkDeserializer, times(0)).readArrowBatches(any)
+    verify(transformWithStateInPySparkDeserializer).close()
     verify(listState).appendList(any)
   }
 
@@ -362,6 +366,7 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
       .setAppendList(AppendList.newBuilder().setFetchWithArrow(true).build()).build()
     stateServer.handleListStateRequest(message)
     verify(transformWithStateInPySparkDeserializer).readArrowBatches(any)
+    verify(transformWithStateInPySparkDeserializer).close()
     verify(listState).appendList(any)
   }
 
