@@ -71,11 +71,8 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
         if (cmd.hasIntoClause) {
           throw QueryCompilationErrors.invalidStatementForExecuteInto(sqlStmtStr)
         }
-        // Commands may produce output (e.g., SET commands) - collect the actual results
-        // The Thrift Server relies on CommandResult containing the actual output data
-        val commandRows = result.queryExecution.executedPlan.executeCollect()
-        CommandResult(
-          command.output, command, result.queryExecution.executedPlan, commandRows.toSeq)
+        // Use the built-in command execution which already creates CommandResult properly
+        result.queryExecution.commandExecuted
       case _ =>
         // Regular queries - return the analyzed plan directly (no eager evaluation)
         result.queryExecution.analyzed
