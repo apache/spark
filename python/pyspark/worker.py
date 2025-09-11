@@ -1516,30 +1516,35 @@ def read_udtf(pickleSer, infile, eval_type):
 
     class ArrowUDTFWithPartition:
         """
-        This implements the logic of an Arrow UDTF (SQL_ARROW_UDTF) that accepts an input TABLE argument
-        with one or more PARTITION BY expressions. Arrow UDTFs receive data as PyArrow RecordBatch objects
-        instead of individual Row objects.
+        Implements logic for an Arrow UDTF (SQL_ARROW_UDTF) that accepts a TABLE argument
+        with one or more PARTITION BY expressions.
 
-        For example, let's assume we have a table like:
+        Arrow UDTFs receive data as PyArrow RecordBatch objects instead of individual Row
+        objects.
+
+        Example table:
             CREATE TABLE t (c1 INT, c2 INT) USING delta;
-        Then for the following queries:
+
+        Example queries:
             SELECT * FROM my_udtf(TABLE (t) PARTITION BY c1, c2);
-            The partition_child_indexes will be: 0, 1.
+            partition_child_indexes: 0, 1.
+
             SELECT * FROM my_udtf(TABLE (t) PARTITION BY c1, c2 + 4);
-            The partition_child_indexes will be: 0, 2 (where we add a projection for "c2 + 4").
+            partition_child_indexes: 0, 2 (adds a projection for "c2 + 4").
         """
 
         def __init__(self, create_udtf: Callable, partition_child_indexes: list):
             """
-            Creates a new instance of this class to wrap the provided Arrow UDTF with partitioning logic.
+            Create a new instance that wraps the provided Arrow UDTF with partitioning
+            logic.
 
             Parameters
             ----------
             create_udtf: function
-                Function to create a new instance of the Arrow UDTF to be invoked.
+                Function that creates a new instance of the Arrow UDTF to invoke.
             partition_child_indexes: list
-                List of integers identifying zero-based indexes of the columns of the input table
-                that contain projected partitioning expressions.
+                Zero-based indexes of input-table columns that contain projected
+                partitioning expressions.
             """
             self._create_udtf: Callable = create_udtf
             self._udtf = create_udtf()
@@ -1554,32 +1559,39 @@ def read_udtf(pickleSer, infile, eval_type):
             # Get the original batch with partition columns
             original_batch = self._get_table_arg(list(args) + list(kwargs.values()))
             if not isinstance(original_batch, pa.RecordBatch):
-                # Arrow UDTFs with PARTITION BY must have a TABLE argument that results in RecordBatch
+                # Arrow UDTFs with PARTITION BY must have a TABLE argument that
+                # results in a PyArrow RecordBatch
                 raise PySparkRuntimeError(
                     errorClass="INVALID_ARROW_UDTF_TABLE_ARGUMENT",
                     messageParameters={
-                        "actual_type": str(type(original_batch)) if original_batch is not None else "None"
-                    }
+                        "actual_type": str(type(original_batch))
+                        if original_batch is not None
+                        else "None"
+                    },
                 )
-            
+
             # Remove partition columns to get the filtered arguments
             filtered_args = [self._remove_partition_by_exprs(arg) for arg in args]
             filtered_kwargs = {
                 key: self._remove_partition_by_exprs(value) for (key, value) in kwargs.items()
             }
-            
+
             # Get the filtered RecordBatch (without partition columns)
             filtered_batch = self._get_table_arg(filtered_args + list(filtered_kwargs.values()))
 
             # Process the RecordBatch by partitions
-            yield from self._process_arrow_batch_by_partitions(original_batch, filtered_batch, filtered_args, filtered_kwargs)
+            yield from self._process_arrow_batch_by_partitions(
+                original_batch, filtered_batch, filtered_args, filtered_kwargs
+            )
 
-        def _process_arrow_batch_by_partitions(self, original_batch, filtered_batch, filtered_args, filtered_kwargs) -> Iterator:
+        def _process_arrow_batch_by_partitions(
+            self, original_batch, filtered_batch, filtered_args, filtered_kwargs
+        ) -> Iterator:
             """Process an Arrow RecordBatch by splitting it into partitions.
-            
+
             Since Catalyst guarantees that rows with the same partition key are contiguous,
             we can use efficient boundary detection instead of group_by.
-            
+
             Handles two scenarios:
             1. Multiple partitions within a single RecordBatch (using boundary detection)
             2. Same partition key continuing from previous RecordBatch (tracking state)
@@ -1589,22 +1601,24 @@ def read_udtf(pickleSer, infile, eval_type):
             if self._partition_child_indexes:
                 # Detect partition boundaries (much more efficient than group_by)
                 boundaries = self._detect_partition_boundaries(original_batch)
-                
+
                 # Process each contiguous partition
                 for i in range(len(boundaries) - 1):
                     start_idx = boundaries[i]
                     end_idx = boundaries[i + 1]
-                    
+
                     # Get the partition key for this segment
                     partition_key = tuple(
-                        original_batch.column(idx)[start_idx].as_py() 
+                        original_batch.column(idx)[start_idx].as_py()
                         for idx in self._partition_child_indexes
                     )
-                    
+
                     # Check if this is a continuation of the previous batch's partition
-                    is_new_partition = (self._last_partition_key is not None and 
-                                      partition_key != self._last_partition_key)
-                    
+                    is_new_partition = (
+                        self._last_partition_key is not None
+                        and partition_key != self._last_partition_key
+                    )
+
                     if is_new_partition:
                         # Previous partition ended, call terminate
                         if hasattr(self._udtf, "terminate"):
@@ -1615,13 +1629,13 @@ def read_udtf(pickleSer, infile, eval_type):
                         # Create new UDTF instance for new partition
                         self._udtf = self._create_udtf()
                         self._eval_raised_skip_rest_of_input_table = False
-                    
+
                     # Slice the filtered batch for this partition (efficient - creates a view)
                     partition_batch = filtered_batch.slice(start_idx, end_idx - start_idx)
-                    
+
                     # Update the last partition key
                     self._last_partition_key = partition_key
-                    
+
                     # Update filtered args to use the partition batch
                     partition_filtered_args = []
                     for arg in filtered_args:
@@ -1629,25 +1643,27 @@ def read_udtf(pickleSer, infile, eval_type):
                             partition_filtered_args.append(partition_batch)
                         else:
                             partition_filtered_args.append(arg)
-                    
+
                     partition_filtered_kwargs = {}
                     for key, value in filtered_kwargs.items():
                         if isinstance(value, pa.RecordBatch):
                             partition_filtered_kwargs[key] = partition_batch
                         else:
                             partition_filtered_kwargs[key] = value
-                    
+
                     # Call the UDTF with this partition's data
                     if not self._eval_raised_skip_rest_of_input_table:
                         try:
-                            result = self._udtf.eval(*partition_filtered_args, **partition_filtered_kwargs)
+                            result = self._udtf.eval(
+                                *partition_filtered_args, **partition_filtered_kwargs
+                            )
                             if result is not None:
                                 for table in result:
                                     yield table
                         except SkipRestOfInputTableException:
                             # Skip remaining rows in this partition
                             self._eval_raised_skip_rest_of_input_table = True
-                    
+
                     # Don't terminate here - let the next batch or final terminate handle it
             else:
                 # No partitions, process the entire batch as one group
@@ -1671,41 +1687,40 @@ def read_udtf(pickleSer, infile, eval_type):
 
         def _get_table_arg(self, inputs: list):
             """Get the table argument (RecordBatch) from the inputs list.
-            
+
             For Arrow UDTFs with TABLE arguments, we can guarantee the table argument
             will be a pa.RecordBatch, not a Row.
             """
             import pyarrow as pa
-            
+
             # Find the RecordBatch in the arguments
             for arg in inputs:
                 if isinstance(arg, pa.RecordBatch):
                     return arg
-            
+
             # This shouldn't happen for Arrow UDTFs with TABLE arguments
             return None
-        
+
         def _detect_partition_boundaries(self, batch) -> list:
             """
             Efficiently detect partition boundaries in a batch with contiguous partitions.
-            
+
             Since Catalyst ensures rows with the same partition key are contiguous,
             we only need to find where partition values change.
-            
+
             Returns:
                 List of indices where each partition starts, plus the total row count.
                 For example: [0, 3, 8, 10] means partitions are rows [0:3), [3:8), [8:10)
             """
             boundaries = [0]  # First partition starts at index 0
-            
+
             if batch.num_rows <= 1 or not self._partition_child_indexes:
                 boundaries.append(batch.num_rows)
                 return boundaries
-            
+
             # Get partition column arrays
             partition_arrays = [batch.column(i) for i in self._partition_child_indexes]
-            
-            
+
             # Find boundaries by comparing consecutive rows
             for row_idx in range(1, batch.num_rows):
                 # Check if any partition column changed from previous row
@@ -1714,43 +1729,49 @@ def read_udtf(pickleSer, infile, eval_type):
                     if col_array[row_idx].as_py() != col_array[row_idx - 1].as_py():
                         partition_changed = True
                         break
-                
+
                 if partition_changed:
                     boundaries.append(row_idx)
-            
+
             boundaries.append(batch.num_rows)  # Last boundary at end
             return boundaries
-        
+
         def _remove_partition_by_exprs(self, arg: Any) -> Any:
             """
             Remove partition columns from the RecordBatch argument.
-            
+
             Why this is needed:
-            When a UDTF is called with TABLE(t) PARTITION BY expressions, Catalyst transforms the data:
-            1. Adds any complex partition expressions as new columns (e.g., "c2 + 4" becomes a new column)
+            When a UDTF is called with TABLE(t) PARTITION BY expressions, Catalyst transforms
+            the data:
+            1. Adds complex partition expressions as new columns
+               (e.g., "c2 + 4" becomes a new column)
             2. Repartitions data by partition columns using hash partitioning
             3. Sends ALL columns (including partition columns) to the Python worker
-            
-            The partition columns serve two purposes:
-            - Routing: Determining which worker processes which partition
-            - Boundary detection: Knowing when one partition ends and another begins
-            
-            However, the user's UDTF implementation should only receive the actual table data,
-            not the partition columns. This method filters out the partition columns before
-            passing data to the user's UDTF eval() method.
-            
+
+            Partition columns serve two purposes:
+            - Routing: decide which worker processes which partition
+            - Boundary detection: know when one partition ends and another begins
+
+            However, the user's UDTF should only receive the actual table data, not the
+            partition columns. This method filters out partition columns before passing
+            data to the user's UDTF eval() method.
+
             Example:
             - User writes: SELECT * FROM udtf(TABLE(t) PARTITION BY c1, c2)
-            - Catalyst sends: RecordBatch with [c1, c2, c3, c4], partition_child_indexes=[0, 1]
-            - This method removes columns at indexes 0, 1 if they're pure partition columns
+            - Catalyst sends: RecordBatch with [c1, c2, c3, c4],
+              partition_child_indexes=[0, 1]
+            - This method removes columns at indexes 0, 1 if they are pure partition columns
             - UDTF.eval() receives: RecordBatch with only the non-partition columns
             """
             import pyarrow as pa
-            
+
             if isinstance(arg, pa.RecordBatch):
                 # Remove partition columns from the RecordBatch
-                keep_indices = [i for i in range(len(arg.schema.names)) 
-                              if i not in self._partition_child_indexes]
+                keep_indices = [
+                    i
+                    for i in range(len(arg.schema.names))
+                    if i not in self._partition_child_indexes
+                ]
                 if keep_indices:
                     # Select only the columns we want to keep
                     keep_arrays = [arg.column(i) for i in keep_indices]
@@ -1758,8 +1779,10 @@ def read_udtf(pickleSer, infile, eval_type):
                     return pa.RecordBatch.from_arrays(keep_arrays, names=keep_names)
                 else:
                     # If no columns remain, return an empty RecordBatch with the same number of rows
-                    return pa.RecordBatch.from_arrays([], schema=pa.schema([]), num_rows=arg.num_rows)
-            
+                    return pa.RecordBatch.from_arrays(
+                        [], schema=pa.schema([]), num_rows=arg.num_rows
+                    )
+
             # For non-RecordBatch arguments (like scalar pa.Arrays), return unchanged
             return arg
 
