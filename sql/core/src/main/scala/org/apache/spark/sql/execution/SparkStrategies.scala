@@ -94,9 +94,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // plan, instead of planning limit and offset separately.
         case LimitAndOffset(limit, offset, child) =>
           CollectLimitExec(limit = limit, child = planLater(child), offset = offset)
-        case OffsetAndLimit(offset, limit, child) =>
+        case OffsetAndLimit(offset, _, localLimit, child) =>
           // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
-          CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
+          CollectLimitExec(limit = localLimit, child = planLater(child), offset = offset)
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit = limit, child = planLater(child))
         case logical.Offset(IntegerLiteral(offset), child) =>
@@ -121,14 +121,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         Some(TakeOrderedAndProjectExec(
           limit, order, projectList, planLater(child), offset))
       // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
-      case OffsetAndLimit(offset, limit, Sort(order, true, child, _))
-          if offset + limit < conf.topKSortFallbackThreshold =>
-        Some(TakeOrderedAndProjectExec(
-          offset + limit, order, child.output, planLater(child), offset))
-      case OffsetAndLimit(offset, limit, Project(projectList, Sort(order, true, child, _)))
-          if offset + limit < conf.topKSortFallbackThreshold =>
-        Some(TakeOrderedAndProjectExec(
-          offset + limit, order, projectList, planLater(child), offset))
+      case OffsetAndLimit(offset, _, localLimit, Sort(order, true, child, _))
+          if localLimit < conf.topKSortFallbackThreshold =>
+        Some(TakeOrderedAndProjectExec(localLimit, order, child.output, planLater(child), offset))
+      case OffsetAndLimit(offset, _, localLimit, Project(projectList, Sort(order, true, child, _)))
+          if localLimit < conf.topKSortFallbackThreshold =>
+        Some(TakeOrderedAndProjectExec(localLimit, order, projectList, planLater(child), offset))
       case Limit(IntegerLiteral(limit), Sort(order, true, child, _))
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
@@ -1037,10 +1035,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case LimitAndOffset(limit, offset, child) =>
         GlobalLimitExec(limit,
           LocalLimitExec(limit, planLater(child)), offset) :: Nil
-      case OffsetAndLimit(offset, limit, child) =>
+      case OffsetAndLimit(offset, _, localLimit, child) =>
         // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
-        GlobalLimitExec(offset + limit,
-          LocalLimitExec(offset + limit, planLater(child)), offset) :: Nil
+        GlobalLimitExec(localLimit,
+          LocalLimitExec(localLimit, planLater(child)), offset) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>

@@ -1652,14 +1652,14 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
 }
 
 object OffsetAndLimit {
-  def unapply(p: GlobalLimit): Option[(Int, Int, LogicalPlan)] = {
+  def unapply(p: GlobalLimit): Option[(Int, Int, Int, LogicalPlan)] = {
     p match {
       // Optimizer pushes local limit through offset, so we need to match the plan this way.
       case GlobalLimit(IntegerLiteral(globalLimit),
              Offset(IntegerLiteral(offset),
                LocalLimit(IntegerLiteral(localLimit), child)))
           if globalLimit + offset == localLimit =>
-        Some((offset, globalLimit, child))
+        Some((offset, globalLimit, localLimit, child))
       case _ => None
     }
   }
