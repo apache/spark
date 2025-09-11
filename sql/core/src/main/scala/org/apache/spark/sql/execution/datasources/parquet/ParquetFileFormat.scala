@@ -292,7 +292,7 @@ class ParquetFileFormat
           val iter = new RecordReaderIterator(vectorizedReader)
           try {
             shouldCloseInputStream = false
-            // We don't need to take care the closeness of inputStream because this transfers
+            // We don't need to take care the close of inputStream because this transfers
             // the ownership of inputStream to the vectorizedReader
             vectorizedReader.initialize(
               split, hadoopAttemptContext, inputFileOpt, inputStreamOpt, Some(fileFooter))
