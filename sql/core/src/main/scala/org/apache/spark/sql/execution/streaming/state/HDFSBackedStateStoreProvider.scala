@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -292,9 +292,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Get the state store for making updates to create a new `version` of the store. */
   override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     if (uniqueId.isDefined) {
-      throw QueryExecutionErrors.cannotLoadStore(new SparkException(
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
         "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
-        "but a state store checkpointID is passed in"))
+        "but a state store checkpointID is passed in")
     }
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +
@@ -369,10 +369,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false,
       stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
-    assert(
-      !storeConf.enableStateStoreCheckpointIds,
-      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2 " +
-        s"checkpointFormatVersion ${storeConf.stateStoreCheckpointFormatVersion}")
+    if (storeConf.enableStateStoreCheckpointIds) {
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1")
+    }
 
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
@@ -515,7 +515,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       logInfo(log"Trying to add version=${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} to state " +
         log"cache map with current_size=${MDC(LogKeys.NUM_LOADED_ENTRIES, loadedEntries)} and " +
         log"earliest_loaded_version=" +
-        log"${MDC(LogKeys.EARLIEST_LOADED_VERSION, earliestLoadedVersion.get)}} " +
+        log"${MDC(LogKeys.EARLIEST_LOADED_VERSION, earliestLoadedVersion.get)} " +
         log"and max_versions_to_retain_in_memory=" +
         log"${MDC(LogKeys.NUM_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
     } else {
@@ -972,10 +972,22 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[HDFSBackedStateStore]]
    */
   override def replayStateFromSnapshot(
-      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
+      snapshotVersion: Long,
+      endVersion: Long,
+      readOnly: Boolean,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): StateStore = {
+    if (snapshotVersionStateStoreCkptId.isDefined || endVersionStateStoreCkptId.isDefined) {
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in")
+    }
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
@@ -990,10 +1002,21 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[HDFSBackedReadStateStore]]
    */
-  override def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long):
+  override def replayReadStateFromSnapshot(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None):
     ReadStateStore = {
+    if (snapshotVersionStateStoreCkptId.isDefined || endVersionStateStoreCkptId.isDefined) {
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in")
+    }
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
@@ -1064,8 +1087,16 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   override def getStateStoreChangeDataReader(
       startVersion: Long,
       endVersion: Long,
-      colFamilyNameOpt: Option[String] = None):
+      colFamilyNameOpt: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None):
     StateStoreChangeDataReader = {
+
+    if (endVersionStateStoreCkptId.isDefined) {
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in")
+    }
+
     // Multiple column families are not supported with HDFSBackedStateStoreProvider
     if (colFamilyNameOpt.isDefined) {
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
@@ -1099,7 +1130,7 @@ class HDFSBackedStateStoreChangeDataReader(
   extends StateStoreChangeDataReader(
     fm, stateLocation, startVersion, endVersion, compressionCodec) {
 
-  override protected var changelogSuffix: String = "delta"
+  override protected val changelogSuffix: String = "delta"
 
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     val reader = currentChangelogReader()

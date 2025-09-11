@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.{SparkConf, SparkException, SparkNumberFormatException}
+import org.apache.spark.{SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SqlScriptingContextManager}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
@@ -33,30 +33,18 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Output from the interpreter (iterator over executable statements) is then checked - statements
  *   are executed and output DataFrames are compared with expected outputs.
  */
-class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
-
-  // Tests setup
-  override protected def sparkConf: SparkConf = {
-    super.sparkConf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
-  }
+class SqlScriptingInterpreterSuite
+    extends QueryTest
+    with SharedSparkSession
+    with SqlScriptingTestUtils {
 
   // Helpers
   private def runSqlScript(
       sqlText: String,
       args: Map[String, Expression] = Map.empty): Array[DataFrame] = {
-    val interpreter = SqlScriptingInterpreter(spark)
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
 
-    // Initialize context so scopes can be entered correctly.
-    val context = new SqlScriptingExecutionContext()
-    val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
-    context.frames.append(new SqlScriptingExecutionFrame(
-      executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
-    executionPlan.enterScope()
-
-    val handle =
-      SqlScriptingContextManager.create(new SqlScriptingContextManagerImpl(context))
-    handle.runWith {
+    withSqlScriptingContextManager(spark, compoundBody, args) { executionPlan =>
       executionPlan.getTreeIterator.flatMap {
         case statement: SingleStatementExec =>
           if (statement.isExecuted) {

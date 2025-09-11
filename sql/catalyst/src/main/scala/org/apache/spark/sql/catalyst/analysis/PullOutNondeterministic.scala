@@ -42,7 +42,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         NondeterministicExpressionCollection.getNondeterministicToAttributes(a.groupingExpressions)
       val newChild = Project(a.child.output ++ nondeterToAttr.values.asScala.toSeq, a.child)
       val deterministicAggregate = a.transformExpressions { case e =>
-        Option(nondeterToAttr.get(e)).map(_.toAttribute).getOrElse(e)
+        Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
       }.copy(child = newChild)
 
       deterministicAggregate.groupingExpressions.foreach(expr => if (!expr.deterministic) {
@@ -69,7 +69,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(p.expressions)
       val newPlan = p.transformExpressions { case e =>
-        Option(nondeterToAttr.get(e)).map(_.toAttribute).getOrElse(e)
+        Option(nondeterToAttr.get(e.canonicalized)).map(_.toAttribute).getOrElse(e)
       }
       val newChild = Project(p.child.output ++ nondeterToAttr.values.asScala.toSeq, p.child)
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))

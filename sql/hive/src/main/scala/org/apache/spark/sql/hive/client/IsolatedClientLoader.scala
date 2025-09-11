@@ -65,7 +65,7 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            val fallbackVersion = "3.4.1"
+            val fallbackVersion = "3.4.2"
             logWarning(log"Failed to resolve Hadoop artifacts for the version " +
               log"${MDC(HADOOP_VERSION, hadoopVersion)}. We will change the hadoop version from " +
               log"${MDC(HADOOP_VERSION, hadoopVersion)} to " +

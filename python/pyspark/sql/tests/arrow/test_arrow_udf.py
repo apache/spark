@@ -15,11 +15,13 @@
 # limitations under the License.
 #
 
+import os
+import time
 import unittest
 import datetime
 
 from pyspark.sql.functions import arrow_udf, ArrowUDFType, PandasUDFType
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Row
 from pyspark.sql.types import (
     DoubleType,
     StructType,
@@ -97,6 +99,65 @@ class ArrowUDFTestsMixin:
         self.assertEqual(foo.returnType, DoubleType())
         self.assertEqual(foo.evalType, PythonEvalType.SQL_SCALAR_ARROW_UDF)
 
+    def test_time_zone_against_map_in_arrow(self):
+        import pyarrow as pa
+
+        for tz in [
+            "Asia/Shanghai",
+            "Asia/Hong_Kong",
+            "America/Los_Angeles",
+            "Pacific/Honolulu",
+            "Europe/Amsterdam",
+            "US/Pacific",
+        ]:
+            with self.sql_conf({"spark.sql.session.timeZone": tz}):
+                # There is a time-zone conversion in df.collect:
+                # ts.astimezone().replace(tzinfo=None)
+                # it is controlled by env os.environ["TZ"].
+                # Note that if the env is not equvilent to spark.sql.session.timeZone,
+                # than there is a mismatch between the internal arrow data and df.collect.
+                os.environ["TZ"] = tz
+                time.tzset()
+
+                df = self.spark.sql("SELECT TIMESTAMP('2019-04-12 15:50:01') AS ts")
+
+                def check_value(t):
+                    assert isinstance(t, pa.Array)
+                    assert isinstance(t, pa.TimestampArray)
+                    assert isinstance(t[0], pa.Scalar)
+                    assert isinstance(t[0], pa.TimestampScalar)
+                    ts = t[0].as_py()
+                    assert isinstance(ts, datetime.datetime)
+                    assert ts.year == 2019
+                    assert ts.month == 4
+                    assert ts.day == 12
+                    assert ts.hour == 15
+                    assert ts.minute == 50
+                    assert ts.second == 1
+                    # the timezone is still kept in the internal arrow data
+                    assert ts.tzinfo is not None
+                    assert str(ts.tzinfo) == tz, str(ts.tzinfo)
+
+                @arrow_udf("timestamp")
+                def identity(t):
+                    check_value(t)
+                    return t
+
+                expected = [Row(ts=datetime.datetime(2019, 4, 12, 15, 50, 1))]
+                self.assertEqual(expected, df.collect())
+
+                result1 = df.select(identity("ts").alias("ts"))
+                self.assertEqual(expected, result1.collect())
+
+                def identity2(iter):
+                    for batch in iter:
+                        t = batch["ts"]
+                        check_value(t)
+                        yield batch
+
+                result2 = df.mapInArrow(identity2, "ts timestamp")
+                self.assertEqual(expected, result2.collect())
+
     def test_arrow_udf_wrong_arg(self):
         with self.quiet():
             with self.assertRaises(ParseException):
@@ -165,6 +226,13 @@ class ArrowUDFTestsMixin:
                 def zero_with_type():
                     return 1
 
+            with self.assertRaisesRegex(ValueError, "0-arg arrow_udfs.*not.*supported"):
+
+                @arrow_udf(LongType(), ArrowUDFType.SCALAR_ITER)
+                def zero_with_type():
+                    yield 1
+                    yield 2
+
     def test_arrow_udf_timestamp_ntz(self):
         import pyarrow as pa
 
@@ -206,7 +274,10 @@ class ArrowUDFTestsMixin:
 
 
 class ArrowUDFTests(ArrowUDFTestsMixin, ReusedSQLTestCase):
-    pass
+    def setUp(self):
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
 
 
 if __name__ == "__main__":

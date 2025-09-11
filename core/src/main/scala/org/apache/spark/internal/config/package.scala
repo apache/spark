@@ -291,14 +291,6 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val EVENT_LOG_READER_MAX_STRING_LENGTH =
-    ConfigBuilder("spark.eventLog.readerMaxStringLength")
-      .doc("Limit the maximum string size an eventlog item can have when deserializing it.")
-      .version("4.1.0")
-      .intConf
-      .checkValue(_ > 0, "Maximum string size of an eventLog item should be positive.")
-      .createWithDefault(Int.MaxValue)
-
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
@@ -1607,9 +1599,9 @@ package object config {
       .createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD =
-    ConfigBuilder("spark.shuffle.spill.maxRecordsSizeForSpillThreshold")
+    ConfigBuilder("spark.shuffle.spill.maxSizeInBytesForSpillThreshold")
       .internal()
-      .doc("The maximum size in memory before forcing the shuffle sorter to spill. " +
+      .doc("The maximum in memory size in bytes before forcing the shuffle sorter to spill. " +
         "By default it is Long.MAX_VALUE, which means we never force the sorter to spill, " +
         "until we reach some limitations, like the max page size limitation for the pointer " +
         "array in the sorter.")
@@ -2318,6 +2310,15 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT =
+    ConfigBuilder("spark.submit.callSystemExitOnMainExit")
+      .doc("If true, SparkSubmit will call System.exit() to initiate JVM shutdown once the " +
+        "user's main method has exited. This can be useful in cases where non-daemon JVM " +
+        "threads might otherwise prevent the JVM from shutting down on its own.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val SCHEDULER_ALLOCATION_FILE =
     ConfigBuilder("spark.scheduler.allocation.file")

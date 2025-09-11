@@ -227,6 +227,68 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                     result_batches.append(batch.column(i))
             yield result_batches
 
+    def _create_array(self, arr, arrow_type):
+        import pyarrow as pa
+
+        assert isinstance(arr, pa.Array)
+        assert isinstance(arrow_type, pa.DataType)
+        if arr.type == arrow_type:
+            return arr
+        else:
+            try:
+                # when safe is True, the cast will fail if there's a overflow or other
+                # unsafe conversion.
+                # RecordBatch.cast(...) isn't used as minimum PyArrow version
+                # required for RecordBatch.cast(...) is v16.0
+                return arr.cast(target_type=arrow_type, safe=True)
+            except (pa.ArrowInvalid, pa.ArrowTypeError):
+                raise PySparkRuntimeError(
+                    errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
+                    messageParameters={
+                        "expected": str(arrow_type),
+                        "actual": str(arr.type),
+                    },
+                )
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override to handle type coercion for ArrowUDTF outputs.
+        ArrowUDTF returns iterator of (pa.RecordBatch, arrow_return_type) tuples.
+        """
+        import pyarrow as pa
+
+        def apply_type_coercion():
+            for batch, arrow_return_type in iterator:
+                assert isinstance(
+                    arrow_return_type, pa.StructType
+                ), f"Expected pa.StructType, got {type(arrow_return_type)}"
+
+                # Handle empty struct case specially
+                if batch.num_columns == 0:
+                    coerced_batch = batch  # skip type coercion
+                else:
+                    expected_field_names = [field.name for field in arrow_return_type]
+                    actual_field_names = batch.schema.names
+
+                    if expected_field_names != actual_field_names:
+                        raise PySparkTypeError(
+                            "Target schema's field names are not matching the record batch's "
+                            "field names. "
+                            f"Expected: {expected_field_names}, but got: {actual_field_names}."
+                        )
+
+                    coerced_arrays = []
+                    for i, field in enumerate(arrow_return_type):
+                        original_array = batch.column(i)
+                        coerced_array = self._create_array(original_array, field.type)
+                        coerced_arrays.append(coerced_array)
+                    coerced_batch = pa.RecordBatch.from_arrays(
+                        coerced_arrays, names=expected_field_names
+                    )
+                yield coerced_batch, arrow_return_type
+
+        return super().dump_stream(apply_type_coercion(), stream)
+
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
@@ -735,8 +797,6 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         assert isinstance(arr, pa.Array)
         assert isinstance(arrow_type, pa.DataType)
 
-        # TODO: should we handle timezone here?
-
         if arr.type == arrow_type:
             return arr
         elif arrow_cast:
@@ -791,8 +851,11 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         A timezone to respect when handling timestamp values
     safecheck : bool
         If True, conversion from Arrow to Pandas checks for overflow/truncation
-    input_types : bool
-        If True, then Pandas DataFrames will get columns by name
+    input_types : list
+        List of input data types for the UDF
+    int_to_decimal_coercion_enabled : bool
+        If True, applies additional coercions in Python before converting to Arrow
+        This has performance penalties.
     """
 
     def __init__(
@@ -800,6 +863,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         timezone,
         safecheck,
         input_types,
+        int_to_decimal_coercion_enabled=False,
     ):
         super().__init__(
             timezone=timezone,
@@ -808,6 +872,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
             arrow_cast=True,
         )
         self._input_types = input_types
+        self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
 
     def load_stream(self, stream):
         """
@@ -858,7 +923,11 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         import pyarrow as pa
 
         def create_array(results, arrow_type, spark_type):
-            conv = LocalDataToArrowConversion._create_converter(spark_type, none_on_identity=True)
+            conv = LocalDataToArrowConversion._create_converter(
+                spark_type,
+                none_on_identity=True,
+                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+            )
             converted = [conv(res) for res in results] if conv is not None else results
             try:
                 return pa.array(converted, type=arrow_type)

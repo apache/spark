@@ -459,6 +459,7 @@ def assertSchemaEqual(
     ignoreColumnOrder: bool = False,
     ignoreColumnName: bool = False,
 ):
+    __tracebackhide__ = True
     r"""
     A util function to assert equality between DataFrame schemas `actual` and `expected`.
 
@@ -648,6 +649,7 @@ def assertDataFrameEqual(
     showOnlyDiff: bool = False,
     includeDiffRows=False,
 ):
+    __tracebackhide__ = True
     r"""
     A util function to assert equality between `actual` and `expected`
     (DataFrames or lists of Rows), with optional parameters `checkRowOrder`, `rtol`, and `atol`.
@@ -1034,6 +1036,7 @@ def assertDataFrameEqual(
     def assert_rows_equal(
         rows1: List[Row], rows2: List[Row], maxErrors: int = None, showOnlyDiff: bool = False
     ):
+        __tracebackhide__ = True
         zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
         diff_rows = []

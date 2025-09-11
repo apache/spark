@@ -403,15 +403,13 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 8
           }, {
             "integer": 6
-          }]
+          }],
+          "dataType": {
+          }
         }
       },
       "common": {
@@ -700,17 +698,15 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 1
           }, {
             "integer": 2
           }, {
             "integer": 3
-          }]
+          }],
+          "dataType": {
+          }
         }
       },
       "common": {
@@ -733,17 +729,15 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 1
           }, {
             "integer": 2
           }, {
             "integer": 3
-          }]
+          }],
+          "dataType": {
+          }
         }
       },
       "common": {
@@ -766,15 +760,6 @@
     }, {
       "literal": {
         "map": {
-          "keyType": {
-            "string": {
-              "collation": "UTF8_BINARY"
-            }
-          },
-          "valueType": {
-            "integer": {
-            }
-          },
           "keys": [{
             "string": "a"
           }, {
@@ -784,7 +769,14 @@
             "integer": 1
           }, {
             "integer": 2
-          }]
+          }],
+          "dataType": {
+            "keyType": {
+              "string": {
+                "collation": "UTF8_BINARY"
+              }
+            }
+          }
         }
       },
       "common": {
@@ -875,13 +867,12 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 1
-          }]
+          }],
+          "dataType": {
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -904,14 +895,6 @@
     }, {
       "literal": {
         "map": {
-          "keyType": {
-            "integer": {
-            }
-          },
-          "valueType": {
-            "integer": {
-            }
-          },
           "keys": [{
             "integer": 1
           }],
@@ -920,7 +903,10 @@
               "integer": {
               }
             }
-          }]
+          }],
+          "dataType": {
+            "valueContainsNull": true
+          }
         }
       },
       "common": {
@@ -943,14 +929,6 @@
     }, {
       "literal": {
         "map": {
-          "keyType": {
-            "integer": {
-            }
-          },
-          "valueType": {
-            "integer": {
-            }
-          },
           "keys": [{
             "integer": 1
           }],
@@ -959,7 +937,10 @@
               "integer": {
               }
             }
-          }]
+          }],
+          "dataType": {
+            "valueContainsNull": true
+          }
         }
       },
       "common": {
@@ -982,14 +963,6 @@
     }, {
       "literal": {
         "map": {
-          "keyType": {
-            "integer": {
-            }
-          },
-          "valueType": {
-            "integer": {
-            }
-          },
           "keys": [{
             "integer": 1
           }],
@@ -998,7 +971,10 @@
               "integer": {
               }
             }
-          }]
+          }],
+          "dataType": {
+            "valueContainsNull": true
+          }
         }
       },
       "common": {
@@ -1021,34 +997,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "array": {
-              "elementType": {
-                "integer": {
-                }
-              }
-            }
-          },
           "elements": [{
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 1
               }, {
                 "integer": 2
               }, {
                 "integer": 3
-              }]
+              }],
+              "dataType": {
+              }
             }
           }, {
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 4
               }, {
@@ -1059,10 +1021,6 @@
             }
           }, {
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 7
               }, {
@@ -1071,7 +1029,10 @@
                 "integer": 9
               }]
             }
-          }]
+          }],
+          "dataType": {
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -1094,30 +1055,8 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              }
-            }
-          },
           "elements": [{
             "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              },
               "keys": [{
                 "string": "a"
               }, {
@@ -1127,19 +1066,17 @@
                 "integer": 1
               }, {
                 "integer": 2
-              }]
+              }],
+              "dataType": {
+                "keyType": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                }
+              }
             }
           }, {
             "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              },
               "keys": [{
                 "string": "a"
               }, {
@@ -1153,15 +1090,6 @@
             }
           }, {
             "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              },
               "keys": [{
                 "string": "a"
               }, {
@@ -1173,7 +1101,117 @@
                 "integer": 6
               }]
             }
-          }]
+          }],
+          "dataType": {
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
+            "map": {
+              "keys": [{
+                "string": "a"
+              }, {
+                "string": "b"
+              }],
+              "values": [{
+                "array": {
+                  "elements": [{
+                    "string": "1"
+                  }, {
+                    "string": "2"
+                  }],
+                  "dataType": {
+                    "elementType": {
+                      "string": {
+                        "collation": "UTF8_BINARY"
+                      }
+                    },
+                    "containsNull": true
+                  }
+                }
+              }, {
+                "array": {
+                  "elements": [{
+                    "string": "3"
+                  }, {
+                    "string": "4"
+                  }]
+                }
+              }],
+              "dataType": {
+                "keyType": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                },
+                "valueContainsNull": true
+              }
+            }
+          }, {
+            "map": {
+              "keys": [{
+                "string": "a"
+              }, {
+                "string": "b"
+              }],
+              "values": [{
+                "array": {
+                  "elements": [{
+                    "string": "5"
+                  }, {
+                    "string": "6"
+                  }]
+                }
+              }, {
+                "array": {
+                  "elements": [{
+                    "string": "7"
+                  }, {
+                    "string": "8"
+                  }]
+                }
+              }]
+            }
+          }, {
+            "map": {
+              "keys": [{
+                "string": "a"
+              }, {
+                "string": "b"
+              }],
+              "values": [{
+                "array": {
+                }
+              }, {
+                "array": {
+                }
+              }]
+            }
+          }],
+          "dataType": {
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -1196,23 +1234,6 @@
     }, {
       "literal": {
         "map": {
-          "keyType": {
-            "integer": {
-            }
-          },
-          "valueType": {
-            "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              }
-            }
-          },
           "keys": [{
             "integer": 1
           }, {
@@ -1220,15 +1241,6 @@
           }],
           "values": [{
             "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              },
               "keys": [{
                 "string": "a"
               }, {
@@ -1238,19 +1250,17 @@
                 "integer": 1
               }, {
                 "integer": 2
-              }]
+              }],
+              "dataType": {
+                "keyType": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                }
+              }
             }
           }, {
             "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              },
               "keys": [{
                 "string": "a"
               }, {
@@ -1262,7 +1272,10 @@
                 "integer": 4
               }]
             }
-          }]
+          }],
+          "dataType": {
+            "valueContainsNull": true
+          }
         }
       },
       "common": {
@@ -1287,29 +1300,18 @@
         "struct": {
           "elements": [{
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 1
               }, {
                 "integer": 2
               }, {
                 "integer": 3
-              }]
+              }],
+              "dataType": {
+              }
             }
           }, {
             "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              },
               "keys": [{
                 "string": "a"
               }, {
@@ -1319,7 +1321,14 @@
                 "integer": 1
               }, {
                 "integer": 2
-              }]
+              }],
+              "dataType": {
+                "keyType": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                }
+              }
             }
           }, {
             "struct": {
@@ -1327,15 +1336,6 @@
                 "string": "a"
               }, {
                 "map": {
-                  "keyType": {
-                    "integer": {
-                    }
-                  },
-                  "valueType": {
-                    "string": {
-                      "collation": "UTF8_BINARY"
-                    }
-                  },
                   "keys": [{
                     "integer": 1
                   }, {
@@ -1345,7 +1345,15 @@
                     "string": "a"
                   }, {
                     "string": "b"
-                  }]
+                  }],
+                  "dataType": {
+                    "valueType": {
+                      "string": {
+                        "collation": "UTF8_BINARY"
+                      }
+                    },
+                    "valueContainsNull": true
+                  }
                 }
               }],
               "dataTypeStruct": {
@@ -1359,20 +1367,6 @@
                   "nullable": true
                 }, {
                   "name": "_2",
-                  "dataType": {
-                    "map": {
-                      "keyType": {
-                        "integer": {
-                        }
-                      },
-                      "valueType": {
-                        "string": {
-                          "collation": "UTF8_BINARY"
-                        }
-                      },
-                      "valueContainsNull": true
-                    }
-                  },
                   "nullable": true
                 }]
               }
@@ -1381,30 +1375,9 @@
           "dataTypeStruct": {
             "fields": [{
               "name": "_1",
-              "dataType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  }
-                }
-              },
               "nullable": true
             }, {
               "name": "_2",
-              "dataType": {
-                "map": {
-                  "keyType": {
-                    "string": {
-                      "collation": "UTF8_BINARY"
-                    }
-                  },
-                  "valueType": {
-                    "integer": {
-                    }
-                  }
-                }
-              },
               "nullable": true
             }, {
               "name": "_3",

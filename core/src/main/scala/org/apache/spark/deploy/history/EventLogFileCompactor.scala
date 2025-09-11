@@ -31,7 +31,7 @@ import org.apache.spark.deploy.history.EventFilter.FilterStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.scheduler.ReplayListenerBus
-import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * This class compacts the old event log files into one compact file, via two phases reading:
@@ -54,8 +54,6 @@ class EventLogFileCompactor(
     compactionThresholdScore: Double) extends Logging {
 
   require(maxFilesToRetain > 0, "Max event log files to retain should be higher than 0.")
-
-  private val jsonProtocol = new JsonProtocol(sparkConf)
 
   /**
    * Compacts the old event log files into one compact file, and clean old event log files being
@@ -115,7 +113,7 @@ class EventLogFileCompactor(
    * them via replaying events in given files.
    */
   private def initializeBuilders(fs: FileSystem, files: Seq[Path]): Seq[EventFilterBuilder] = {
-    val bus = new ReplayListenerBus(jsonProtocol)
+    val bus = new ReplayListenerBus()
 
     val builders = ServiceLoader.load(classOf[EventFilterBuilder],
       Utils.getContextOrSparkClassLoader).asScala.toSeq
@@ -155,7 +153,7 @@ class EventLogFileCompactor(
     val startTime = System.currentTimeMillis()
     logWriter.start()
     eventLogFiles.foreach { file =>
-      EventFilter.applyFilterToFile(fs, filters, file.getPath, jsonProtocol,
+      EventFilter.applyFilterToFile(fs, filters, file.getPath,
         onAccepted = (line, _) => logWriter.writeEvent(line, flushLogger = true),
         onRejected = (_, _) => {},
         onUnidentified = line => logWriter.writeEvent(line, flushLogger = true)

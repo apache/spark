@@ -25,15 +25,12 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
-import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType
@@ -43,8 +40,6 @@ import org.apache.spark.sql.execution.streaming.state.StateMessage.KeyAndValuePa
 import org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithListGet
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -60,16 +55,12 @@ class TransformWithStateInPySparkStateServer(
     stateServerSocket: ServerSocketChannel,
     statefulProcessorHandle: StatefulProcessorHandleImplBase,
     groupingKeySchema: StructType,
-    timeZoneId: String,
-    errorOnDuplicatedFieldNames: Boolean,
-    largeVarTypes: Boolean,
     arrowTransformWithStateInPySparkMaxRecordsPerBatch: Int,
     batchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForEviction: Option[Long] = None,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPySparkDeserializer = null,
-    arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
     iteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
     mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null,
@@ -533,28 +524,6 @@ class TransformWithStateInPySparkStateServer(
     }
   }
 
-  private def sendIteratorForListState(iter: Iterator[Row]): Unit = {
-    // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-    // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
-    // when there are multiple state variables, user tries to access a different state variable
-    // while the current state variable is not exhausted yet.
-    var rowCount = 0
-    while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
-      val data = iter.next()
-
-      // Serialize the value row as a byte array
-      val valueBytes = PythonSQLUtils.toPyRow(data)
-      val lenBytes = valueBytes.length
-
-      outputStream.writeInt(lenBytes)
-      outputStream.write(valueBytes)
-
-      rowCount += 1
-    }
-    outputStream.writeInt(-1)
-    outputStream.flush()
-  }
-
   private[sql] def handleMapStateRequest(message: MapStateCall): Unit = {
     val stateName = message.getStateName
     if (!mapStates.contains(stateName)) {
@@ -939,45 +908,6 @@ class TransformWithStateInPySparkStateServer(
       outputStream.write(responseMessageBytes)
     }
 
-    def sendIteratorAsArrowBatches[T](
-        iter: Iterator[T],
-        outputSchema: StructType,
-        arrowStreamWriterForTest: BaseStreamingArrowWriter = null)(func: T => InternalRow): Unit = {
-      outputStream.flush()
-      val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
-        errorOnDuplicatedFieldNames, largeVarTypes)
-      val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-        s"stdout writer for transformWithStateInPySpark state socket", 0, Long.MaxValue)
-      val root = VectorSchemaRoot.create(arrowSchema, allocator)
-      val writer = new ArrowStreamWriter(root, null, outputStream)
-      val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
-        arrowStreamWriterForTest
-      } else {
-        new BaseStreamingArrowWriter(root, writer,
-          arrowTransformWithStateInPySparkMaxRecordsPerBatch)
-      }
-      // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-      // the arrowTransformWithStateInPySparkMaxRecordsPerBatch limit. This is to handle a case
-      // when there are multiple state variables, user tries to access a different state variable
-      // while the current state variable is not exhausted yet.
-      var rowCount = 0
-      while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
-        val data = iter.next()
-        val internalRow = func(data)
-        arrowStreamWriter.writeRow(internalRow)
-        rowCount += 1
-      }
-      arrowStreamWriter.finalizeCurrentArrowBatch()
-      Utils.tryWithSafeFinally {
-        // end writes footer to the output stream and doesn't clean any resources.
-        // It could throw exception if the output stream is closed, so it should be
-        // in the try block.
-        writer.end()
-      } {
-        root.close()
-        allocator.close()
-      }
-    }
   }
 }
 

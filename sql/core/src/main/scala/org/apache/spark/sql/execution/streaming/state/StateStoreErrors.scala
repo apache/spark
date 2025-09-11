@@ -187,6 +187,11 @@ object StateStoreErrors {
       numSchemaFiles, schemaFilesThreshold, addedColFamilies, removedColFamilies)
   }
 
+  def streamingStateCheckpointLocationNotEmpty(checkpointLocation: String)
+    : StateStoreCheckpointLocationNotEmpty = {
+    new StateStoreCheckpointLocationNotEmpty(checkpointLocation)
+  }
+
   def stateStoreColumnFamilyMismatch(
       columnFamilyName: String,
       oldColumnFamilySchema: String,
@@ -253,6 +258,10 @@ object StateStoreErrors {
       case e: Throwable =>
         QueryExecutionErrors.cannotLoadStore(e)
     }
+  }
+
+  def stateStoreCheckpointIdsNotSupported(msg: String): StateStoreCheckpointIdsNotSupported = {
+    new StateStoreCheckpointIdsNotSupported(msg)
   }
 }
 
@@ -474,6 +483,13 @@ class StateStoreStateSchemaFilesThresholdExceeded(
       "addedColumnFamilies" -> addedColFamilies.mkString("(", ",", ")"),
       "removedColumnFamilies" -> removedColFamilies.mkString("(", ",", ")")))
 
+class StateStoreCheckpointLocationNotEmpty(
+    checkpointLocation: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
+    messageParameters = Map(
+      "checkpointLocation" -> checkpointLocation))
+
 class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
   extends SparkRuntimeException(
     errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_MISSING_SNAPSHOT_FILE",
@@ -531,6 +547,12 @@ class StateStoreOperationOutOfOrder(errorMsg: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
     messageParameters = Map("errorMsg" -> errorMsg)
+  )
+
+class StateStoreCheckpointIdsNotSupported(msg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_CHECKPOINT_IDS_NOT_SUPPORTED",
+    messageParameters = Map("msg" -> msg)
   )
 
 class StateStoreCommitValidationFailed(

@@ -34,7 +34,7 @@ if should_test_connect and have_yaml:
         load_pipeline_spec,
         register_definitions,
         unpack_pipeline_spec,
-        DefinitionsGlob,
+        LibrariesGlob,
         PipelineSpec,
         run,
     )
@@ -58,7 +58,7 @@ class CLIUtilityTests(unittest.TestCase):
                         "key1": "value1",
                         "key2": "value2"
                     },
-                    "definitions": [
+                    "libraries": [
                         {"glob": {"include": "test_include"}}
                     ]
                 }
@@ -70,8 +70,8 @@ class CLIUtilityTests(unittest.TestCase):
             assert spec.catalog == "test_catalog"
             assert spec.database == "test_database"
             assert spec.configuration == {"key1": "value1", "key2": "value2"}
-            assert len(spec.definitions) == 1
-            assert spec.definitions[0].include == "test_include"
+            assert len(spec.libraries) == 1
+            assert spec.libraries[0].include == "test_include"
 
     def test_load_pipeline_spec_name_is_required(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
@@ -84,7 +84,7 @@ class CLIUtilityTests(unittest.TestCase):
                         "key1": "value1",
                         "key2": "value2"
                     },
-                    "definitions": [
+                    "libraries": [
                         {"glob": {"include": "test_include"}}
                     ]
                 }
@@ -110,7 +110,7 @@ class CLIUtilityTests(unittest.TestCase):
                         "key1": "value1",
                         "key2": "value2"
                     },
-                    "definitions": [
+                    "libraries": [
                         {"glob": {"include": "test_include"}}
                     ]
                 }
@@ -121,8 +121,8 @@ class CLIUtilityTests(unittest.TestCase):
             assert spec.catalog == "test_catalog"
             assert spec.database == "test_database"
             assert spec.configuration == {"key1": "value1", "key2": "value2"}
-            assert len(spec.definitions) == 1
-            assert spec.definitions[0].include == "test_include"
+            assert len(spec.libraries) == 1
+            assert spec.libraries[0].include == "test_include"
 
     def test_load_pipeline_spec_invalid(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
@@ -134,7 +134,7 @@ class CLIUtilityTests(unittest.TestCase):
                         "key1": "value1",
                         "key2": "value2"
                     },
-                    "definitions": [
+                    "libraries": [
                         {"glob": {"include": "test_include"}}
                     ]
                 }
@@ -150,7 +150,7 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_unpack_empty_pipeline_spec(self):
         empty_spec = PipelineSpec(
-            name="test_pipeline", catalog=None, database=None, configuration={}, definitions=[]
+            name="test_pipeline", catalog=None, database=None, configuration={}, libraries=[]
         )
         self.assertEqual(unpack_pipeline_spec({"name": "test_pipeline"}), empty_spec)
 
@@ -176,7 +176,7 @@ class CLIUtilityTests(unittest.TestCase):
                     {
                         "catalog": "test_catalog",
                         "configuration": {},
-                        "definitions": []
+                        "libraries": []
                     }
                     """
                 )
@@ -193,7 +193,7 @@ class CLIUtilityTests(unittest.TestCase):
                     {
                         "catalog": "test_catalog",
                         "configuration": {},
-                        "definitions": []
+                        "libraries": []
                     }
                     """
                 )
@@ -226,7 +226,7 @@ class CLIUtilityTests(unittest.TestCase):
                     {
                         "catalog": "test_catalog",
                         "configuration": {},
-                        "definitions": []
+                        "libraries": []
                     }
                     """
                 )
@@ -240,7 +240,7 @@ class CLIUtilityTests(unittest.TestCase):
             catalog=None,
             database=None,
             configuration={},
-            definitions=[DefinitionsGlob(include="subdir1/*")],
+            libraries=[LibrariesGlob(include="subdir1/*")],
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             outer_dir = Path(temp_dir)
@@ -248,23 +248,23 @@ class CLIUtilityTests(unittest.TestCase):
             subdir1.mkdir()
             subdir2 = outer_dir / "subdir2"
             subdir2.mkdir()
-            with (subdir1 / "definitions.py").open("w") as f:
+            with (subdir1 / "libraries.py").open("w") as f:
                 f.write(
                     textwrap.dedent(
                         """
-                        from pyspark import pipelines as sdp
-                        @sdp.materialized_view
+                        from pyspark import pipelines as dp
+                        @dp.materialized_view
                         def mv1():
                             raise NotImplementedError()
                     """
                     )
                 )
 
-            with (subdir2 / "definitions.py").open("w") as f:
+            with (subdir2 / "libraries.py").open("w") as f:
                 f.write(
                     textwrap.dedent(
                         """
-                        from pyspark import pipelines as sdp
+                        from pyspark import pipelines as dp
                         def mv2():
                             raise NotImplementedError()
                     """
@@ -283,7 +283,7 @@ class CLIUtilityTests(unittest.TestCase):
             catalog=None,
             database=None,
             configuration={},
-            definitions=[DefinitionsGlob(include="*")],
+            libraries=[LibrariesGlob(include="*")],
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             outer_dir = Path(temp_dir)
@@ -301,7 +301,7 @@ class CLIUtilityTests(unittest.TestCase):
             catalog=None,
             database=None,
             configuration={},
-            definitions=[DefinitionsGlob(include="*")],
+            libraries=[LibrariesGlob(include="*")],
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             outer_dir = Path(temp_dir)
@@ -355,7 +355,7 @@ class CLIUtilityTests(unittest.TestCase):
                         catalog=None,
                         database=None,
                         configuration={},
-                        definitions=[DefinitionsGlob(include="defs.py")],
+                        libraries=[LibrariesGlob(include="defs.py")],
                     ),
                 )
 

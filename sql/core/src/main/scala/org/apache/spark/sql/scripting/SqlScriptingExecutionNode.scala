@@ -1174,7 +1174,7 @@ class ForStatementExec(
     val defaultExpression = DefaultValueExpression(
       Literal(null, queryColumnNameToDataType(varName)), "null")
     val declareVariable = CreateVariable(
-      UnresolvedIdentifier(Seq(varName)),
+      Seq(UnresolvedIdentifier(Seq(varName))),
       defaultExpression,
       replace = false
     )

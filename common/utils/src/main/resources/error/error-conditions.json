@@ -368,6 +368,11 @@
           "The change log writer version cannot be <version>."
         ]
       },
+      "INVALID_CHECKPOINT_LINEAGE" : {
+        "message" : [
+          "Invalid checkpoint lineage: <lineage>. <message>"
+        ]
+      },
       "KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
         "message" : [
           "<msg>"
@@ -1494,6 +1499,12 @@
     ],
     "sqlState" : "42711"
   },
+  "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
+    "message" : [
+      "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
       "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
@@ -1839,12 +1850,6 @@
       "An error occurred in the user provided function in foreach sink. Reason: <reason>"
     ],
     "sqlState" : "39000"
-  },
-  "FOUND_MULTIPLE_DATA_SOURCES" : {
-    "message" : [
-      "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
-    ],
-    "sqlState" : "42710"
   },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
@@ -4080,6 +4085,13 @@
     ],
     "sqlState" : "42K0L"
   },
+  "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED" : {
+    "message" : [
+      "LATERAL JOIN with Arrow-optimized user-defined table functions (UDTFs) is not supported. Arrow UDTFs cannot be used on the right-hand side of a lateral join.",
+      "Please use a regular UDTF instead, or restructure your query to avoid the lateral join."
+    ],
+    "sqlState" : "0A000"
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -5155,6 +5167,19 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_CHECKPOINT_IDS_NOT_SUPPORTED" : {
+    "message" : [
+      "<msg>"
+    ],
+    "sqlState" : "KD002"
+  },
+  "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
+    "message" : [
+      "The checkpoint location <checkpointLocation> should be empty on batch 0",
+      "Please either use a new checkpoint location, or delete the existing data in the checkpoint location."
+    ],
+    "sqlState" : "42K03"
+  },
   "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
     "message" : [
       "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
@@ -5392,6 +5417,14 @@
       }
     },
     "sqlState" : "42616"
+  },
+  "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED" : {
+    "message" : [
+      "Reading state across different checkpoint format versions is not supported.",
+      "startBatchId=<startBatchId>, endBatchId=<endBatchId>.",
+      "startFormatVersion=<startFormatVersion>, endFormatVersion=<endFormatVersion>."
+    ],
+    "sqlState" : "KD002"
   },
   "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
     "message" : [
@@ -6624,12 +6657,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION" : {
-    "message" : [
-      "The function <funcName> does not support streaming. Please remove the STREAM keyword"
-    ],
-    "sqlState" : "42000"
-  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"
@@ -6724,6 +6751,12 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_TABLE_CHANGE_IN_AUTO_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "The table changes <changes> are not supported by the catalog on table <tableName>."
+    ],
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [

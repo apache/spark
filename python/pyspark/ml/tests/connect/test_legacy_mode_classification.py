@@ -131,98 +131,108 @@ class ClassificationTestsMixin:
         import torch
 
         with tempfile.TemporaryDirectory(prefix="test_save_load") as tmp_dir:
-            estimator = LORV2(maxIter=2, numTrainWorkers=2, learningRate=0.001)
-            local_path = os.path.join(tmp_dir, "estimator")
-            estimator.saveToLocal(local_path)
-            loaded_estimator = LORV2.loadFromLocal(local_path)
-            assert loaded_estimator.uid == estimator.uid
-            assert loaded_estimator.getOrDefault(loaded_estimator.maxIter) == 2
-            assert loaded_estimator.getOrDefault(loaded_estimator.numTrainWorkers) == 2
-            assert loaded_estimator.getOrDefault(loaded_estimator.learningRate) == 0.001
-
-            # test overwriting
-            estimator2 = estimator.copy()
-            estimator2.set(estimator2.maxIter, 10)
-            estimator2.saveToLocal(local_path, overwrite=True)
-            loaded_estimator2 = LORV2.loadFromLocal(local_path)
-            assert loaded_estimator2.getOrDefault(loaded_estimator2.maxIter) == 10
-
-            fs_path = os.path.join(tmp_dir, "fs", "estimator")
-            estimator.save(fs_path)
-            loaded_estimator = LORV2.load(fs_path)
-            assert loaded_estimator.uid == estimator.uid
-            assert loaded_estimator.getOrDefault(loaded_estimator.maxIter) == 2
-            assert loaded_estimator.getOrDefault(loaded_estimator.numTrainWorkers) == 2
-            assert loaded_estimator.getOrDefault(loaded_estimator.learningRate) == 0.001
-
-            training_dataset = self.spark.createDataFrame(
+            with torch.serialization.safe_globals(
                 [
-                    (1.0, [0.0, 5.0]),
-                    (0.0, [1.0, 2.0]),
-                    (1.0, [2.0, 1.0]),
-                    (0.0, [3.0, 3.0]),
+                    torch.nn.modules.container.Sequential,
+                    torch.nn.modules.linear.Linear,
+                    torch.nn.modules.activation.Softmax,
                 ]
-                * 100,
-                ["label", "features"],
-            )
-            eval_df1 = self.spark.createDataFrame(
-                [
-                    ([0.0, 2.0],),
-                    ([3.5, 3.0],),
-                ],
-                ["features"],
-            )
+            ):
+                estimator = LORV2(maxIter=2, numTrainWorkers=2, learningRate=0.001)
+                local_path = os.path.join(tmp_dir, "estimator")
+                estimator.saveToLocal(local_path)
+                loaded_estimator = LORV2.loadFromLocal(local_path)
+                assert loaded_estimator.uid == estimator.uid
+                assert loaded_estimator.getOrDefault(loaded_estimator.maxIter) == 2
+                assert loaded_estimator.getOrDefault(loaded_estimator.numTrainWorkers) == 2
+                assert loaded_estimator.getOrDefault(loaded_estimator.learningRate) == 0.001
 
-            model = estimator.fit(training_dataset)
-            model_predictions = model.transform(eval_df1.toPandas())
+                # test overwriting
+                estimator2 = estimator.copy()
+                estimator2.set(estimator2.maxIter, 10)
+                estimator2.saveToLocal(local_path, overwrite=True)
+                loaded_estimator2 = LORV2.loadFromLocal(local_path)
+                assert loaded_estimator2.getOrDefault(loaded_estimator2.maxIter) == 10
 
-            assert model.uid == estimator.uid
+                fs_path = os.path.join(tmp_dir, "fs", "estimator")
+                estimator.save(fs_path)
+                loaded_estimator = LORV2.load(fs_path)
+                assert loaded_estimator.uid == estimator.uid
+                assert loaded_estimator.getOrDefault(loaded_estimator.maxIter) == 2
+                assert loaded_estimator.getOrDefault(loaded_estimator.numTrainWorkers) == 2
+                assert loaded_estimator.getOrDefault(loaded_estimator.learningRate) == 0.001
 
-            local_model_path = os.path.join(tmp_dir, "model")
-            model.saveToLocal(local_model_path)
+                training_dataset = self.spark.createDataFrame(
+                    [
+                        (1.0, [0.0, 5.0]),
+                        (0.0, [1.0, 2.0]),
+                        (1.0, [2.0, 1.0]),
+                        (0.0, [3.0, 3.0]),
+                    ]
+                    * 100,
+                    ["label", "features"],
+                )
+                eval_df1 = self.spark.createDataFrame(
+                    [
+                        ([0.0, 2.0],),
+                        ([3.5, 3.0],),
+                    ],
+                    ["features"],
+                )
 
-            # test saved torch model can be loaded by pytorch solely
-            lor_torch_model = torch.load(
-                os.path.join(local_model_path, "LogisticRegressionModel.torch")
-            )
+                model = estimator.fit(training_dataset)
+                model_predictions = model.transform(eval_df1.toPandas())
 
-            with torch.inference_mode():
-                torch_infer_result = lor_torch_model(
-                    torch.tensor(np.stack(list(eval_df1.toPandas().features)), dtype=torch.float32)
-                ).numpy()
+                assert model.uid == estimator.uid
 
-            np.testing.assert_allclose(
-                np.stack(list(model_predictions.probability)),
-                torch_infer_result,
-                rtol=1e-4,
-            )
+                local_model_path = os.path.join(tmp_dir, "model")
+                model.saveToLocal(local_model_path)
 
-            loaded_model = LORV2Model.loadFromLocal(local_model_path)
-            assert loaded_model.numFeatures == 2
-            assert loaded_model.numClasses == 2
-            assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
-            assert loaded_model.torch_model is not None
-            np.testing.assert_allclose(
-                loaded_model.torch_model.weight.detach().numpy(),
-                model.torch_model.weight.detach().numpy(),
-            )
-            np.testing.assert_allclose(
-                loaded_model.torch_model.bias.detach().numpy(),
-                model.torch_model.bias.detach().numpy(),
-            )
+                # test saved torch model can be loaded by pytorch solely
+                lor_torch_model = torch.load(
+                    os.path.join(local_model_path, "LogisticRegressionModel.torch"),
+                    weights_only=False,
+                )
 
-            # Test loaded model transformation.
-            loaded_model.transform(eval_df1.toPandas())
+                with torch.inference_mode():
+                    torch_infer_result = lor_torch_model(
+                        torch.tensor(
+                            np.stack(list(eval_df1.toPandas().features)), dtype=torch.float32
+                        )
+                    ).numpy()
 
-            fs_model_path = os.path.join(tmp_dir, "fs", "model")
-            model.save(fs_model_path)
-            loaded_model = LORV2Model.load(fs_model_path)
-            assert loaded_model.numFeatures == 2
-            assert loaded_model.numClasses == 2
-            assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
-            assert loaded_model.torch_model is not None
-            # Test loaded model transformation works.
-            loaded_model.transform(eval_df1.toPandas())
+                np.testing.assert_allclose(
+                    np.stack(list(model_predictions.probability)),
+                    torch_infer_result,
+                    rtol=1e-4,
+                )
+
+                loaded_model = LORV2Model.loadFromLocal(local_model_path)
+                assert loaded_model.numFeatures == 2
+                assert loaded_model.numClasses == 2
+                assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
+                assert loaded_model.torch_model is not None
+                np.testing.assert_allclose(
+                    loaded_model.torch_model.weight.detach().numpy(),
+                    model.torch_model.weight.detach().numpy(),
+                )
+                np.testing.assert_allclose(
+                    loaded_model.torch_model.bias.detach().numpy(),
+                    model.torch_model.bias.detach().numpy(),
+                )
+
+                # Test loaded model transformation.
+                loaded_model.transform(eval_df1.toPandas())
+
+                fs_model_path = os.path.join(tmp_dir, "fs", "model")
+                model.save(fs_model_path)
+                loaded_model = LORV2Model.load(fs_model_path)
+                assert loaded_model.numFeatures == 2
+                assert loaded_model.numClasses == 2
+                assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
+                assert loaded_model.torch_model is not None
+                # Test loaded model transformation works.
+                loaded_model.transform(eval_df1.toPandas())
 
 
 @unittest.skipIf(
