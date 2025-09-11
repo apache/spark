@@ -25,7 +25,7 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonRDD, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
-import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.arrow.{ArrowWriter, ArrowWriterWrapper}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -168,29 +168,130 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
     if (nextBatchStart.hasNext) {
       val startData = dataOut.size()
 
-      var numRowsInBatch: Int = 0
+      val numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
+        arrowWriter, writer, nextBatchStart, maxBytesPerBatch, arrowMaxRecordsPerBatch)
 
-      def underBatchSizeLimit: Boolean =
-        (maxBytesPerBatch == Int.MaxValue) || (arrowWriter.sizeInBytes() < maxBytesPerBatch)
-
-      while (nextBatchStart.hasNext && numRowsInBatch < arrowMaxRecordsPerBatch &&
-        underBatchSizeLimit) {
-        arrowWriter.write(nextBatchStart.next())
-        numRowsInBatch += 1
-      }
-
-      assert(numRowsInBatch > 0)
-      assert(numRowsInBatch <= arrowMaxRecordsPerBatch)
-      arrowWriter.finish()
-      writer.writeBatch()
-
-      arrowWriter.reset()
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
       true
     } else {
       super[BasicPythonArrowInput].close()
       false
+    }
+  }
+}
+
+object BatchedPythonArrowInput {
+  /**
+   * Split a group into smaller Arrow batches within
+   * a separate and complete Arrow streaming format in order
+   * to work around Arrow 2G limit, see ARROW-4890.
+   *
+   * The return value is the number of rows in the batch.
+   *
+   * Note that `rowIter` here is always grouped batch. One group does not span
+   * multiple groups, see also [[org.apache.spark.sql.execution.GroupedIterator]].
+   * Therefore, each split Arrow batch also does not have mixed grouped. For example:
+   *
+   *        +------------------------+      +------------------------+      +--------------------
+   *        |Group (by k1) v1, v2, v3|      |Group (by k2) v1, v2, v3|      |                 ...
+   *        +------------------------+      +------------------------+      +--------------------
+   *
+   * +------+-----------------+------+------+-----------------+------+------+--------------------
+   * |Schema|            Batch| Batch|Schema|            Batch| Batch|Schema|           Batch ...
+   * +------+-----------------+------+------+-----------------+------+------+--------------------
+   * |    Arrow Streaming Format     |    Arrow Streaming Format     |    Arrow Streaming Form...
+   *
+   * Here, each (Arrow) batch does not span multiple groups.
+   * These (Arrow) batches within each complete Arrow Streaming Format are
+   * reconstructed into the group back as pandas instances later on the Python worker side.
+   */
+  def writeSizedBatch(
+      arrowWriter: ArrowWriter,
+      writer: ArrowStreamWriter,
+      rowIter: Iterator[InternalRow],
+      maxBytesPerBatch: Long,
+      maxRecordsPerBatch: Int): Int = {
+    var numRowsInBatch: Int = 0
+
+    def underBatchSizeLimit: Boolean =
+      (maxBytesPerBatch == Int.MaxValue) || (arrowWriter.sizeInBytes() < maxBytesPerBatch)
+
+    while (rowIter.hasNext && numRowsInBatch < maxRecordsPerBatch &&
+      underBatchSizeLimit) {
+      arrowWriter.write(rowIter.next())
+      numRowsInBatch += 1
+    }
+
+    assert(numRowsInBatch > 0)
+    assert(numRowsInBatch <= maxRecordsPerBatch)
+    arrowWriter.finish()
+    writer.writeBatch()
+
+    arrowWriter.reset()
+    numRowsInBatch
+  }
+}
+
+/**
+ * Enables an optimization that splits each group into the sized batches.
+ */
+private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner =>
+
+  private val maxRecordsPerBatch = {
+    val v = SQLConf.get.arrowMaxRecordsPerBatch
+    if (v > 0) v else Int.MaxValue
+  }
+
+  private val maxBytesPerBatch = SQLConf.get.arrowMaxBytesPerBatch
+
+  protected override def newWriter(
+      env: SparkEnv,
+      worker: PythonWorker,
+      inputIterator: Iterator[Iterator[InternalRow]],
+      partitionIndex: Int,
+      context: TaskContext): Writer = {
+    new Writer(env, worker, inputIterator, partitionIndex, context) {
+      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
+        handleMetadataBeforeExec(dataOut)
+        writeUDF(dataOut)
+      }
+
+      var writer: ArrowWriterWrapper = null
+      // Marker inside the input iterator to indicate the start of the next batch.
+      private var nextBatchStart: Iterator[InternalRow] = Iterator.empty
+
+      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        if (!nextBatchStart.hasNext) {
+          if (inputIterator.hasNext) {
+            dataOut.writeInt(1) // Notify that there is a group to read.
+            assert(writer == null || writer.isClosed)
+            writer = ArrowWriterWrapper.createAndStartArrowWriter(
+              schema, timeZoneId, pythonExec,
+              errorOnDuplicatedFieldNames, largeVarTypes, dataOut, context)
+            nextBatchStart = inputIterator.next()
+          }
+        }
+        if (nextBatchStart.hasNext) {
+          val startData = dataOut.size()
+          val numRowsInBatch: Int = BatchedPythonArrowInput.writeSizedBatch(writer.arrowWriter,
+            writer.streamWriter, nextBatchStart, maxBytesPerBatch, maxRecordsPerBatch)
+          if (!nextBatchStart.hasNext) {
+            writer.streamWriter.end()
+            // We don't need a try catch block here as the close() method is registered with
+            // the TaskCompletionListener.
+            writer.close()
+          }
+          assert(numRowsInBatch > 0)
+          assert(numRowsInBatch <= maxRecordsPerBatch)
+          val deltaData = dataOut.size() - startData
+          pythonMetrics("pythonDataSent") += deltaData
+          true
+        } else {
+          dataOut.writeInt(0) // End of data is marked by sending 0.
+          false
+        }
+      }
     }
   }
 }
