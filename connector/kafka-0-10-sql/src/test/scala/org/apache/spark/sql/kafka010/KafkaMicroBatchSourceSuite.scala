@@ -2072,7 +2072,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       "subscribePattern" -> s"$topicPrefix-.*")
   }
 
-  test("no crash looping during availableNow uncommitted batch retry") {
+  test("no crash looping during uncommitted batch retry in AvailableNow trigger") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 1)
     testUtils.sendMessages(topic, (1 to 7).map(_.toString).toArray, Some(0))
@@ -2101,7 +2101,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
           !q.isActive
         },
         StartStream(Trigger.AvailableNow, checkpointLocation = dir.getAbsolutePath),
-        // getting the error means the query has passed the planning stage
+        // Getting this error means the query has passed the planning stage, so
+        // verifyEndOffsetForTriggerAvailableNow succeeds.
         ExpectFailure[SparkException] { e =>
           assert(e.getMessage.contains("error for 7"))
         }
