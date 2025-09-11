@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.python.streaming
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.nio.channels.{Channels, ServerSocketChannel}
+import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException, InterruptedIOException}
+import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel}
 import java.time.Duration
 
 import scala.collection.mutable
@@ -172,15 +172,32 @@ class TransformWithStateInPySparkStateServer(
           logWarning(log"No more data to read from the socket")
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
-        case _: InterruptedException =>
+        case _: InterruptedException | _: InterruptedIOException |
+             _: ClosedByInterruptException =>
+          // InterruptedIOException - thrown when an I/O operation is interrupted
+          // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
           logInfo(log"Thread interrupted, shutting down state server")
           Thread.currentThread().interrupt()
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
         case e: Exception =>
           logError(log"Error reading message: ${MDC(LogKeys.ERROR, e.getMessage)}", e)
-          sendResponse(1, e.getMessage)
-          outputStream.flush()
+          try {
+            sendResponse(1, e.getMessage)
+            outputStream.flush()
+          } catch {
+            // InterruptedIOException - thrown when an I/O operation is interrupted
+            // ClosedByInterruptException - thrown when an I/O operation upon a
+            //                              channel is interrupted
+            case _: InterruptedException | _: InterruptedIOException |
+                 _: ClosedByInterruptException =>
+              logInfo(log"Thread is interrupted during flushing error response, " +
+                              "shutting down state server")
+            case e: Throwable =>
+              logError(log"Error during flushing error response: " +
+                log"${MDC(LogKeys.ERROR, e.getMessage)}", e)
+              throw e
+          }
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
       }
