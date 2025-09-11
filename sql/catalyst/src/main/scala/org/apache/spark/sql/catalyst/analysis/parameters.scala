@@ -234,47 +234,52 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           args.forall(_.resolved) =>
 
         // Check all arguments for validity (args are already evaluated expressions/literals)
-        val allArgs = args.zipWithIndex.map { case (arg, idx) =>
-          val name = if (idx < paramNames.length && paramNames(idx) != null) {
-            paramNames(idx)
-          } else {
-            s"_$idx"
-          }
-          (name, arg)
+        val allArgs = if (paramNames.isEmpty) {
+          args.zipWithIndex.map { case (arg, idx) => s"_$idx" -> arg }
+        } else {
+          args.zip(paramNames).map { case (arg, name) => name -> arg }
         }
         checkArgs(allArgs)
 
         // Collect parameter types used in the query to enforce invariants
-        val namedParams = scala.collection.mutable.Set.empty[String]
+        var hasNamedParam = false
+        var hasPositionalParam = false
         val positionalParams = scala.collection.mutable.Set.empty[Int]
         bind(child) {
-          case NamedParameter(name) => namedParams.add(name); NamedParameter(name)
-          case p @ PosParameter(pos) => positionalParams.add(pos); p
+          case p @ NamedParameter(_) => hasNamedParam = true; p
+          case p @ PosParameter(pos) =>
+            hasPositionalParam = true
+            positionalParams.add(pos)
+            p
         }
 
         // Validate: no mixing of positional and named parameters
-        if (namedParams.nonEmpty && positionalParams.nonEmpty) {
+        if (hasNamedParam && hasPositionalParam) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         }
 
         // Validate: if query uses named parameters, all USING expressions must have names
-        if (namedParams.nonEmpty && positionalParams.isEmpty) {
-          val unnamedExpressions = paramNames.zipWithIndex.collect {
-            case (null, index) => index
-            case ("", index) => index // empty strings are unnamed
-          }
-          if (unnamedExpressions.nonEmpty) {
-            val unnamedExprs = unnamedExpressions.map(args(_))
-            throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
+        if (hasNamedParam && !hasPositionalParam) {
+          if (paramNames.isEmpty) {
+            // Query uses named parameters but no USING expressions provided
+            throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(Seq.empty)
+          } else {
+            // Check that all USING expressions have names
+            val unnamedExpressions = paramNames.zipWithIndex.collect {
+              case (null, index) => index
+              case ("", index) => index // empty strings are unnamed
+            }
+            if (unnamedExpressions.nonEmpty) {
+              val unnamedExprs = unnamedExpressions.map(args(_))
+              throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
+            }
           }
         }
 
         // Now we can do simple binding based on which type we determined
-        if (namedParams.nonEmpty) {
-          // Named parameter binding
-          val namedArgsMap = paramNames.zipWithIndex.collect {
-            case (name, index) if name != null => name -> args(index)
-          }.toMap
+        if (hasNamedParam) {
+          // Named parameter binding - paramNames guaranteed to have no nulls at this point
+          val namedArgsMap = paramNames.zip(args).toMap
           bind(child) {
             case NamedParameter(name) => namedArgsMap.getOrElse(name, NamedParameter(name))
           }

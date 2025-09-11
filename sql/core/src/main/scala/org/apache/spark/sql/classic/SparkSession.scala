@@ -531,7 +531,7 @@ class SparkSession private(
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
           // Check for SQL scripting with positional parameters before creating parameterized query
-          if (parsedPlan.isInstanceOf[CompoundBody] && paramNames.contains(null)) {
+          if (parsedPlan.isInstanceOf[CompoundBody] && paramNames.isEmpty) {
             throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
           }
           // Create a general parameter query that can handle both positional and named parameters
