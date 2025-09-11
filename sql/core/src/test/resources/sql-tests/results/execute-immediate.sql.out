@@ -48,18 +48,11 @@ spark.sql.ansi.enabled	true
 
 
 -- !query
-EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName
+EXECUTE IMMEDIATE 'CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
-{
-  "errorClass" : "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`tbl_view_tmp`"
-  }
-}
+
 
 
 -- !query
