@@ -27,14 +27,13 @@ import scala.util.control.NonFatal
 import com.google.common.base.Throwables
 import com.google.common.collect.Lists
 import com.google.protobuf.{Any => ProtoAny, ByteString}
-import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
+import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
@@ -62,6 +61,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.execution.command.{ConnectLeafRunnableCommand, StreamingQueryCommand}
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -78,9 +78,8 @@ import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDef
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
-import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.storage.CacheId
@@ -2686,6 +2685,8 @@ class SparkConnectPlanner(
         Some(transformMergeIntoTableCommand(command.getMergeIntoTableCommand))
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
         Some(_ => transformCreateViewCommand(command.getCreateDataframeView))
+      case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
+        Some(_ => transformStreamingQueryCommand(command.getStreamingQueryCommand))
       case _ =>
         None
     }
@@ -2696,7 +2697,7 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val transformerOpt = transformCommand(command)
     if (transformerOpt.isDefined) {
-      transformAndRunCommand(transformerOpt.get)
+      transformAndRunCommand(transformerOpt.get, responseObserver)
       return
     }
     command.getCommandTypeCase match {
@@ -2712,8 +2713,6 @@ class SparkConnectPlanner(
         handleSqlCommand(command.getSqlCommand, responseObserver)
       case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION_START =>
         handleWriteStreamOperationStart(command.getWriteStreamOperationStart, responseObserver)
-      case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
-        handleStreamingQueryCommand(command.getStreamingQueryCommand, responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_MANAGER_COMMAND =>
         handleStreamingQueryManagerCommand(
           command.getStreamingQueryManagerCommand,
@@ -3185,11 +3184,22 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformAndRunCommand(transformer: QueryPlanningTracker => LogicalPlan): Unit = {
+  private def transformAndRunCommand(
+      transformer: QueryPlanningTracker => LogicalPlan,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val qe = new QueryExecution(session, transformer(tracker), tracker)
     qe.assertCommandExecuted()
     executeHolder.eventsManager.postFinished()
+    qe.logical match {
+      case connectCommand: ConnectLeafRunnableCommand =>
+        connectCommand.handleConnectResponse(
+          responseObserver,
+          sessionId,
+          sessionHolder.serverSessionId)
+      case _ =>
+      // Do nothing
+    }
   }
 
   /**
@@ -3423,169 +3433,6 @@ class SparkConnectPlanner(
         .build())
   }
 
-  private def handleStreamingQueryCommand(
-      command: StreamingQueryCommand,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-
-    val id = command.getQueryId.getId
-    val runId = command.getQueryId.getRunId
-
-    val respBuilder = StreamingQueryCommandResult
-      .newBuilder()
-      .setQueryId(command.getQueryId)
-
-    // Find the query in connect service level cache, otherwise check session's active streams.
-    val query = SparkConnectService.streamingSessionManager
-      // Common case: query is cached in the cache.
-      .getCachedQuery(id, runId, executeHolder.sparkSessionTags, session)
-      .map(_.query)
-      .orElse { // Else try to find it in active streams. Mostly will not be found here either.
-        Option(session.streams.get(id))
-      } match {
-      case Some(query) if query.runId.toString == runId =>
-        query
-      case Some(query) =>
-        throw InvalidInputErrors.streamingQueryRunIdMismatch(id, runId, query.runId.toString)
-      case None =>
-        throw InvalidInputErrors.streamingQueryNotFound(id)
-    }
-
-    command.getCommandCase match {
-      case StreamingQueryCommand.CommandCase.STATUS =>
-        val queryStatus = query.status
-
-        val statusResult = StreamingQueryCommandResult.StatusResult
-          .newBuilder()
-          .setStatusMessage(queryStatus.message)
-          .setIsDataAvailable(queryStatus.isDataAvailable)
-          .setIsTriggerActive(queryStatus.isTriggerActive)
-          .setIsActive(query.isActive)
-          .build()
-
-        respBuilder.setStatus(statusResult)
-
-      case StreamingQueryCommand.CommandCase.LAST_PROGRESS |
-          StreamingQueryCommand.CommandCase.RECENT_PROGRESS =>
-        val progressReports = if (command.getLastProgress) {
-          Option(query.lastProgress).toSeq
-        } else {
-          query.recentProgress.toImmutableArraySeq
-        }
-        respBuilder.setRecentProgress(
-          StreamingQueryCommandResult.RecentProgressResult
-            .newBuilder()
-            .addAllRecentProgressJson(
-              progressReports.map(StreamingQueryProgress.jsonString).asJava)
-            .build())
-
-      case StreamingQueryCommand.CommandCase.STOP =>
-        query.stop()
-
-      case StreamingQueryCommand.CommandCase.PROCESS_ALL_AVAILABLE =>
-        // This might take a long time, Spark-connect client keeps this connection alive.
-        query.processAllAvailable()
-
-      case StreamingQueryCommand.CommandCase.EXPLAIN =>
-        val result = query match {
-          case q: StreamingQueryWrapper =>
-            q.streamingQuery.explainInternal(command.getExplain.getExtended)
-          case _ =>
-            throw SparkException.internalError(s"Unexpected type for streaming query: $query")
-        }
-        val explain = StreamingQueryCommandResult.ExplainResult
-          .newBuilder()
-          .setResult(result)
-          .build()
-        respBuilder.setExplain(explain)
-
-      case StreamingQueryCommand.CommandCase.EXCEPTION =>
-        val result = query.exception
-        if (result.isDefined) {
-          // Throw StreamingQueryException directly and rely on error translation on the
-          // client-side to reconstruct the exception. Keep the remaining implementation
-          // for backward-compatibility
-          if (!command.getException) {
-            throw result.get
-          }
-          val e = result.get
-          val exception_builder = StreamingQueryCommandResult.ExceptionResult
-            .newBuilder()
-          exception_builder
-            .setExceptionMessage(e.toString())
-            .setErrorClass(e.getCondition)
-
-          val stackTrace = Option(Utils.stackTraceToString(e))
-          stackTrace.foreach { s =>
-            exception_builder.setStackTrace(s)
-          }
-          respBuilder.setException(exception_builder.build())
-        }
-
-      case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
-        val timeout = if (command.getAwaitTermination.hasTimeoutMs) {
-          Some(command.getAwaitTermination.getTimeoutMs)
-        } else {
-          None
-        }
-        val terminated = handleStreamingAwaitTermination(query, timeout)
-        respBuilder.getAwaitTerminationBuilder.setTerminated(terminated)
-
-      case other =>
-        throw InvalidInputErrors.invalidOneOfField(other, command.getDescriptorForType)
-    }
-
-    executeHolder.eventsManager.postFinished()
-    responseObserver.onNext(
-      ExecutePlanResponse
-        .newBuilder()
-        .setSessionId(sessionId)
-        .setServerSideSessionId(sessionHolder.serverSessionId)
-        .setStreamingQueryCommandResult(respBuilder.build())
-        .build())
-  }
-
-  /**
-   * A helper function to handle streaming awaitTermination(). awaitTermination() can be a long
-   * running command. In this function, we periodically check if the RPC call has been cancelled.
-   * If so, we can stop the operation and release resources early.
-   * @param query
-   *   the query waits to be terminated
-   * @param timeoutOptionMs
-   *   optional. Timeout to wait for termination. If None, no timeout is set
-   * @return
-   *   if the query has terminated
-   */
-  private def handleStreamingAwaitTermination(
-      query: StreamingQuery,
-      timeoutOptionMs: Option[Long]): Boolean = {
-    // How often to check if RPC is cancelled and call awaitTermination()
-    val awaitTerminationIntervalMs = 10000
-    val startTimeMs = System.currentTimeMillis()
-
-    val timeoutTotalMs = timeoutOptionMs.getOrElse(Long.MaxValue)
-    var timeoutLeftMs = timeoutTotalMs
-    require(timeoutLeftMs > 0, "Timeout has to be positive")
-
-    val grpcContext = Context.current
-    while (!grpcContext.isCancelled) {
-      val awaitTimeMs = math.min(awaitTerminationIntervalMs, timeoutLeftMs)
-
-      val terminated = query.awaitTermination(awaitTimeMs)
-      if (terminated) {
-        return true
-      }
-
-      timeoutLeftMs = timeoutTotalMs - (System.currentTimeMillis() - startTimeMs)
-      if (timeoutLeftMs <= 0) {
-        return false
-      }
-    }
-
-    // gRPC is cancelled
-    logWarning("RPC context is cancelled when executing awaitTermination()")
-    throw new StatusRuntimeException(Status.CANCELLED)
-  }
-
   private def buildStreamingQueryInstance(query: StreamingQuery): StreamingQueryInstance = {
     val builder = StreamingQueryInstance
       .newBuilder()
@@ -3785,6 +3632,14 @@ class SparkConnectPlanner(
     logInfo(log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
     sessionHolder.removeCachedDataFrame(dfId)
     executeHolder.eventsManager.postFinished()
+  }
+
+  private def transformStreamingQueryCommand(
+      streamingQueryCommand: proto.StreamingQueryCommand): LogicalPlan = {
+    StreamingQueryCommand(
+      streamingQueryCommand,
+      executeHolder.sparkSessionTags,
+      StreamingQueryCommandResult.newBuilder())
   }
 
   private def transformMergeIntoTableCommand(cmd: proto.MergeIntoTableCommand)(
