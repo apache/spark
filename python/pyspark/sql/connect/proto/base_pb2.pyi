@@ -1093,9 +1093,12 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         REATTACH_OPTIONS_FIELD_NUMBER: builtins.int
+        RESULT_CHUNKING_OPTIONS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
         @property
         def reattach_options(self) -> global___ReattachOptions: ...
+        @property
+        def result_chunking_options(self) -> global___ResultChunkingOptions: ...
         @property
         def extension(self) -> google.protobuf.any_pb2.Any:
             """Extension type for request options"""
@@ -1103,6 +1106,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
             self,
             *,
             reattach_options: global___ReattachOptions | None = ...,
+            result_chunking_options: global___ResultChunkingOptions | None = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
         def HasField(
@@ -1114,6 +1118,8 @@ class ExecutePlanRequest(google.protobuf.message.Message):
                 b"reattach_options",
                 "request_option",
                 b"request_option",
+                "result_chunking_options",
+                b"result_chunking_options",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -1125,11 +1131,16 @@ class ExecutePlanRequest(google.protobuf.message.Message):
                 b"reattach_options",
                 "request_option",
                 b"request_option",
+                "result_chunking_options",
+                b"result_chunking_options",
             ],
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["request_option", b"request_option"]
-        ) -> typing_extensions.Literal["reattach_options", "extension"] | None: ...
+        ) -> (
+            typing_extensions.Literal["reattach_options", "result_chunking_options", "extension"]
+            | None
+        ): ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -1308,38 +1319,78 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         ROW_COUNT_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
         START_OFFSET_FIELD_NUMBER: builtins.int
+        CHUNK_INDEX_FIELD_NUMBER: builtins.int
+        NUM_CHUNKS_IN_BATCH_FIELD_NUMBER: builtins.int
         row_count: builtins.int
         """Count rows in `data`. Must match the number of rows inside `data`."""
         data: builtins.bytes
         """Serialized Arrow data."""
         start_offset: builtins.int
         """If set, row offset of the start of this ArrowBatch in execution results."""
+        chunk_index: builtins.int
+        """Index of this chunk in the batch if chunking is enabled. The index starts from 0."""
+        num_chunks_in_batch: builtins.int
+        """Total number of chunks in this batch if chunking is enabled.
+        It is missing when chunking is disabled - the batch is returned whole
+        and client will treat this response as the batch.
+        """
         def __init__(
             self,
             *,
             row_count: builtins.int = ...,
             data: builtins.bytes = ...,
             start_offset: builtins.int | None = ...,
+            chunk_index: builtins.int | None = ...,
+            num_chunks_in_batch: builtins.int | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_start_offset", b"_start_offset", "start_offset", b"start_offset"
+                "_chunk_index",
+                b"_chunk_index",
+                "_num_chunks_in_batch",
+                b"_num_chunks_in_batch",
+                "_start_offset",
+                b"_start_offset",
+                "chunk_index",
+                b"chunk_index",
+                "num_chunks_in_batch",
+                b"num_chunks_in_batch",
+                "start_offset",
+                b"start_offset",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_chunk_index",
+                b"_chunk_index",
+                "_num_chunks_in_batch",
+                b"_num_chunks_in_batch",
                 "_start_offset",
                 b"_start_offset",
+                "chunk_index",
+                b"chunk_index",
                 "data",
                 b"data",
+                "num_chunks_in_batch",
+                b"num_chunks_in_batch",
                 "row_count",
                 b"row_count",
                 "start_offset",
                 b"start_offset",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_chunk_index", b"_chunk_index"]
+        ) -> typing_extensions.Literal["chunk_index"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_num_chunks_in_batch", b"_num_chunks_in_batch"],
+        ) -> typing_extensions.Literal["num_chunks_in_batch"] | None: ...
+        @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_start_offset", b"_start_offset"]
         ) -> typing_extensions.Literal["start_offset"] | None: ...
@@ -2941,6 +2992,62 @@ class ReattachOptions(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ReattachOptions = ReattachOptions
+
+class ResultChunkingOptions(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ALLOW_ARROW_BATCH_CHUNKING_FIELD_NUMBER: builtins.int
+    PREFERRED_ARROW_CHUNK_SIZE_FIELD_NUMBER: builtins.int
+    allow_arrow_batch_chunking: builtins.bool
+    """Although Arrow results are split into batches with a size limit according to estimation, the
+    size of the batches is not guaranteed to be less than the limit, especially when a single row
+    is larger than the limit, in which case the server will fail to split it further into smaller
+    batches. As a result, the client may encounter a gRPC error stating “Received message larger
+    than max” when a batch is too large.
+    If allow_arrow_batch_chunking=true, the server will split large Arrow batches into smaller chunks,
+    and the client is expected to handle the chunked Arrow batches.
+
+    If false, the server will not chunk large Arrow batches.
+    """
+    preferred_arrow_chunk_size: builtins.int
+    """Optional preferred Arrow batch size in bytes for the server to use when sending Arrow results.
+    The server will attempt to use this size if it is set and within the valid range
+    ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
+    """
+    def __init__(
+        self,
+        *,
+        allow_arrow_batch_chunking: builtins.bool = ...,
+        preferred_arrow_chunk_size: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size",
+            b"_preferred_arrow_chunk_size",
+            "preferred_arrow_chunk_size",
+            b"preferred_arrow_chunk_size",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size",
+            b"_preferred_arrow_chunk_size",
+            "allow_arrow_batch_chunking",
+            b"allow_arrow_batch_chunking",
+            "preferred_arrow_chunk_size",
+            b"preferred_arrow_chunk_size",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size", b"_preferred_arrow_chunk_size"
+        ],
+    ) -> typing_extensions.Literal["preferred_arrow_chunk_size"] | None: ...
+
+global___ResultChunkingOptions = ResultChunkingOptions
 
 class ReattachExecuteRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
