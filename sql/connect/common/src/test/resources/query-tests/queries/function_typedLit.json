@@ -1151,6 +1151,71 @@
       "literal": {
         "array": {
           "elements": [{
+            "struct": {
+              "elements": [{
+                "integer": 1
+              }, {
+                "integer": 2
+              }, {
+                "integer": 3
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "_1"
+                }, {
+                  "name": "_2"
+                }, {
+                  "name": "_3"
+                }]
+              }
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 4
+              }, {
+                "integer": 5
+              }, {
+                "integer": 6
+              }]
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 7
+              }, {
+                "integer": 8
+              }, {
+                "integer": 9
+              }]
+            }
+          }],
+          "dataType": {
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
             "map": {
               "keys": [{
                 "string": "a"
