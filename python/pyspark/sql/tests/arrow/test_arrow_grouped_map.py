@@ -279,7 +279,6 @@ class GroupedMapInArrowTestsMixin:
             df = df.withColumns(cols)
 
             def min_max_v(table):
-                v = table.column("v")
                 return pa.Table.from_pydict(
                     {
                         "key": [table.column("key")[0].as_py()],
