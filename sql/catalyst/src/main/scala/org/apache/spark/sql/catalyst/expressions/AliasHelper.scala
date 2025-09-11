@@ -44,7 +44,7 @@ trait AliasHelper {
     AttributeMap(aliasMap)
   }
 
-  protected def getAliasMap(exprs: Seq[NamedExpression]): AttributeMap[Alias] = {
+  protected def getAliasMap(exprs: Iterable[NamedExpression]): AttributeMap[Alias] = {
     // Create a map of Aliases to their values from the child projection.
     // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> Alias(a + b, c)).
     AttributeMap(exprs.collect { case a: Alias => (a.toAttribute, a) })
