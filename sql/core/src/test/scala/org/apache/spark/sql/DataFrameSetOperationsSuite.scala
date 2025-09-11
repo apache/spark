@@ -1620,7 +1620,7 @@ class DataFrameSetOperationsSuite extends QueryTest
 
   test("SPARK-53550: union partitioning should compare canonicalized attributes") {
     withSQLConf(
-      "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("person", "person_a", "person_b", "person_c") {
         // scalastyle:off line.size.limit
         sql(
