@@ -35,5 +35,3 @@ object FormatTypeOps {
   def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
   def apply(dt: DataType): FormatTypeOps = TypeApiOps(dt).asInstanceOf[FormatTypeOps]
 }
-
-
