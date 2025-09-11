@@ -1104,6 +1104,37 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         return "ArrowStreamPandasUDTFSerializer"
 
 
+class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
+    def load_stream(self, stream):
+        """
+        Flatten the struct into Arrow's record batches.
+        """
+        import pyarrow as pa
+
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 1:
+                structs = [
+                    batch.column(0) for batch in ArrowStreamSerializer.load_stream(self, stream)
+                ]
+                yield [
+                    pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
+                    for struct in structs
+                ]
+
+            elif dataframes_in_group != 0:
+                raise PySparkValueError(
+                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
+                )
+
+    def __repr__(self):
+        return "GroupArrowUDFSerializer"
+
+
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def load_stream(self, stream):
         """
