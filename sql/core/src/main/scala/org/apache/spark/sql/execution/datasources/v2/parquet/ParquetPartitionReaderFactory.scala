@@ -220,7 +220,7 @@ case class ParquetPartitionReaderFactory(
     val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
     val (inputFileOpt, inputStreamOpt, fileFooter) = openFileAndReadFooter(file)
     // Before transform the ownership of InputStream to the VectorizedParquetRecordReader,
-    // we must to close the InputStream leak if something goes wrong to avoid resource.
+    // we must to close the InputStream leak if something goes wrong to avoid resource leak.
     var shouldCloseInputStream = inputStreamOpt.isDefined
     try {
       val footerFileMetaData = fileFooter.getFileMetaData

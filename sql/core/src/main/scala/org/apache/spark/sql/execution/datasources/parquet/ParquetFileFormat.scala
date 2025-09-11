@@ -214,7 +214,7 @@ class ParquetFileFormat
         ParquetFooterReader.openFileAndReadFooter(sharedConf, file, enableVectorizedReader)
 
       // Before transform the ownership of InputStream to the VectorizedParquetRecordReader,
-      // we must to close the InputStream leak if something goes wrong to avoid resource.
+      // we must to close the InputStream leak if something goes wrong to avoid resource leak.
       var shouldCloseInputStream = inputStreamOpt.isDefined
       try {
         val footerFileMetaData = fileFooter.getFileMetaData
