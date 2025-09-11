@@ -2072,7 +2072,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       "subscribePattern" -> s"$topicPrefix-.*")
   }
 
-  test("no crash looping during uncommitted batch retry in AvailableNow trigger") {
+  test("SPARK-53560: no crash looping during uncommitted batch retry in AvailableNow trigger") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 1)
     testUtils.sendMessages(topic, (1 to 7).map(_.toString).toArray, Some(0))
