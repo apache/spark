@@ -27,6 +27,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
@@ -38,7 +39,7 @@ import org.apache.spark.sql.connect.utils.MetricGenerator
 import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -281,11 +282,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       dataframe: DataFrame): Option[ExecutePlanResponse] = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
       case (name, row) if !executeHolder.observations.contains(name) =>
-        val values = if (row.schema == null) {
-          (0 until row.length).map { i => (None, row(i)) }
-        } else {
-          (0 until row.length).map { i => (Some(row.schema.fieldNames(i)), row(i)) }
-        }
+        val values = SparkConnectPlanExecution.toObservedMetricsValues(row)
         name -> values
     }
     if (observedMetrics.nonEmpty) {
@@ -301,18 +298,34 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 }
 
 object SparkConnectPlanExecution {
+
+  def toObservedMetricsValues(row: Row): Seq[(Option[String], Any, Option[DataType])] = {
+    if (row.schema == null) {
+      (0 until row.length).map { i => (None, row(i), None) }
+    } else {
+      (0 until row.length).map { i =>
+        (Some(row.schema.fieldNames(i)), row(i), Some(row.schema(i).dataType))
+      }
+    }
+  }
+
   def createObservedMetricsResponse(
       sessionId: String,
       serverSessionId: String,
       observationAndPlanIds: Map[String, Long],
-      metrics: Map[String, Seq[(Option[String], Any)]]): ExecutePlanResponse = {
+      metrics: Map[String, Seq[(Option[String], Any, Option[DataType])]]): ExecutePlanResponse = {
     val observedMetrics = metrics.map { case (name, values) =>
       val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
-      values.foreach { case (key, value) =>
-        metrics.addValues(toLiteralProto(value))
-        key.foreach(metrics.addKeys)
+      values.foreach { case (keyOpt, value, dataTypeOpt) =>
+        dataTypeOpt match {
+          case Some(dataType) =>
+            metrics.addValues(toLiteralProto(value, dataType))
+          case None =>
+            metrics.addValues(toLiteralProto(value))
+        }
+        keyOpt.foreach(metrics.addKeys)
       }
       observationAndPlanIds.get(name).foreach(metrics.setPlanId)
       metrics.build()
