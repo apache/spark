@@ -926,5 +926,27 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
-}
 
+  testVectors("SPARK-53434: ColumnarRow.get() should handle null", 1, structType) { testVector =>
+    val c1 = testVector.getChild(0)
+    val c2 = testVector.getChild(1)
+    val c3 = testVector.getChild(2)
+
+    // For row 0, set the integer field to null, and other fields to non-null.
+    c1.putNull(0)
+    c2.putDouble(0, 3.45)
+    c3.putLong(0, 1000L)
+
+    val row = testVector.getStruct(0)
+
+    // Verify that get() on the null field returns null.
+    assert(row.isNullAt(0))
+    assert(row.get(0, IntegerType) == null)
+
+    // Verify that other fields can be retrieved correctly.
+    assert(!row.isNullAt(1))
+    assert(row.get(1, DoubleType) === 3.45)
+    assert(!row.isNullAt(2))
+    assert(row.get(2, TimestampNTZType) === 1000L)
+  }
+}
