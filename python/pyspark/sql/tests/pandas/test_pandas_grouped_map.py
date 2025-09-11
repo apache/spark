@@ -74,7 +74,6 @@ if have_pyarrow:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class GroupedApplyInPandasTestsMixin:
-
     @property
     def data(self):
         return (
