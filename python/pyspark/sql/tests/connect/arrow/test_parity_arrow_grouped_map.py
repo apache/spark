@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import os
+import time
 import unittest
 
 from pyspark.sql.tests.arrow.test_arrow_grouped_map import GroupedMapInArrowTestsMixin
@@ -22,7 +24,30 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class GroupedApplyInArrowParityTests(GroupedMapInArrowTestsMixin, ReusedConnectTestCase):
-    pass
+    @classmethod
+    def setUpClass(cls):
+        ReusedConnectTestCase.setUpClass()
+
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
+
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
+        # Set it to a small odd value to exercise batching logic for all test cases
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
+
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedConnectTestCase.tearDownClass()
 
 
 if __name__ == "__main__":

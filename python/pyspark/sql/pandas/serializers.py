@@ -1140,8 +1140,24 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
 
 
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
-    def __init__(self, timezone, safecheck, assign_cols_by_name):
-        super(GroupPandasUDFSerializer, self).__init__(timezone, safecheck, assign_cols_by_name)
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        int_to_decimal_coercion_enabled,
+    ):
+        super(GroupPandasUDFSerializer, self).__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=assign_cols_by_name,
+            df_for_struct=False,
+            struct_in_pandas="dict",
+            ndarray_as_list=False,
+            arrow_cast=True,
+            input_types=None,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+        )
 
     def load_stream(self, stream):
         """

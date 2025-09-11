@@ -51,7 +51,6 @@ from pyspark.serializers import (
 from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
-    DatabricksGroupedAggPandasUDFSerializer,
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
     GroupPandasUDFSerializer,
@@ -2228,7 +2227,9 @@ def read_udfs(pickleSer, infile, eval_type):
         )
 
         if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and arrow_batch_slicing_enabled:
-            ser = GroupPandasUDFSerializer(timezone, safecheck, _assign_cols_by_name)
+            ser = GroupPandasUDFSerializer(
+                timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
+            )
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF and arrow_batch_slicing_enabled:
             ser = GroupArrowUDFSerializer(_assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:

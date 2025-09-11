@@ -957,6 +957,14 @@ class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCas
         cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
 
 
+class GroupedApplyInPandasLegacyTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.pandas.test_pandas_grouped_map import *  # noqa: F401
 
