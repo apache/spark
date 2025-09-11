@@ -51,6 +51,7 @@ from pyspark.serializers import (
 from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
+    DatabricksGroupedAggPandasUDFSerializer,
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
     GroupPandasUDFSerializer,
@@ -2228,7 +2229,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and arrow_batch_slicing_enabled:
             ser = GroupPandasUDFSerializer(timezone, safecheck, _assign_cols_by_name)
-        if eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF and arrow_batch_slicing_enabled:
+        elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF and arrow_batch_slicing_enabled:
             ser = GroupArrowUDFSerializer(_assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             ser = CogroupArrowUDFSerializer(_assign_cols_by_name)
@@ -2829,6 +2830,9 @@ def main(infile, outfile):
             func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
         else:
             func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
+            print(f"read_udfs: func {func.__name__}")
+            print(f"read_udfs: deser {deserializer}")
+            print(f"read_udfs: ser {serializer}")
 
         init_time = time.time()
 

@@ -1105,6 +1105,10 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
 
 class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
+    def __init__(self, assign_cols_by_name):
+        super(GroupArrowUDFSerializer, self).__init__(assign_cols_by_name)
+        self._assign_cols_by_name = assign_cols_by_name
+
     def load_stream(self, stream):
         """
         Flatten the struct into Arrow's record batches.
@@ -1136,6 +1140,9 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
 
 
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
+    def __init__(self, timezone, safecheck, assign_cols_by_name):
+        super(GroupPandasUDFSerializer, self).__init__(timezone, safecheck, assign_cols_by_name)
+
     def load_stream(self, stream):
         """
         Deserialize Grouped ArrowRecordBatches to a tuple of Arrow tables and yield as a
