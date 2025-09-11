@@ -1691,9 +1691,9 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         k2, grp2 = safe_next(g2)
 
             for batch_key, input_data_iterator, init_state_iterator in groupby_pair(
-                    data_stream(batches_gent_1, "inputData", self.key_offsets),
-                    data_stream(batches_gent_2, "initState", self.init_key_offsets),
-                    keyfunc=lambda x: x[0],
+                data_stream(batches_gent_1, "inputData", self.key_offsets),
+                data_stream(batches_gent_2, "initState", self.init_key_offsets),
+                keyfunc=lambda x: x[0],
             ):
                 input_data_pandas = pd.DataFrame(
                     [d for _, d in input_data_iterator], columns=columns_map["inputData"]
@@ -1702,7 +1702,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     [d for _, d in init_state_iterator], columns=columns_map["initState"]
                 )
 
-                yield (batch_key,input_data_pandas, init_state_pandas)
+                yield (batch_key, input_data_pandas, init_state_pandas)
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)

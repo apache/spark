@@ -708,7 +708,6 @@ def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
 
 def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
-
         state_values_gen, init_states_gen = itertools.tee(value_series_gen, 2)
         state_values = (x for x, _ in state_values_gen if not x.empty)
         init_states = (x for _, x in init_states_gen if not x.empty)
