@@ -708,7 +708,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     val firstAttrs = children.head.output
     val attributesMap = children.tail.map(_.output).map { otherAttrs =>
       otherAttrs.zip(firstAttrs).map { case (attr, firstAttr) =>
-        attr -> firstAttr
+        // Remove metadata and qualifier before comparing, as they may be different
+        // even if the attributes are semantically the same.
+        attr.canonicalized -> firstAttr
       }.toMap
     }
 
@@ -721,7 +723,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
       p match {
         case e: Expression =>
           e.transform {
-            case a: Attribute if attributeMap.contains(a) => attributeMap(a)
+            case a: Attribute if attributeMap.contains(a.canonicalized) =>
+              attributeMap(a.canonicalized)
           }.asInstanceOf[Partitioning]
         case _ => p
       }
