@@ -26,10 +26,8 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.parquet.HadoopReadOptions
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
-import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.util.HadoopInputFile
@@ -50,7 +48,7 @@ import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapC
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{SerializableConfiguration, ThreadUtils, Utils}
+import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 class ParquetFileFormat
   extends FileFormat
@@ -205,37 +203,15 @@ class ParquetFileFormat
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
-      val filePath = file.toPath
-      val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
-
+      val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
       val sharedConf = broadcastedHadoopConf.value.value
 
       // When there are vectorized reads, we can avoid
       // 1. opening the file twice by transfering the SeekableInputStream
       // 2. reading the footer twice by reading all row groups in advance and filter row groups
       //    according to filters that require push down
-      val metadataFilter = if (enableVectorizedReader) {
-        HadoopReadOptions.builder(sharedConf, filePath)
-          .withRange(file.start, file.start + file.length)
-          .build.getMetadataFilter
-      } else {
-        ParquetMetadataConverter.SKIP_ROW_GROUPS
-      }
-
-      val readOptions = HadoopReadOptions.builder(sharedConf, filePath)
-        .withMetadataFilter(metadataFilter).build
-
-      val inputFile = HadoopInputFile.fromStatus(file.fileStatus, sharedConf)
-      val inputStream = inputFile.newStream()
-      val fileFooter = Utils.tryWithResource(
-        ParquetFileReader.open(inputFile, readOptions, inputStream)) { fileReader =>
-        val footer = fileReader.getFooter
-        if (enableVectorizedReader) {
-          // Keep the file input stream open so it can be reused later
-          fileReader.detachFileInputStream()
-        }
-        footer
-      }
+      val (inputFileOpt, inputStreamOpt, fileFooter) =
+        ParquetFooterReader.openFileAndReadFooter(sharedConf, file, enableVectorizedReader)
 
       val footerFileMetaData = fileFooter.getFileMetaData
       val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
@@ -311,7 +287,7 @@ class ParquetFileFormat
         val iter = new RecordReaderIterator(vectorizedReader)
         try {
           vectorizedReader.initialize(
-            split, hadoopAttemptContext, Option(inputFile), Option(inputStream), Option(fileFooter))
+            split, hadoopAttemptContext, inputFileOpt, inputStreamOpt, Option(fileFooter))
           logDebug(s"Appending $partitionSchema ${file.partitionValues}")
           vectorizedReader.initBatch(partitionSchema, file.partitionValues)
           if (returningBatch) {
