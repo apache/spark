@@ -140,7 +140,7 @@ private[ml] object MLUtils {
           }
 
         case _ =>
-          val paramValue = LiteralValueProtoConverter.toCatalystValue(literal)
+          val paramValue = LiteralValueProtoConverter.toScalaValue(literal)
           val paramType: Class[_] = if (p.dataClass == null) {
             if (paramValue.isInstanceOf[String]) {
               classOf[String]
@@ -170,7 +170,7 @@ private[ml] object MLUtils {
    * @return
    *   the reconciled array
    */
-  private def reconcileArray(elementType: Class[_], array: Array[_]): Array[_] = {
+  private[ml] def reconcileArray(elementType: Class[_], array: Array[_]): Array[_] = {
     if (elementType == classOf[Byte]) {
       array.map(_.asInstanceOf[Byte])
     } else if (elementType == classOf[Short]) {
@@ -187,6 +187,8 @@ private[ml] object MLUtils {
       array.map(_.asInstanceOf[String])
     } else if (elementType.isArray && elementType.getComponentType == classOf[Double]) {
       array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[Double]))
+    } else if (elementType.isArray && elementType.getComponentType == classOf[String]) {
+      array.map(_.asInstanceOf[Array[_]].map(_.asInstanceOf[String]))
     } else {
       throw MlUnsupportedException(
         s"array element type unsupported, " +

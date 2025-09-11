@@ -21,6 +21,7 @@ import pandas as pd
 import numpy as np
 
 from pyspark import pandas as ps
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
@@ -54,6 +55,14 @@ class NumMulDivTestsMixin:
             self.assertRaises(TypeError, lambda: psser * psdf["date"])
             self.assertRaises(TypeError, lambda: psser * psdf["categorical"])
 
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psdf["decimal"] * psdf["float"])
+            self.assertRaises(TypeError, lambda: psdf["float"] * psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] * psdf["float32"])
+            self.assertRaises(TypeError, lambda: psdf["float32"] * psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] * 0.1)
+            self.assertRaises(TypeError, lambda: 0.1 * psdf["decimal"])
+
     def test_truediv(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
@@ -70,6 +79,14 @@ class NumMulDivTestsMixin:
                 else:
                     self.assertRaises(TypeError, lambda: psser / psdf[n_col])
 
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psdf["decimal"] / psdf["float"])
+            self.assertRaises(TypeError, lambda: psdf["float"] / psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] / psdf["float32"])
+            self.assertRaises(TypeError, lambda: psdf["float32"] / psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] / 0.1)
+            self.assertRaises(TypeError, lambda: 0.1 / psdf["decimal"])
+
     def test_floordiv(self):
         pdf, psdf = self.pdf, self.psdf
         pser, psser = pdf["float"], psdf["float"]
@@ -85,6 +102,43 @@ class NumMulDivTestsMixin:
                 for col in self.numeric_df_cols:
                     psser = psdf[col]
                     self.assertRaises(TypeError, lambda: psser // psdf[n_col])
+
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psdf["decimal"] // psdf["float"])
+            self.assertRaises(TypeError, lambda: psdf["float"] // psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] // psdf["float32"])
+            self.assertRaises(TypeError, lambda: psdf["float32"] // psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] // 0.1)
+            self.assertRaises(TypeError, lambda: 0.1 // psdf["decimal"])
+
+    def test_mod(self):
+        pdf, psdf = self.pdf, self.psdf
+
+        # element-wise modulo for numeric columns
+        for col in self.numeric_df_cols:
+            pser, psser = pdf[col], psdf[col]
+
+            if psser.dtype in [float, int, np.int32]:
+                self.assert_eq(pser % pser, psser % psser)
+                self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool))
+                self.assert_eq(pser % True, psser % True)
+                # TODO: decide if to follow pser % False
+                self.assert_eq(pser % 0, psser % False)
+
+            # modulo with non-numeric columns
+            for n_col in self.non_numeric_df_cols:
+                if n_col == "bool":
+                    self.assert_eq(pdf["float"] % pdf["bool"], psdf["float"] % psdf["bool"])
+                else:
+                    self.assertRaises(TypeError, lambda: psser % psdf[n_col])
+
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float"])
+            self.assertRaises(TypeError, lambda: psdf["float"] % psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float32"])
+            self.assertRaises(TypeError, lambda: psdf["float32"] % psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] % 0.1)
+            self.assertRaises(TypeError, lambda: 0.1 % psdf["decimal"])
 
 
 class NumMulDivTests(

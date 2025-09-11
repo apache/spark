@@ -1544,16 +1544,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  /**
-   * Repartitions the Dataset into the given number of partitions using the specified
-   * partition ID expression.
-   *
-   * @param numPartitions the number of partitions to use.
-   * @param partitionIdExpr the expression to be used as the partition ID. Must be an integer type.
-   *
-   * @group typedrel
-   * @since 4.1.0
-   */
+  /** @inheritdoc */
   def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T] = {
     val directShufflePartitionIdCol = Column(DirectShufflePartitionID(partitionIdExpr.expr))
     repartitionByExpression(Some(numPartitions), Seq(directShufflePartitionIdCol))

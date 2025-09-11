@@ -28,14 +28,18 @@ from pyspark import SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf, assert_true, lit
 from pyspark.sql.types import (
+    BooleanType,
+    ByteType,
     StructType,
     StringType,
+    ShortType,
     IntegerType,
     LongType,
     FloatType,
     DoubleType,
     DecimalType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     BinaryType,
@@ -44,6 +48,7 @@ from pyspark.sql.types import (
     MapType,
     NullType,
     DayTimeIntervalType,
+    VariantType,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
@@ -737,29 +742,71 @@ class ArrowTestsMixin:
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
 
-    def test_map_type_conversion_roundtrip(self):
+    def test_type_conversion_round_trip(self):
         from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
 
-        m1 = MapType(StringType(), IntegerType(), True)
-        m2 = MapType(StringType(), IntegerType(), False)
-
-        for t in [m1, m2]:
-            with self.subTest(map_type=t):
-                arrow_type = to_arrow_type(t)
-                t2 = from_arrow_type(arrow_type)
+        for t in [
+            NullType(),
+            BinaryType(),
+            BooleanType(),
+            ByteType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            FloatType(),
+            DoubleType(),
+            DecimalType(38, 18),
+            StringType(),
+            DateType(),
+            TimeType(),
+            TimestampType(),
+            # TimestampNTZTydpe(), # from_arrow_type controlled by prefer_timestamp_ntz
+            DayTimeIntervalType(0, 3),
+            ArrayType(StringType(), True),
+            ArrayType(StringType(), False),
+            ArrayType(ArrayType(StringType(), True), True),
+            ArrayType(ArrayType(StringType(), False), False),
+            MapType(StringType(), IntegerType(), True),
+            MapType(StringType(), IntegerType(), False),
+            MapType(StringType(), MapType(StringType(), IntegerType(), True), True),
+            MapType(StringType(), MapType(StringType(), IntegerType(), False), False),
+            VariantType(),
+            StructType(
+                [
+                    StructField("1_str_t", StringType(), True),
+                    StructField("2_int_t", IntegerType(), True),
+                    StructField("3_long_t", LongType(), True),
+                    StructField("4_float_t", FloatType(), True),
+                    StructField("5_double_t", DoubleType(), True),
+                    StructField("6_decimal_t", DecimalType(38, 18), True),
+                    StructField("7_date_t", DateType(), True),
+                    StructField("8_timestamp_t", TimestampType(), True),
+                    StructField("9_binary_t", BinaryType(), True),
+                    StructField("10_var", VariantType(), True),
+                    StructField("11_arr", ArrayType(ArrayType(StringType(), True), False), True),
+                    StructField("12_map", MapType(StringType(), IntegerType(), True), True),
+                    StructField(
+                        "13_struct",
+                        StructType(
+                            [
+                                StructField("13_1_str_t", StringType(), True),
+                                StructField("13_2_int_t", IntegerType(), True),
+                                StructField("13_3_long_t", LongType(), True),
+                            ]
+                        ),
+                        True,
+                    ),
+                ]
+            ),
+        ]:
+            with self.subTest(data_type=t):
+                at = to_arrow_type(t)
+                t2 = from_arrow_type(at)
                 self.assertEqual(t, t2)
 
-    def test_arrow_type_conversion_roundtrip(self):
-        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
-
-        m1 = ArrayType(StringType(), True)
-        m2 = ArrayType(StringType(), False)
-
-        for t in [m1, m2]:
-            with self.subTest(map_type=t):
-                arrow_type = to_arrow_type(t)
-                t2 = from_arrow_type(arrow_type)
-                self.assertEqual(t, t2)
+                at2 = to_arrow_type(t, prefers_large_types=True)
+                t3 = from_arrow_type(at2)
+                self.assertEqual(t, t3)
 
     def test_createDataFrame_with_ndarray(self):
         for arrow_enabled in [True, False]:

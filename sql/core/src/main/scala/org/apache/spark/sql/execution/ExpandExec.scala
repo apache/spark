@@ -56,8 +56,9 @@ case class ExpandExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val groups = projections.map(projection).toArray
+      groups.foreach(_.initialize(index))
       new Iterator[InternalRow] {
         private[this] var result: InternalRow = _
         private[this] var idx = -1  // -1 means the initial state
