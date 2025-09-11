@@ -30,9 +30,6 @@ import org.apache.spark.util.Utils
 
 object ParquetFooterReader {
 
-  val SKIP_ROW_GROUPS = true
-  val WITH_ROW_GROUPS = false
-
   /**
    * Build a filter for reading footer of the input Parquet file 'split'.
    * If 'skipRowGroup' is true, this will skip reading the Parquet row group metadata.

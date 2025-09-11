@@ -95,7 +95,7 @@ case class ParquetPartitionReaderFactory(
       // When there are aggregates to push down, we get max/min/count from footer statistics.
       val footer = ParquetFooterReader.readFooter(
         HadoopInputFile.fromStatus(file.fileStatus, hadoopConf),
-        ParquetFooterReader.buildFilter(hadoopConf, file, ParquetFooterReader.WITH_ROW_GROUPS))
+        ParquetFooterReader.buildFilter(hadoopConf, file, skipRowGroup = false))
       (None, None, footer)
     } else {
       // When there are vectorized reads, we can avoid
