@@ -192,9 +192,9 @@ class TransformWithStateInPySparkStateServer(
             case _: InterruptedException | _: InterruptedIOException |
                  _: ClosedByInterruptException =>
               logInfo(log"Thread is interrupted during flushing error response, " +
-                              "shutting down state server")
+                log"shutting down state server")
             case e: Throwable =>
-              logError(log"Error during flushing error response: " +
+              logError(log"Failed to flush with errorMsg=" +
                 log"${MDC(LogKeys.ERROR, e.getMessage)}", e)
               throw e
           }
