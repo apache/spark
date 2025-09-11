@@ -265,6 +265,32 @@ class GroupedMapInArrowTestsMixin:
 
         self.assertEqual(df2.join(df2).count(), 1)
 
+
+class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
+
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
+
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedSQLTestCase.tearDownClass()
+
+
+class GroupedMapInArrowWithSlicingTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     def test_arrow_batch_slicing(self):
         with self.sql_conf(
             {
@@ -299,8 +325,6 @@ class GroupedMapInArrowTestsMixin:
             )
             self.assertEqual(expected.collect(), result.collect())
 
-
-class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
@@ -313,6 +337,8 @@ class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
 
         cls.sc.environment["TZ"] = tz
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
 
     @classmethod
     def tearDownClass(cls):
