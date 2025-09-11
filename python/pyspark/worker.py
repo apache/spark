@@ -2402,7 +2402,13 @@ def read_udfs(pickleSer, infile, eval_type):
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
             ser = ArrowStreamGroupUDFSerializer(_assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-            ser = GroupPandasUDFSerializer(timezone, safecheck, _assign_cols_by_name)
+            ser = GroupPandasUDFSerializer(
+                timezone,
+                safecheck,
+                _assign_cols_by_name,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                arrow_cast=True,
+            )
         elif eval_type in (
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,

@@ -74,11 +74,6 @@ if have_pyarrow:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class GroupedApplyInPandasTestsMixin:
-    @classmethod
-    def setUpClass(cls):
-        super(GroupedApplyInPandasTestsMixin, cls).setUpClass()
-        # Some nanosecond->microsecond conversions throw loss of precision errors
-        cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
 
     @property
     def data(self):
