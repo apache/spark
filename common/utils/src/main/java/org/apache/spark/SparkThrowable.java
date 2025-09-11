@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Evolving;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Interface mixed into Throwables thrown from Spark.
@@ -58,6 +59,11 @@ public interface SparkThrowable {
   // True if this error is an internal error.
   default boolean isInternalError() {
     return SparkThrowableHelper.isInternalError(this.getCondition());
+  }
+
+  default Optional<BreakingChangeInfo> getBreakingChangeInfo() {
+    return Optional.ofNullable(SparkThrowableHelper.getBreakingChangeInfo(
+        this.getCondition()).getOrElse(() -> null));
   }
 
   default Map<String, String> getMessageParameters() {

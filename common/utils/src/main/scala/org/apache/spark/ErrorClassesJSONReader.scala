@@ -46,24 +46,28 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       case (key, value) => key -> value
     }
     val sub = new StringSubstitutor(sanitizedParameters)
-    val errorMessage = try {
-      sub.replace(ErrorClassesJsonReader.TEMPLATE_REGEX.replaceAllIn(
-        messageTemplate, "\\$\\{$1\\}"))
-    } catch {
-      case i: IllegalArgumentException => throw SparkException.internalError(
-        s"Undefined error message parameter for error class: '$errorClass', " +
-          s"MessageTemplate: $messageTemplate, " +
-          s"Parameters: $messageParameters", i)
-    }
+    val errorMessage =
+      try {
+        sub.replace(
+          ErrorClassesJsonReader.TEMPLATE_REGEX.replaceAllIn(messageTemplate, "\\$\\{$1\\}"))
+      } catch {
+        case i: IllegalArgumentException =>
+          throw SparkException.internalError(
+            s"Undefined error message parameter for error class: '$errorClass', " +
+              s"MessageTemplate: $messageTemplate, " +
+              s"Parameters: $messageParameters",
+            i)
+      }
     if (util.SparkEnvUtils.isTesting) {
-      val placeHoldersNum = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).length
+      val placeHoldersNum =
+        ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).length
       if (placeHoldersNum < sanitizedParameters.size &&
-          !ErrorClassesJsonReader.MORE_PARAMS_ALLOWLIST.contains(errorClass)) {
+        !ErrorClassesJsonReader.MORE_PARAMS_ALLOWLIST.contains(errorClass)) {
         throw SparkException.internalError(
           s"Found unused message parameters of the error class '$errorClass'. " +
-          s"Its error message format has $placeHoldersNum placeholders, " +
-          s"but the passed message parameters map has ${sanitizedParameters.size} items. " +
-          "Consider to add placeholders to the error format or remove unused message parameters.")
+            s"Its error message format has $placeHoldersNum placeholders, " +
+            s"but the passed message parameters map has ${sanitizedParameters.size} items. " +
+            "Consider to add placeholders to the error format or remove unused message parameters.")
       }
     }
     errorMessage
@@ -73,6 +77,22 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val messageTemplate = getMessageTemplate(errorClass)
     val matches = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).toSeq
     matches.map(m => m.stripSuffix(">").stripPrefix("<"))
+  }
+
+  def getBreakingChangeInfo(errorClass: String): Option[BreakingChangeInfo] = {
+    val errorClasses = errorClass.split('.')
+    errorClasses match {
+      case Array(mainClass) =>
+        errorInfoMap.get(mainClass).flatMap(_.breakingChangeInfo)
+      case Array(mainClass, subClass) =>
+        errorInfoMap.get(mainClass).flatMap { errorInfo =>
+          errorInfo.subClass
+            .flatMap(_.get(subClass))
+            .flatMap(_.breakingChangeInfo)
+            .orElse(errorInfo.breakingChangeInfo)
+        }
+      case _ => None
+    }
   }
 
   def getMessageTemplate(errorClass: String): String = {
@@ -108,9 +128,10 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val errorClasses = errorClass.split("\\.")
     errorClasses match {
       case Array(mainClass) => errorInfoMap.contains(mainClass)
-      case Array(mainClass, subClass) => errorInfoMap.get(mainClass).exists { info =>
-        info.subClass.get.contains(subClass)
-      }
+      case Array(mainClass, subClass) =>
+        errorInfoMap.get(mainClass).exists { info =>
+          info.subClass.get.contains(subClass)
+        }
       case _ => false
     }
   }
@@ -121,14 +142,15 @@ private object ErrorClassesJsonReader {
 
   private val MORE_PARAMS_ALLOWLIST = Array("CAST_INVALID_INPUT", "CAST_OVERFLOW")
 
-  private val mapper: JsonMapper = JsonMapper.builder()
+  private val mapper: JsonMapper = JsonMapper
+    .builder()
     .addModule(DefaultScalaModule)
     .build()
   private def readAsMap(url: URL): Map[String, ErrorInfo] = {
     val map = mapper.readValue(url, new TypeReference[Map[String, ErrorInfo]]() {})
     val errorClassWithDots = map.collectFirst {
       case (errorClass, _) if errorClass.contains('.') => errorClass
-      case (_, ErrorInfo(_, Some(map), _)) if map.keys.exists(_.contains('.')) =>
+      case (_, ErrorInfo(_, Some(map), _, _)) if map.keys.exists(_.contains('.')) =>
         map.keys.collectFirst { case s if s.contains('.') => s }.get
     }
     if (errorClassWithDots.isEmpty) {
@@ -143,39 +165,81 @@ private object ErrorClassesJsonReader {
 /**
  * Information associated with an error class.
  *
- * @param sqlState SQLSTATE associated with this class.
- * @param subClass SubClass associated with this class.
- * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
- *                The error message is constructed by concatenating the lines with newlines.
+ * @param sqlState
+ *   SQLSTATE associated with this class.
+ * @param subClass
+ *   SubClass associated with this class.
+ * @param message
+ *   Message format with optional placeholders (e.g. &lt;parm&gt;). The error message is
+ *   constructed by concatenating the lines with newlines.
+ * @param breakingChangeInfo
+ *   Additional metadata if the error is due to a breaking change.
  */
 private case class ErrorInfo(
     message: Seq[String],
     subClass: Option[Map[String, ErrorSubInfo]],
-    sqlState: Option[String]) {
+    sqlState: Option[String],
+    breakingChangeInfo: Option[BreakingChangeInfo] = None) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageTemplate: String = message.mkString("\n")
+  val messageTemplate: String = message.mkString("\n") +
+    breakingChangeInfo.map(_.migrationMessage.mkString(" ", "\n", "")).getOrElse("")
 }
 
 /**
  * Information associated with an error subclass.
  *
- * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
- *                The error message is constructed by concatenating the lines with newlines.
+ * @param message
+ *   Message format with optional placeholders (e.g. &lt;parm&gt;). The error message is
+ *   constructed by concatenating the lines with newlines.
+ * @param breakingChangeInfo
+ *   Additional metadata if the error is due to a breaking change.
  */
-private case class ErrorSubInfo(message: Seq[String]) {
+private case class ErrorSubInfo(
+    message: Seq[String],
+    breakingChangeInfo: Option[BreakingChangeInfo] = None) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageTemplate: String = message.mkString("\n")
+  val messageTemplate: String = message.mkString("\n") +
+    breakingChangeInfo.map(_.migrationMessage.mkString(" ", "\n", "")).getOrElse("")
 }
+
+/**
+ * Additional information if the error was caused by a breaking change.
+ *
+ * @param migrationMessage
+ *   A message explaining how the user can migrate their job to work with the breaking change.
+ * @param mitigationSparkConfig
+ *   A spark config flag that can be used to mitigate the breaking change.
+ * @param autoMitigation
+ *   If true, the DBR pinning service will set the mitigationSparkConfig on jobs after observing
+ *   this error. If false, the breaking change must be mitigated manually.
+ */
+case class BreakingChangeInfo(
+    migrationMessage: Seq[String],
+    mitigationSparkConfig: Option[MitigationSparkConfig] = None,
+    autoMitigation: Boolean = false)
+
+/**
+ * A spark config flag that can be used to mitigate a breaking change.
+ * @param key
+ *   The spark config key.
+ * @param value
+ *   The spark config value that mitigates the breaking change.
+ */
+case class MitigationSparkConfig(key: String, value: String)
 
 /**
  * Information associated with an error state / SQLSTATE.
  *
- * @param description What the error state means.
- * @param origin The DBMS where this error state was first defined.
- * @param standard Whether this error state is part of the SQL standard.
- * @param usedBy What database systems use this error state.
+ * @param description
+ *   What the error state means.
+ * @param origin
+ *   The DBMS where this error state was first defined.
+ * @param standard
+ *   Whether this error state is part of the SQL standard.
+ * @param usedBy
+ *   What database systems use this error state.
  */
 private case class ErrorStateInfo(
     description: String,
