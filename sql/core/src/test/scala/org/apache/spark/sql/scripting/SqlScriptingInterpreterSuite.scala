@@ -38,6 +38,16 @@ class SqlScriptingInterpreterSuite
     with SharedSparkSession
     with SqlScriptingTestUtils {
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConfString(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key, "true")
+  }
+
+  protected override def afterAll(): Unit = {
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key)
+    super.afterAll()
+  }
+
   // Helpers
   private def runSqlScript(
       sqlText: String,

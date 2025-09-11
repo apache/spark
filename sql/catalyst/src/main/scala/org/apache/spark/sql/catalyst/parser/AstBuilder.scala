@@ -283,6 +283,9 @@ class AstBuilder extends DataTypeAstBuilder
     val exceptionHandlerTriggers = visitConditionValuesImpl(ctx.conditionValues())
 
     val handlerType = if (Option(ctx.CONTINUE()).isDefined) {
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED)) {
+        throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+      }
       ExceptionHandlerType.CONTINUE
     } else {
       ExceptionHandlerType.EXIT
