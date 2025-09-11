@@ -77,10 +77,10 @@ private[spark] class PrometheusServlet(
       }
     }
     registry.getCounters.asScala.foreach { case (k, v) =>
-      val name = normalizeKey(k)
+      val name = s"${normalizeKey(k)}_total"
       sb.append(s"# HELP ${name} Counter metric\n")
       sb.append(s"# TYPE ${name} counter\n")
-      sb.append(s"$name ${v.getCount}\n")
+      sb.append(s"${name} ${v.getCount}\n")
     }
     registry.getHistograms.asScala.foreach { case (k, h) =>
       val snapshot = h.getSnapshot
@@ -96,36 +96,72 @@ private[spark] class PrometheusServlet(
       sb.append(s"${prefix}{quantile=\"${PERCENTILE_P999}\"} ${snapshot.get999thPercentile}\n")
       sb.append(s"${prefix}_count ${h.getCount}\n")
       sb.append(s"${prefix}_sum ${values.sum}\n")
+      sb.append(s"# HELP ${prefix}_min Minimum value\n")
+      sb.append(s"# TYPE ${prefix}_min gauge\n")
+      sb.append(s"${prefix}_min ${snapshot.getMin}\n")
+      sb.append(s"# HELP ${prefix}_max Maximal value\n")
+      sb.append(s"# TYPE ${prefix}_max gauge\n")
+      sb.append(s"${prefix}_max ${snapshot.getMax}\n")
+      sb.append(s"# HELP ${prefix}_mean Mean value\n")
+      sb.append(s"# TYPE ${prefix}_mean gauge\n")
+      sb.append(s"${prefix}_mean ${snapshot.getMedian}\n")
+      sb.append(s"# HELP ${prefix}_stddev Standard deviation value\n")
+      sb.append(s"# TYPE ${prefix}_stddev gauge\n")
+      sb.append(s"${prefix}_stddev ${snapshot.getStdDev}\n")
     }
     registry.getMeters.entrySet.iterator.asScala.foreach { kv =>
       val prefix = normalizeKey(kv.getKey)
       val meter = kv.getValue
-      sb.append(s"# HELP ${prefix} Meter metric\n")
-      sb.append(s"# TYPE ${prefix} gauge\n")
-      sb.append(s"${prefix}_count ${meter.getCount}\n")
+      sb.append(s"# HELP ${prefix}_count_cumulative Meter counts metric\n")
+      sb.append(s"# TYPE ${prefix}_count_cumulative gauge\n")
+      sb.append(s"${prefix}_count_cumulative ${meter.getCount}\n")
+      sb.append(s"# HELP ${prefix}_mean_rate total counts metric\n")
+      sb.append(s"# TYPE ${prefix}_mean_rate gauge\n")
+      sb.append(s"${prefix}_mean_rate ${meter.getMeanRate}\n")
+      sb.append(s"# HELP ${prefix}_m1_rate 1-min moving avg metric\n")
+      sb.append(s"# TYPE ${prefix}_m1_rate gauge\n")
       sb.append(s"${prefix}_m1_rate ${meter.getOneMinuteRate}\n")
+      sb.append(s"# HELP ${prefix}_m5_rate 5-min moving avg metric\n")
+      sb.append(s"# TYPE ${prefix}_m5_rate gauge\n")
       sb.append(s"${prefix}_m5_rate ${meter.getFiveMinuteRate}\n")
+      sb.append(s"# HELP ${prefix}_m15_rate 15-min moving avg metric\n")
+      sb.append(s"# TYPE ${prefix}_m15_rate gauge\n")
       sb.append(s"${prefix}_m15_rate ${meter.getFifteenMinuteRate}\n")
     }
+
     registry.getTimers.entrySet.iterator.asScala.foreach { kv =>
       val prefix = normalizeKey(kv.getKey)
       val timer = kv.getValue
       val snapshot = timer.getSnapshot
-      sb.append(s"# HELP ${prefix} Timer summary metric\n")
-      sb.append(s"# TYPE ${prefix} summary\n")
-      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P50}\"} ${snapshot.getMedian}\n")
-      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P75}\"} ${snapshot.get75thPercentile}\n")
-      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P95}\"} ${snapshot.get95thPercentile}\n")
-      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P98}\"} ${snapshot.get98thPercentile}\n")
-      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P99}\"} ${snapshot.get99thPercentile}\n")
-      sb.append(s"${prefix}{quantile=\"${PERCENTILE_P999}\"} ${snapshot.get999thPercentile}\n")
-      sb.append(s"${prefix}_count ${timer.getCount}\n")
-      sb.append(s"${prefix}_sum ${snapshot.getValues.sum}\n")
-      sb.append(s"# HELP ${prefix} Timer rate metric\n")
-      sb.append(s"# TYPE ${prefix} gauge\n")
-      sb.append(s"${prefix}_count ${timer.getCount}\n")
+      val NANOS_TO_SECONDS_UNIT = 1e9
+      def nanosToSeconds(n: Double): Double = n / NANOS_TO_SECONDS_UNIT
+      val medianValue = nanosToSeconds(snapshot.getMedian)
+      val p75Value = nanosToSeconds(snapshot.get75thPercentile)
+      val p95Value = nanosToSeconds(snapshot.get95thPercentile)
+      val p98Value = nanosToSeconds(snapshot.get98thPercentile)
+      val p99Value = nanosToSeconds(snapshot.get99thPercentile)
+      val p999Value = nanosToSeconds(snapshot.get999thPercentile)
+
+      val durationSecondsName = s"${prefix}_duration_seconds"
+      sb.append(s"# HELP $durationSecondsName Timer summary metric\n")
+      sb.append(s"# TYPE $durationSecondsName summary\n")
+      sb.append(s"${durationSecondsName}{quantile=\"${PERCENTILE_P50}\"} ${medianValue}\n")
+      sb.append(s"${durationSecondsName}{quantile=\"${PERCENTILE_P75}\"} ${p75Value}\n")
+      sb.append(s"${durationSecondsName}{quantile=\"${PERCENTILE_P95}\"} ${p95Value}\n")
+      sb.append(s"${durationSecondsName}{quantile=\"${PERCENTILE_P98}\"} ${p98Value}\n")
+      sb.append(s"${durationSecondsName}{quantile=\"${PERCENTILE_P99}\"} ${p99Value}\n")
+      sb.append(s"${durationSecondsName}{quantile=\"${PERCENTILE_P999}\"} ${p999Value}\n")
+      sb.append(s"${durationSecondsName}_count ${timer.getCount}\n")
+      sb.append(s"${durationSecondsName}_sum " +
+        s"${snapshot.getValues.map(_.toDouble / NANOS_TO_SECONDS_UNIT).sum}\n")
+      sb.append(s"# HELP ${prefix}_m1_rate Timer rate 1-min moving avg metric\n")
+      sb.append(s"# TYPE ${prefix}_m1_rate gauge\n")
       sb.append(s"${prefix}_m1_rate ${timer.getOneMinuteRate}\n")
+      sb.append(s"# HELP ${prefix}_m5_rate Timer rate 5-min moving avg metric\n")
+      sb.append(s"# TYPE ${prefix}_m5_rate gauge\n")
       sb.append(s"${prefix}_m5_rate ${timer.getFiveMinuteRate}\n")
+      sb.append(s"# HELP ${prefix}_m15_rate Timer rate 15-min moving avg metric\n")
+      sb.append(s"# TYPE ${prefix}_m15_rate gauge\n")
       sb.append(s"${prefix}_m15_rate ${timer.getFifteenMinuteRate}\n")
     }
     sb.toString()
