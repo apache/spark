@@ -3903,6 +3903,19 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val ARROW_EXECUTION_BATCH_SLICING_ENABLED =
+    buildConf("spark.sql.execution.arrow.arrowBatchSlicing.enabled")
+      .doc("Enable slicing of arrow batches to limit the size of each arrow batch in " +
+        "grouped aggregation and grouped map. " +
+        "This is useful to avoid OOMs as arrow batches are buffered in a DirectByteBuffer before " +
+        "they are shipped over the network to the Python process for Python UDF evaluation." +
+        "The size of the sliced arrow batch is limited by " +
+        "spark.sql.execution.arrow.maxRecordsPerBatch and " +
+        "spark.sql.execution.arrow.maxBytesPerBatch")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ARROW_EXECUTION_USE_LARGE_VAR_TYPES =
     buildConf("spark.sql.execution.arrow.useLargeVarTypes")
       .doc("When using Apache Arrow, use large variable width vectors for string and binary " +
@@ -7134,6 +7147,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)
+
+  def arrowBatchSlicingEnabled: Boolean = getConf(ARROW_EXECUTION_BATCH_SLICING_ENABLED)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
 
