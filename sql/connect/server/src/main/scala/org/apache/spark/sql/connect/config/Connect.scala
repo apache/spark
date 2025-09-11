@@ -330,9 +330,10 @@ object Connect {
 
   val CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS =
     buildStaticConf("spark.connect.session.inactiveOperations.cacheExpiration")
-      .doc("Expiration time for inactive operation IDs cache in Spark Connect Session." +
-        " Operations are cached after completion for a period of time to detect duplicates." +
-        " The time should allow for network late arrivals, at least several minutes.")
+      .doc(
+        "Expiration time for inactive operation IDs cache in Spark Connect Session." +
+          " Operations are cached after completion for a period of time to detect duplicates." +
+          " The time should allow for network late arrivals, at least several minutes.")
       .version("4.1.0")
       .internal()
       .timeConf(TimeUnit.MINUTES)

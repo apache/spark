@@ -98,8 +98,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   // Cache of inactive operation IDs for this session, either completed, interrupted or abandoned.
   // The Boolean is just a placeholder since Guava needs a <K, V> pair.
-  private val inactiveOperationIds: Cache[String, Boolean] =
-    CacheBuilder.newBuilder()
+  private lazy val inactiveOperationIds: Cache[String, Boolean] =
+    CacheBuilder
+      .newBuilder()
       .ticker(Ticker.systemTicker())
       .expireAfterAccess(
         SparkEnv.get.conf.get(Connect.CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS),
@@ -182,15 +183,15 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Returns the status of the operation in this session given the operation id.
-   * Operations are cached for when they are inactive (completed, interrupted or abandoned).
-   * Cache expiration is configured with CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS.
+   * Returns the status of the operation in this session given the operation id. Operations are
+   * cached for when they are inactive (completed, interrupted or abandoned). Cache expiration is
+   * configured with CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS.
    *
    * @param operationId
    * @return
-   *   Some(true) if the operation is currently active,
-   *   Some(false) if the operation was completed, interrupted or abandoned recently,
-   *   None if no operation with this id is found in this session.
+   *   Some(true) if the operation is currently active, Some(false) if the operation was
+   *   completed, interrupted or abandoned recently, None if no operation with this id is found in
+   *   this session.
    */
   private[service] def getOperationStatus(operationId: String): Option[Boolean] = {
     if (activeOperationIds.contains(operationId)) {

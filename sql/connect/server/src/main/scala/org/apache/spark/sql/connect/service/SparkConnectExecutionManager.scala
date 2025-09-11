@@ -102,14 +102,15 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
         }
         // Check if the operation is already in the graveyard of abandoned executions, or was
         // recently completed. Prevents double execution when client retries on a lost response.
-        if (
-          getAbandonedTombstone(executeKey).isDefined ||
+        if (getAbandonedTombstone(executeKey).isDefined ||
           sessionHolder.getOperationStatus(opId).isDefined) {
 
-          logInfo(log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)}: Already tombstoned: " +
-            log"${MDC(LogKeys.STATUS, getAbandonedTombstone(executeKey).isDefined)}.")
-          logInfo(log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)}: Seen previously: " +
-            log"${MDC(LogKeys.STATUS, sessionHolder.getOperationStatus(opId).isDefined)}.")
+          logInfo(
+            log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)}: Already tombstoned: " +
+              log"${MDC(LogKeys.STATUS, getAbandonedTombstone(executeKey).isDefined)}.")
+          logInfo(
+            log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)}: Seen previously: " +
+              log"${MDC(LogKeys.STATUS, sessionHolder.getOperationStatus(opId).isDefined)}.")
 
           throw new SparkSQLException(
             errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
