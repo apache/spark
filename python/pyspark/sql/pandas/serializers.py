@@ -1093,8 +1093,9 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
 class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
     def __init__(self, assign_cols_by_name):
-        super(GroupArrowUDFSerializer, self).__init__(assign_cols_by_name)
-        self._assign_cols_by_name = assign_cols_by_name
+        super(GroupArrowUDFSerializer, self).__init__(
+            assign_cols_by_name=assign_cols_by_name,
+        )
 
     def load_stream(self, stream):
         """
