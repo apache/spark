@@ -21,6 +21,14 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedConnectTestCase):
+    @classmethod
+    def setUpClass(cls):
+        ReusedConnectTestCase.setUpClass()
+
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
+        # Set it to a small odd value to exercise batching logic for all test cases
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
+
     # TODO(SPARK-42857): Support CreateDataFrame from Decimal128
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_supported_types(self):
