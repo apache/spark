@@ -1,10 +1,4 @@
 ---- SETUP
-DROP TABLE IF EXISTS products;
-DROP TABLE IF EXISTS customers;
-DROP TABLE IF EXISTS orders;
-DROP TABLE IF EXISTS order_items;
-DROP TABLE IF EXISTS employees;
-DROP TABLE IF EXISTS suppliers;
 
 -- Table: products
 CREATE TABLE products (
@@ -7166,3 +7160,10 @@ END;
 -- TAGS: FOREACH, IF, DML, deep-nesting, exception-handler, foreign-customer-logic
 -- EXPECTED: Foreign customer inserts, international customer coverage, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
+
+DROP TABLE products;
+DROP TABLE customers;
+DROP TABLE orders;
+DROP TABLE order_items;
+DROP TABLE employees;
+DROP TABLE suppliers;
