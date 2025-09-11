@@ -22,7 +22,7 @@ from collections import OrderedDict
 from decimal import Decimal
 from typing import cast
 
-from pyspark.sql import Row
+from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import (
     array,
     explode,
@@ -946,6 +946,40 @@ class GroupedApplyInPandasTestsMixin:
                 row = df.groupby("id").apply(test).first()
                 self.assertEqual(row[1], 123)
 
+    def test_arrow_batch_slicing(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.arrowBatchSlicing.enabled": True,
+                "spark.sql.execution.arrow.maxRecordsPerBatch": 1000,
+            }
+        ):
+            df = self.spark.range(10000000).select(
+                (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+            )
+            cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
+            df = df.withColumns(cols)
+
+            def min_max_v(pdf):
+                return pd.DataFrame(
+                    {
+                        "key": [pdf.key.iloc[0]],
+                        "min": [pdf.v.min()],
+                        "max": [pdf.v.max()],
+                    }
+                )
+
+            result = (
+                df.groupBy("key")
+                .applyInPandas(min_max_v, "key long, min long, max long")
+                .sort("key")
+            )
+            expected = (
+                df.groupby("key")
+                .agg(sf.min("v").alias("min"), sf.max("v").alias("max"))
+                .sort("key")
+            )
+            self.assertEqual(expected.collect(), result.collect())
+
 
 class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -955,14 +989,6 @@ class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCas
         cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
         # Set it to a small odd value to exercise batching logic for all test cases
         cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
-
-
-class GroupedApplyInPandasLegacyTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
-
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
 
 
 if __name__ == "__main__":

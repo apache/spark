@@ -2831,9 +2831,6 @@ def main(infile, outfile):
             func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
         else:
             func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
-            print(f"read_udfs: func {func.__name__}")
-            print(f"read_udfs: deser {deserializer}")
-            print(f"read_udfs: ser {serializer}")
 
         init_time = time.time()
 

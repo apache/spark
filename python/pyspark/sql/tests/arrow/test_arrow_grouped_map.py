@@ -19,7 +19,7 @@ import time
 import unittest
 
 from pyspark.errors import PythonException
-from pyspark.sql import Row
+from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import array, col, explode, lit, mean, stddev
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import (
@@ -265,6 +265,41 @@ class GroupedMapInArrowTestsMixin:
 
         self.assertEqual(df2.join(df2).count(), 1)
 
+    def test_arrow_batch_slicing(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.arrowBatchSlicing.enabled": True,
+                "spark.sql.execution.arrow.maxRecordsPerBatch": 1000,
+            }
+        ):
+            df = self.spark.range(10000000).select(
+                (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+            )
+            cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
+            df = df.withColumns(cols)
+
+            def min_max_v(table):
+                v = table.column("v")
+                return pa.Table.from_pydict(
+                    {
+                        "key": [table.column("key")[0].as_py()],
+                        "min": [pc.min(table.column("v")).as_py()],
+                        "max": [pc.max(table.column("v")).as_py()],
+                    }
+                )
+
+            result = (
+                df.groupBy("key")
+                .applyInArrow(min_max_v, "key long, min long, max long")
+                .sort("key")
+            )
+            expected = (
+                df.groupby("key")
+                .agg(sf.min("v").alias("min"), sf.max("v").alias("max"))
+                .sort("key")
+            )
+            self.assertEqual(expected.collect(), result.collect())
+
 
 class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -279,33 +314,6 @@ class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
 
         cls.sc.environment["TZ"] = tz
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
-        # Set it to a small odd value to exercise batching logic for all test cases
-        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
-
-    @classmethod
-    def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-        ReusedSQLTestCase.tearDownClass()
-
-
-class GroupedMapInArrowLegacyTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
 
     @classmethod
     def tearDownClass(cls):
