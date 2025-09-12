@@ -47,7 +47,10 @@ class SparkDeclarativePipelinesServerSuite
         .setDefineDataset(defineDataset)
         .build()
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
-      assert(res == PipelineCommandResult.getDefaultInstance)
+      assert(res !== PipelineCommandResult.getDefaultInstance)
+      assert(res.hasDefineEntityResult)
+      val graphResult = res.getDefineEntityResult
+      assert(graphResult.getFullyQualifiedName == "fullyqualifieddummyname")
     }
   }
 
