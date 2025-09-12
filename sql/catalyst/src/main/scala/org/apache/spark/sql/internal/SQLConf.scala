@@ -4146,6 +4146,7 @@ object SQLConf {
 
   val SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED =
     buildConf("spark.sql.scripting.continueHandlerEnabled")
+      .internal()
       .doc("EXPERIMENTAL FEATURE/WORK IN PROGRESS: SQL Scripting CONTINUE HANDLER feature " +
         "is under development and still not working as intended. This feature switch is intended " +
         "to be used internally for development and testing, not by end users. " +
