@@ -513,7 +513,6 @@ class FunctionsTestsMixin:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={"func_name": "make_timestamp_ntz", "expected": "either all 6 components (years, months, days, hours, mins, secs) or both date and time", "actual": "incomplete arguments"}
         )
-        
 
         with self.assertRaises(PySparkValueError) as pe:
             F.make_timestamp_ntz(F.lit(2024))  # Only 1 argument
