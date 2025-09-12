@@ -786,7 +786,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-50892: parameterized identifier inside a recursive CTE") {
-    spark.conf.set("spark.sql.cteRecursionRowLimit", "50")
+
     def query(p: String): String = {
       s"""
          |WITH RECURSIVE t1(n) AS (

@@ -191,7 +191,7 @@ case class InlineCTE(
         val refInfo = cteMap(ref.cteId)
 
         val cteBody = if (ref.isUnlimitedRecursion) {
-            setUnlimitedRecursion(refInfo.cteDef.child, ref.cteId)
+          setUnlimitedRecursion(refInfo.cteDef.child, ref.cteId)
         } else {
           refInfo.cteDef.child
         }

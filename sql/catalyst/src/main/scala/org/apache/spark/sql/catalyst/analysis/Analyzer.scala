@@ -4282,29 +4282,6 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   }
 }
 
-object ApplyLimitAll extends Rule[LogicalPlan] {
-  def applyLimitAllToPlan(plan: LogicalPlan, isInLimitAll: Boolean = false): LogicalPlan = {
-    plan match {
-      case la: LimitAll =>
-        applyLimitAllToPlan(la.child, isInLimitAll = true)
-      case cteRef: CTERelationRef if isInLimitAll =>
-        cteRef.copy(isUnlimitedRecursion = true)
-      // Allow-list for pushing down Limit All.
-      case _: Project | _: Filter | _: Join | _: Union | _: Offset |
-           _: BaseEvalPython | _: Aggregate | _: Window | _: SubqueryAlias =>
-        plan.withNewChildren(plan.children
-          .map(child => applyLimitAllToPlan(child, isInLimitAll)))
-      case other =>
-        other.withNewChildren(plan.children
-          .map(child => applyLimitAllToPlan(child, isInLimitAll = false)))
-    }
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    applyLimitAllToPlan(plan)
-  }
-}
-
 /**
  * Rule that's used to handle `UnresolvedHaving` nodes with resolved `condition` and `child`.
  * It's placed outside the main batch to avoid conflicts with other rules that resolve
