@@ -321,20 +321,23 @@ abstract class InMemoryBaseTable(
   }
 
   def withData(data: Array[BufferedRows]): InMemoryBaseTable = {
-    withData(data, CatalogV2Util.v2ColumnsToStructType(columns()), newData = true)
+    withData(data, CatalogV2Util.v2ColumnsToStructType(columns()))
+  }
+
+  def withData(data: Array[BufferedRows], columns: Array[Column]): InMemoryBaseTable = {
+    withData(data, CatalogV2Util.v2ColumnsToStructType(columns))
   }
 
   def withData(
       data: Array[BufferedRows],
-      writeSchema: StructType,
-      newData: Boolean): InMemoryBaseTable = dataMap.synchronized {
+      writeSchema: StructType): InMemoryBaseTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row, writeSchema)
       dataMap += dataMap.get(key)
           .map { splits =>
-            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-              val rowsSchema = if (newData) writeSchema else splits.last.schema
-              splits :+ new BufferedRows(key, rowsSchema)
+            val newSplits = if ((splits.last.rows.size >= numRowsPerSplit)
+            || (splits.last.schema != writeSchema)) {
+              splits :+ new BufferedRows(key, writeSchema)
             } else {
               splits
             }
@@ -345,6 +348,32 @@ abstract class InMemoryBaseTable(
             new BufferedRows(key, writeSchema).withRow(row)))
       addPartitionKey(key)
     })
+    this
+  }
+
+  def alterTableWithData(data: Array[BufferedRows],
+                         newSchema: StructType): InMemoryBaseTable = {
+    data.foreach { bufferedRow =>
+      val oldSchema = bufferedRow.schema
+      bufferedRow.rows.foreach { row =>
+        // handle partition evolution by re-keying all data
+        val key = getKey(row, newSchema)
+        dataMap += dataMap.get(key)
+          .map { splits =>
+            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
+              val oldSchema = splits.last.schema
+              splits :+ new BufferedRows(key, oldSchema)
+            } else {
+              splits
+            }
+            newSplits.last.withRow(row)
+            key -> newSplits
+          }
+          .getOrElse(key -> Seq(
+            new BufferedRows(key, oldSchema).withRow(row)))
+        addPartitionKey(key)
+      }
+    }
     this
   }
 
@@ -723,6 +752,11 @@ object InMemoryBaseTable {
   }
 }
 
+/**
+ * Represent a set of rows buffered in memory for a given partition key.
+ * @param key partition key
+ * @param schema schema used to write the rows
+ */
 class BufferedRows(val key: Seq[Any],
                    val schema: StructType)
   extends WriterCommitMessage

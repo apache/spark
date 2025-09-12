@@ -133,9 +133,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
         }
 
         val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
-          .withData(table.data,
-            CatalogV2Util.v2ColumnsToStructType(table.columns()),
-            newData = false)
+          .alterTableWithData(table.data, schema)
 
         tables.put(ident, newTable)
 

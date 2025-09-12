@@ -136,7 +136,7 @@ class InMemoryRowLevelOperationTable(
       val readPartitions = readRows.map(r => getKey(r, schema)).distinct
       dataMap --= readPartitions
       replacedPartitions = readPartitions
-      withData(newData, schema, newData = true)
+      withData(newData, schema)
       lastWriteLog = newData.flatMap(buffer => buffer.log).toImmutableArraySeq
     }
   }
@@ -190,7 +190,7 @@ class InMemoryRowLevelOperationTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       withDeletes(newData)
-      withData(newData, CatalogV2Util.v2ColumnsToStructType(columns()), newData = true)
+      withData(newData, columns())
       lastWriteLog = newData.flatMap(buffer => buffer.log).toIndexedSeq
     }
 

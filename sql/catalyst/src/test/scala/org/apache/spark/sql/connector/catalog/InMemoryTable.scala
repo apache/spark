@@ -71,31 +71,33 @@ class InMemoryTable(
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {
-    withData(data, schema(), newData = true)
+    withData(data, columns())
+  }
+
+  override def withData(data: Array[BufferedRows], columns: Array[Column]): InMemoryTable = {
+    withData(data, CatalogV2Util.v2ColumnsToStructType(columns))
   }
 
   override def withData(
       data: Array[BufferedRows],
-      writeSchema: StructType,
-      newData: Boolean): InMemoryTable = {
+      writeSchema: StructType): InMemoryTable = {
     dataMap.synchronized {
       data.foreach {
         bufferedRow => {
-          val rowSchema = if (newData) writeSchema else bufferedRow.schema
           bufferedRow.rows.foreach { row =>
             val key = getKey(row, writeSchema)
             dataMap += dataMap.get(key)
               .map { splits =>
                 val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
-                  (splits.last.schema != rowSchema)) {
-                  splits :+ new BufferedRows(key, rowSchema)
+                  (splits.last.schema != writeSchema)) {
+                  splits :+ new BufferedRows(key, writeSchema)
                 } else {
                   splits
                 }
                 newSplits.last.withRow(row)
                 key -> newSplits
               }
-              .getOrElse(key -> Seq(new BufferedRows(key, rowSchema).withRow(row)))
+              .getOrElse(key -> Seq(new BufferedRows(key, writeSchema).withRow(row)))
             addPartitionKey(key)
           }
         }
@@ -108,6 +110,12 @@ class InMemoryTable(
       increaseCurrentVersion()
       this
     }
+  }
+
+  override def alterTableWithData(
+      data: Array[BufferedRows],
+      newSchema: StructType): InMemoryTable = {
+    super.alterTableWithData(data, newSchema).asInstanceOf[InMemoryTable]
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
