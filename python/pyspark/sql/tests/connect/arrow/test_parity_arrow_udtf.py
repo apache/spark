@@ -22,13 +22,9 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ArrowUDTFParityTests(ArrowUDTFTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-53323): Support table arguments in Spark Connect Arrow UDTFs
-    @unittest.skip("asTable() is not supported in Spark Connect")
     def test_arrow_udtf_with_table_argument_basic(self):
         super().test_arrow_udtf_with_table_argument_basic()
 
-    # TODO(SPARK-53323): Support table arguments in Spark Connect Arrow UDTFs
-    @unittest.skip("asTable() is not supported in Spark Connect")
     def test_arrow_udtf_with_table_argument_and_scalar(self):
         super().test_arrow_udtf_with_table_argument_and_scalar()
 
