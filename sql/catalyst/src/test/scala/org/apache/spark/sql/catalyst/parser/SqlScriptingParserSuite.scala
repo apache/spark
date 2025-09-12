@@ -30,7 +30,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.setConfString(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key, "true")
+    conf.setConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED, true)
   }
 
   protected override def afterAll(): Unit = {
