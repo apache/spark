@@ -25,6 +25,7 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.metastore.Warehouse.{DEFAULT_CATALOG_NAME, DEFAULT_DATABASE_NAME}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{spy, times, verify}
@@ -1393,7 +1394,8 @@ class HiveDDLSuite
             case "false" => Map("database" -> "`spark_catalog`.`default`")
             case _ => Map(
               "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
-              "msg" -> "MetaException(message:Can not drop default database)")
+              "msg" -> (s"MetaException(message:Can not drop $DEFAULT_DATABASE_NAME database " +
+                s"in catalog $DEFAULT_CATALOG_NAME)"))
           }
         )
       }
@@ -1756,7 +1758,7 @@ class HiveDDLSuite
       sql(s"SELECT * FROM ${targetTable.identifier}"))
   }
 
-  test("create table with the same name as an index table") {
+  ignore("[Hive 4.x: does not support index] create table with the same name as an index table") {
     val tabName = "tab1"
     val indexName = tabName + "_index"
     withTable(tabName) {
