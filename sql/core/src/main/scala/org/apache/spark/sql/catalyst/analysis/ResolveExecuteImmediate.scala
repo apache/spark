@@ -109,7 +109,13 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       throw QueryCompilationErrors.invalidStatementForExecuteInto(sqlString)
     }
 
-    result.queryExecution.analyzed
+    // For commands, use commandExecuted to avoid double execution
+    // For queries, use analyzed to avoid eager evaluation
+    if (result.queryExecution.analyzed.isInstanceOf[Command]) {
+      result.queryExecution.commandExecuted
+    } else {
+      result.queryExecution.analyzed
+    }
   }
 
   private def extractQueryString(queryExpr: Expression): String = {

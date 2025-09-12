@@ -16,7 +16,7 @@ SET VAR sql_string = 'SELECT * from tbl_view where name = \'name1\'';
 
 -- test commands
 EXECUTE IMMEDIATE 'SET spark.sql.ansi.enabled=true';
-EXECUTE IMMEDIATE 'CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName;
+EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName;
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view_tmp';
 
 EXECUTE IMMEDIATE 'REFRESH TABLE IDENTIFIER(:tblName)' USING 'x' as tblName;
