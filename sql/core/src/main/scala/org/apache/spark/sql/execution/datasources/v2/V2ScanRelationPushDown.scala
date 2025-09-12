@@ -732,6 +732,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
     case globalLimit @ OffsetAndLimit(offset, limit, localLimit, child) =>
       // For `df.offset(n).limit(m)`, we can push down `limit(m + n)` first.
+      // 'm + n' is equals to 'localLimit'.
       val (newChild, canRemoveLimit) = pushDownLimit(child, localLimit)
       if (canRemoveLimit) {
         // Try to push down OFFSET only if the LIMIT operator has been pushed and can be removed.

@@ -96,6 +96,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           CollectLimitExec(limit = limit, child = planLater(child), offset = offset)
         case OffsetAndLimit(offset, _, localLimit, child) =>
           // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
+          // 'a + b' is equals to 'localLimit'.
           CollectLimitExec(limit = localLimit, child = planLater(child), offset = offset)
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit = limit, child = planLater(child))
@@ -121,6 +122,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         Some(TakeOrderedAndProjectExec(
           limit, order, projectList, planLater(child), offset))
       // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
+      // 'a + b' is equals to 'localLimit'.
       case OffsetAndLimit(offset, _, localLimit, Sort(order, true, child, _))
           if localLimit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(localLimit, order, child.output, planLater(child), offset))
@@ -1037,6 +1039,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           LocalLimitExec(limit, planLater(child)), offset) :: Nil
       case OffsetAndLimit(offset, _, localLimit, child) =>
         // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
+        // 'a + b' is equals to 'localLimit'.
         GlobalLimitExec(localLimit,
           LocalLimitExec(localLimit, planLater(child)), offset) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>
