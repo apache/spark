@@ -491,6 +491,42 @@ trait APITest
       Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
   }
 
+  test("Python Pipeline with partition columns") {
+    val pipelineSpec =
+      TestPipelineSpec(
+        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
+        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
+        include = Seq("*.py"))
+    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val sources = Seq(
+      File(
+        name = "definition.py",
+        contents = """
+                     |from pyspark import pipelines as dp
+                     |from pyspark.sql import DataFrame, SparkSession
+                     |from pyspark.sql.functions import col
+                     |
+                     |spark = SparkSession.active()
+                     |
+                     |@dp.materialized_view(partition_cols = ["id_mod"])
+                     |def mv():
+                     |  return spark.range(5).withColumn("id_mod", col("id") % 2)
+                     |
+                     |@dp.table(partition_cols = ["id_mod"])
+                     |def st():
+                     |  return spark.readStream.table("mv")
+                     |""".stripMargin))
+    val (_, update) = createAndRunPipeline(testConfig, sources)
+    awaitPipelineUpdateTermination(update)
+
+    Seq("mv", "st").foreach { tbl =>
+      val fullName = s"${pipelineSpec.catalog}.${pipelineSpec.database}.$tbl"
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $fullName"),
+        Seq(Row(0, 0), Row(1, 1), Row(2, 0), Row(3, 1), Row(4, 0)))
+    }
+  }
+
   /* Below tests pipeline execution configurations */
 
   test("Pipeline with dry run") {

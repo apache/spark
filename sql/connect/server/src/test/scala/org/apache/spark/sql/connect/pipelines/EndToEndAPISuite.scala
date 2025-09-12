@@ -146,7 +146,7 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
   }
 
   private def writePipelineSpecFile(spec: TestPipelineSpec): Path = {
-    val definitions = spec.include
+    val libraries = spec.include
       .map { includePattern =>
         s"""  - glob:
          |      include: "$includePattern"
@@ -160,8 +160,8 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
       |database: ${spec.database}
       |configuration:
       |  "spark.remote": "sc://localhost:$serverPort"
-      |definitions:
-      |$definitions
+      |libraries:
+      |$libraries
       |""".stripMargin
     val specFilePath = projectDir.resolve("pipeline.yaml")
     Files.write(specFilePath, pipelineSpec.getBytes("UTF-8"))
