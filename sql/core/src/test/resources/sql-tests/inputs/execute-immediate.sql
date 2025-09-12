@@ -146,4 +146,378 @@ EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USIN
 SET VAR sql_string = null;
 EXECUTE IMMEDIATE sql_string;
 
+-- =============================================================================
+-- DDL STATEMENTS WITH PARAMETER MARKERS TESTS
+-- =============================================================================
+
+-- setup variables for DDL tests
+DECLARE default_val INT;
+SET VAR default_val = 42;
+
+-- CREATE TABLE tests with parameter markers
+EXECUTE IMMEDIATE 'CREATE TABLE test_table (id INT, name STRING DEFAULT :default_name, score INT DEFAULT :default_score) USING PARQUET' 
+USING 'unknown' as default_name, default_val as default_score;
+DESCRIBE EXTENDED test_table;
+
+-- test positional parameters in CREATE TABLE
+EXECUTE IMMEDIATE 'CREATE TABLE test_table2 (id INT, value INT DEFAULT ?) USING PARQUET' USING 100;
+DESCRIBE EXTENDED test_table2;
+
+-- ALTER TABLE tests with parameter markers
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ALTER COLUMN score SET DEFAULT :new_default' USING 99 as new_default;
+DESCRIBE EXTENDED test_table;
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ADD COLUMN status STRING DEFAULT :status_default' USING 'active' as status_default;
+DESCRIBE EXTENDED test_table;
+-- test positional parameters in ALTER TABLE ADD COLUMN
+EXECUTE IMMEDIATE 'ALTER TABLE test_table2 ADD COLUMN flag BOOLEAN DEFAULT ?' USING true;
+DESCRIBE EXTENDED test_table2;
+
+-- CREATE VIEW tests with parameter markers
+EXECUTE IMMEDIATE 'CREATE VIEW test_view AS SELECT * FROM test_table WHERE score > :min_score' USING 50 as min_score;
+DESCRIBE EXTENDED test_view;
+-- test positional parameters in CREATE VIEW
+EXECUTE IMMEDIATE 'CREATE VIEW test_view2 AS SELECT * FROM test_table WHERE score < ?' USING 80;
+DESCRIBE EXTENDED test_view2;
+
+-- ALTER VIEW AS tests with parameter markers
+EXECUTE IMMEDIATE 'ALTER VIEW test_view AS SELECT id, name FROM test_table WHERE score BETWEEN :min_val AND :max_val' 
+USING 30 as min_val, 70 as max_val;
+DESCRIBE EXTENDED test_view;
+-- test positional parameters in ALTER VIEW AS
+EXECUTE IMMEDIATE 'ALTER VIEW test_view2 AS SELECT * FROM test_table WHERE score > ?' USING 60;
+DESCRIBE EXTENDED test_view2;
+
+-- DECLARE VARIABLE tests with parameter markers
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var INT DEFAULT :var_default' USING 123 as var_default;
+SELECT test_var;
+-- test positional parameters in DECLARE VARIABLE
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var2 STRING DEFAULT ?' USING 'default_string';
+SELECT test_var2;
+
+-- verify the created objects work
+SELECT * FROM test_view;
+SELECT test_var, test_var2;
+
+-- test complex expressions in parameters for DDL
+DECLARE expr_val INT;
+SET VAR expr_val = 10;
+EXECUTE IMMEDIATE 'CREATE TABLE expr_test (id INT, computed INT DEFAULT :expr_result) USING PARQUET' 
+USING (expr_val * 5 + 2) as expr_result;
+DESCRIBE EXTENDED expr_test;
+
+-- test error: mixing positional and named parameters in DDL
+EXECUTE IMMEDIATE 'CREATE TABLE error_table (id INT DEFAULT ?, name STRING DEFAULT :name_default) USING PARQUET' 
+USING 1, 'test' as name_default;
+
+-- test error: undefined parameter in DDL
+EXECUTE IMMEDIATE 'CREATE TABLE error_table2 (id INT DEFAULT :undefined_param) USING PARQUET';
+
+-- CREATE FUNCTION tests with parameter markers
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func(x INT DEFAULT :func_default) RETURNS INT RETURN x + :increment' 
+USING 10 as func_default, 5 as increment;
+DESCRIBE FUNCTION EXTENDED test_func;
+-- test positional parameters in CREATE FUNCTION
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func2(x INT DEFAULT ?) RETURNS INT RETURN x * ?' USING 1, 2;
+DESCRIBE FUNCTION EXTENDED test_func2;
+
+-- =============================================================================
+-- COMPREHENSIVE TESTS FOR MULTIPLE PARAMETER CONSUMPTION
+-- =============================================================================
+
+-- Test CREATE FUNCTION with multiple positional parameters across inputParamText, exprText, queryText
+EXECUTE IMMEDIATE 'CREATE FUNCTION multi_param_func(a INT DEFAULT ?, b INT DEFAULT ?) RETURNS INT RETURN a + b + ?' 
+USING 10, 20, 5;
+DESCRIBE FUNCTION EXTENDED multi_param_func;
+
+-- Test CREATE FUNCTION table function with parameters in all three sections
+EXECUTE IMMEDIATE 'CREATE FUNCTION table_func(x INT DEFAULT ?, y INT DEFAULT ?) RETURNS TABLE(result INT) RETURN SELECT x + y + ? as result' 
+USING 1, 2, 3;
+DESCRIBE FUNCTION EXTENDED table_func;
+
+-- Test CREATE TABLE with multiple columns having positional parameters
+EXECUTE IMMEDIATE 'CREATE TABLE multi_col_table (id INT DEFAULT ?, name STRING DEFAULT ?, score INT DEFAULT ?, active BOOLEAN DEFAULT ?) USING PARQUET' 
+USING 1, 'default_name', 100, true;
+DESCRIBE EXTENDED multi_col_table;
+
+-- Test CREATE TABLE with generation expressions and defaults using positional parameters
+EXECUTE IMMEDIATE 'CREATE TABLE gen_and_default (id INT DEFAULT ?, doubled INT GENERATED ALWAYS AS (id * ?), tripled INT GENERATED ALWAYS AS (id * ?)) USING PARQUET' 
+USING 42, 2, 3;
+DESCRIBE EXTENDED gen_and_default;
+
+-- Test ALTER TABLE ADD COLUMN with multiple columns using positional parameters
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ADD COLUMN (status STRING DEFAULT ?, priority INT DEFAULT ?, created_at STRING DEFAULT ?)' 
+USING 'pending', 1, '2023-01-01';
+DESCRIBE EXTENDED multi_col_table;
+
+-- Test ALTER TABLE ALTER COLUMN with multiple columns using positional parameters
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN score SET DEFAULT ?' 
+USING 200;
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN priority SET DEFAULT ?' 
+USING 5;
+DESCRIBE EXTENDED multi_col_table;
+
+-- Test complex CREATE FUNCTION with many positional parameters
+EXECUTE IMMEDIATE 'CREATE FUNCTION complex_func(a INT DEFAULT ?, b STRING DEFAULT ?, c DOUBLE DEFAULT ?) RETURNS STRING RETURN CONCAT(b, CAST(a + c + ? AS STRING))' 
+USING 10, 'prefix_', 3.14, 100;
+DESCRIBE FUNCTION EXTENDED complex_func;
+
+-- Test CREATE TABLE with mixed defaults and generation expressions
+EXECUTE IMMEDIATE 'CREATE TABLE mixed_expressions (
+  id INT DEFAULT ?,
+  name STRING DEFAULT ?,
+  base_score INT DEFAULT ?,
+  bonus_score INT GENERATED ALWAYS AS (base_score + ?),
+  total_score INT GENERATED ALWAYS AS (base_score + bonus_score + ?),
+  description STRING DEFAULT ?
+) USING PARQUET' 
+USING 1, 'test', 50, 10, 5, 'default_desc';
+DESCRIBE EXTENDED mixed_expressions;
+
+-- Test CREATE VIEW with positional parameters (should consume 1 parameter)
+EXECUTE IMMEDIATE 'CREATE VIEW param_view AS SELECT * FROM multi_col_table WHERE score > ?' 
+USING 150;
+DESCRIBE EXTENDED param_view;
+
+-- Test ALTER VIEW AS with positional parameters
+EXECUTE IMMEDIATE 'ALTER VIEW param_view AS SELECT id, name FROM multi_col_table WHERE score > ? AND priority > ?' 
+USING 100, 3;
+DESCRIBE EXTENDED param_view;
+
+-- Test DECLARE VARIABLE with positional parameters
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var_pos INT DEFAULT ?' 
+USING 999;
+SELECT test_var_pos;
+
+-- Test error case: not enough positional parameters for CREATE FUNCTION
+EXECUTE IMMEDIATE 'CREATE FUNCTION error_func(x INT DEFAULT ?) RETURNS INT RETURN x + ?' 
+USING 10;
+
+-- Test error case: not enough positional parameters for CREATE TABLE
+EXECUTE IMMEDIATE 'CREATE TABLE error_table_pos (id INT DEFAULT ?, name STRING DEFAULT ?) USING PARQUET' 
+USING 1;
+
+-- Advanced DDL tests with parameter markers
+-- test nested DDL with parameter markers
+EXECUTE IMMEDIATE 'CREATE VIEW nested_view AS SELECT test_func(:input_val) as result' USING 20 as input_val;
+DESCRIBE EXTENDED nested_view;
+-- test parameter markers in generation expressions
+EXECUTE IMMEDIATE 'CREATE TABLE gen_table (id INT, doubled INT GENERATED ALWAYS AS (id * :multiplier)) USING PARQUET' 
+USING 2 as multiplier;
+DESCRIBE EXTENDED gen_table;
+-- test multiple parameter occurrences in same DDL
+EXECUTE IMMEDIATE 'CREATE TABLE multi_param (id INT DEFAULT :val, name STRING DEFAULT :name, score INT DEFAULT :val) USING PARQUET' 
+USING 42 as val, 'test' as name;
+DESCRIBE EXTENDED multi_param;
+
+
+-- =============================================================================
+-- COMPLEX AND INTERESTING PARAMETER MARKERS TESTS
+-- =============================================================================
+
+-- Test strings with embedded single quotes (properly escaped with backslash)
+EXECUTE IMMEDIATE 'DECLARE VARIABLE quote_test STRING DEFAULT ?' 
+USING 'It\'s a test with \'embedded\' single quotes';
+SELECT quote_test, typeof(quote_test);
+
+-- Test strings with mixed quotes and escaping
+EXECUTE IMMEDIATE 'DECLARE VARIABLE mixed_quotes STRING DEFAULT ?' 
+USING 'String with "double" and \'single\' quotes';
+SELECT mixed_quotes, typeof(mixed_quotes);
+
+-- Test very long string parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE long_string STRING DEFAULT ?' 
+USING 'This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values';
+SELECT long_string, typeof(long_string);
+
+-- Test empty string parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE empty_string STRING DEFAULT ?' 
+USING '';
+SELECT empty_string, typeof(empty_string);
+
+-- Test string with special characters and unicode
+EXECUTE IMMEDIATE 'DECLARE VARIABLE special_chars STRING DEFAULT ?' 
+USING 'Special chars: \\n\\t\\r\\\\ and unicode: café naïve résumé';
+SELECT special_chars, typeof(special_chars);
+
+-- Test string with SQL keywords as values
+EXECUTE IMMEDIATE 'DECLARE VARIABLE sql_keywords STRING DEFAULT ?' 
+USING 'SELECT INSERT UPDATE DELETE FROM WHERE JOIN';
+SELECT sql_keywords, typeof(sql_keywords);
+
+-- Test actual ARRAY parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE array_param ARRAY<INT> DEFAULT ?' 
+USING ARRAY(1, 2, 3, 4, 5);
+SELECT array_param, typeof(array_param);
+
+-- Test actual STRUCT parameter (Spark supports this type)
+EXECUTE IMMEDIATE 'DECLARE VARIABLE struct_param STRUCT<name: STRING, age: INT, active: BOOLEAN> DEFAULT ?' 
+USING STRUCT('John', 25, true);
+SELECT struct_param, typeof(struct_param);
+
+-- Test MAP parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE map_param MAP<STRING, INT> DEFAULT ?' 
+USING MAP('key1', 100, 'key2', 200, 'key3', 300);
+SELECT map_param, typeof(map_param);
+
+-- Test complex nested structure
+EXECUTE IMMEDIATE 'DECLARE VARIABLE nested_param STRUCT<user:STRUCT<name:STRING, age:INT>, scores:ARRAY<INT>> DEFAULT ?' 
+USING STRUCT(STRUCT('Jane', 30), ARRAY(95, 87, 92));
+SELECT nested_param, typeof(nested_param);
+
+-- Test JSON-like string parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE json_param STRING DEFAULT ?' 
+USING '{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}';
+SELECT json_param, typeof(json_param);
+
+-- Test numeric edge cases
+EXECUTE IMMEDIATE 'DECLARE VARIABLE big_int INT DEFAULT ?' 
+USING 2147483647;
+SELECT big_int, typeof(big_int);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE max_long BIGINT DEFAULT ?' 
+USING 9223372036854775807;
+SELECT max_long, typeof(max_long);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE tiny_byte TINYINT DEFAULT ?' 
+USING 127;
+SELECT tiny_byte, typeof(tiny_byte);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE small_short SMALLINT DEFAULT ?' 
+USING 32767;
+SELECT small_short, typeof(small_short);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE scientific_double DOUBLE DEFAULT ?' 
+USING 1.23456789e-10;
+SELECT scientific_double, typeof(scientific_double);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE float_param FLOAT DEFAULT ?' 
+USING 3.14159;
+SELECT float_param, typeof(float_param);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE precise_decimal DECIMAL(20,10) DEFAULT ?' 
+USING 123456789.0123456789;
+SELECT precise_decimal, typeof(precise_decimal);
+
+-- Test boolean parameters
+EXECUTE IMMEDIATE 'DECLARE VARIABLE bool_true BOOLEAN DEFAULT ?' 
+USING true;
+SELECT bool_true, typeof(bool_true);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE bool_false BOOLEAN DEFAULT ?' 
+USING false;
+SELECT bool_false, typeof(bool_false);
+
+-- Test timestamp parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE timestamp_param TIMESTAMP DEFAULT ?' 
+USING TIMESTAMP '2023-12-25 14:30:45.123456';
+SELECT timestamp_param, typeof(timestamp_param);
+
+-- Test date parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE date_param DATE DEFAULT ?' 
+USING DATE '2023-12-25';
+SELECT date_param, typeof(date_param);
+
+-- Test binary parameter
+EXECUTE IMMEDIATE 'DECLARE VARIABLE binary_param BINARY DEFAULT ?' 
+USING X'48656C6C6F20576F726C64';
+SELECT binary_param, typeof(binary_param);
+
+-- Test parameter with backslashes and escape sequences
+EXECUTE IMMEDIATE 'DECLARE VARIABLE escape_test STRING DEFAULT ?' 
+USING 'Path: C:\\\\Users\\\\Name\\\\Documents\\\\file.txt';
+SELECT escape_test, typeof(escape_test);
+
+-- Test parameter with newlines and tabs
+EXECUTE IMMEDIATE 'DECLARE VARIABLE multiline_param STRING DEFAULT ?' 
+USING 'Line 1\\nLine 2\\n\\tIndented line\\nLine 4';
+SELECT multiline_param, typeof(multiline_param);
+
+-- Test floating point special values
+EXECUTE IMMEDIATE 'DECLARE VARIABLE pos_inf DOUBLE DEFAULT ?' 
+USING CAST('Infinity' AS DOUBLE);
+SELECT pos_inf, typeof(pos_inf);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE neg_inf DOUBLE DEFAULT ?' 
+USING CAST('-Infinity' AS DOUBLE);
+SELECT neg_inf, typeof(neg_inf);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE nan_val DOUBLE DEFAULT ?' 
+USING CAST('NaN' AS DOUBLE);
+SELECT nan_val, typeof(nan_val);
+
+-- Test array of strings with quotes
+EXECUTE IMMEDIATE 'DECLARE VARIABLE string_array ARRAY<STRING> DEFAULT ?' 
+USING ARRAY('first\'s value', 'second "quoted" value', 'third\nwith\ttabs');
+SELECT string_array, typeof(string_array);
+
+-- Test array of structs
+EXECUTE IMMEDIATE 'DECLARE VARIABLE struct_array ARRAY<STRUCT<name:STRING, age:INT>> DEFAULT ?' 
+USING ARRAY(STRUCT('Alice', 25), STRUCT('Bob', 30), STRUCT('Charlie', 35));
+SELECT struct_array, typeof(struct_array);
+
+-- Test map with string keys and struct values
+EXECUTE IMMEDIATE 'DECLARE VARIABLE complex_map MAP<STRING, STRUCT<id:INT, active:BOOLEAN>> DEFAULT ?' 
+USING MAP('user1', STRUCT(1, true), 'user2', STRUCT(2, false));
+SELECT complex_map, typeof(complex_map);
+
+-- Test deeply nested structure
+EXECUTE IMMEDIATE 'DECLARE VARIABLE deep_nested STRUCT<level1:STRUCT<level2:STRUCT<data:ARRAY<MAP<STRING, INT>>>>> DEFAULT ?' 
+USING STRUCT(STRUCT(STRUCT(ARRAY(MAP('a', 1, 'b', 2), MAP('c', 3, 'd', 4)))));
+SELECT deep_nested, typeof(deep_nested);
+
+-- Test complex parameter with CREATE TABLE using properly typed defaults
+EXECUTE IMMEDIATE 'CREATE TABLE complex_defaults (
+  id INT, 
+  json_data STRING DEFAULT ?,
+  quoted_name STRING DEFAULT ?,
+  large_number BIGINT DEFAULT ?,
+  precise_val DECIMAL(15,5) DEFAULT ?,
+  bool_flag BOOLEAN DEFAULT ?,
+  created_date DATE DEFAULT ?
+) USING PARQUET' 
+USING '{"type": "user", "data": {"name": "Test\'User", "active": true}}',
+      'Name with \'quotes\' and "double quotes"',
+      9223372036854775807,
+      12345.67890,
+      true,
+      DATE '2023-12-25';
+DESCRIBE EXTENDED complex_defaults;
+
+-- Test case sensitivity in parameter values
+EXECUTE IMMEDIATE 'DECLARE VARIABLE case_sensitive STRING DEFAULT ?' 
+USING 'MiXeD CaSe StRiNg WiTh UPPER and lower';
+SELECT case_sensitive, typeof(case_sensitive);
+
+-- Test interval types
+EXECUTE IMMEDIATE 'DECLARE VARIABLE year_interval DEFAULT ?'
+USING INTERVAL '2' years;
+SELECT year_interval, typeof(year_interval);
+
+EXECUTE IMMEDIATE 'DECLARE VARIABLE day_interval DEFAULT ?'
+USING INTERVAL '10' DAYS;
+SELECT day_interval, typeof(day_interval);
+
+-- cleanup complex test objects
+DROP TABLE IF EXISTS complex_defaults;
+
+-- cleanup DDL test objects
+DROP FUNCTION IF EXISTS test_func;
+DROP FUNCTION IF EXISTS test_func2;
+DROP FUNCTION IF EXISTS multi_param_func;
+DROP FUNCTION IF EXISTS table_func;
+DROP FUNCTION IF EXISTS complex_func;
+DROP VIEW IF EXISTS nested_view;
+DROP VIEW IF EXISTS param_view;
+DROP TABLE IF EXISTS gen_table;
+DROP TABLE IF EXISTS multi_param;
+DROP TABLE IF EXISTS multi_col_table;
+DROP TABLE IF EXISTS gen_and_default;
+DROP TABLE IF EXISTS mixed_expressions;
+
+DROP VIEW IF EXISTS test_view;
+DROP VIEW IF EXISTS test_view2;
+DROP TABLE IF EXISTS test_table;
+DROP TABLE IF EXISTS test_table2;
+DROP TABLE IF EXISTS expr_test;
+
 DROP TABLE x;

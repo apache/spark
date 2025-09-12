@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.util.{Either, Left, Right}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, VariableReference}
+import org.apache.spark.sql.catalyst.parser.{ParseException, SubstituteParamsParser, SubstitutionRule}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
@@ -107,6 +107,34 @@ class SubstituteExecuteImmediate(
     }
   }
 
+  /**
+   * Performs constant folding on expressions to convert foldable expressions to literals.
+   * Uses the same approach as the ConstantFolding optimizer rule and tryEvalExpr pattern.
+   */
+  private def foldToLiteral(expr: Expression): Expression = {
+    expr match {
+      case alias: Alias =>
+        if (alias.child.foldable) {
+          Literal.create(alias.child.eval(), alias.child.dataType)
+        } else {
+          alias.child
+        }
+      case e if e.foldable =>
+          Literal.create(e.eval(), e.dataType)
+      case other => other
+    }
+  }
+
+  /**
+   * Detects parameter markers in SQL text using the SubstituteParamsParser.
+   * This is needed for cases like CREATE FUNCTION where parameter markers are embedded
+   * in text fields rather than in Expression objects.
+   */
+  private def detectParametersInSqlText(sqlText: String): (Boolean, Boolean) = {
+    val parser = new SubstituteParamsParser()
+    parser.detectParameters(sqlText, SubstitutionRule.Statement)
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case e @ ExecuteImmediateQuery(expressions, _, _) if expressions.exists(!_.resolved) =>
@@ -118,20 +146,18 @@ class SubstituteExecuteImmediate(
         val queryString = extractQueryString(query)
         val plan = parseStatement(queryString, targetVariables)
 
-        val posNodes = plan.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: PosParameter => n })
-        }.flatten
-        val namedNodes = plan.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: NamedParameter => n })
-        }.flatten
+        // use the parser to detect parameter markers in the SQL text
+        val (hasPositionalInText, hasNamedInText) = detectParametersInSqlText(queryString)
 
-        val queryPlan = if (expressions.isEmpty || (posNodes.isEmpty && namedNodes.isEmpty)) {
+        val queryPlan = if (!hasPositionalInText && !hasNamedInText) {
           plan
-        } else if (posNodes.nonEmpty && namedNodes.nonEmpty) {
+        } else if (hasPositionalInText &&  hasNamedInText) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         } else {
-          if (posNodes.nonEmpty) {
-            PosParameterizedQuery(plan, expressions)
+          if (hasPositionalInText) {
+            // Apply constant folding to positional parameters
+            val foldedArgs = expressions.map(foldToLiteral)
+            PosParameterizedQuery(plan, foldedArgs)
           } else {
             val aliases = expressions.collect {
               case e: Alias => e
@@ -145,13 +171,18 @@ class SubstituteExecuteImmediate(
               throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
             }
 
+            // Extract names before folding
+            val names = aliases.map(_.name)
+            // Apply constant folding to named parameters
+            val values = aliases.map(foldToLiteral)
+
             NameParameterizedQuery(
               plan,
-              aliases.map(_.name),
+              names,
               // We need to resolve arguments before Resolution batch to make sure
               // that some rule does not accidentally resolve our parameters.
               // We do not want this as they can resolve some unsupported parameters.
-              aliases)
+              values)
           }
         }
 
