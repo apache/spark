@@ -99,8 +99,7 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       val (paramValues, paramNames) = buildUnifiedParameters(args)
 
       withIsolatedLocalVariableContext {
-        sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
-          .sql(sqlString, paramValues, paramNames)
+        sparkSession.sql(sqlString, paramValues, paramNames)
       }
     }
 
