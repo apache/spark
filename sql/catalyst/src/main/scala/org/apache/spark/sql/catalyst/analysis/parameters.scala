@@ -245,9 +245,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         val positionalParams = scala.collection.mutable.Set.empty[Int]
         bind(child) {
           case p @ NamedParameter(_) => hasNamedParam = true; p
-          case p @ PosParameter(pos) =>
-            positionalParams.add(pos)
-            p
+          case p @ PosParameter(pos) => positionalParams.add(pos); p
         }
 
         // Validate: no mixing of positional and named parameters
