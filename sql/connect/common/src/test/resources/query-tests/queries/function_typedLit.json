@@ -907,6 +907,26 @@
                 }]
               }
             }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 2
+              }, {
+                "null": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                }
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "_1"
+                }, {
+                  "name": "_2",
+                  "nullable": true
+                }]
+              }
+            }
           }],
           "dataType": {
             "containsNull": true

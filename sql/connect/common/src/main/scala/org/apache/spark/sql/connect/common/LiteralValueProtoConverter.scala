@@ -528,9 +528,7 @@ object LiteralValueProtoConverter {
       case _ =>
         throw InvalidPlanInput(s"Unsupported Literal Type: ${dataType.getKindCase}")
     }
-    v =>
-      if (v.hasNull) { null }
-      else { converter(v) }
+    v => if (v.hasNull) null else converter(v)
   }
 
   private def getInferredDataType(
