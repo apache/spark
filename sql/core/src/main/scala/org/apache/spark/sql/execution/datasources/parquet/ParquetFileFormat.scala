@@ -292,11 +292,11 @@ class ParquetFileFormat
           // Instead, we use FileScanRDD's task completion listener to close this iterator.
           val iter = new RecordReaderIterator(vectorizedReader)
           try {
-            shouldCloseInputStream = false
             // We don't need to take care the close of inputStream because this transfers
             // the ownership of inputStream to the vectorizedReader
             vectorizedReader.initialize(
               split, hadoopAttemptContext, inputFileOpt, inputStreamOpt, Some(fileFooter))
+            shouldCloseInputStream = false
             logDebug(s"Appending $partitionSchema ${file.partitionValues}")
             vectorizedReader.initBatch(partitionSchema, file.partitionValues)
             if (returningBatch) {
