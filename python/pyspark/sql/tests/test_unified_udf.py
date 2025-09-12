@@ -428,7 +428,7 @@ class UnifiedUDFTestsMixin:
 class UnifiedUDFTests(UnifiedUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UnifiedUDFTests, cls).setUpClass()
+        ReusedSQLTestCase.setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
 
 
