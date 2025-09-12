@@ -1894,4 +1894,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
     checkAnalysis(inputPlan, expectedPlan)
   }
+
+  // TODO: need SPARK ticket created to update this
+  test("SPARK- : nested plans reverts AnalysisContext instead of resetting it") {
+    // TODO: create a unresolved relation that causes nested project plan to be analyzed - need to ask Spark expert
+    val inputPlan = UnresolvedRelation()
+    val expectedPlan = Project(Seq()).analyze
+    checkAnalysis(inputPlan, expectedPlan)
+  }
 }

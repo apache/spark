@@ -320,13 +320,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     if (plan.analyzed) {
       plan
     } else {
-      AnalysisContext.reset()
-      try {
+      AnalysisContext.withNewAnalysisContext {
         AnalysisHelper.markInAnalyzer {
           HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
         }
-      } finally {
-        AnalysisContext.reset()
       }
     }
   }
