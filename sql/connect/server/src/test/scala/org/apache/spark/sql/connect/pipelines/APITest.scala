@@ -30,19 +30,35 @@ import org.apache.spark.sql.QueryTest.checkAnswer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.pipelines.utils.TestGraphRegistrationContext.{DEFAULT_CATALOG, DEFAULT_DATABASE}
 
-case class TestPipelineSpec(catalog: String, database: String, include: Seq[String])
+/**
+ * Representation of a pipeline specification
+ * @param catalog
+ *   the catalog to publish data from the pipeline
+ * @param database
+ *   the database to publish data from the pipeline
+ * @param include
+ *   the list of source files to include in the pipeline spec
+ */
+case class TestPipelineSpec(
+    catalog: Option[String] = None,
+    database: Option[String] = None,
+    include: Seq[String])
 
 /**
  * Available configurations for running a test pipeline.
  *
- * @param pipelineSpec the pipeline specification to use
- * Below are CLI options that affect execution, default is to update all datasets incrementally
- * @param dryRun if true, the pipeline will be validated but not executed
- * @param fullRefreshAll if true, perform a full graph reset and recompute
- * @param fullRefreshSelection if non-empty, only reset and recompute the subset
- * @param refreshSelection if non-empty, only update the specified subset of datasets
+ * @param pipelineSpec
+ *   the pipeline specification to use Below are CLI options that affect execution, default is to
+ *   update all datasets incrementally
+ * @param dryRun
+ *   if true, the pipeline will be validated but not executed
+ * @param fullRefreshAll
+ *   if true, perform a full graph reset and recompute
+ * @param fullRefreshSelection
+ *   if non-empty, only reset and recompute the subset
+ * @param refreshSelection
+ *   if non-empty, only update the specified subset of datasets
  */
 case class TestPipelineConfiguration(
     pipelineSpec: TestPipelineSpec,
@@ -52,13 +68,13 @@ case class TestPipelineConfiguration(
     refreshSelection: Seq[String] = Seq.empty)
 
 /**
-  Logical representation of a source file to be included in the pipeline spec.
+ * Logical representation of a source file to be included in the pipeline spec.
  */
 case class PipelineSourceFile(name: String, contents: String)
 
 /**
-  Extendable traits for PipelineReference and UpdateReference to allow different level of
-  implementations which stores pipeline execution and update execution specific information.
+ * Extendable traits for PipelineReference and UpdateReference to allow different level of
+ * implementations which stores pipeline execution and update execution specific information.
  */
 trait PipelineReference {}
 
@@ -69,8 +85,6 @@ trait APITest
     with Matchers {
 
   protected def spark: SparkSession
-  protected def catalogInPipelineSpec: Option[String]
-  protected def databaseInPipelineSpec: Option[String]
 
   def createAndRunPipeline(
       config: TestPipelineConfiguration,
@@ -81,38 +95,30 @@ trait APITest
   /* SQL Language Tests */
   test("SQL Pipeline with mv, st, and flows") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("mv.sql", "st.sql"))
+      TestPipelineSpec(include = Seq("mv.sql", "st.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
         name = "st.sql",
         contents = s"""
-                     |CREATE STREAMING TABLE ${pipelineSpec.catalog}.${pipelineSpec.database}.st;
+                     |CREATE STREAMING TABLE st;
                      |CREATE FLOW f AS INSERT INTO st BY NAME SELECT * FROM STREAM mv WHERE id > 2;
                      |""".stripMargin),
       PipelineSourceFile(
         name = "mv.sql",
         contents = s"""
-                     |CREATE MATERIALIZED VIEW ${pipelineSpec.database}.mv
+                     |CREATE MATERIALIZED VIEW mv
                      |AS SELECT * FROM RANGE(5);
                      |""".stripMargin))
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
 
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.st"),
-      Seq(Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM st"), Seq(Row(3), Row(4)))
   }
 
   test("SQL Pipeline with CTE") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("*.sql"))
+      TestPipelineSpec(include = Seq("*.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -132,17 +138,12 @@ trait APITest
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
 
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.d"),
-      Seq(Row(1)))
+    checkAnswer(spark.sql(s"SELECT * FROM d"), Seq(Row(1)))
   }
 
   test("SQL Pipeline with subquery") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -155,17 +156,12 @@ trait APITest
 
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
-      Seq(Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM b"), Seq(Row(4)))
   }
 
   test("SQL Pipeline with join") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -179,17 +175,12 @@ trait APITest
 
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.c"),
-      Seq(Row(1, 1), Row(2, 2)))
+    checkAnswer(spark.sql(s"SELECT * FROM c"), Seq(Row(1, 1), Row(2, 2)))
   }
 
   test("SQL Pipeline with aggregation") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -202,17 +193,12 @@ trait APITest
 
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
-      Seq(Row(0, 8), Row(1, 9)))
+    checkAnswer(spark.sql(s"SELECT * FROM b"), Seq(Row(0, 8), Row(1, 9)))
   }
 
   test("SQL Pipeline with table properties") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -228,22 +214,19 @@ trait APITest
     awaitPipelineTermination(pipeline)
     // verify table properties
     val mv = spark.sessionState.catalog
-      .getTableMetadata(TableIdentifier("mv", Some(pipelineSpec.database)))
+      .getTableMetadata(TableIdentifier("mv"))
     assert(mv.properties.get("prop1").contains("foo1"))
     assert(mv.properties.get("prop2").contains("bar2"))
 
     val st = spark.sessionState.catalog
-      .getTableMetadata(TableIdentifier("st", Some(pipelineSpec.database)))
+      .getTableMetadata(TableIdentifier("st"))
     assert(st.properties.get("prop3").contains("foo3"))
     assert(st.properties.get("prop4").contains("bar4"))
   }
 
   test("SQL Pipeline with schema") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -257,12 +240,12 @@ trait APITest
     awaitPipelineTermination(pipeline)
 
     val a = spark.sessionState.catalog
-      .getTableMetadata(TableIdentifier("a", Some(pipelineSpec.database)))
+      .getTableMetadata(TableIdentifier("a"))
     assert(a.schema.fields.length == 1)
     assert(a.schema.fields(0).name == "id")
 
     val b = spark.sessionState.catalog
-      .getTableMetadata(TableIdentifier("b", Some(pipelineSpec.database)))
+      .getTableMetadata(TableIdentifier("b"))
     assert(b.schema.fields.length == 1)
     assert(b.schema.fields(0).name == "id")
   }
@@ -270,10 +253,7 @@ trait APITest
   /* Mixed Language Tests */
   test("Pipeline with Python and SQL") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("definition.sql", "definition.py"))
+      TestPipelineSpec(include = Seq("definition.sql", "definition.py"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -301,20 +281,13 @@ trait APITest
 
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
-      Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.c"),
-      Seq(Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM b"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM c"), Seq(Row(3), Row(4)))
   }
 
   test("Pipeline referencing internal datasets") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("mv.py", "st.py", "definition.sql"))
+      TestPipelineSpec(include = Seq("mv.py", "st.py", "definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -354,26 +327,17 @@ trait APITest
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
 
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.a"),
-      Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
-      Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.c"),
-      Seq(Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM a"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM b"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM c"), Seq(Row(3), Row(4)))
   }
 
   test("Pipeline referencing external datasets") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("definition.py", "definition.sql"))
+      TestPipelineSpec(include = Seq("definition.py", "definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     spark.sql(
-      s"CREATE TABLE ${pipelineSpec.catalog}.${pipelineSpec.database}.src " +
+      s"CREATE TABLE src " +
         s"AS SELECT * FROM RANGE(5)")
     val sources = Seq(
       PipelineSourceFile(
@@ -401,24 +365,15 @@ trait APITest
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
 
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.a"),
-      Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
-      Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.c"),
-      Seq(Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM a"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM b"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM c"), Seq(Row(3), Row(4)))
   }
 
   /* Python Language Tests */
   test("Python Pipeline with materialized_view, create_streaming_table, and append_flow") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("st.py", "mv.py"))
+      TestPipelineSpec(include = Seq("st.py", "mv.py"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -430,7 +385,7 @@ trait APITest
            |spark = SparkSession.active()
            |
            |dp.create_streaming_table(
-           |  name = "${pipelineSpec.database}.a",
+           |  name = "a",
            |  schema = "id LONG",
            |  comment = "streaming table a",
            |)
@@ -448,7 +403,7 @@ trait APITest
            |spark = SparkSession.active()
            |
            |@dp.materialized_view(
-           |  name = "${pipelineSpec.catalog}.${pipelineSpec.database}.src",
+           |  name = "src",
            |  comment = "source table",
            |  schema = "id LONG"
            |)
@@ -458,20 +413,15 @@ trait APITest
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
 
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.a"),
-      Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM a"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
   }
 
   test("Python Pipeline with temporary_view") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("definition.py"))
+      TestPipelineSpec(include = Seq("definition.py"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     spark.sql(
-      s"CREATE TABLE ${pipelineSpec.catalog}.${pipelineSpec.database}.src " +
+      s"CREATE TABLE src " +
         s"AS SELECT * FROM RANGE(5)")
     val sources = Seq(
       PipelineSourceFile(
@@ -499,17 +449,12 @@ trait APITest
     awaitPipelineTermination(pipeline)
 
     // query the mv that depends on the temporary view
-    checkAnswer(
-      spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.mv_1"),
-      Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+    checkAnswer(spark.sql(s"SELECT * FROM mv_1"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
   }
 
   test("Python Pipeline with partition columns") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("*.py"))
+      TestPipelineSpec(include = Seq("*.py"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
@@ -533,7 +478,7 @@ trait APITest
     awaitPipelineTermination(pipeline)
 
     Seq("mv", "st").foreach { tbl =>
-      val fullName = s"${pipelineSpec.catalog}.${pipelineSpec.database}.$tbl"
+      val fullName = s"$tbl"
       checkAnswer(
         spark.sql(s"SELECT * FROM $fullName"),
         Seq(Row(0, 0), Row(1, 1), Row(2, 0), Row(3, 1), Row(4, 0)))
@@ -544,10 +489,7 @@ trait APITest
 
   test("Pipeline with dry run") {
     val pipelineSpec =
-      TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
-        database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
-        include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec, dryRun = true)
     val sources = Seq(
       PipelineSourceFile(
@@ -560,12 +502,8 @@ trait APITest
     val pipeline = createAndRunPipeline(pipelineConfig, sources)
     awaitPipelineTermination(pipeline)
     // ensure the table did not get created in dry run mode
-    assert(
-      !spark.catalog.tableExists(s"${pipelineSpec.catalog}.${pipelineSpec.database}.a"),
-      "Table a should not exist in dry run mode")
-    assert(
-      !spark.catalog.tableExists(s"${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
-      "Table b should not exist in dry run mode")
+    assert(!spark.catalog.tableExists(s"a"), "Table a should not exist in dry run mode")
+    assert(!spark.catalog.tableExists(s"b"), "Table b should not exist in dry run mode")
   }
 
   Seq(
@@ -610,11 +548,8 @@ trait APITest
 
   private def runSelectiveRefreshTest(tc: SelectiveRefreshTestCase): Unit = {
     test(tc.name) {
-      val pipelineSpec = TestPipelineSpec(
-        catalog = catalogInPipelineSpec.getOrElse("spark_catalog"),
-        database = databaseInPipelineSpec.getOrElse("test_db"),
-        include = Seq("st.sql", "mv.sql"))
-      val externalTable = s"${pipelineSpec.catalog}.${pipelineSpec.database}.source_data"
+      val pipelineSpec = TestPipelineSpec(include = Seq("st.sql", "mv.sql"))
+      val externalTable = s"source_data"
       // create initial source table
       spark.sql(s"DROP TABLE IF EXISTS $externalTable")
       spark.sql(s"CREATE TABLE $externalTable AS SELECT * FROM RANGE(1, 2)")
@@ -652,19 +587,13 @@ trait APITest
 
       // clear caches to force reload
       Seq("a", "b", "mv").foreach { t =>
-        spark.catalog.refreshTable(s"${pipelineSpec.catalog}.${pipelineSpec.database}.$t")
+        spark.catalog.refreshTable(s"$t")
       }
 
       // verify results
-      checkAnswer(
-        spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.a"),
-        tc.expectedA)
-      checkAnswer(
-        spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
-        tc.expectedB)
-      checkAnswer(
-        spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.mv"),
-        tc.expectedMV)
+      checkAnswer(spark.sql(s"SELECT * FROM a"), tc.expectedA)
+      checkAnswer(spark.sql(s"SELECT * FROM b"), tc.expectedB)
+      checkAnswer(spark.sql(s"SELECT * FROM mv"), tc.expectedMV)
     }
   }
 }

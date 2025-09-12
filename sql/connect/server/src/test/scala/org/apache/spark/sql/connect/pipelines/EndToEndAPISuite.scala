@@ -26,7 +26,6 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.pipelines.utils.PipelineTest
 
-
 case class PipelineReferenceImpl(executionProcess: Process) extends PipelineReference
 
 /**
@@ -40,8 +39,8 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
   // Directory where the pipeline files will be created
   private var projectDir: Path = _
 
-  override def test(testName: String, testTags: org.scalatest.Tag*)(testFun: => Any)(
-      implicit pos: org.scalactic.source.Position): Unit = {
+  override def test(testName: String, testTags: org.scalatest.Tag*)(testFun: => Any)(implicit
+      pos: org.scalactic.source.Position): Unit = {
     super.test(testName, testTags: _*) {
       withTempDir { dir =>
         projectDir = dir.toPath
@@ -68,7 +67,8 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
     val cliCommand: Seq[String] = generateCliCommand(config, specFilePath)
     val pythonPath = PythonUtils.mergePythonPaths(
       Paths.get(sparkHome, "python").toAbsolutePath.toString, // PySpark with pipelines
-      PythonUtils.sparkPythonPath) // PySpark dependencies such as py4j
+      PythonUtils.sparkPythonPath
+    ) // PySpark dependencies such as py4j
 
     val processBuilder = new ProcessBuilder(cliCommand: _*)
     processBuilder.environment().put("PYTHONPATH", pythonPath)
@@ -110,19 +110,17 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
         process.waitFor(duration.toSeconds, TimeUnit.SECONDS)
         val exitCode = process.exitValue()
         if (exitCode != 0) {
-          throw new RuntimeException(
-            s"""Pipeline update process failed with exit code $exitCode.
+          throw new RuntimeException(s"""Pipeline update process failed with exit code $exitCode.
                |Output: ${new String(process.getInputStream.readAllBytes(), "UTF-8")}
-               |Error: ${new String(process.getErrorStream.readAllBytes(), "UTF-8")}"""
-              .stripMargin
-          )
+               |Error: ${new String(
+                                         process.getErrorStream.readAllBytes(),
+                                         "UTF-8")}""".stripMargin)
         } else {
           logInfo("Pipeline update process completed successfully")
-          logDebug(
-            s"""Output: ${new String(process.getInputStream.readAllBytes(), "UTF-8")}
-               |Error: ${new String(process.getErrorStream.readAllBytes(), "UTF-8")}"""
-              .stripMargin
-          )
+          logDebug(s"""Output: ${new String(process.getInputStream.readAllBytes(), "UTF-8")}
+               |Error: ${new String(
+                       process.getErrorStream.readAllBytes(),
+                       "UTF-8")}""".stripMargin)
         }
       case _ => throw new IllegalArgumentException("Invalid UpdateReference type")
     }
@@ -142,7 +140,6 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
     }
   }
 
-
   private def writePipelineSpecFile(spec: TestPipelineSpec): Path = {
     val libraries = spec.include
       .map { includePattern =>
@@ -154,20 +151,18 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
 
     val pipelineSpec = s"""
       |name: test-pipeline
-      |catalog: ${spec.catalog}
-      |database: ${spec.database}
+      |${spec.catalog.map(catalog => s"""catalog: "$catalog"""").getOrElse("")}
+      |${spec.database.map(database => s"""database: "$database"""").getOrElse("")}
       |configuration:
       |  "spark.remote": "sc://localhost:$serverPort"
       |libraries:
       |$libraries
       |""".stripMargin
-    logInfo(
-      """
+    logInfo("""
         |Generated pipeline spec:
         |
         |$pipelineSpec
-        |""".stripMargin
-    )
+        |""".stripMargin)
     val specFilePath = projectDir.resolve("pipeline.yaml")
     Files.write(specFilePath, pipelineSpec.getBytes("UTF-8"))
     logDebug(s"Created pipeline spec: ${specFilePath.toAbsolutePath}")
