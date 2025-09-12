@@ -108,6 +108,8 @@ private[kafka010] class KafkaSource(
 
   private var allDataForTriggerAvailableNow: PartitionOffsetMap = _
 
+  private var isTriggerAvailableNow = false
+
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
@@ -171,8 +173,13 @@ private[kafka010] class KafkaSource(
     val currentOffsets = currentPartitionOffsets.orElse(Some(initialPartitionOffsets))
 
     // Use the pre-fetched list of partition offsets when Trigger.AvailableNow is enabled.
-    val latest = if (allDataForTriggerAvailableNow != null) {
-      allDataForTriggerAvailableNow
+    val latest = if (isTriggerAvailableNow) {
+      if (allDataForTriggerAvailableNow != null) {
+        allDataForTriggerAvailableNow
+      } else {
+        allDataForTriggerAvailableNow = kafkaReader.fetchLatestOffsets(currentOffsets)
+        allDataForTriggerAvailableNow
+      }
     } else {
       kafkaReader.fetchLatestOffsets(currentOffsets)
     }
@@ -399,7 +406,7 @@ private[kafka010] class KafkaSource(
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {
-    allDataForTriggerAvailableNow = kafkaReader.fetchLatestOffsets(Some(initialPartitionOffsets))
+    isTriggerAvailableNow = true
   }
 }
 
