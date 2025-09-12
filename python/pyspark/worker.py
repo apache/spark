@@ -25,7 +25,7 @@ import time
 import inspect
 import itertools
 import json
-from typing import Any, Callable, Iterable, Iterator, Optional
+from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
 import faulthandler
 
 from pyspark.accumulators import (
@@ -1549,7 +1549,8 @@ def read_udtf(pickleSer, infile, eval_type):
             self._create_udtf: Callable = create_udtf
             self._udtf = create_udtf()
             self._partition_child_indexes: list = partition_child_indexes
-            self._last_partition_key = None  # Track last partition key from previous batch
+            # Track last partition key from previous batch
+            self._last_partition_key: Optional[Tuple[Any, ...]] = None
             self._eval_raised_skip_rest_of_input_table: bool = False
 
         def eval(self, *args, **kwargs) -> Iterator:

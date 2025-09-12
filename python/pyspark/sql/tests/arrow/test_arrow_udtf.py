@@ -1112,6 +1112,114 @@ class ArrowUDTFTestsMixin:
         )
         assertDataFrameEqual(result_df, expected_df)
 
+    def test_arrow_udtf_with_partition_by_null_values(self):
+        @arrow_udtf(returnType="partition_key int, count int, non_null_sum int")
+        class NullPartitionUDTF:
+            def __init__(self):
+                self._partition_key = None
+                self._count = 0
+                self._non_null_sum = 0
+
+            def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
+                import pyarrow.compute as pc
+
+                table = pa.table(table_data)
+                # Handle null partition keys
+                partition_keys = table["partition_key"]
+                unique_keys = pc.unique(partition_keys).to_pylist()
+
+                # Should have exactly one unique value (either a value or None)
+                assert len(unique_keys) == 1, f"Expected one partition key, got {unique_keys}"
+                self._partition_key = unique_keys[0]
+
+                # Count rows and sum non-null values
+                self._count += table.num_rows
+                values = table["value"]
+                # Use PyArrow compute to handle nulls properly
+                non_null_values = pc.drop_null(values)
+                if len(non_null_values) > 0:
+                    self._non_null_sum += pc.sum(non_null_values).as_py()
+
+                return iter(())
+
+            def terminate(self) -> Iterator["pa.Table"]:
+                # Return results even for null partition keys
+                result_table = pa.table(
+                    {
+                        "partition_key": pa.array([self._partition_key], type=pa.int32()),
+                        "count": pa.array([self._count], type=pa.int32()),
+                        "non_null_sum": pa.array([self._non_null_sum], type=pa.int32()),
+                    }
+                )
+                yield result_table
+
+        # Test data with null partition keys and null values
+        test_data = [
+            (1, 10),
+            (1, None),  # null value in partition 1
+            (None, 20),  # null partition key
+            (None, 30),  # null partition key
+            (2, 40),
+            (2, None),  # null value in partition 2
+            (None, None),  # both null
+        ]
+        input_df = self.spark.createDataFrame(test_data, "partition_key int, value int")
+
+        self.spark.udtf.register("null_partition_udtf", NullPartitionUDTF)
+        input_df.createOrReplaceTempView("test_null_partitions")
+
+        result_df = self.spark.sql(
+            """
+            SELECT * FROM null_partition_udtf(
+                TABLE(test_null_partitions)
+                PARTITION BY partition_key
+                ORDER BY value
+            )
+            ORDER BY partition_key NULLS FIRST
+            """
+        )
+
+        # Expected: null partition gets grouped together, nulls in values are handled
+        expected_data = [
+            (None, 3, 50),  # null partition: 3 rows, sum of non-null values = 20+30 = 50
+            (1, 2, 10),  # partition 1: 2 rows, sum of non-null values = 10
+            (2, 2, 40),  # partition 2: 2 rows, sum of non-null values = 40
+        ]
+        expected_df = self.spark.createDataFrame(
+            expected_data, "partition_key int, count int, non_null_sum int"
+        )
+        assertDataFrameEqual(result_df, expected_df)
+
+    def test_arrow_udtf_with_empty_table(self):
+        @arrow_udtf(returnType="result string")
+        class EmptyTableUDTF:
+            def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
+                import pyarrow as pa
+
+                # This should not be called for empty tables
+                table = pa.table(table_data)
+                result_table = pa.table(
+                    {"result": pa.array([f"rows_{table.num_rows}"], type=pa.string())}
+                )
+                yield result_table
+
+        # Create an empty DataFrame
+        empty_df = self.spark.range(0)
+
+        self.spark.udtf.register("empty_table_udtf", EmptyTableUDTF)
+        empty_df.createOrReplaceTempView("empty_table")
+
+        result_df = self.spark.sql(
+            """
+            SELECT * FROM empty_table_udtf(TABLE(empty_table))
+            """
+        )
+
+        # For empty input, UDTF is not called, resulting in empty output
+        # This is consistent with regular UDTFs
+        expected_df = self.spark.createDataFrame([], "result string")
+        assertDataFrameEqual(result_df, expected_df)
+
 
 class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
     pass
