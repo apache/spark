@@ -393,22 +393,19 @@ class DefaultChannelBuilder(ChannelBuilder):
                     )
                 self.set(kv[0], urllib.parse.unquote(kv[1]))
 
-        netloc = self.url.netloc.split(":")
-        if len(netloc) == 1:
-            self._host = netloc[0]
-            self._port = DefaultChannelBuilder.default_port()
-        elif len(netloc) == 2:
-            self._host = netloc[0]
-            self._port = int(netloc[1])
-        else:
+        if not self.url.hostname:
             raise PySparkValueError(
                 errorClass="INVALID_CONNECT_URL",
                 messageParameters={
-                    "detail": f"Target destination '{self.url.netloc}' should match the "
-                    f"'<host>:<port>' pattern. Please update the destination to follow "
-                    f"the correct format, e.g., 'hostname:port'.",
+                    "detail": f"Hostname is missing in the URL: '{self.url.geturl()}'. "
+                    "Please update the URL to follow the correct format, "
+                    "e.g., 'sc://hostname:port'.",
                 },
             )
+        self._host = f"[{self.url.hostname}]" if ":" in self.url.hostname else self.url.hostname
+        self._port = (
+            self.url.port if self.url.port is not None else DefaultChannelBuilder.default_port()
+        )
 
     @property
     def secure(self) -> bool:
