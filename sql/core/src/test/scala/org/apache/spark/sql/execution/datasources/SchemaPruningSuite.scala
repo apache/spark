@@ -1162,4 +1162,550 @@ abstract class SchemaPruningSuite
     checkAnswer(mapQuery, Row(0, null) :: Row(1, null) ::
       Row(null, null) :: Row(null, null) :: Nil)
   }
+
+  testSchemaPruning("SPARK-XXXXX: multi-field explode column pruning optimization") {
+    // Create test data with nested structure similar to pageviews -> requests -> items
+    case class Item(itemId: Int, itemName: String, itemPrice: Double, itemCategory: String)
+    case class Request(requestId: Int, timestamp: String, userAgent: String, items: Array[Item])
+    case class PageView(pageId: Int, userId: String, requests: Array[Request])
+
+    val testData = PageView(1, "user1", Array(
+      Request(101, "2023-01-01", "browser1", Array(
+        Item(201, "item1", 10.0, "cat1"),
+        Item(202, "item2", 20.0, "cat2")
+      )),
+      Request(102, "2023-01-02", "browser2", Array(
+        Item(203, "item3", 30.0, "cat3")
+      ))
+    )) :: Nil
+
+    withDataSourceTable(testData, "pageviews") {
+      // Query that only needs itemId and itemName - should prune itemPrice, itemCategory,
+      // userAgent, timestamp
+      val query1 = spark.table("pageviews")
+        .select(explode(col("requests")).as("request"))
+        .select(explode(col("request.items")).as("item"))
+        .select("item.itemId", "item.itemName")
+
+      // With the optimization, unnecessary fields should be pruned
+      checkScan(query1,
+        "struct<requests:array<struct<items:array<struct<itemId:int,itemName:string>>>>>")
+      checkAnswer(query1,
+        Row(201, "item1") :: Row(202, "item2") :: Row(203, "item3") :: Nil)
+
+      // Query with multiple nested levels - should still optimize
+      val query2 = spark.table("pageviews")
+        .select("pageId", "requests.requestId", "requests.items.itemId")
+      // Should prune unneeded fields at all levels
+      checkScan(query2,
+        "struct<pageId:int,requests:array<struct<requestId:int,items:array<struct<itemId:int>>>>>")
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: explode with filter and multiple field selection") {
+    // Test that optimization works even with filters
+    case class NestedItem(id: Int, name: String, price: Double, category: String, active: Boolean)
+    case class Container(id: Int, items: Array[NestedItem])
+
+    val testData = Container(1, Array(
+      NestedItem(1, "item1", 10.0, "cat1", true),
+      NestedItem(2, "item2", 20.0, "cat2", false),
+      NestedItem(3, "item3", 30.0, "cat3", true)
+    )) :: Nil
+
+    withDataSourceTable(testData, "containers") {
+      val query = spark.table("containers")
+        .select(explode(col("items")).as("item"))
+        .filter("item.active = true")
+        .select("item.id", "item.name")
+
+      // Should prune price and category fields, keep active for filter
+      checkScan(query, "struct<items:array<struct<id:int,name:string,active:boolean>>>")
+      checkAnswer(query, Row(1, "item1") :: Row(3, "item3") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: nested explode with aggregation") {
+    // Test that optimization works with aggregations on exploded data
+    case class Event(eventId: Int, eventName: String, eventType: String)
+    case class Session(sessionId: Int, duration: Int, events: Array[Event])
+    case class User(userId: Int, userName: String, sessions: Array[Session])
+
+    val testData = User(1, "user1", Array(
+      Session(101, 3600, Array(
+        Event(1001, "login", "auth"),
+        Event(1002, "click", "interaction"),
+        Event(1003, "purchase", "transaction")
+      )),
+      Session(102, 1800, Array(
+        Event(1004, "login", "auth"),
+        Event(1005, "logout", "auth")
+      ))
+    )) :: Nil
+
+    withDataSourceTable(testData, "users") {
+      val query = spark.table("users")
+        .select(explode(col("sessions")).as("session"))
+        .select(explode(col("session.events")).as("event"))
+        .groupBy("event.eventType")
+        .count()
+
+      // Should only read eventType field, prune eventId, eventName, duration, userName
+      checkScan(query, "struct<sessions:array<struct<events:array<struct<eventType:string>>>>>")
+      checkAnswer(query,
+        Row("auth", 3) :: Row("interaction", 1) :: Row("transaction", 1) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: multi-format support - JSON with nested explode") {
+    case class JsonNestedItem(id: Int, name: String, price: Double, tags: Array[String])
+    case class JsonContainer(containerId: Int, items: Array[JsonNestedItem], metadata: String)
+    
+    val testData = JsonContainer(1, Array(
+      JsonNestedItem(101, "item1", 10.5, Array("tag1", "tag2")),
+      JsonNestedItem(102, "item2", 20.0, Array("tag3", "tag4", "tag5"))
+    ), "test-metadata") :: Nil
+
+    withDataSourceTable(testData, "json_containers") {
+      val query = spark.table("json_containers")
+        .select(explode(col("items")).as("item"))
+        .select("item.id", "item.name")
+        
+      // Should prune price, tags, and metadata fields
+      checkScan(query, "struct<items:array<struct<id:int,name:string>>>")
+      checkAnswer(query, Row(101, "item1") :: Row(102, "item2") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: multi-level explode with Parquet optimization") {
+    case class ParquetProduct(productId: Int, productName: String, productPrice: Double)
+    case class ParquetOrder(orderId: Int, orderDate: String, products: Array[ParquetProduct])
+    case class ParquetCustomer(customerId: Int, customerName: String, orders: Array[ParquetOrder])
+    
+    val testData = ParquetCustomer(1, "John Doe", Array(
+      ParquetOrder(101, "2023-01-01", Array(
+        ParquetProduct(201, "Product1", 10.0),
+        ParquetProduct(202, "Product2", 20.0)
+      )),
+      ParquetOrder(102, "2023-01-02", Array(
+        ParquetProduct(203, "Product3", 30.0)
+      ))
+    )) :: Nil
+
+    withDataSourceTable(testData, "parquet_customers") {
+      val query = spark.table("parquet_customers")
+        .select(explode(col("orders")).as("order"))
+        .select(explode(col("order.products")).as("product"))
+        .select("product.productId", "product.productName")
+        
+      // Should prune customerName, orderDate, productPrice
+      checkScan(query, 
+        "struct<orders:array<struct<products:array<struct<productId:int,productName:string>>>>>")
+      checkAnswer(query, 
+        Row(201, "Product1") :: Row(202, "Product2") :: Row(203, "Product3") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: complex filter predicates with explode optimization") {
+    case class FilterableItem(id: Int, name: String, category: String, price: Double, active: Boolean)
+    case class FilterableContainer(containerId: Int, containerType: String, items: Array[FilterableItem])
+    
+    val testData = FilterableContainer(1, "premium", Array(
+      FilterableItem(1, "item1", "electronics", 100.0, true),
+      FilterableItem(2, "item2", "books", 20.0, false),
+      FilterableItem(3, "item3", "electronics", 150.0, true),
+      FilterableItem(4, "item4", "clothing", 50.0, true)
+    )) :: Nil
+
+    withDataSourceTable(testData, "filterable_containers") {
+      // Complex filter with multiple conditions
+      val query = spark.table("filterable_containers")
+        .select(explode(col("items")).as("item"))
+        .filter("item.active = true AND item.category = 'electronics' AND item.price > 50.0")
+        .select("item.id", "item.name")
+        
+      // Should keep active, category, price for filter, prune containerType
+      checkScan(query, 
+        "struct<items:array<struct<id:int,name:string,category:string,price:double,active:boolean>>>")
+      checkAnswer(query, Row(1, "item1") :: Row(3, "item3") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: window functions over exploded nested data") {
+    case class SalesRecord(salesId: Int, amount: Double, region: String, quarter: Int)
+    case class SalesData(year: Int, records: Array[SalesRecord], totalRevenue: Double)
+    
+    val testData = SalesData(2023, Array(
+      SalesRecord(1, 1000.0, "North", 1),
+      SalesRecord(2, 2000.0, "South", 1),
+      SalesRecord(3, 1500.0, "North", 2),
+      SalesRecord(4, 2500.0, "South", 2)
+    ), 7000.0) :: Nil
+
+    withDataSourceTable(testData, "sales_data") {
+      val query = spark.table("sales_data")
+        .select(explode(col("records")).as("record"))
+        .select(
+          col("record.salesId"),
+          col("record.amount"),
+          col("record.region"),
+          row_number().over(Window.partitionBy(col("record.region"))
+                                 .orderBy(col("record.amount").desc)).as("rank")
+        )
+        
+      // Should prune year, quarter, totalRevenue
+      checkScan(query, 
+        "struct<records:array<struct<salesId:int,amount:double,region:string>>>")
+      checkAnswer(query, 
+        Row(2, 2000.0, "South", 1) :: Row(4, 2500.0, "South", 1) :: 
+        Row(1, 1000.0, "North", 2) :: Row(3, 1500.0, "North", 2) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: lateral view with multiple explodes") {
+    case class Tag(tagId: Int, tagName: String, tagType: String)
+    case class Document(docId: Int, title: String, tags: Array[Tag], categories: Array[String])
+    
+    val testData = Document(1, "Test Document", Array(
+      Tag(101, "spark", "technology"),
+      Tag(102, "sql", "technology")
+    ), Array("tutorial", "advanced")) :: Nil
+
+    withDataSourceTable(testData, "documents") {
+      // Using SQL lateral view syntax
+      val query = sql("""
+        SELECT tag.tagId, tag.tagName, category
+        FROM documents 
+        LATERAL VIEW explode(tags) t AS tag
+        LATERAL VIEW explode(categories) c AS category
+        WHERE tag.tagType = 'technology'
+      """)
+      
+      // Should prune title, tagType is kept for filter
+      checkScan(query, 
+        "struct<tags:array<struct<tagId:int,tagName:string,tagType:string>>,categories:array<string>>")
+      checkAnswer(query, 
+        Row(101, "spark", "tutorial") :: Row(101, "spark", "advanced") :: 
+        Row(102, "sql", "tutorial") :: Row(102, "sql", "advanced") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: join between exploded tables") {
+    case class LeftRecord(id: Int, leftData: String, leftValue: Double)
+    case class RightRecord(id: Int, rightData: String, rightCode: String)
+    case class LeftContainer(leftItems: Array[LeftRecord])
+    case class RightContainer(rightItems: Array[RightRecord])
+    
+    val leftData = LeftContainer(Array(
+      LeftRecord(1, "left1", 10.0),
+      LeftRecord(2, "left2", 20.0)
+    )) :: Nil
+    
+    val rightData = RightContainer(Array(
+      RightRecord(1, "right1", "code1"),
+      RightRecord(2, "right2", "code2")
+    )) :: Nil
+
+    withDataSourceTable(leftData, "left_containers")
+    withDataSourceTable(rightData, "right_containers")
+    
+    val query = spark.table("left_containers")
+      .select(explode(col("leftItems")).as("left"))
+      .join(
+        spark.table("right_containers")
+          .select(explode(col("rightItems")).as("right")),
+        col("left.id") === col("right.id")
+      )
+      .select("left.id", "left.leftData", "right.rightCode")
+      
+    // Should prune leftValue and rightData
+    checkAnswer(query, Row(1, "left1", "code1") :: Row(2, "left2", "code2") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-XXXXX: subquery with exploded data") {
+    case class SubItem(itemId: Int, itemName: String, itemStatus: String, itemValue: Double)
+    case class SubContainer(containerId: Int, items: Array[SubItem], containerType: String)
+    
+    val testData = SubContainer(1, Array(
+      SubItem(101, "item1", "active", 100.0),
+      SubItem(102, "item2", "inactive", 200.0),
+      SubItem(103, "item3", "active", 150.0)
+    ), "standard") :: Nil
+
+    withDataSourceTable(testData, "sub_containers") {
+      val query = sql("""
+        SELECT item.itemId, item.itemName
+        FROM (
+          SELECT explode(items) as item 
+          FROM sub_containers 
+          WHERE containerType = 'standard'
+        ) exploded
+        WHERE item.itemStatus = 'active'
+      """)
+      
+      // Should prune itemValue, keep itemStatus and containerType for filters
+      checkAnswer(query, Row(101, "item1") :: Row(103, "item3") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: CTE with exploded nested data") {
+    case class CteRecord(recordId: Int, recordName: String, recordType: String, recordData: Double)
+    case class CteData(dataId: Int, records: Array[CteRecord], metadata: String)
+    
+    val testData = CteData(1, Array(
+      CteRecord(1, "record1", "typeA", 10.0),
+      CteRecord(2, "record2", "typeB", 20.0),
+      CteRecord(3, "record3", "typeA", 30.0)
+    ), "test-meta") :: Nil
+
+    withDataSourceTable(testData, "cte_data") {
+      val query = sql("""
+        WITH exploded_records AS (
+          SELECT explode(records) as record, metadata
+          FROM cte_data
+        ),
+        filtered_records AS (
+          SELECT record.recordId, record.recordName, record.recordType
+          FROM exploded_records
+          WHERE record.recordType = 'typeA'
+        )
+        SELECT recordId, recordName
+        FROM filtered_records
+      """)
+      
+      // Should prune recordData and metadata
+      checkAnswer(query, Row(1, "record1") :: Row(3, "record3") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: performance test - very wide schema with selective access") {
+    // Create a very wide schema to test pruning efficiency
+    val wideFields = (1 to 100).map(i => s"field$i" -> s"value$i")
+    val wideItem = wideFields.toMap + ("id" -> "1") + ("name" -> "test")
+    val wideSchema = spark.read.json(spark.sparkContext.parallelize(Seq(
+      s"""{"items": [${wideItem.map { case (k, v) => s""""$k": "$v"""" }.mkString("{", ",", "}")}]}"""
+    )))
+
+    wideSchema.createOrReplaceTempView("wide_data")
+    
+    val query = sql("""
+      SELECT item.id, item.name
+      FROM wide_data
+      LATERAL VIEW explode(items) t AS item
+    """)
+    
+    // Should dramatically prune the schema to only include id and name
+    checkScan(query, "struct<items:array<struct<id:string,name:string>>>")
+    checkAnswer(query, Row("1", "test") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-XXXXX: exploding nested structs within structs") {
+    case class Address(street: String, city: String, zipCode: String, country: String)
+    case class PersonalInfo(firstName: String, lastName: String, address: Address, age: Int)
+    case class Employee(empId: Int, personalInfo: PersonalInfo, department: String, salary: Double)
+    case class Company(companyId: Int, employees: Array[Employee], companyName: String)
+    
+    val testData = Company(1, Array(
+      Employee(101, PersonalInfo("John", "Doe", 
+        Address("123 Main St", "NYC", "10001", "USA"), 30), "Engineering", 75000.0),
+      Employee(102, PersonalInfo("Jane", "Smith", 
+        Address("456 Oak Ave", "SF", "94102", "USA"), 28), "Marketing", 65000.0)
+    ), "TechCorp") :: Nil
+
+    withDataSourceTable(testData, "companies") {
+      val query = spark.table("companies")
+        .select(explode(col("employees")).as("emp"))
+        .select("emp.empId", "emp.personalInfo.firstName", "emp.personalInfo.address.city")
+        
+      // Should prune salary, department, companyName, lastName, age, street, zipCode, country
+      checkScan(query,
+        "struct<employees:array<struct<empId:int,personalInfo:struct<firstName:string,address:struct<city:string>>>>>")
+      checkAnswer(query, 
+        Row(101, "John", "NYC") :: Row(102, "Jane", "SF") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: nested list of structs containing lists of structs") {
+    case class Skill(skillId: Int, skillName: String, level: String, certified: Boolean)
+    case class Project(projectId: Int, projectName: String, skills: Array[Skill], budget: Double)
+    case class Department(deptId: Int, deptName: String, projects: Array[Project], manager: String)
+    case class Organization(orgId: Int, departments: Array[Department], orgType: String)
+    
+    val testData = Organization(1, Array(
+      Department(10, "Engineering", Array(
+        Project(100, "Project A", Array(
+          Skill(1, "Scala", "Expert", true),
+          Skill(2, "Spark", "Advanced", false)
+        ), 100000.0),
+        Project(101, "Project B", Array(
+          Skill(3, "Python", "Intermediate", true)
+        ), 75000.0)
+      ), "Alice"),
+      Department(20, "Data Science", Array(
+        Project(200, "ML Project", Array(
+          Skill(4, "TensorFlow", "Advanced", true),
+          Skill(5, "Statistics", "Expert", false)
+        ), 150000.0)
+      ), "Bob")
+    ), "Tech") :: Nil
+
+    withDataSourceTable(testData, "organizations") {
+      // Three-level exploding: departments -> projects -> skills
+      val query = spark.table("organizations")
+        .select(explode(col("departments")).as("dept"))
+        .select(explode(col("dept.projects")).as("project"))
+        .select(explode(col("project.skills")).as("skill"))
+        .select("skill.skillId", "skill.skillName", "skill.level")
+        
+      // Should prune orgType, manager, budget, certified, and other unused fields
+      checkScan(query,
+        """struct<departments:array<struct<projects:array<struct<skills:array<struct<skillId:int,skillName:string,level:string>>>>>>>""")
+      checkAnswer(query,
+        Row(1, "Scala", "Expert") :: Row(2, "Spark", "Advanced") :: 
+        Row(3, "Python", "Intermediate") :: Row(4, "TensorFlow", "Advanced") ::
+        Row(5, "Statistics", "Expert") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-XXXXX: nested map of structs with explode") {
+    import org.apache.spark.sql.types._
+    
+    // Using raw SQL since case classes don't support maps easily
+    val mapData = spark.sql("""
+      SELECT map(
+        'user1', named_struct('userId', 1, 'userName', 'John', 'userAge', 25, 'userEmail', 'john@test.com'),
+        'user2', named_struct('userId', 2, 'userName', 'Jane', 'userAge', 30, 'userEmail', 'jane@test.com')
+      ) as userMap,
+      'active' as status,
+      array(
+        map('config1', named_struct('configId', 101, 'configValue', 'value1', 'configType', 'string')),
+        map('config2', named_struct('configId', 102, 'configValue', 'value2', 'configType', 'number'))
+      ) as configMaps
+    """)
+    
+    mapData.createOrReplaceTempView("map_data")
+    
+    val query = sql("""
+      SELECT user.key as userKey, user.value.userId, user.value.userName
+      FROM map_data
+      LATERAL VIEW explode(userMap) t AS user
+    """)
+    
+    // Should prune status, configMaps, userAge, userEmail
+    checkAnswer(query,
+      Row("user1", 1, "John") :: Row("user2", 2, "Jane") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-XXXXX: complex nested arrays with maps and structs") {
+    val complexData = spark.sql("""
+      SELECT array(
+        named_struct(
+          'regionId', 1,
+          'regionName', 'North',
+          'stores', array(
+            named_struct(
+              'storeId', 101,
+              'storeName', 'Store A',
+              'products', map(
+                'electronics', array(
+                  named_struct('productId', 1001, 'productName', 'Laptop', 'price', 999.99, 'category', 'computers'),
+                  named_struct('productId', 1002, 'productName', 'Mouse', 'price', 19.99, 'category', 'accessories')
+                ),
+                'books', array(
+                  named_struct('productId', 2001, 'productName', 'Scala Book', 'price', 49.99, 'category', 'programming')
+                )
+              ),
+              'revenue', 50000.0
+            )
+          )
+        )
+      ) as regions,
+      'Q1-2023' as quarter
+    """)
+    
+    complexData.createOrReplaceTempView("complex_data")
+    
+    val query = sql("""
+      SELECT store.storeId, product.productId, product.productName
+      FROM complex_data
+      LATERAL VIEW explode(regions) r AS region
+      LATERAL VIEW explode(region.stores) s AS store  
+      LATERAL VIEW explode(store.products) p AS productType, products
+      LATERAL VIEW explode(products) prod AS product
+    """)
+    
+    // Should prune quarter, regionName, storeName, revenue, price, category
+    checkAnswer(query,
+      Row(101, 1001, "Laptop") :: Row(101, 1002, "Mouse") :: Row(101, 2001, "Scala Book") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-XXXXX: mixed nested structures with conditional access") {
+    case class ContactInfo(phone: String, email: String, preferred: String)
+    case class CustomerProfile(profileId: Int, contacts: Array[ContactInfo], preferences: Map[String, String])
+    case class Customer(customerId: Int, profile: CustomerProfile, orders: Array[Int], active: Boolean)
+    case class CustomerData(customers: Array[Customer], lastUpdated: String)
+    
+    // Simulate this with SQL since maps in case classes are complex
+    val mixedData = spark.sql("""
+      SELECT array(
+        named_struct(
+          'customerId', 1,
+          'profile', named_struct(
+            'profileId', 101,
+            'contacts', array(
+              named_struct('phone', '123-456-7890', 'email', 'test1@example.com', 'preferred', 'email'),
+              named_struct('phone', '987-654-3210', 'email', 'test2@example.com', 'preferred', 'phone')
+            ),
+            'preferences', map('newsletter', 'true', 'sms', 'false')
+          ),
+          'orders', array(1001, 1002, 1003),
+          'active', true
+        )
+      ) as customers,
+      '2023-01-01' as lastUpdated
+    """)
+    
+    mixedData.createOrReplaceTempView("customer_data")
+    
+    val query = sql("""
+      SELECT customer.customerId, contact.phone, contact.preferred
+      FROM customer_data
+      LATERAL VIEW explode(customers) c AS customer
+      LATERAL VIEW explode(customer.profile.contacts) ct AS contact
+      WHERE contact.preferred = 'phone'
+    """)
+    
+    // Should prune lastUpdated, orders, active, profileId, preferences, email
+    checkAnswer(query, Row(1, "987-654-3210", "phone") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-XXXXX: deeply nested struct in array optimization") {
+    case class Level4(field4: String, data4: Int, unused4: String)
+    case class Level3(field3: String, level4: Level4, unused3: Double)
+    case class Level2(field2: String, level3: Level3, unused2: Boolean)
+    case class Level1(field1: String, level2: Level2, unused1: Array[String])
+    case class RootLevel(items: Array[Level1], rootField: String)
+    
+    val deepData = RootLevel(Array(
+      Level1("f1", Level2("f2", Level3("f3", Level4("f4", 42, "unused"), 3.14), false), Array("u1")),
+      Level1("f1b", Level2("f2b", Level3("f3b", Level4("f4b", 43, "unused2"), 2.71), true), Array("u2"))
+    ), "root") :: Nil
+
+    withDataSourceTable(deepData, "deep_data") {
+      val query = spark.table("deep_data")
+        .select(explode(col("items")).as("item"))
+        .select(
+          "item.field1",
+          "item.level2.field2", 
+          "item.level2.level3.level4.field4",
+          "item.level2.level3.level4.data4"
+        )
+        
+      // Should prune rootField, unused1, unused2, unused3, unused4, field3
+      checkScan(query,
+        """struct<items:array<struct<field1:string,level2:struct<field2:string,level3:struct<level4:struct<field4:string,data4:int>>>>>>""")
+      checkAnswer(query,
+        Row("f1", "f2", "f4", 42) :: Row("f1b", "f2b", "f4b", 43) :: Nil)
+    }
+  }
 }
