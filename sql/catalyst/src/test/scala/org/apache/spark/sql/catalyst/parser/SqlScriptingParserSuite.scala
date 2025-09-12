@@ -2853,6 +2853,30 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(6))
   }
 
+  test("continue handler not supported") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key)
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScript)
+      },
+      condition = "UNSUPPORTED_FEATURE.CONTINUE_EXCEPTION_HANDLER",
+      parameters = Map.empty)
+    conf.setConfString(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key, "true")
+  }
+
   test("declare exit handler for qualified condition name that is not supported") {
     val sqlScript =
       """
