@@ -171,7 +171,7 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
         // Positional parameter: just a value
         val paramValue = evaluateParameterExpression(expr)
         values += paramValue
-        names += null // unnamed expression
+        names += "" // unnamed expression
     }
 
     (values.toArray, names.toArray)

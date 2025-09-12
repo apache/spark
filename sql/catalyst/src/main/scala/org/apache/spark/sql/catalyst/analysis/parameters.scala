@@ -122,8 +122,8 @@ case class GeneralParameterizedQuery(
     paramNames: Seq[String])
   extends ParameterizedQuery(child) {
   assert(args.nonEmpty)
-  assert(paramNames.isEmpty || paramNames.length == args.length,
-    s"paramNames must be either empty or same length as args. " +
+  assert(paramNames.length == args.length,
+    s"paramNames must be same length as args. " +
     s"paramNames.length=${paramNames.length}, args.length=${args.length}")
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
@@ -234,39 +234,35 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           args.forall(_.resolved) =>
 
         // Check all arguments for validity (args are already evaluated expressions/literals)
-        val allArgs = if (paramNames.isEmpty) {
-          args.zipWithIndex.map { case (arg, idx) => s"_$idx" -> arg }
-        } else {
-          args.zip(paramNames).map { case (arg, name) => name -> arg }
+        val allArgs = args.zip(paramNames).zipWithIndex.map { case ((arg, name), index) =>
+          val finalName = if (name.isEmpty) s"_$index" else name
+          finalName -> arg
         }
         checkArgs(allArgs)
 
         // Collect parameter types used in the query to enforce invariants
         var hasNamedParam = false
-        var hasPositionalParam = false
         val positionalParams = scala.collection.mutable.Set.empty[Int]
         bind(child) {
           case p @ NamedParameter(_) => hasNamedParam = true; p
           case p @ PosParameter(pos) =>
-            hasPositionalParam = true
             positionalParams.add(pos)
             p
         }
 
         // Validate: no mixing of positional and named parameters
-        if (hasNamedParam && hasPositionalParam) {
+        if (hasNamedParam && positionalParams.nonEmpty) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         }
 
         // Validate: if query uses named parameters, all USING expressions must have names
-        if (hasNamedParam && !hasPositionalParam) {
+        if (hasNamedParam && positionalParams.isEmpty) {
           if (paramNames.isEmpty) {
             // Query uses named parameters but no USING expressions provided
             throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(Seq.empty)
           } else {
             // Check that all USING expressions have names
             val unnamedExpressions = paramNames.zipWithIndex.collect {
-              case (null, index) => index
               case ("", index) => index // empty strings are unnamed
             }
             if (unnamedExpressions.nonEmpty) {
