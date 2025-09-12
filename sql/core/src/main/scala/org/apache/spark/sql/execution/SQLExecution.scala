@@ -28,6 +28,8 @@ import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.sql.catalyst.parser.{PositionTranslationUtils, ThreadLocalParameterContext}
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -54,6 +56,83 @@ object SQLExecution extends Logging {
   }
 
   private val testing = sys.props.contains(IS_TESTING.key)
+
+
+
+  /**
+   * Translates error positions from substituted SQL back to original SQL if parameter
+   * substitution occurred. This ensures that error messages show positions relative
+   * to the SQL text that the user originally submitted.
+   *
+   * @param error The original error that occurred
+   * @param queryExecution The query execution context
+   * @return The error with translated positions, or the original error if no translation needed
+   */
+  private def translateParameterPositions(error: Throwable,
+      queryExecution: QueryExecution): Throwable = {
+    // Check if parameter substitution is enabled and this query execution involved it
+    if (queryExecution.sparkSession.sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+      // Legacy mode: parameter substitution limited to constants only, no translation needed
+      return error
+    }
+
+    val positionMapperOpt = ThreadLocalParameterContext.get() match {
+      case Some(_) =>
+        // Parameter substitution occurred, try to get the position mapper
+        queryExecution.sparkSession.sessionState.sqlParser match {
+          case sparkParser: org.apache.spark.sql.execution.SparkSqlParser =>
+            sparkParser.getPositionMapper
+          case _ => None
+        }
+      case None => None
+    }
+
+    positionMapperOpt match {
+      case Some(positionMapper) =>
+        // Simply check if the error has WithOrigin and update its context
+        error match {
+          case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+            // Check if this exception has a getQueryContext method (like AnalysisException)
+            val contexts = e match {
+              case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
+              case _ =>
+                Array.empty[org.apache.spark.QueryContext]
+            }
+            if (contexts.isEmpty) {
+              // No query context available - create a default context
+              // spanning the entire original SQL
+              val originalSql = positionMapper.originalText
+              val defaultContext = org.apache.spark.sql.catalyst.trees.SQLQueryContext(
+                line = None,
+                startPosition = None,
+                originStartIndex = Some(0),
+                originStopIndex = Some(originalSql.length - 1),
+                sqlText = Some(originalSql),
+                originObjectType = None,
+                originObjectName = None
+              )
+              e.updateQueryContext(_ => Array(defaultContext)).asInstanceOf[Throwable]
+            } else {
+              // Apply position mapping to existing contexts
+              e.updateQueryContext { contexts =>
+                contexts.map { context =>
+                  context match {
+                    case sqlContext: SQLQueryContext =>
+                      PositionTranslationUtils.translateSqlContext(sqlContext, positionMapper)
+                    case _ => context
+                  }
+                }
+              }.asInstanceOf[Throwable]
+            }
+          case _ =>
+            // No WithOrigin trait, return as-is
+            error
+        }
+      case None =>
+        // No position mapper available, return original error
+        error
+    }
+  }
 
   private[sql] def executionIdJobTag(session: SparkSession, id: Long) =
     s"${session.sessionJobTag}-execution-root-id-$id"
@@ -178,7 +257,9 @@ object SQLExecution extends Logging {
             } catch {
               case e: Throwable =>
                 ex = Some(e)
-                throw e
+                // Translate parameter substitution positions back to original SQL if needed
+                val translatedError = translateParameterPositions(e, queryExecution)
+                throw translatedError
             } finally {
               val endTime = System.nanoTime()
               val errorMessage = ex.map {

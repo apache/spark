@@ -1260,7 +1260,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 50,
+    "stopIndex" : 31,
     "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 JOIN SELECT 2' INTO v1"
   } ]
 }
@@ -1288,7 +1288,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 47,
+    "stopIndex" : 28,
     "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 VALUES (1)' INTO v1"
   } ]
 }
@@ -1316,7 +1316,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 66,
+    "stopIndex" : 47,
     "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 alias garbage garbage garbage' INTO v1"
   } ]
 }
@@ -1344,7 +1344,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 45,
+    "stopIndex" : 26,
     "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 WITH abc' INTO v1"
   } ]
 }
