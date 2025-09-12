@@ -4019,6 +4019,7 @@ def try_make_timestamp_ltz(
 try_make_timestamp_ltz.__doc__ = pysparkfuncs.try_make_timestamp_ltz.__doc__
 
 
+@overload
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -4027,9 +4028,51 @@ def make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
-    return _invoke_function_over_columns(
-        "make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    ...
+
+
+@overload
+def make_timestamp_ntz(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+def make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    *,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    # Check for date/time keyword arguments (2-parameter version)
+    if date is not None and time is not None:
+        # make_timestamp_ntz(date=..., time=...)
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="WRONG_NUM_ARGS",
+                messageParameters={"func_name": "make_timestamp_ntz", "expected": "either 6 positional args or date/time keywords", "actual": "mixed"}
+            )
+        return _invoke_function_over_columns("make_timestamp_ntz", date, time)
+    
+    # Check for 6-parameter positional version
+    elif all(arg is not None for arg in [years, months, days, hours, mins, secs]):
+        # make_timestamp_ntz(years, months, days, hours, mins, secs)
+        if date is not None or time is not None:
+            raise PySparkValueError(
+                errorClass="WRONG_NUM_ARGS",
+                messageParameters={"func_name": "make_timestamp_ntz", "expected": "either 6 positional args or date/time keywords", "actual": "mixed"}
+            )
+        return _invoke_function_over_columns("make_timestamp_ntz", years, months, days, hours, mins, secs)
+    
+    else:
+        # Invalid argument combination
+        raise PySparkValueError(
+            errorClass="WRONG_NUM_ARGS",
+            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either all 6 positional args (years, months, days, hours, mins, secs) or date/time keywords", "actual": "partial"}
+        )
 
 
 make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
