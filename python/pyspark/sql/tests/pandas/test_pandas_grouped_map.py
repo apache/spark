@@ -20,6 +20,7 @@ import unittest
 
 from collections import OrderedDict
 from decimal import Decimal
+from random import random
 from typing import cast
 
 from pyspark.sql import Row, functions as sf
@@ -73,7 +74,7 @@ if have_pyarrow:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class GroupedApplyInPandasTestsMixin:
+class ApplyInPandasTestsMixin:
     @property
     def data(self):
         return (
@@ -301,17 +302,17 @@ class GroupedApplyInPandasTestsMixin:
         return pd.DataFrame([key + (pdf.v.mean(),)])
 
     def test_apply_in_pandas_returning_column_names(self):
-        self._test_apply_in_pandas(GroupedApplyInPandasTestsMixin.stats_with_column_names)
+        self._test_apply_in_pandas(ApplyInPandasTestsMixin.stats_with_column_names)
 
     def test_apply_in_pandas_returning_no_column_names(self):
-        self._test_apply_in_pandas(GroupedApplyInPandasTestsMixin.stats_with_no_column_names)
+        self._test_apply_in_pandas(ApplyInPandasTestsMixin.stats_with_no_column_names)
 
     def test_apply_in_pandas_returning_column_names_sometimes(self):
         def stats(key, pdf):
             if key[0] % 2:
-                return GroupedApplyInPandasTestsMixin.stats_with_column_names(key, pdf)
+                return ApplyInPandasTestsMixin.stats_with_column_names(key, pdf)
             else:
-                return GroupedApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+                return ApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
 
         self._test_apply_in_pandas(stats)
 
@@ -879,7 +880,7 @@ class GroupedApplyInPandasTestsMixin:
 
         def stats(key, pdf):
             if key[0] % 2 == 0:
-                return GroupedApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+                return ApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
             return empty_df
 
         result = (
@@ -947,14 +948,19 @@ class GroupedApplyInPandasTestsMixin:
                 self.assertEqual(row[1], 123)
 
 
-class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
+class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
         cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
 
 
-class GroupedApplyInPandasWithSlicingTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
+class ApplyInPandasWithArrowBatchSlicingTests(ApplyInPandasTests):
+    @classmethod
+    def setUpClass(cls):
+        ApplyInPandasTests.setUpClass()
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
+
     def test_arrow_batch_slicing(self):
         with self.sql_conf(
             {
@@ -989,10 +995,58 @@ class GroupedApplyInPandasWithSlicingTests(GroupedApplyInPandasTestsMixin, Reuse
             )
             self.assertEqual(expected.collect(), result.collect())
 
+    def test_many_rows_per_grouping_key(self):
+        # Apply in Pandas with many rows per grouping key
+        def test_df(nr_columns):
+            data = []
+            # Create a big table with many rows per grouping key
+            dict_ = {f"some_field{i}": f"{random()}" for i in range(nr_columns)}
+            for i in range(100_000):
+                dict_1 = dict_.copy()
+                dict_1.update({"group_key": "0", "numeric_value": i})
+                data.append(dict_1)
+                dict_2 = dict_.copy()
+                dict_2.update({"group_key": "1", "numeric_value": i})
+                data.append(dict_2)
+            ndf = self.spark.createDataFrame(data)
+            # Increase the size of the dataframe
+            for i in range(4):
+                ndf = ndf.unionAll(ndf)
+            return ndf
+
+        df = test_df(nr_columns=20)
+
+        def pandas_udf(pdf: pd.DataFrame):
+            # All of the values in the batch should have the same group key:
+            assert pdf["group_key"].nunique() == 1
+            group_key = pdf["group_key"].iloc[0]
+            sum_values = pdf["numeric_value"].sum()
+            return pd.DataFrame([{"group_key": group_key, "sum_values": sum_values}])
+
+        actual = (
+            df.groupBy("group_key")
+            .applyInPandas(pandas_udf, schema="group_key string, sum_values long")
+            .collect()
+        )
+
+        expected = (
+            df.groupBy("group_key").agg(sf.sum("numeric_value").alias("sum_values")).collect()
+        )
+
+        self.assertEqual(actual, expected)
+
+    def test_negative_and_zero_batch_size(self):
+        for batch_size in [0, -1]:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
+                ApplyInPandasTestsMixin.test_complex_groupby(self)
+
+
+class ApplyInPandasWithArrowBatchSlicingAndReducedBatchSizeTests(ApplyInPandasTests):
     @classmethod
     def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
+        ApplyInPandasTests.setUpClass()
         cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
+        # Set it to a small odd value to exercise batching logic for all test cases
         cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
 
 
