@@ -831,7 +831,7 @@ class CliSuite extends SparkFunSuite {
       "SELECT CURRENT_SCHEMA();" -> "SYS")
   }
 
-  test("SPARK-52426: do not redirect stderr to stdout in spark-sql") {
+  test("SPARK-52426: do not redirect stderr and stdout in spark-sql") {
     runCliWithin(
       2.minute,
       extraArgs = "--conf" :: s"spark.plugins=${classOf[RedirectConsolePlugin].getName}" :: Nil)(
