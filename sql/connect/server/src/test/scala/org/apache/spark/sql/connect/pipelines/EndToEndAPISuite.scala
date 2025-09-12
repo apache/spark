@@ -20,13 +20,14 @@ package org.apache.spark.sql.connect.pipelines
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.pipelines.utils.PipelineTest
 
-trait SDPUpdateReference extends UpdateReference {
-  val executionProcess: Process
-}
+
+case class PipelineReferenceImpl(executionProcess: Process) extends PipelineReference
 
 /**
  * End-to-end test suite for the Spark Data Pipelines API using the CLI.
@@ -39,15 +40,19 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
   // Directory where the pipeline files will be created
   private var projectDir: Path = _
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    projectDir = Files.createTempDirectory("spark-pipeline-test-")
-    logInfo(s"Created temporary directory: ${projectDir.toAbsolutePath}")
+  override def test(testName: String, testTags: org.scalatest.Tag*)(testFun: => Any)(
+      implicit pos: org.scalactic.source.Position): Unit = {
+    super.test(testName, testTags: _*) {
+      withTempDir { dir =>
+        projectDir = dir.toPath
+        testFun
+      }
+    }
   }
 
   override def createAndRunPipeline(
       config: TestPipelineConfiguration,
-      sources: Seq[File]): (PipelineReference, SDPUpdateReference) = {
+      sources: Seq[PipelineSourceFile]): PipelineReference = {
     // Create each source file in the temporary directory
     sources.foreach { file =>
       val filePath = Paths.get(file.name)
@@ -61,22 +66,15 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
 
     val specFilePath = writePipelineSpecFile(config.pipelineSpec)
     val cliCommand: Seq[String] = generateCliCommand(config, specFilePath)
-    val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
-    val py4jPath = Paths.get(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
     val pythonPath = PythonUtils.mergePythonPaths(
-      sourcePath.toString,
-      py4jPath.toString,
-      sys.env.getOrElse("PYTHONPATH", ""))
+      Paths.get(sparkHome, "python").toAbsolutePath.toString, // PySpark with pipelines
+      PythonUtils.sparkPythonPath) // PySpark dependencies such as py4j
 
     val processBuilder = new ProcessBuilder(cliCommand: _*)
     processBuilder.environment().put("PYTHONPATH", pythonPath)
     val process = processBuilder.start()
 
-    (
-      new PipelineReference {},
-      new SDPUpdateReference {
-        override val executionProcess: Process = process
-      })
+    PipelineReferenceImpl(process)
   }
 
   private def generateCliCommand(
@@ -105,30 +103,34 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
     cliCommand
   }
 
-  override def awaitPipelineUpdateTermination(update: UpdateReference): Unit = {
-    update match {
-      case ref: SDPUpdateReference =>
+  override def awaitPipelineTermination(pipeline: PipelineReference, duration: Duration): Unit = {
+    pipeline match {
+      case ref: PipelineReferenceImpl =>
         val process = ref.executionProcess
-        process.waitFor(60, TimeUnit.SECONDS)
+        process.waitFor(duration.toSeconds, TimeUnit.SECONDS)
         val exitCode = process.exitValue()
         if (exitCode != 0) {
           throw new RuntimeException(
-            s"Pipeline update process failed with exit code $exitCode. " +
-              s"Output: ${new String(process.getInputStream.readAllBytes(), "UTF-8")}\n" +
-              s"Error: ${new String(process.getErrorStream.readAllBytes(), "UTF-8")}")
+            s"""Pipeline update process failed with exit code $exitCode.
+               |Output: ${new String(process.getInputStream.readAllBytes(), "UTF-8")}
+               |Error: ${new String(process.getErrorStream.readAllBytes(), "UTF-8")}"""
+              .stripMargin
+          )
         } else {
           logInfo("Pipeline update process completed successfully")
           logDebug(
-            s"Output: ${new String(process.getInputStream.readAllBytes(), "UTF-8")}\n" +
-              s"Error: ${new String(process.getErrorStream.readAllBytes(), "UTF-8")}")
+            s"""Output: ${new String(process.getInputStream.readAllBytes(), "UTF-8")}
+               |Error: ${new String(process.getErrorStream.readAllBytes(), "UTF-8")}"""
+              .stripMargin
+          )
         }
       case _ => throw new IllegalArgumentException("Invalid UpdateReference type")
     }
   }
 
-  override def stopPipelineUpdate(update: UpdateReference): Unit = {
-    update match {
-      case ref: SDPUpdateReference =>
+  override def stopPipeline(pipeline: PipelineReference): Unit = {
+    pipeline match {
+      case ref: PipelineReferenceImpl =>
         val process = ref.executionProcess
         if (process.isAlive) {
           process.destroy()
@@ -140,10 +142,6 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
     }
   }
 
-  override def afterEach(): Unit = {
-    super.afterEach()
-    cleanupTempDir()
-  }
 
   private def writePipelineSpecFile(spec: TestPipelineSpec): Path = {
     val libraries = spec.include
@@ -163,26 +161,16 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
       |libraries:
       |$libraries
       |""".stripMargin
+    logInfo(
+      """
+        |Generated pipeline spec:
+        |
+        |$pipelineSpec
+        |""".stripMargin
+    )
     val specFilePath = projectDir.resolve("pipeline.yaml")
     Files.write(specFilePath, pipelineSpec.getBytes("UTF-8"))
     logDebug(s"Created pipeline spec: ${specFilePath.toAbsolutePath}")
     specFilePath
-  }
-
-  private def cleanupTempDir(): Unit = {
-    try {
-      if (Files.exists(projectDir)) {
-        Files
-          .walk(projectDir)
-          .sorted(java.util.Comparator.reverseOrder())
-          .forEach(path => Files.deleteIfExists(path))
-        logInfo(s"Cleaned up temporary directory: ${projectDir.toAbsolutePath}")
-      }
-    } catch {
-      case e: Exception =>
-        logInfo(s"Warning: Failed to clean up temporary directory: ${e.getMessage}")
-    } finally {
-      projectDir = null
-    }
   }
 }

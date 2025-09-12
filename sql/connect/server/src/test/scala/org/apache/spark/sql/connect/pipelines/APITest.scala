@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connect.pipelines
 
+import scala.concurrent.duration._
+import scala.concurrent.duration.Duration
+
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 // scalastyle:off
 import org.scalatest.funsuite.AnyFunSuite
@@ -31,23 +34,33 @@ import org.apache.spark.sql.pipelines.utils.TestGraphRegistrationContext.{DEFAUL
 
 case class TestPipelineSpec(catalog: String, database: String, include: Seq[String])
 
+/**
+ * Available configurations for running a test pipeline.
+ *
+ * @param pipelineSpec the pipeline specification to use
+ * Below are CLI options that affect execution, default is to update all datasets incrementally
+ * @param dryRun if true, the pipeline will be validated but not executed
+ * @param fullRefreshAll if true, perform a full graph reset and recompute
+ * @param fullRefreshSelection if non-empty, only reset and recompute the subset
+ * @param refreshSelection if non-empty, only update the specified subset of datasets
+ */
 case class TestPipelineConfiguration(
     pipelineSpec: TestPipelineSpec,
-    // additional configuration options not included in the pipeline spec that should also be tested
     dryRun: Boolean = false,
     fullRefreshAll: Boolean = false,
     fullRefreshSelection: Seq[String] = Seq.empty,
     refreshSelection: Seq[String] = Seq.empty)
 
-case class File(name: String, contents: String)
+/**
+  Logical representation of a source file to be included in the pipeline spec.
+ */
+case class PipelineSourceFile(name: String, contents: String)
 
-/*
+/**
   Extendable traits for PipelineReference and UpdateReference to allow different level of
   implementations which stores pipeline execution and update execution specific information.
  */
 trait PipelineReference {}
-
-trait UpdateReference {}
 
 trait APITest
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -61,9 +74,9 @@ trait APITest
 
   def createAndRunPipeline(
       config: TestPipelineConfiguration,
-      sources: Seq[File]): (PipelineReference, UpdateReference)
-  def awaitPipelineUpdateTermination(update: UpdateReference): Unit
-  def stopPipelineUpdate(update: UpdateReference): Unit
+      sources: Seq[PipelineSourceFile]): PipelineReference
+  def awaitPipelineTermination(pipeline: PipelineReference, timeout: Duration = 60.seconds): Unit
+  def stopPipeline(pipeline: PipelineReference): Unit
 
   /* SQL Language Tests */
   test("SQL Pipeline with mv, st, and flows") {
@@ -72,22 +85,22 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("mv.sql", "st.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "st.sql",
         contents = s"""
                      |CREATE STREAMING TABLE ${pipelineSpec.catalog}.${pipelineSpec.database}.st;
                      |CREATE FLOW f AS INSERT INTO st BY NAME SELECT * FROM STREAM mv WHERE id > 2;
                      |""".stripMargin),
-      File(
+      PipelineSourceFile(
         name = "mv.sql",
         contents = s"""
                      |CREATE MATERIALIZED VIEW ${pipelineSpec.database}.mv
                      |AS SELECT * FROM RANGE(5);
                      |""".stripMargin))
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
 
     checkAnswer(
       spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.st"),
@@ -100,9 +113,9 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("*.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
                      |CREATE MATERIALIZED VIEW a AS SELECT 1;
@@ -116,8 +129,8 @@ trait APITest
                      |SELECT * FROM c;
                      |""".stripMargin))
 
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
 
     checkAnswer(
       spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.d"),
@@ -130,9 +143,9 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("definition.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
                      |CREATE MATERIALIZED VIEW a AS SELECT * FROM RANGE(5);
@@ -140,8 +153,8 @@ trait APITest
                      |WHERE id = (SELECT max(id) FROM a);
                      |""".stripMargin))
 
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
     checkAnswer(
       spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
       Seq(Row(4)))
@@ -153,9 +166,9 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("definition.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
                   |CREATE TEMPORARY VIEW a AS SELECT id FROM range(1,3);
@@ -164,8 +177,8 @@ trait APITest
                   |FROM a JOIN b ON a.id=b.id
                   |""".stripMargin))
 
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
     checkAnswer(
       spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.c"),
       Seq(Row(1, 1), Row(2, 2)))
@@ -177,9 +190,9 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("definition.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
          |CREATE MATERIALIZED VIEW a AS SELECT id AS value, (id % 2) AS isOdd FROM range(1,10);
@@ -187,8 +200,8 @@ trait APITest
          |maximum FROM a GROUP BY isOdd LIMIT 2;
          |""".stripMargin))
 
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
     checkAnswer(
       spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
       Seq(Row(0, 8), Row(1, 9)))
@@ -200,9 +213,9 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("definition.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
            |CREATE MATERIALIZED VIEW mv TBLPROPERTIES ('prop1'='foo1', 'prop2'='bar2')
@@ -211,8 +224,8 @@ trait APITest
            |AS SELECT * FROM STREAM(mv);
            |""".stripMargin))
 
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
     // verify table properties
     val mv = spark.sessionState.catalog
       .getTableMetadata(TableIdentifier("mv", Some(pipelineSpec.database)))
@@ -231,17 +244,17 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("definition.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
                |CREATE MATERIALIZED VIEW a (id LONG COMMENT 'comment') AS SELECT * FROM RANGE(5);
                |CREATE STREAMING TABLE b (id LONG COMMENT 'comment') AS SELECT * FROM STREAM a;
                |""".stripMargin))
 
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
 
     val a = spark.sessionState.catalog
       .getTableMetadata(TableIdentifier("a", Some(pipelineSpec.database)))
@@ -261,15 +274,15 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("definition.sql", "definition.py"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
                      |CREATE STREAMING TABLE c;
                      |CREATE MATERIALIZED VIEW a AS SELECT * FROM RANGE(5);
                      |""".stripMargin),
-      File(
+      PipelineSourceFile(
         name = "definition.py",
         contents = """
                      |from pyspark import pipelines as dp
@@ -286,8 +299,8 @@ trait APITest
                      |  return spark.read.table("a")
                      |""".stripMargin))
 
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
     checkAnswer(
       spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.b"),
       Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
@@ -302,9 +315,9 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("mv.py", "st.py", "definition.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "mv.py",
         contents = """
                      |from pyspark import pipelines as dp
@@ -316,7 +329,7 @@ trait APITest
                      |def src():
                      |  return spark.range(5)
                      |""".stripMargin),
-      File(
+      PipelineSourceFile(
         name = "st.py",
         contents = """
                      |from pyspark import pipelines as dp
@@ -332,14 +345,14 @@ trait APITest
                      |def b():
                      |  return spark.readStream.table("src")
                      |""".stripMargin),
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
                      |CREATE STREAMING TABLE c;
                      |CREATE FLOW f AS INSERT INTO c BY NAME SELECT * FROM STREAM b WHERE id > 2;
                      |""".stripMargin))
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
 
     checkAnswer(
       spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.a"),
@@ -358,12 +371,12 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("definition.py", "definition.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     spark.sql(
       s"CREATE TABLE ${pipelineSpec.catalog}.${pipelineSpec.database}.src " +
         s"AS SELECT * FROM RANGE(5)")
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.py",
         contents = """
                      |from pyspark import pipelines as dp
@@ -379,14 +392,14 @@ trait APITest
                      |def b():
                      |  return spark.readStream.table("src")
                      |""".stripMargin),
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
                      |CREATE STREAMING TABLE c;
                      |CREATE FLOW f AS INSERT INTO c BY NAME SELECT * FROM STREAM b WHERE id > 2;
                      |""".stripMargin))
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
 
     checkAnswer(
       spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.a"),
@@ -406,9 +419,9 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("st.py", "mv.py"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "st.py",
         contents = s"""
            |from pyspark import pipelines as dp
@@ -426,7 +439,7 @@ trait APITest
            |def flow():
            |  return spark.readStream.table("src")
            |""".stripMargin),
-      File(
+      PipelineSourceFile(
         name = "mv.py",
         contents = s"""
            |from pyspark import pipelines as dp
@@ -442,8 +455,8 @@ trait APITest
            |def irrelevant():
            |  return spark.range(5)
            |""".stripMargin))
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
 
     checkAnswer(
       spark.sql(s"SELECT * FROM ${pipelineSpec.catalog}.${pipelineSpec.database}.a"),
@@ -456,12 +469,12 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("definition.py"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     spark.sql(
       s"CREATE TABLE ${pipelineSpec.catalog}.${pipelineSpec.database}.src " +
         s"AS SELECT * FROM RANGE(5)")
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.py",
         contents = """
                      |from pyspark import pipelines as dp
@@ -482,8 +495,8 @@ trait APITest
                      |def irrelevant_1():
                      |  return spark.read.table("view_1")
                      |""".stripMargin))
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
 
     // query the mv that depends on the temporary view
     checkAnswer(
@@ -497,9 +510,9 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("*.py"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.py",
         contents = """
                      |from pyspark import pipelines as dp
@@ -516,8 +529,8 @@ trait APITest
                      |def st():
                      |  return spark.readStream.table("mv")
                      |""".stripMargin))
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
 
     Seq("mv", "st").foreach { tbl =>
       val fullName = s"${pipelineSpec.catalog}.${pipelineSpec.database}.$tbl"
@@ -535,17 +548,17 @@ trait APITest
         catalog = catalogInPipelineSpec.getOrElse(DEFAULT_CATALOG),
         database = databaseInPipelineSpec.getOrElse(DEFAULT_DATABASE),
         include = Seq("definition.sql"))
-    val testConfig = TestPipelineConfiguration(pipelineSpec, dryRun = true)
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec, dryRun = true)
     val sources = Seq(
-      File(
+      PipelineSourceFile(
         name = "definition.sql",
         contents = """
                      |CREATE MATERIALIZED VIEW a AS SELECT * FROM RANGE(5);
                      |CREATE MATERIALIZED VIEW b AS SELECT * FROM a WHERE id > 2;
                      |""".stripMargin))
 
-    val (_, update) = createAndRunPipeline(testConfig, sources)
-    awaitPipelineUpdateTermination(update)
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
     // ensure the table did not get created in dry run mode
     assert(
       !spark.catalog.tableExists(s"${pipelineSpec.catalog}.${pipelineSpec.database}.a"),
@@ -607,35 +620,35 @@ trait APITest
       spark.sql(s"CREATE TABLE $externalTable AS SELECT * FROM RANGE(1, 2)")
 
       val sources = Seq(
-        File(
+        PipelineSourceFile(
           name = "st.sql",
           contents = s"""
                         |CREATE STREAMING TABLE a AS SELECT * FROM STREAM $externalTable;
                         |CREATE STREAMING TABLE b AS SELECT * FROM STREAM $externalTable;
                         |""".stripMargin),
-        File(
+        PipelineSourceFile(
           name = "mv.sql",
           contents = """
                        |CREATE MATERIALIZED VIEW mv AS SELECT * FROM a;
                        |""".stripMargin))
 
-      val testConfig = TestPipelineConfiguration(pipelineSpec)
+      val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
 
       // run pipeline with possible refresh/full refresh
-      val (_, update) = createAndRunPipeline(testConfig, sources)
-      awaitPipelineUpdateTermination(update)
+      val pipeline = createAndRunPipeline(pipelineConfig, sources)
+      awaitPipelineTermination(pipeline)
 
       // Replace source data to simulate a streaming update
       spark.sql(
         s"INSERT OVERWRITE TABLE $externalTable " +
           "SELECT * FROM VALUES (2), (3) AS t(id)")
 
-      val refreshConfig = testConfig.copy(
+      val refreshConfig = pipelineConfig.copy(
         refreshSelection = tc.refreshSelection,
         fullRefreshSelection = tc.fullRefreshSelection,
         fullRefreshAll = tc.fullRefreshAll)
-      val (_, updateFullRefresh) = createAndRunPipeline(refreshConfig, sources)
-      awaitPipelineUpdateTermination(updateFullRefresh)
+      val secondUpdate = createAndRunPipeline(refreshConfig, sources)
+      awaitPipelineTermination(secondUpdate)
 
       // clear caches to force reload
       Seq("a", "b", "mv").foreach { t =>
