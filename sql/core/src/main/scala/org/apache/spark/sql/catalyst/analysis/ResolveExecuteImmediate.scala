@@ -44,7 +44,7 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
           if (targetVariables.nonEmpty) {
             // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan with eagerly executed
             // source
-            val finalTargetVars = resolveTargetVariables(targetVariables)
+            val finalTargetVars = extractTargetVariables(targetVariables)
             val executedSource = executeImmediateQuery(sqlStmtStr, args, hasIntoClause = true)
             SetVariable(finalTargetVars, executedSource)
           } else {
@@ -58,7 +58,7 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     }
   }
 
-  private def resolveTargetVariables(targetVariables: Seq[Expression]): Seq[VariableReference] = {
+  private def extractTargetVariables(targetVariables: Seq[Expression]): Seq[VariableReference] = {
     targetVariables.map {
       case alias: Alias =>
         // Extract the VariableReference from the alias
