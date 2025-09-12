@@ -515,6 +515,7 @@ class CrossValidatorReader(MLReader["CrossValidator"]):
         self.cls = cls
 
     def load(self, path: str) -> "CrossValidator":
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
             path, self.sparkSession, metadata
         )
@@ -544,6 +545,7 @@ class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
         self.cls = cls
 
     def load(self, path: str) -> "CrossValidatorModel":
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
             path, self.sparkSession, metadata
         )
@@ -1185,6 +1187,7 @@ class TrainValidationSplitReader(MLReader["TrainValidationSplit"]):
         self.cls = cls
 
     def load(self, path: str) -> "TrainValidationSplit":
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
             path, self.sparkSession, metadata
         )
@@ -1214,6 +1217,7 @@ class TrainValidationSplitModelReader(MLReader["TrainValidationSplitModel"]):
         self.cls = cls
 
     def load(self, path: str) -> "TrainValidationSplitModel":
+        metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
         metadata, estimator, evaluator, estimatorParamMaps = _ValidatorSharedReadWrite.load(
             path, self.sparkSession, metadata
         )
