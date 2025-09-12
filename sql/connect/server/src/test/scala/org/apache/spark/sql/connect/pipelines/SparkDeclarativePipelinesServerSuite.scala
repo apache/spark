@@ -34,7 +34,7 @@ class SparkDeclarativePipelinesServerSuite
     }
   }
 
-  test("abcde") {
+  test("DefineDataset returns fully qualified name") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       assert(Option(graphId).isDefined)
@@ -45,6 +45,39 @@ class SparkDeclarativePipelinesServerSuite
         .setDatasetType(DatasetType.MATERIALIZED_VIEW)
       val pipelineCmd = PipelineCommand.newBuilder()
         .setDefineDataset(defineDataset)
+        .build()
+      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
+      assert(res !== PipelineCommandResult.getDefaultInstance)
+      assert(res.hasDefineEntityResult)
+      val graphResult = res.getDefineEntityResult
+      assert(graphResult.getFullyQualifiedName == "fullyqualifieddummyname")
+    }
+  }
+
+  test("DefineFlow returns fully qualified name") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      assert(Option(graphId).isDefined)
+      val defineFlow = DefineFlow
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setFlowName("mv")
+        .setTargetDatasetName("mv")
+        .setRelation(Relation
+                    .newBuilder()
+                    .setUnresolvedTableValuedFunction(
+                      UnresolvedTableValuedFunction
+                        .newBuilder()
+                        .setFunctionName("range")
+                        .addArguments(Expression
+                          .newBuilder()
+                          .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                          .build())
+                        .build())
+                    .build())
+        .build()
+      val pipelineCmd = PipelineCommand.newBuilder()
+        .setDefineFlow(defineFlow)
         .build()
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
       assert(res !== PipelineCommandResult.getDefaultInstance)
