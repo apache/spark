@@ -296,7 +296,7 @@ object LiteralValueProtoConverter {
     }
   }
 
-  private def getConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
+  private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
     if (dataType.hasShort) { v =>
       v.getShort.toShort
     } else if (dataType.hasInteger) { v =>
@@ -316,15 +316,15 @@ object LiteralValueProtoConverter {
     } else if (dataType.hasBinary) { v =>
       v.getBinary.toByteArray
     } else if (dataType.hasDate) { v =>
-      v.getDate
+      SparkDateTimeUtils.toJavaDate(v.getDate)
     } else if (dataType.hasTimestamp) { v =>
-      v.getTimestamp
+      SparkDateTimeUtils.toJavaTimestamp(v.getTimestamp)
     } else if (dataType.hasTimestampNtz) { v =>
-      v.getTimestampNtz
+      SparkDateTimeUtils.microsToLocalDateTime(v.getTimestampNtz)
     } else if (dataType.hasDayTimeInterval) { v =>
-      v.getDayTimeInterval
+      SparkIntervalUtils.microsToDuration(v.getDayTimeInterval)
     } else if (dataType.hasYearMonthInterval) { v =>
-      v.getYearMonthInterval
+      SparkIntervalUtils.monthsToPeriod(v.getYearMonthInterval)
     } else if (dataType.hasDecimal) { v =>
       Decimal(v.getDecimal.getValue)
     } else if (dataType.hasCalendarInterval) { v =>
@@ -354,7 +354,7 @@ object LiteralValueProtoConverter {
       builder.result()
     }
 
-    makeArrayData(getConverter(array.getElementType))
+    makeArrayData(getScalaConverter(array.getElementType))
   }
 
   def toCatalystMap(map: proto.Expression.Literal.Map): mutable.Map[_, _] = {
@@ -373,7 +373,7 @@ object LiteralValueProtoConverter {
       builder
     }
 
-    makeMapData(getConverter(map.getKeyType), getConverter(map.getValueType))
+    makeMapData(getScalaConverter(map.getKeyType), getScalaConverter(map.getValueType))
   }
 
   def toCatalystStruct(struct: proto.Expression.Literal.Struct): Any = {
@@ -392,7 +392,7 @@ object LiteralValueProtoConverter {
     val structData = elements
       .zip(dataTypes)
       .map { case (element, dataType) =>
-        getConverter(dataType)(element)
+        getScalaConverter(dataType)(element)
       }
       .asInstanceOf[scala.collection.Seq[Object]]
       .toSeq
