@@ -16,11 +16,11 @@
 #
 import unittest
 
-from pyspark.sql.tests.pandas.test_pandas_grouped_map import GroupedApplyInPandasTestsMixin
+from pyspark.sql.tests.pandas.test_pandas_grouped_map import ApplyInPandasTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedConnectTestCase):
+class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedConnectTestCase):
     # TODO(SPARK-42857): Support CreateDataFrame from Decimal128
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_supported_types(self):
