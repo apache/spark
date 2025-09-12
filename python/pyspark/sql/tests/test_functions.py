@@ -511,7 +511,7 @@ class FunctionsTestsMixin:
         self.check_error(
             exception=pe.exception,
             errorClass="WRONG_NUM_ARGS",
-            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either all 6 positional args (years, months, days, hours, mins, secs) or date/time keywords", "actual": "partial"}
+            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either all 6 components (years, months, days, hours, mins, secs) or both date and time", "actual": "incomplete arguments"}
         )
 
         with self.assertRaises(PySparkValueError) as pe:
@@ -520,7 +520,7 @@ class FunctionsTestsMixin:
         self.check_error(
             exception=pe.exception,
             errorClass="WRONG_NUM_ARGS",
-            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either all 6 positional args (years, months, days, hours, mins, secs) or date/time keywords", "actual": "partial"}
+            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either all 6 components (years, months, days, hours, mins, secs) or both date and time", "actual": "incomplete arguments"}
         )
         
         # Test mixed argument error
@@ -530,7 +530,7 @@ class FunctionsTestsMixin:
         self.check_error(
             exception=pe.exception,
             errorClass="WRONG_NUM_ARGS",
-            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either 6 positional args or date/time keywords", "actual": "mixed"}
+            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either (years, months, days, hours, mins, secs) or (date, time)", "actual": "cannot mix both approaches"}
         )
 
     def test_string_functions(self):
