@@ -63,7 +63,7 @@ object SparkPlan {
  * The naming convention is that physical operators end with "Exec" suffix, e.g. [[ProjectExec]].
  */
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
-  @transient final val session = SparkSession.getActiveSession.orNull
+  def session: SparkSession = SparkSession.getActiveSession.orNull
 
   protected def sparkContext = session.sparkContext
 
