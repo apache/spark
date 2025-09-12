@@ -4150,7 +4150,7 @@ object SQLConf {
         "is under development and still not working as intended. This feature switch is intended " +
         "to be used internally for development and testing, not by end users. " +
         "YOU ARE ADVISED AGAINST USING THIS FEATURE AS ITS NOT FINISHED.")
-      .version("4.0.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
