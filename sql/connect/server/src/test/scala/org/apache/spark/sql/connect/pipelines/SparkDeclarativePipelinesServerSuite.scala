@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.pipelines
 import java.util.UUID
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{DatasetType, Expression, PipelineCommand, Relation, UnresolvedTableValuedFunction}
+import org.apache.spark.connect.proto.{DatasetType, Expression, PipelineCommand, PipelineCommandResult, Relation, UnresolvedTableValuedFunction}
 import org.apache.spark.connect.proto.PipelineCommand.{DefineDataset, DefineFlow}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
@@ -31,6 +31,23 @@ class SparkDeclarativePipelinesServerSuite
   test("CreateDataflowGraph request creates a new graph") {
     withRawBlockingStub { implicit stub =>
       assert(Option(createDataflowGraph(stub)).isDefined)
+    }
+  }
+
+  test("abcde") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      assert(Option(graphId).isDefined)
+      val defineDataset = DefineDataset
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setDatasetName("mv")
+        .setDatasetType(DatasetType.MATERIALIZED_VIEW)
+      val pipelineCmd = PipelineCommand.newBuilder()
+        .setDefineDataset(defineDataset)
+        .build()
+      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
+      assert(res == PipelineCommandResult.getDefaultInstance)
     }
   }
 
