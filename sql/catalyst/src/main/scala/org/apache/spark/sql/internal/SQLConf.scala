@@ -3609,7 +3609,8 @@ object SQLConf {
   val CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
     buildConf("spark.sql.classic.shuffleDependency.fileCleanup.enabled")
       .doc("When enabled, shuffle files will be cleaned up at the end of classic " +
-        "SQL executions.")
+        "SQL executions. Note that this cleanup may cause stage retries and regenerate " +
+        "shuffle files if the same dataframe reference is executed again.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
