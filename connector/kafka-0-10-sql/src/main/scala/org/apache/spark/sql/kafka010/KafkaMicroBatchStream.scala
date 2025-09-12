@@ -89,6 +89,8 @@ private[kafka010] class KafkaMicroBatchStream(
 
   private var allDataForTriggerAvailableNow: PartitionOffsetMap = _
 
+  private var isTriggerAvailableNow: Boolean = false
+
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
@@ -124,8 +126,14 @@ private[kafka010] class KafkaMicroBatchStream(
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
 
     // Use the pre-fetched list of partition offsets when Trigger.AvailableNow is enabled.
-    latestPartitionOffsets = if (allDataForTriggerAvailableNow != null) {
-      allDataForTriggerAvailableNow
+    latestPartitionOffsets = if (isTriggerAvailableNow) {
+      if (allDataForTriggerAvailableNow != null) {
+        allDataForTriggerAvailableNow
+      } else {
+        allDataForTriggerAvailableNow =
+          kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+        allDataForTriggerAvailableNow
+      }
     } else {
       kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
     }
@@ -357,8 +365,7 @@ private[kafka010] class KafkaMicroBatchStream(
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {
-    allDataForTriggerAvailableNow = kafkaOffsetReader.fetchLatestOffsets(
-      Some(getOrCreateInitialPartitionOffsets()))
+    isTriggerAvailableNow = true
   }
 }
 
