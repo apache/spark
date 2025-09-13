@@ -107,6 +107,7 @@ from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_p
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
+    from google.rpc.status_pb2 import Status
     from pyspark.sql.connect._typing import DataTypeOrString
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
@@ -1954,7 +1955,7 @@ class SparkConnectClient(object):
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
         error: grpc.Call = cast(grpc.Call, rpc_error)
         status_code: grpc.StatusCode = error.code()
-        status: Optional[google.rpc.status_pb2.Status] = rpc_status.from_call(error)
+        status: Optional[Status] = rpc_status.from_call(error)
         if status:
             for d in status.details:
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
