@@ -25157,25 +25157,29 @@ def make_timestamp_ntz(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or column name
-        The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or column name
-        The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or column name
-        The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or column name
-        The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or column name
-        The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or column name
-        The second-of-minute and its micro-fraction to represent, from 0 to 60.
-        The value can be either an integer like 13, or a fraction like 13.123.
-        If the sec argument equals to 60, the seconds field is set
-        to 0 and 1 minute is added to the final timestamp.
-    date : :class:`~pyspark.sql.Column` or column name
-        A date to represent, from 0001-01-01 to 9999-12-31
-    time : :class:`~pyspark.sql.Column` or column name
-        A local time to represent, from 00:00:00 to 23:59:59.999999
+    cols : :class:`~pyspark.sql.Column` or column name
+        Either 6 columns (years, months, days, hours, mins, secs)
+        Or 2 columns (date, time)
+
+        years : :class:`~pyspark.sql.Column` or column name
+            The year to represent, from 1 to 9999
+        months : :class:`~pyspark.sql.Column` or column name
+            The month-of-year to represent, from 1 (January) to 12 (December)
+        days : :class:`~pyspark.sql.Column` or column name
+            The day-of-month to represent, from 1 to 31
+        hours : :class:`~pyspark.sql.Column` or column name
+            The hour-of-day to represent, from 0 to 23
+        mins : :class:`~pyspark.sql.Column` or column name
+            The minute-of-hour to represent, from 0 to 59
+        secs : :class:`~pyspark.sql.Column` or column name
+            The second-of-minute and its micro-fraction to represent, from 0 to 60.
+            The value can be either an integer like 13, or a fraction like 13.123.
+            If the sec argument equals to 60, the seconds field is set
+            to 0 and 1 minute is added to the final timestamp.
+        date : :class:`~pyspark.sql.Column` or column name
+            A date to represent, from 0001-01-01 to 9999-12-31
+        time : :class:`~pyspark.sql.Column` or column name
+            A local time to represent, from 00:00:00 to 23:59:59.999999
 
     Notes
     -----
@@ -25246,8 +25250,8 @@ def make_timestamp_ntz(*cols: "ColumnOrName") -> Column:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either 6 arguments (years, months, days, hours, mins, secs) or 2 arguments (date, time)",
-                "actual": f"{len(cols)} arguments",
+                "expected": "either 6 columns (years, months, days, hours, mins, secs) or 2 columns (date, time)",
+                "actual": f"{len(cols)} columns",
             },
         )
 

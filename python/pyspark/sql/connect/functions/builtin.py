@@ -4019,7 +4019,7 @@ def try_make_timestamp_ltz(
 try_make_timestamp_ltz.__doc__ = pysparkfuncs.try_make_timestamp_ltz.__doc__
 
 
-@overload  # type: ignore[no-redef]
+@overload
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -4053,8 +4053,8 @@ def make_timestamp_ntz(*args: "ColumnOrName") -> Column:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either 6 arguments (years, months, days, hours, mins, secs) or 2 arguments (date, time)",
-                "actual": f"{len(args)} arguments",
+                "expected": "either 6 columns (years, months, days, hours, mins, secs) or 2 columns (date, time)",
+                "actual": f"{len(args)} columns",
             },
         )
 
