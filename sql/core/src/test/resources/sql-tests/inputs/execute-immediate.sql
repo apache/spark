@@ -95,9 +95,12 @@ EXECUTE IMMEDIATE 'SET VAR testVarA = 1' INTO testVarA;
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id;
 
 -- either positional or named parameters must be used
-EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1, 'name2' as first;
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1 as x, 'name2' as first;
 
--- all paramerers must be named
+-- all parameters must be named
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :x = id and :first = name' USING 1, 'name2' as first;
+
+-- all parameters must be named
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :first = name' USING 1, 'name2' as first;
 
 -- internal syntax error

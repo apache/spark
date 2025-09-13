@@ -98,6 +98,9 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       // For parameterized queries, build parameter arrays
       val (paramValues, paramNames) = buildUnifiedParameters(args)
 
+      // Validate parameter consistency between inner query and USING clause
+      validateParameterConsistency(sqlString, paramNames, args)
+
       withIsolatedLocalVariableContext {
         sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
           .sql(sqlString, paramValues, paramNames)
@@ -152,6 +155,41 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     // Check for compound bodies (SQL scripting)
     if (parsedPlan.isInstanceOf[CompoundBody]) {
       throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
+    }
+  }
+
+  /**
+   * Validates parameter consistency between inner query parameter type and USING clause naming.
+   * If the inner query uses named parameters (:name), then ALL arguments in USING must be named.
+   */
+  private def validateParameterConsistency(
+      sqlString: String,
+      paramNames: Array[String],
+      args: Seq[Expression]): Unit = {
+
+    // Parse the inner query to detect parameter types
+    val innerParsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlString)
+
+    // Check if the parsed plan contains named parameters by searching all expressions recursively
+    var hasNamedParams = false
+    innerParsedPlan.foreachUp { node =>
+      node.expressions.foreach { expr =>
+        expr.foreach {
+          case _: NamedParameter => hasNamedParams = true
+          case _ =>
+        }
+      }
+    }
+
+    if (hasNamedParams) {
+      // If inner query uses named parameters, ALL USING arguments must be named
+      val unnamedArgs = args.zip(paramNames).collect {
+        case (expr, name) if name.isEmpty => expr
+      }
+
+      if (unnamedArgs.nonEmpty) {
+        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedArgs)
+      }
     }
   }
 

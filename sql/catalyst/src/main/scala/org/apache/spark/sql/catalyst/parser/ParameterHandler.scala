@@ -149,12 +149,25 @@ class ParameterHandler {
           positionalParams = params.map(ExpressionToSqlConverter.convert).toList)
 
       case HybridParameterContext(positionalParams, namedParams) =>
-        // Provide both named and positional parameters - let the parser choose which to use
-        performSubstitution(sqlText, rule,
-          namedParams = namedParams.map { case (name, expr) =>
-            (name, ExpressionToSqlConverter.convert(expr))
-          },
-          positionalParams = positionalParams.map(ExpressionToSqlConverter.convert).toList)
+        // First validate that the query doesn't mix parameter types
+        validateParameterConsistency(sqlText, rule)
+
+        // Detect which parameter types are actually used in the query
+        val (hasPositional, hasNamed) = detectParameters(sqlText, rule)
+        if (hasPositional && !hasNamed) {
+          // Query uses only positional parameters
+          performSubstitution(sqlText, rule,
+            positionalParams = positionalParams.map(ExpressionToSqlConverter.convert).toList)
+        } else if (hasNamed && !hasPositional) {
+          // Query uses only named parameters
+          performSubstitution(sqlText, rule,
+            namedParams = namedParams.map { case (name, expr) =>
+              (name, ExpressionToSqlConverter.convert(expr))
+            })
+        } else {
+          // No parameters in query - return as-is
+          performSubstitution(sqlText, rule)
+        }
     }
   }
 
