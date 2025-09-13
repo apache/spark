@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -1211,4 +1211,20 @@ trait UnresolvedPlanId extends LeafExpression with Unevaluable {
 
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
+}
+
+/**
+ * Logical plan representing execute immediate query.
+ *
+ * @param sqlStmtStr the query expression (first child)
+ * @param args parameters from USING clause (subsequent children)
+ * @param targetVariables variables to store the result of the query
+ */
+case class UnresolvedExecuteImmediate(
+    sqlStmtStr: Expression,
+    args: Seq[Expression],
+    targetVariables: Seq[Expression])
+  extends UnresolvedLeafNode with SupportsSubquery {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
