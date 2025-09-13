@@ -14,9 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import platform
+import unittest
+
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class JoinTests(ReusedPySparkTestCase):
     def test_narrow_dependency_in_join(self):
         rdd = self.sc.parallelize(range(10)).map(lambda x: (x, x))
@@ -57,7 +64,6 @@ class JoinTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.tests.test_join import *  # noqa: F401
 
     try:
