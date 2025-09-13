@@ -1705,13 +1705,11 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
         )
-        import pandas as pd
-        import pyarrow as pa
         import itertools
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of Rows.
+            Deserialize ArrowRecordBatches and return a generator of Row.
 
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
@@ -1719,20 +1717,16 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
             This function must avoid materializing multiple Arrow RecordBatches into memory at the
             same time. And data chunks from the same grouping key should appear sequentially.
             """
+            for batch in batches:
+                DataRow = Row(*batch.schema.names)
 
-            def row_stream():
-                for batch in batches:
-                    data_pandas = [
-                        self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
-                    ]
-                    for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
-                        batch_key = tuple(row[s] for s in self.key_offsets)
-                        yield (batch_key, row)
-
-            for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
-                df = pd.DataFrame([row for _, row in group_rows])
-                yield (batch_key, df)
+                # Iterate row by row without converting the whole batch
+                num_cols = batch.num_columns
+                for row_idx in range(batch.num_rows):
+                    # build the key for this row
+                    row_key = tuple(batch[o][row_idx].as_py() for o in self.key_offsets)
+                    row = DataRow(*(batch.column(i)[row_idx].as_py() for i in range(num_cols)))
+                    yield row_key, row
 
         _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
