@@ -169,9 +169,6 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
     @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
-        allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(self.getStages())
-        if allStagesAreJava:
-            return JavaMLWriter(self)  # type: ignore[arg-type]
         return PipelineWriter(self)
 
     @classmethod
@@ -250,11 +247,8 @@ class PipelineReader(MLReader[Pipeline]):
 
     def load(self, path: str) -> Pipeline:
         metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
-        if "language" not in metadata["paramMap"] or metadata["paramMap"]["language"] != "Python":
-            return JavaMLReader(cast(Type["JavaMLReadable[Pipeline]"], self.cls)).load(path)
-        else:
-            uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
-            return Pipeline(stages=stages)._resetUid(uid)
+        uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
+        return Pipeline(stages=stages)._resetUid(uid)
 
 
 @inherit_doc
@@ -287,11 +281,8 @@ class PipelineModelReader(MLReader["PipelineModel"]):
 
     def load(self, path: str) -> "PipelineModel":
         metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
-        if "language" not in metadata["paramMap"] or metadata["paramMap"]["language"] != "Python":
-            return JavaMLReader(cast(Type["JavaMLReadable[PipelineModel]"], self.cls)).load(path)
-        else:
-            uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
-            return PipelineModel(stages=cast(List[Transformer], stages))._resetUid(uid)
+        uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
+        return PipelineModel(stages=cast(List[Transformer], stages))._resetUid(uid)
 
 
 @inherit_doc
@@ -329,11 +320,6 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
     @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
-        allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(
-            cast(List["PipelineStage"], self.stages)
-        )
-        if allStagesAreJava:
-            return JavaMLWriter(self)  # type: ignore[arg-type]
         return PipelineModelWriter(self)
 
     @classmethod
