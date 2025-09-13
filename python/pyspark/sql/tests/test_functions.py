@@ -513,7 +513,7 @@ class FunctionsTestsMixin:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either all 6 components (years, months, days, hours, mins, secs) or both date and time",
+                "expected": "(years, months, days, hours, mins, secs) or (date, time)",
                 "actual": "incomplete arguments",
             },
         )
@@ -526,7 +526,7 @@ class FunctionsTestsMixin:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either all 6 components (years, months, days, hours, mins, secs) or both date and time",
+                "expected": "(years, months, days, hours, mins, secs) or (date, time)",
                 "actual": "incomplete arguments",
             },
         )
