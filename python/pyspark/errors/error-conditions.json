@@ -1374,6 +1374,11 @@
       "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
     ]
   },
+  "WRONG_NUM_ARGS": {
+    "message": [
+      "Function `<func_name>` expects <expected> but got <actual>."
+    ]
+  },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION": {
     "message": [
       "Function `<func_name>` should take between 1 and 3 arguments, but the provided function takes <num_args>."
@@ -1382,11 +1387,6 @@
   "WRONG_NUM_COLUMNS": {
     "message": [
       "Function `<func_name>` should take at least <num_cols> columns."
-    ]
-  },
-  "WRONG_NUM_ARGS": {
-    "message": [
-      "Function `<func_name>` expects <expected> but got <actual>."
     ]
   },
   "ZERO_INDEX": {
