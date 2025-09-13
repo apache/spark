@@ -221,6 +221,7 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, target: NumericType) => target
       case (_: StringType, datetime: DatetimeType) => datetime
       case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
+      case (_: StringType, AnyTimeType) => AnyTimeType.defaultConcreteType
       case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string except if there are strings with different collations.
       case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st
