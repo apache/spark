@@ -29,7 +29,6 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import assertDataFrameEqual, timeout
 from pyspark.util import PythonEvalType
 
 

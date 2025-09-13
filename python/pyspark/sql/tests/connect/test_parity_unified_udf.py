@@ -17,9 +17,6 @@
 
 import unittest
 
-from pyspark.testing.connectutils import should_test_connect
-
-
 from pyspark.sql.tests.test_unified_udf import UnifiedUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
