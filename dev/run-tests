@@ -20,10 +20,23 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-PYTHON_VERSION_CHECK=$(python3 -c 'import sys; print(sys.version_info < (3, 8, 0))')
-if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
-  echo "Python versions prior to 3.8 are not supported."
-  exit -1
+# Check if python3 is available
+if ! command -v python3 &> /dev/null; then
+  echo "Error: python3 is not installed or not in PATH"
+  echo "Please install Python 3.8 or later and ensure it's available as 'python3'"
+  exit 1
 fi
+
+# Check Python version with better error reporting
+PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+PYTHON_VERSION_CHECK=$(python3 -c 'import sys; print(sys.version_info < (3, 8, 0))')
+
+if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
+  echo "Error: Python version $PYTHON_VERSION is not supported."
+  echo "Spark requires Python 3.8 or later. Please upgrade your Python installation."
+  exit 1
+fi
+
+echo "Using Python version: $PYTHON_VERSION"
 
 exec python3 -u ./dev/run-tests.py "$@"
