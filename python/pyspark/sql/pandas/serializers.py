@@ -355,6 +355,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._timezone = timezone
         self._safecheck = safecheck
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
+        self._converter_cache = {}
 
     @staticmethod
     def _apply_python_coercions(series, arrow_type):
@@ -403,15 +404,24 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         }
         s = arrow_column.to_pandas(**pandas_options)
 
-        # TODO(SPARK-43579): cache the converter for reuse
-        converter = _create_converter_to_pandas(
-            data_type=spark_type or from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
-            nullable=True,
-            timezone=self._timezone,
-            struct_in_pandas=struct_in_pandas,
-            error_on_duplicated_field_names=True,
-            ndarray_as_list=ndarray_as_list,
+        data_type = spark_type or from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True)
+        key = (
+            data_type.json(),
+            struct_in_pandas,
+            ndarray_as_list,
         )
+
+        if key not in self._converter_cache:
+            self._converter_cache[key] = _create_converter_to_pandas(
+                data_type=data_type,
+                nullable=True,
+                timezone=self._timezone,
+                struct_in_pandas=struct_in_pandas,
+                error_on_duplicated_field_names=True,
+                ndarray_as_list=ndarray_as_list,
+            )
+
+        converter = self._converter_cache[key]
         return converter(s)
 
     def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
