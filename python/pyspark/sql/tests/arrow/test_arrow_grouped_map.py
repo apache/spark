@@ -16,10 +16,11 @@
 #
 import os
 import time
+from random import random
 import unittest
 
 from pyspark.errors import PythonException
-from pyspark.sql import Row
+from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import array, col, explode, lit, mean, stddev
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import (
@@ -37,7 +38,7 @@ if have_pyarrow:
     not have_pyarrow,
     pyarrow_requirement_message,  # type: ignore[arg-type]
 )
-class GroupedMapInArrowTestsMixin:
+class ApplyInArrowTestsMixin:
     @property
     def data(self):
         return (
@@ -266,7 +267,7 @@ class GroupedMapInArrowTestsMixin:
         self.assertEqual(df2.join(df2).count(), 1)
 
 
-class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
+class ApplyInArrowTests(ApplyInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
@@ -279,6 +280,7 @@ class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
 
         cls.sc.environment["TZ"] = tz
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
 
     @classmethod
     def tearDownClass(cls):
@@ -287,6 +289,102 @@ class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
         ReusedSQLTestCase.tearDownClass()
+
+
+class GroupedMapInArrowWithArrowBatchSlicingTests(ApplyInArrowTests):
+    @classmethod
+    def setUpClass(cls):
+        ApplyInArrowTests.setUpClass()
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
+
+    def test_arrow_batch_slicing(self):
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.arrowBatchSlicing.enabled": True,
+                "spark.sql.execution.arrow.maxRecordsPerBatch": 1000,
+            }
+        ):
+            df = self.spark.range(10000000).select(
+                (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+            )
+            cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
+            df = df.withColumns(cols)
+
+            def min_max_v(table):
+                return pa.Table.from_pydict(
+                    {
+                        "key": [table.column("key")[0].as_py()],
+                        "min": [pc.min(table.column("v")).as_py()],
+                        "max": [pc.max(table.column("v")).as_py()],
+                    }
+                )
+
+            result = (
+                df.groupBy("key")
+                .applyInArrow(min_max_v, "key long, min long, max long")
+                .sort("key")
+            )
+            expected = (
+                df.groupby("key")
+                .agg(sf.min("v").alias("min"), sf.max("v").alias("max"))
+                .sort("key")
+            )
+            self.assertEqual(expected.collect(), result.collect())
+
+    def test_many_rows_per_grouping_key(self):
+        # Apply in Pandas with many rows per grouping key
+        def test_df(nr_columns):
+            data = []
+            # Create a big table with many rows per grouping key
+            dict_ = {f"some_field{i}": f"{random()}" for i in range(nr_columns)}
+            for i in range(100_000):
+                dict_1 = dict_.copy()
+                dict_1.update({"group_key": "0", "numeric_value": i})
+                data.append(dict_1)
+                dict_2 = dict_.copy()
+                dict_2.update({"group_key": "1", "numeric_value": i})
+                data.append(dict_2)
+            ndf = self.spark.createDataFrame(data)
+            # Increase the size of the dataframe
+            for i in range(4):
+                ndf = ndf.unionAll(ndf)
+            return ndf
+
+        df = test_df(nr_columns=20)
+
+        def udf(table):
+            # All of the values in the batch should have the same group key:
+            group_keys = set(table["group_key"].to_pylist())
+            assert len(group_keys) == 1
+            group_key = group_keys.pop()
+            return pa.Table.from_pydict(
+                {
+                    "group_key": [group_key],
+                    "sum_values": [pa.compute.sum(table["numeric_value"]).as_py()],
+                }
+            )
+
+        actual = df.groupBy("group_key").applyInArrow(
+            udf, schema="group_key string, sum_values long"
+        )
+
+        expected = df.groupBy("group_key").agg(sf.sum("numeric_value").alias("sum_values"))
+
+        self.assertEqual(actual.collect(), expected.collect())
+
+    def test_negative_and_zero_batch_size(self):
+        for batch_size in [0, -1]:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
+                ApplyInArrowTestsMixin.test_apply_in_arrow(self)
+
+
+class GroupedMapInArrowWithArrowBatchSlicingAndReducedBatchSizeTests(ApplyInArrowTests):
+    @classmethod
+    def setUpClass(cls):
+        ApplyInArrowTests.setUpClass()
+        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
+        # Set it to a small odd value to exercise batching logic for all test cases
+        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
 
 
 if __name__ == "__main__":
