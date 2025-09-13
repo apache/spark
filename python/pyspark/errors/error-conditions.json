@@ -1384,6 +1384,11 @@
       "Function `<func_name>` should take at least <num_cols> columns."
     ]
   },
+  "WRONG_NUM_ARGS": {
+    "message": [
+      "Function `<func_name>` expects <expected> but got <actual>."
+    ]
+  },
   "ZERO_INDEX": {
     "message": [
       "Index must be non-zero."

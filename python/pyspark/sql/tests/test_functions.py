@@ -507,30 +507,50 @@ class FunctionsTestsMixin:
         # Test error handling for wrong number of arguments
         with self.assertRaises(PySparkValueError) as pe:
             F.make_timestamp_ntz()  # No arguments
-        
+
         self.check_error(
             exception=pe.exception,
             errorClass="WRONG_NUM_ARGS",
-            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either all 6 components (years, months, days, hours, mins, secs) or both date and time", "actual": "incomplete arguments"}
+            messageParameters={
+                "func_name": "make_timestamp_ntz",
+                "expected": "either all 6 components (years, months, days, hours, mins, secs) or both date and time",
+                "actual": "incomplete arguments",
+            },
         )
 
         with self.assertRaises(PySparkValueError) as pe:
             F.make_timestamp_ntz(F.lit(2024))  # Only 1 argument
-        
+
         self.check_error(
             exception=pe.exception,
             errorClass="WRONG_NUM_ARGS",
-            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either all 6 components (years, months, days, hours, mins, secs) or both date and time", "actual": "incomplete arguments"}
+            messageParameters={
+                "func_name": "make_timestamp_ntz",
+                "expected": "either all 6 components (years, months, days, hours, mins, secs) or both date and time",
+                "actual": "incomplete arguments",
+            },
         )
-        
+
         # Test mixed argument error
         with self.assertRaises(PySparkValueError) as pe:
-            F.make_timestamp_ntz(F.lit(2024), F.lit(1), F.lit(1), F.lit(12), F.lit(0), F.lit(0), date=F.lit("2024-01-01"))
-        
+            F.make_timestamp_ntz(
+                F.lit(2024),
+                F.lit(1),
+                F.lit(1),
+                F.lit(12),
+                F.lit(0),
+                F.lit(0),
+                date=F.lit("2024-01-01"),
+            )
+
         self.check_error(
             exception=pe.exception,
             errorClass="WRONG_NUM_ARGS",
-            messageParameters={"func_name": "make_timestamp_ntz", "expected": "either (years, months, days, hours, mins, secs) or (date, time)", "actual": "cannot mix both approaches"}
+            messageParameters={
+                "func_name": "make_timestamp_ntz",
+                "expected": "either (years, months, days, hours, mins, secs) or (date, time)",
+                "actual": "mixed arguments from both approaches",
+            },
         )
 
     def test_string_functions(self):
@@ -2064,7 +2084,7 @@ class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_functions import *  # noqa: F401
-    
+
     try:
         import xmlrunner
 
