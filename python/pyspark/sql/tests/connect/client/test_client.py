@@ -27,7 +27,6 @@ from pyspark.testing.utils import eventually
 if should_test_connect:
     import grpc
     import google.protobuf.any_pb2 as any_pb2
-    import google.protobuf.wrappers_pb2 as wrappers_pb2
     from google.rpc import status_pb2
     from google.rpc.error_details_pb2 import ErrorInfo
     import pandas as pd
