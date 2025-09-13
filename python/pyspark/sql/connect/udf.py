@@ -107,7 +107,7 @@ def _create_py_udf(
     if eval_type is None:
         eval_type = PythonEvalType.SQL_BATCHED_UDF  # type: ignore[assignment]
 
-    return _create_udf(f, returnType, eval_type)
+    return _create_udf(f, returnType, cast(int, eval_type))
 
 
 def _create_udf(
