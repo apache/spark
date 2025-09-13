@@ -82,11 +82,23 @@ private[connect] object PipelinesHandler extends Logging {
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
         logInfo(s"Define pipelines dataset cmd received: $cmd")
         defineDataset(cmd.getDefineDataset, sessionHolder)
-        defaultResponse
+        PipelineCommandResult.newBuilder()
+          .setDefineEntityResult(
+            PipelineCommandResult.DefineEntityResult.newBuilder()
+            .setFullyQualifiedName("fullyqualifieddummyname")
+            .build()
+          )
+        .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
         defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
-        defaultResponse
+        PipelineCommandResult.newBuilder()
+          .setDefineEntityResult(
+            PipelineCommandResult.DefineEntityResult.newBuilder()
+            .setFullyQualifiedName("fullyqualifieddummyname")
+            .build()
+          )
+        .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
         logInfo(s"Start pipeline cmd received: $cmd")
         startRun(cmd.getStartRun, responseObserver, sessionHolder)

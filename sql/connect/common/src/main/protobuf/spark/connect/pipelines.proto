@@ -146,10 +146,14 @@ message PipelineCommand {
 message PipelineCommandResult {
   oneof result_type {
     CreateDataflowGraphResult create_dataflow_graph_result = 1;
+    DefineEntityResult define_entity_result = 2;
   }
   message CreateDataflowGraphResult {
     // The ID of the created graph.
     optional string dataflow_graph_id = 1;
+  }
+  message DefineEntityResult {
+    optional string fully_qualified_name = 1;
   }
 }
 
