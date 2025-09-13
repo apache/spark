@@ -488,16 +488,6 @@ abstract class SparkSession extends Serializable with Closeable {
   def sql(sqlText: String, args: Array[_]): DataFrame
 
   /**
-   * Internal method for executing SQL with both positional and named parameters.
-   * Used by EXECUTE IMMEDIATE for unified parameter handling.
-   *
-   * @param sqlText A SQL statement to execute.
-   * @param args An array of parameter values.
-   * @param paramNames An array of parameter names (empty string for positional parameters).
-   */
-  protected[sql] def sql(sqlText: String, args: Array[_], paramNames: Array[String]): DataFrame
-
-  /**
    * Executes a SQL query substituting named parameters by the given arguments, returning the
    * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *

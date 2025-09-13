@@ -250,16 +250,6 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
-  /** @inheritdoc */
-  override protected[sql] def sql(
-      sqlText: String,
-      args: Array[_],
-      paramNames: Array[String]): DataFrame = {
-    // Connect doesn't support EXECUTE IMMEDIATE, so this should never be called
-    throw new UnsupportedOperationException(
-      "EXECUTE IMMEDIATE is not supported in Spark Connect")
-  }
-
   private def sql(sqlCommand: proto.SqlCommand): DataFrame = {
     // Send the SQL once to the server and then check the output.
     executeCommandWithDataFrameReturn(newCommand(_.setSqlCommand(sqlCommand)))
