@@ -492,14 +492,14 @@ class FunctionsTestsMixin:
         # Test with date and time columns
         data = [(date(2024, 5, 22), time(10, 30, 45))]
         df = self.spark.createDataFrame(data, ["date_col", "time_col"])
-        actual = df.select(F.make_timestamp_ntz(date=df.date_col, time=df.time_col))
+        actual = df.select(F.make_timestamp_ntz(df.date_col, df.time_col))
         assertDataFrameEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30, 45))])
 
         # Test with to_date and to_time functions
         data = [("2024-05-22", "10:30:45.123")]
         df = self.spark.createDataFrame(data, ["date_str", "time_str"])
         actual = df.select(
-            F.make_timestamp_ntz(date=F.to_date(df.date_str), time=F.to_time(df.time_str))
+            F.make_timestamp_ntz(F.to_date(df.date_str), F.to_time(df.time_str))
         )
         assertDataFrameEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30, 45, 123000))])
 
@@ -513,8 +513,8 @@ class FunctionsTestsMixin:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "(years, months, days, hours, mins, secs) or (date, time)",
-                "actual": "incomplete arguments",
+                "expected": "either 6 arguments (years, months, days, hours, mins, secs) or 2 arguments (date, time)",
+                "actual": "0 arguments",
             },
         )
 
@@ -526,30 +526,22 @@ class FunctionsTestsMixin:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "(years, months, days, hours, mins, secs) or (date, time)",
-                "actual": "incomplete arguments",
+                "expected": "either 6 arguments (years, months, days, hours, mins, secs) or 2 arguments (date, time)",
+                "actual": "1 arguments",
             },
         )
 
-        # Test mixed argument error
+        # Test invalid number of arguments (3 arguments)
         with self.assertRaises(PySparkValueError) as pe:
-            F.make_timestamp_ntz(
-                F.lit(2024),
-                F.lit(1),
-                F.lit(1),
-                F.lit(12),
-                F.lit(0),
-                F.lit(0),
-                date=F.lit("2024-01-01"),
-            )
+            F.make_timestamp_ntz(F.lit(2024), F.lit(1), F.lit(1))
 
         self.check_error(
             exception=pe.exception,
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either (years, months, days, hours, mins, secs) or (date, time)",
-                "actual": "mixed arguments from both approaches",
+                "expected": "either 6 arguments (years, months, days, hours, mins, secs) or 2 arguments (date, time)",
+                "actual": "3 arguments",
             },
         )
 
