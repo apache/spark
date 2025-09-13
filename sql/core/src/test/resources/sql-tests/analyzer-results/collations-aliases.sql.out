@@ -183,7 +183,7 @@ WithCTE
 :           +- Relation spark_catalog.default.t1[s#x,utf8_binary#x,utf8_lcase#x] parquet
 +- Project [concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x]
    +- SubqueryAlias cte
-      +- CTERelationRef xxxx, true, [concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x], false, false
+      +- CTERelationRef xxxx, true, [concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x], false, false, false
 
 
 -- !query
@@ -232,7 +232,7 @@ Project [scalar-subquery#x [] AS scalarsubquery()#x]
 :        +- LocalLimit 1
 :           +- Project [concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x]
 :              +- SubqueryAlias cte
-:                 +- CTERelationRef xxxx, true, [concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x], false, false
+:                 +- CTERelationRef xxxx, true, [concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x], false, false, false
 +- OneRowRelation
 
 

@@ -2803,7 +2803,7 @@ WithCTE
 :                    +- LocalRelation [col1#x, col2#x]
 +- Project [spark_catalog.default.foo3_1a(c1, c2)#x]
    +- SubqueryAlias cte
-      +- CTERelationRef xxxx, true, [spark_catalog.default.foo3_1a(c1, c2)#x], false, false
+      +- CTERelationRef xxxx, true, [spark_catalog.default.foo3_1a(c1, c2)#x], false, false, false
 
 
 -- !query
@@ -3528,7 +3528,7 @@ Project [spark_catalog.default.foo3_2e1(occurrences#x, instance_start_time#x) AS
 :     :        +- OneRowRelation
 :     +- Project [CASE WHEN (isnull(outer(occurrences#x)) OR (size(outer(occurrences#x), false) = 0)) THEN cast(null as string) ELSE sort_array(diffs#x, true)[0].id END AS id#x]
 :        +- SubqueryAlias t
-:           +- CTERelationRef xxxx, true, [diffs#x], false, false, 1
+:           +- CTERelationRef xxxx, true, [diffs#x], false, false, 1, false
 +- Project [cast(array(struct(col1, 2022-01-01 10:11:12, col2, 1), struct(col1, 2022-01-01 10:11:15, col2, 2)) as array<struct<start_time:timestamp,occurrence_id:string>>) AS occurrences#x, cast(2022-01-01 as timestamp) AS instance_start_time#x]
    +- OneRowRelation
 
