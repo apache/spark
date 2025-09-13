@@ -4160,6 +4160,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED =
+    buildConf("spark.sql.scripting.continueHandlerEnabled")
+      .internal()
+      .doc("EXPERIMENTAL FEATURE/WORK IN PROGRESS: SQL Scripting CONTINUE HANDLER feature " +
+        "is under development and still not working as intended. This feature switch is intended " +
+        "to be used internally for development and testing, not by end users. " +
+        "YOU ARE ADVISED AGAINST USING THIS FEATURE AS ITS NOT FINISHED.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
       "an output as binary. Otherwise, it returns as a string.")

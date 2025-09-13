@@ -281,11 +281,15 @@ class AstBuilder extends DataTypeAstBuilder
       parsingCtx: SqlScriptingParsingContext): ExceptionHandler = {
     val exceptionHandlerTriggers = visitConditionValuesImpl(ctx.conditionValues())
 
-    if (Option(ctx.CONTINUE()).isDefined) {
-      throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+    val handlerType = if (Option(ctx.CONTINUE()).isDefined) {
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED)) {
+        throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+      }
+      ExceptionHandlerType.CONTINUE
+    } else {
+      ExceptionHandlerType.EXIT
     }
 
-    val handlerType = ExceptionHandlerType.EXIT
     val body = if (Option(ctx.beginEndCompoundBlock()).isDefined) {
       visitBeginEndCompoundBlockImpl(
         ctx.beginEndCompoundBlock(),
