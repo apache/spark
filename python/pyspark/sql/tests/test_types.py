@@ -25,8 +25,6 @@ import sys
 import unittest
 from dataclasses import dataclass, asdict
 
-from pyspark.sql import Row
-from pyspark.sql import functions as F
 from pyspark.errors import (
     AnalysisException,
     ParseException,
@@ -35,6 +33,8 @@ from pyspark.errors import (
     PySparkRuntimeError,
     PySparkNotImplementedError,
 )
+from pyspark.sql import Row
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DataType,
     ByteType,
@@ -2347,6 +2347,18 @@ class TypesTestsMixin:
         # Rows in createDataFrame cannot be of type VariantVal
         with self.assertRaises(PySparkValueError, msg="Rows cannot be of type VariantVal"):
             self.spark.createDataFrame([VariantVal.parseJson("2")], "v variant")
+
+    def test_variant_to_pandas(self):
+        import pandas as pd
+
+        expected_values = [
+            ("str", '"%s"' % ("0123456789" * 10), "0123456789" * 10),
+            ("short_str", '"abc"', "abc"),
+        ]
+        json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
+        df = self.spark.createDataFrame([({"json": json_str})])
+        pandas = df.toPandas()
+        self.assertIsInstance(pandas, pd.DataFrame)
 
     def test_to_ddl(self):
         schema = StructType().add("a", NullType()).add("b", BooleanType()).add("c", BinaryType())
