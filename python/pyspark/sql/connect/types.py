@@ -277,11 +277,29 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
     elif schema.HasField("calendar_interval"):
         return CalendarIntervalType()
     elif schema.HasField("array"):
-        return proto_array_to_pyspark_data_type_array(schema.array)
+        return ArrayType(
+            proto_schema_to_pyspark_data_type(schema.array.element_type),
+            schema.array.contains_null,
+        )
     elif schema.HasField("struct"):
-        return proto_struct_to_pyspark_data_type_struct(schema.struct)
+        fields = []
+        for f in schema.struct.fields:
+            if f.HasField("metadata"):
+                metadata = json.loads(f.metadata)
+            else:
+                metadata = None
+            fields.append(
+                StructField(
+                    f.name, proto_schema_to_pyspark_data_type(f.data_type), f.nullable, metadata
+                )
+            )
+        return StructType(fields)
     elif schema.HasField("map"):
-        return proto_map_to_pyspark_data_type_map(schema.map)
+        return MapType(
+            proto_schema_to_pyspark_data_type(schema.map.key_type),
+            proto_schema_to_pyspark_data_type(schema.map.value_type),
+            schema.map.value_contains_null,
+        )
     elif schema.HasField("variant"):
         return VariantType()
     elif schema.HasField("udt"):
@@ -297,36 +315,6 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             errorClass="UNSUPPORTED_OPERATION",
             messageParameters={"operation": f"data type {schema}"},
         )
-
-
-def proto_array_to_pyspark_data_type_array(array: pb2.DataType.Array) -> ArrayType:
-    return ArrayType(
-        proto_schema_to_pyspark_data_type(array.element_type),
-        array.contains_null,
-    )
-
-
-def proto_map_to_pyspark_data_type_map(map: pb2.DataType.Map) -> MapType:
-    return MapType(
-        proto_schema_to_pyspark_data_type(map.key_type),
-        proto_schema_to_pyspark_data_type(map.value_type),
-        map.value_contains_null,
-    )
-
-
-def proto_struct_to_pyspark_data_type_struct(struct: pb2.DataType.Struct) -> StructType:
-    fields = []
-    for f in struct.fields:
-        if f.HasField("metadata"):
-            metadata = json.loads(f.metadata)
-        else:
-            metadata = None
-        fields.append(
-            StructField(
-                f.name, proto_schema_to_pyspark_data_type(f.data_type), f.nullable, metadata
-            )
-        )
-    return StructType(fields)
 
 
 # The python version of org.apache.spark.sql.catalyst.util.AttributeNameParser

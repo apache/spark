@@ -78,9 +78,6 @@ from pyspark.sql.connect.types import (
     UnparsedDataType,
     pyspark_types_to_proto_types,
     proto_schema_to_pyspark_data_type,
-    proto_array_to_pyspark_data_type_array,
-    proto_map_to_pyspark_data_type_map,
-    proto_struct_to_pyspark_data_type_struct,
 )
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import current_origin
@@ -442,23 +439,14 @@ class LiteralExpression(Expression):
             assert dataType is None or isinstance(dataType, DayTimeIntervalType)
             return DayTimeIntervalType().fromInternal(literal.day_time_interval)
         elif literal.HasField("array"):
-            if literal.array.HasField("data_type"):
-                arrayType = proto_array_to_pyspark_data_type_array(literal.array.data_type)
-                elementType = arrayType.elementType
-            else:
-                elementType = proto_schema_to_pyspark_data_type(literal.array.element_type)
+            elementType = proto_schema_to_pyspark_data_type(literal.array.element_type)
             if dataType is not None:
                 assert isinstance(dataType, ArrayType)
                 assert elementType == dataType.elementType
             return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
         elif literal.HasField("map"):
-            if literal.map.HasField("data_type"):
-                mapType = proto_map_to_pyspark_data_type_map(literal.map.data_type)
-                keyType = mapType.keyType
-                valueType = mapType.valueType
-            else:
-                keyType = proto_schema_to_pyspark_data_type(literal.map.key_type)
-                valueType = proto_schema_to_pyspark_data_type(literal.map.value_type)
+            keyType = proto_schema_to_pyspark_data_type(literal.map.key_type)
+            valueType = proto_schema_to_pyspark_data_type(literal.map.value_type)
             if dataType is not None:
                 assert isinstance(dataType, MapType)
                 assert keyType == dataType.keyType
@@ -468,14 +456,9 @@ class LiteralExpression(Expression):
                 for k, v in zip(literal.map.keys, literal.map.values)
             }
         elif literal.HasField("struct"):
-            if literal.struct.HasField("data_type_struct"):
-                struct_type = proto_struct_to_pyspark_data_type_struct(
-                    literal.struct.data_type_struct
-                )
-            else:
-                struct_type = cast(
-                    StructType, proto_schema_to_pyspark_data_type(literal.struct.struct_type)
-                )
+            struct_type = cast(
+                StructType, proto_schema_to_pyspark_data_type(literal.struct.struct_type)
+            )
             if dataType is not None:
                 assert isinstance(dataType, StructType)
                 assert struct_type == dataType
