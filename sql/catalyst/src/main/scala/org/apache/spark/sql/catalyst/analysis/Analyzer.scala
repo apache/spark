@@ -1677,12 +1677,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
               case UpdateStarAction(updateCondition) =>
-                // Use only source columns.  Missing columns in target will be handled in
+                // Use only common columns.  Missing columns in target will be handled in
                 // ResolveRowLevelCommandAssignments.
-                val assignments = targetTable.output.flatMap{ targetAttr =>
-                  sourceTable.output.find(
-                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
-                    .map(Assignment(targetAttr, _))}
+                val sourceAttrs = DataTypeUtils.nestedAttributes(sourceTable.output)
+                val targetAttrs = DataTypeUtils.nestedAttributes(targetTable.output)
+                val commonAttrs = sourceAttrs.filter(s =>
+                  targetAttrs.exists(t => conf.resolver(t.name, s.name)))
+                val assignments = commonAttrs.map{ a =>
+                  Assignment(UnresolvedAttribute(a.name), UnresolvedAttribute(a.name))}
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
@@ -1703,12 +1705,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                // Use only source columns.  Missing columns in target will be handled in
+                // Use only common columns.  Missing columns in target will be handled in
                 // ResolveRowLevelCommandAssignments.
-                val assignments = targetTable.output.flatMap{ targetAttr =>
-                  sourceTable.output.find(
-                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
-                    .map(Assignment(targetAttr, _))}
+                val sourceAttrs = DataTypeUtils.nestedAttributes(sourceTable.output)
+                val targetAttrs = DataTypeUtils.nestedAttributes(targetTable.output)
+                val commonAttrs = sourceAttrs.filter(s =>
+                  targetAttrs.exists(t => conf.resolver(t.name, s.name)))
+                val assignments = commonAttrs.map{ a =>
+                  Assignment(UnresolvedAttribute(a.name), UnresolvedAttribute(a.name))}
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))

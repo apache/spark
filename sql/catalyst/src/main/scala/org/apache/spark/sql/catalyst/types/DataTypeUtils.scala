@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.types
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
@@ -235,6 +236,25 @@ object DataTypeUtils {
    */
   def toAttributes(schema: StructType): Seq[AttributeReference] = {
     schema.map(toAttribute)
+  }
+
+  def nestedAttributes(attrs: Seq[Attribute]): Seq[AttributeReference] = {
+    nestedAttributes(fromAttributes(attrs))
+  }
+
+  private def nestedAttributes(schema: StructType, colPath: Seq[String] = Seq())
+  : Seq[AttributeReference] = {
+    schema.flatMap { field =>
+      field.dataType match {
+        case structType: StructType =>
+          val newColPath = colPath :+ field.name
+          nestedAttributes(structType, newColPath)
+        case _ => Seq(
+          AttributeReference((colPath :+ field.name).quoted,
+            field.dataType, field.nullable, field.metadata)()
+        )
+      }
+    }
   }
 
   def fromAttributes(attributes: Seq[Attribute]): StructType =
