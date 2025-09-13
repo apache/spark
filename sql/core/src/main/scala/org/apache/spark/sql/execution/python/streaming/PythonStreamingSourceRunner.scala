@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{PythonWorkerArgs, SparkEnv}
 import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.PYTHON_EXEC
@@ -93,9 +93,15 @@ class PythonStreamingSourceRunner(
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
 
-    val workerFactory =
-      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
-    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
+    val workerArgs = PythonWorkerArgs(
+      pythonExec,
+      workerModule,
+      envVars.asScala.toMap,
+      useDaemon = false,
+      daemonModule = PythonWorkerFactory.defaultDaemonModule
+    )
+    val workerFactory = new PythonWorkerFactory(workerArgs)
+    val worker: PythonWorker = workerFactory.createSimpleWorker(blockingMode = true)
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
@@ -220,7 +226,7 @@ class PythonStreamingSourceRunner(
     try {
       pythonWorkerFactory.foreach { factory =>
         pythonWorker.foreach { worker =>
-          factory.stopWorker(worker)
+          factory.stopWorker(worker, None)
           factory.stop()
         }
       }
