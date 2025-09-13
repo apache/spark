@@ -1952,9 +1952,9 @@ class SparkConnectClient(object):
         logger.exception("GRPC Error received")
         # We have to cast the value here because, a RpcError is a Call as well.
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
-        rpc_error: grpc.Call = cast(grpc.Call, rpc_error)
-        status_code: grpc.StatusCode = rpc_error.code()
-        status: Optional[google.rpc.status_pb2.Status] = rpc_status.from_call(rpc_error)
+        error: grpc.Call = cast(grpc.Call, rpc_error)
+        status_code: grpc.StatusCode = error.code()
+        status: Optional[google.rpc.status_pb2.Status] = rpc_status.from_call(error)
         if status:
             for d in status.details:
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
@@ -1979,7 +1979,7 @@ class SparkConnectClient(object):
             ) from None
         else:
             raise SparkConnectGrpcException(
-                message=str(rpc_error),
+                message=str(error),
                 grpc_status_code=status_code,
             ) from None
 
