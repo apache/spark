@@ -188,10 +188,7 @@ object BatchedPythonArrowInput {
    * to work around Arrow 2G limit, see ARROW-4890.
    *
    * The return value is the number of rows in the batch.
-   *
-   * Note that `rowIter` here is always grouped batch. One group does not span
-   * multiple groups, see also [[org.apache.spark.sql.execution.GroupedIterator]].
-   * Therefore, each split Arrow batch also does not have mixed grouped. For example:
+   * Each split Arrow batch also does not have mixed grouped. For example:
    *
    *        +------------------------+      +------------------------+      +--------------------
    *        |Group (by k1) v1, v2, v3|      |Group (by k2) v1, v2, v3|      |                 ...
@@ -203,7 +200,7 @@ object BatchedPythonArrowInput {
    * |    Arrow Streaming Format     |    Arrow Streaming Format     |    Arrow Streaming Form...
    *
    * Here, each (Arrow) batch does not span multiple groups.
-   * These (Arrow) batches within each complete Arrow Streaming Format are
+   * These (Arrow) batches within each complete Arrow IPC Format are
    * reconstructed into the group back as pandas instances later on the Python worker side.
    */
   def writeSizedBatch(
