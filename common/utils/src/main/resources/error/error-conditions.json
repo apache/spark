@@ -2742,6 +2742,12 @@
     ],
     "sqlState" : "42001"
   },
+  "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Expression type must be string type but got <exprType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [
       "The external type <externalType> is not valid for the type <type> at the expression <expr>."
@@ -3918,12 +3924,6 @@
       }
     },
     "sqlState" : "42K0M"
-  },
-  "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
-    "message" : [
-      "Variable type must be string type but got <varType>."
-    ],
-    "sqlState" : "42K09"
   },
   "INVALID_VARIANT_CAST" : {
     "message" : [
