@@ -498,9 +498,7 @@ class FunctionsTestsMixin:
         # Test with to_date and to_time functions
         data = [("2024-05-22", "10:30:45.123")]
         df = self.spark.createDataFrame(data, ["date_str", "time_str"])
-        actual = df.select(
-            F.make_timestamp_ntz(F.to_date(df.date_str), F.to_time(df.time_str))
-        )
+        actual = df.select(F.make_timestamp_ntz(F.to_date(df.date_str), F.to_time(df.time_str)))
         assertDataFrameEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30, 45, 123000))])
 
     def test_make_timestamp_ntz_error_handling(self):

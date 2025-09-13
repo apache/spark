@@ -25125,6 +25125,7 @@ def try_make_timestamp_ltz(
             "try_make_timestamp_ltz", years, months, days, hours, mins, secs
         )
 
+
 @overload
 def make_timestamp_ntz(
     years: "ColumnOrName",
@@ -25135,6 +25136,7 @@ def make_timestamp_ntz(
     secs: "ColumnOrName",
 ) -> Column:
     ...
+
 
 @overload
 def make_timestamp_ntz(date: "ColumnOrName", time: "ColumnOrName") -> Column:
@@ -25151,7 +25153,7 @@ def make_timestamp_ntz(*cols: "ColumnOrName") -> Column:
     on invalid inputs. Otherwise, it will throw an error instead.
 
     .. versionadded:: 3.5.0
-    
+
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
