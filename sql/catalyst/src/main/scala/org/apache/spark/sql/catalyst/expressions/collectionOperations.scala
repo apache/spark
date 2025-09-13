@@ -1734,7 +1734,7 @@ case class ArrayPrepend(left: Expression, right: Expression) extends ArrayPendBa
   usage = """
       _FUNC_(array, element) - Add the element at the end of the array passed as first
       argument. Type of element should be similar to type of the elements of the array.
-      Null element is also appended into the array. But if the array passed, is NULL
+      Null element is also appended into the array. But if the array passed is NULL,
       output is NULL
       """,
   examples = """
