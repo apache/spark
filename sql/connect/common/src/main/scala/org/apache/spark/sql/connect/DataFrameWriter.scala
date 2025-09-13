@@ -96,7 +96,7 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) extends sql.DataFra
   private def executeWriteOperation(f: proto.WriteOperation.Builder => Unit): Unit = {
     val builder = proto.WriteOperation.newBuilder()
 
-    builder.setInput(ds.plan.getRoot)
+    builder.setInput(ds.optimizedPlan.getRoot)
 
     // Set path or table
     f(builder)
