@@ -74,3 +74,15 @@ SELECT map('a', 1, 'b', 2) AS col1, col1
 FROM values(map('a', 1, 'b', 2))
 GROUP BY col1
 HAVING col1['b'] > 1;
+
+-- Both alias and column are named the `col1`, but fields are named `a` and `b`
+
+-- Reference to column field
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 ORDER BY col1.a;
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 HAVING col1.a > 0;
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 HAVING col1.a > 0 ORDER BY col1.a;
+
+-- Reference to alias field
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 ORDER BY col1.b;
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 HAVING col1.b > 0;
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 HAVING col1.b > 0 ORDER BY col1.b;

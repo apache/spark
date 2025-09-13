@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.{Either, Left, Right}
+
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -45,13 +47,8 @@ object ExtractValue {
       extraction: Expression,
       resolver: Resolver): Expression = {
     extractValue(child, extraction, resolver) match {
-      case Some(expression) => expression
-      case None =>
-        throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
-          child.dataType,
-          extraction,
-          child
-        )
+      case Left(expression) => expression
+      case Right(throwable) => throw throwable
     }
   }
 
@@ -69,31 +66,42 @@ object ExtractValue {
   def extractValue(
       child: Expression,
       extraction: Expression,
-      resolver: Resolver): Option[Expression] = {
+      resolver: Resolver): Either[Expression, Throwable] = {
     (child.dataType, extraction) match {
       case (StructType(fields), NonNullLiteral(v, _: StringType)) =>
         val fieldName = v.toString
-        val ordinal = findField(fields, fieldName, resolver)
-        Some(GetStructField(child, ordinal, Some(fieldName)))
+        findField(fields, fieldName, resolver) match {
+          case Left(ordinal) => Left(GetStructField(child, ordinal, Some(fieldName)))
+          case Right(throwable) => Right(throwable)
+        }
 
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, _: StringType)) =>
         val fieldName = v.toString
-        val ordinal = findField(fields, fieldName, resolver)
-        Some(
-          GetArrayStructFields(
-            child,
-            fields(ordinal).copy(name = fieldName),
-            ordinal,
-            fields.length,
-            containsNull || fields(ordinal).nullable
-          )
+        findField(fields, fieldName, resolver) match {
+          case Left(ordinal) =>
+            Left(
+              GetArrayStructFields(
+                child,
+                fields(ordinal).copy(name = fieldName),
+                ordinal,
+                fields.length,
+                containsNull || fields(ordinal).nullable
+              )
+            )
+          case Right(throwable) => Right(throwable)
+        }
+
+      case (_: ArrayType, _) => Left(GetArrayItem(child, extraction))
+
+      case (MapType(_, _, _), _) => Left(GetMapValue(child, extraction))
+
+      case (otherType, _) => Right(
+        QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
+          child.dataType,
+          extraction,
+          child
         )
-
-      case (_: ArrayType, _) => Some(GetArrayItem(child, extraction))
-
-      case (MapType(_, _, _), _) => Some(GetMapValue(child, extraction))
-
-      case (otherType, _) => None
+      )
     }
   }
 
@@ -105,7 +113,10 @@ object ExtractValue {
     nestedFields
       .foldLeft(Some(attribute): Option[Expression]) {
         case (Some(expression), field) =>
-          ExtractValue.extractValue(expression, Literal(field), resolver)
+          ExtractValue.extractValue(expression, Literal(field), resolver) match {
+            case Left(e) => Some(e)
+            case Right(_) => None
+          }
         case _ =>
           None
       }
@@ -116,16 +127,17 @@ object ExtractValue {
    * Find the ordinal of StructField, report error if no desired field or over one
    * desired fields are found.
    */
-  private def findField(fields: Array[StructField], fieldName: String, resolver: Resolver): Int = {
+  private def findField(
+      fields: Array[StructField], fieldName: String, resolver: Resolver): Either[Int, Throwable] = {
     val checkField = (f: StructField) => resolver(f.name, fieldName)
     val ordinal = fields.indexWhere(checkField)
     if (ordinal == -1) {
-      throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(fieldName, fields)
+      Right(QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(fieldName, fields))
     } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
       val numberOfAppearance = fields.count(checkField)
-      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(fieldName, numberOfAppearance)
+      Right(QueryCompilationErrors.ambiguousReferenceToFieldsError(fieldName, numberOfAppearance))
     } else {
-      ordinal
+      Left(ordinal)
     }
   }
 }
