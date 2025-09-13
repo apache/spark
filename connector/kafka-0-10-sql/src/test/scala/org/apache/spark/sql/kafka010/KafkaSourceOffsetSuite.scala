@@ -65,11 +65,11 @@ class KafkaSourceOffsetSuite extends OffsetSuite with SharedSparkSession {
       val batch0 = OffsetSeq.fill(kso1)
       val batch1 = OffsetSeq.fill(kso2, kso3)
 
-      val batch0Serialized = OffsetSeq.fill(batch0.offsets.flatMap(_.map(o =>
-        SerializedOffset(o.json))): _*)
+      val batch0Serialized = OffsetSeq.fill(batch0.offsets.values.map(o =>
+        SerializedOffset(o.json)).toSeq: _*)
 
-      val batch1Serialized = OffsetSeq.fill(batch1.offsets.flatMap(_.map(o =>
-        SerializedOffset(o.json))): _*)
+      val batch1Serialized = OffsetSeq.fill(batch1.offsets.values.map(o =>
+        SerializedOffset(o.json)).toSeq: _*)
 
       assert(metadataLog.add(0, batch0))
       assert(metadataLog.getLatest() === Some(0 -> batch0Serialized))
