@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkConf, SparkContext, SparkMasterRegex}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkMasterRegex}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
@@ -136,15 +136,11 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     val executorPodsAllocator = makeExecutorPodsAllocator(sc, kubernetesClient, snapshotsStore)
 
-    val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
-      snapshotsStore,
-      kubernetesClient,
-      sc.conf)
-
-    val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
-      "kubernetes-executor-pod-polling-sync")
-    val podsPollingEventSource = new ExecutorPodsPollingSnapshotSource(
-      sc.conf, kubernetesClient, snapshotsStore, eventsPollingExecutor)
+    val snapshotSources = {
+      val sources = makeSnapshotSources(sc.conf, kubernetesClient, snapshotsStore, sc.applicationId)
+      logInfo(s"Snapshot sources: ${sources.mkString(", ")}")
+      sources
+    }
 
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
@@ -154,8 +150,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       snapshotsStore,
       executorPodsAllocator,
       executorPodsLifecycleEventHandler,
-      podsWatchEventSource,
-      podsPollingEventSource)
+      snapshotSources)
   }
 
   private[k8s] def makeExecutorPodsAllocator(sc: SparkContext, kubernetesClient: KubernetesClient,
@@ -181,6 +176,46 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       kubernetesClient,
       snapshotsStore,
       new SystemClock())
+  }
+
+  private def makeSnapshotSources(
+      conf: SparkConf,
+      kubernetesClient: KubernetesClient,
+      snapshotsStore: ExecutorPodsSnapshotsStore,
+      applicationId: String): Seq[ExecutorPodsSnapshotSource] = {
+    val snapshotSources = conf
+      .get(org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_POD_SNAPSHOT_SOURCES)
+      .map { className =>
+        logDebug(s"Trying to initialize executor pods snapshot source: $className")
+        val source = Utils.classForName[Any](className).getConstructor().newInstance()
+        var informerManager: InformerManager = null
+        val initializedSource = source match {
+          case s: ExecutorPodsInformerCustomSnapshotSource =>
+            if (informerManager != null) {
+              informerManager = new InformerManager(kubernetesClient, applicationId, conf)
+            }
+            s.init(conf, kubernetesClient, snapshotsStore, informerManager)
+            Some(s)
+          case s: ExecutorPodsCustomSnapshotSource =>
+            s.init(conf, kubernetesClient, snapshotsStore)
+            Some(s)
+          case _ => None
+        }
+        initializedSource.getOrElse {
+          throw new SparkException(s"Failed to initialize snapshot source: $className, " +
+            s"please make sure your executor pod snapshot sources implement" +
+            s"`${classOf[ExecutorPodsSnapshotSource].getSimpleName}`.")
+        }
+      }
+    if (snapshotSources.nonEmpty) {
+      return snapshotSources
+    }
+    val eventsPollingExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "kubernetes-executor-pod-polling-sync")
+    Seq(
+      new ExecutorPodsWatchSnapshotSource(snapshotsStore, kubernetesClient, conf),
+      new ExecutorPodsPollingSnapshotSource(
+        conf, kubernetesClient, snapshotsStore, eventsPollingExecutor))
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
