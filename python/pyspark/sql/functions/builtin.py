@@ -25126,7 +25126,7 @@ def try_make_timestamp_ltz(
         )
 
 
-@_try_remote_functions
+@overload
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -25135,8 +25135,28 @@ def make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
+    ...
+
+
+@overload
+def make_timestamp_ntz(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@_try_remote_functions
+def make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    *,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
     """
-    Create local date-time from years, months, days, hours, mins, secs fields.
+    Create local date-time from years, months, days, hours, mins, secs fields, or from date and time fields.
     If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
     on invalid inputs. Otherwise, it will throw an error instead.
 
@@ -25155,10 +25175,14 @@ def make_timestamp_ntz(
     mins : :class:`~pyspark.sql.Column` or column name
         The minute-of-hour to represent, from 0 to 59
     secs : :class:`~pyspark.sql.Column` or column name
-        The second-of-minute and its micro-fraction to represent, from 0 to 60.
+        The second-of-minute and its micro-fraction to represent, from 0 to 60..
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
+    date : :class:`~pyspark.sql.Column` or column name
+        A date to represent, from 0001-01-01 to 9999-12-31
+    time : :class:`~pyspark.sql.Column` or column name
+        A local time to represent, from 00:00:00 to 23:59:59.999999
 
     Returns
     -------
@@ -25179,6 +25203,8 @@ def make_timestamp_ntz(
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
+    Example 1: Create local date-time from year, month, day, hour, min, sec fields.
+
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
     ...     ['year', 'month', 'day', 'hour', 'min', 'sec'])
@@ -25191,11 +25217,54 @@ def make_timestamp_ntz(
     |2014-12-28 06:30:45.887                             |
     +----------------------------------------------------+
 
+    Example 2: Create local date-time from date and time fields.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([['2014-12-28', '06:30:45.887']],
+    ...     ['date_col', 'time_col'])
+    >>> df.select(
+    ...     sf.make_timestamp_ntz(date=sf.to_date(df.date_col), time=sf.to_time(df.time_col))
+    ... ).show(truncate=False)
+    +------------------------------------------------------------------+
+    |make_timestamp_ntz(date=to_date(date_col), time=to_time(time_col))|
+    +------------------------------------------------------------------+
+    |2014-12-28 06:30:45.887                                           |
+    +------------------------------------------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    return _invoke_function_over_columns(
-        "make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    # Check for mixed arguments (invalid)
+    if any(arg is not None for arg in [years, months, days, hours, mins, secs]) and (
+        date is not None or time is not None
+    ):
+        raise PySparkValueError(
+            errorClass="WRONG_NUM_ARGS",
+            messageParameters={
+                "func_name": "make_timestamp_ntz",
+                "expected": "either (years, months, days, hours, mins, secs) or (date, time)",
+                "actual": "mixed arguments from both approaches",
+            },
+        )
+
+    # Handle valid cases
+    if date is not None and time is not None:
+        # make_timestamp_ntz(date=..., time=...)
+        return _invoke_function_over_columns("make_timestamp_ntz", date, time)
+    elif all(arg is not None for arg in [years, months, days, hours, mins, secs]):
+        # make_timestamp_ntz(years, months, days, hours, mins, secs)
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz", years, months, days, hours, mins, secs
+        )
+    else:
+        # Invalid argument combination (partial arguments)
+        raise PySparkValueError(
+            errorClass="WRONG_NUM_ARGS",
+            messageParameters={
+                "func_name": "make_timestamp_ntz",
+                "expected": "(years, months, days, hours, mins, secs) or (date, time)",
+                "actual": "incomplete arguments",
+            },
+        )
 
 
 @_try_remote_functions
