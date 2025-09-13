@@ -443,6 +443,45 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
+    def repartitionById(
+        self, numPartitions: int, partitionIdCol: "ColumnOrName"
+    ) -> ParentDataFrame:
+        if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
+            raise PySparkTypeError(
+                errorClass="NOT_INT",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_type": type(numPartitions).__name__,
+                },
+            )
+        if numPartitions <= 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_value": str(numPartitions),
+                },
+            )
+
+        from pyspark.sql.connect.expressions import DirectShufflePartitionID
+        from pyspark.sql.connect.column import Column
+
+        # Convert the partition column to a DirectShufflePartitionID expression
+        if isinstance(partitionIdCol, str):
+            partition_col = F.col(partitionIdCol)
+        else:
+            partition_col = partitionIdCol
+
+        direct_partition_expr = DirectShufflePartitionID(partition_col._expr)
+        direct_partition_col = Column(direct_partition_expr)
+
+        res = DataFrame(
+            plan.RepartitionByExpression(self._plan, numPartitions, [direct_partition_col]),
+            self._session,
+        )
+        res._cached_schema = self._cached_schema
+        return res
+
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         if subset is not None and not isinstance(subset, (list, tuple)):
             raise PySparkTypeError(

@@ -1317,3 +1317,24 @@ class SubqueryExpression(Expression):
             repr_parts.append(f"values={self._in_subquery_values}")
 
         return f"SubqueryExpression({', '.join(repr_parts)})"
+
+
+class DirectShufflePartitionID(Expression):
+    """
+    Expression that takes a partition ID value and passes it through directly for use in
+    shuffle partitioning. This is used with RepartitionByExpression to allow users to
+    directly specify target partition IDs.
+    """
+
+    def __init__(self, child: Expression):
+        super().__init__()
+        assert child is not None and isinstance(child, Expression)
+        self._child = child
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = self._create_proto_expression()
+        expr.direct_shuffle_partition_id.child.CopyFrom(self._child.to_plan(session))
+        return expr
+
+    def __repr__(self) -> str:
+        return f"DirectShufflePartitionID(child={self._child})"
