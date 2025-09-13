@@ -66,6 +66,9 @@ class TransformWithStateInPySparkPythonRunner(
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
+  private var currentGroupDataIterator: Iterator[InternalRow] = _
+
+  // Grouping multiple keys into one arrow batch
   override protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -75,23 +78,34 @@ class TransformWithStateInPySparkPythonRunner(
       pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
     }
 
-    if (inputIterator.hasNext) {
-      val startData = dataOut.size()
-      val next = inputIterator.next()
-      val dataIter = next._2
+    // If we don't have data left for the current group, move to the next group.
+    if (currentGroupDataIterator == null && inputIterator.hasNext) {
+      val (_, dataIter) = inputIterator.next()
+      currentGroupDataIterator = dataIter
+    }
 
-      while (dataIter.hasNext) {
-        val dataRow = dataIter.next()
-        pandasWriter.writeRow(dataRow)
+    val startData = dataOut.size()
+    val hasInput = if (currentGroupDataIterator != null) {
+      var isCurrentBatchFull = false
+      // Stop writing when the current arrowBatch is finalized/full. If we have rows left
+      while (currentGroupDataIterator.hasNext && !isCurrentBatchFull) {
+        val dataRow = currentGroupDataIterator.next()
+        isCurrentBatchFull = pandasWriter.writeRow(dataRow)
       }
-      pandasWriter.finalizeCurrentArrowBatch()
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
+
+      if (!currentGroupDataIterator.hasNext) {
+        currentGroupDataIterator = null
+      }
+
       true
     } else {
+      pandasWriter.finalizeCurrentArrowBatch()
       super[PythonArrowInput].close()
       false
     }
+    val deltaData = dataOut.size() - startData
+    pythonMetrics("pythonDataSent") += deltaData
+    hasInput
   }
 }
 
@@ -125,6 +139,11 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
+  private var currentGroupDataIterator: Iterator[InternalRow] = _
+
+  private var currentGroupInitStateIterator: Iterator[InternalRow] = _
+
+  // Grouping multiple keys into one arrow batch
   override protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -134,30 +153,45 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
     }
 
-    if (inputIterator.hasNext) {
-      val startData = dataOut.size()
-      // a new grouping key with data & init state iter
-      val next = inputIterator.next()
-      val dataIter = next._2
-      val initIter = next._3
+    // If we don't have data left for the current group, move to the next group.
+    if (currentGroupDataIterator == null &&
+      currentGroupInitStateIterator == null && inputIterator.hasNext) {
+      val (_, dataIter, initIter) = inputIterator.next()
+      currentGroupDataIterator = dataIter
+      currentGroupInitStateIterator = initIter
+    }
 
-      while (dataIter.hasNext || initIter.hasNext) {
+    val startData = dataOut.size()
+    val hasInput = if (currentGroupDataIterator != null || currentGroupInitStateIterator != null) {
+      var isCurrentBatchFull = false
+      // Stop writing when the current arrowBatch is finalized/full. If we have rows left
+      while ((currentGroupDataIterator.hasNext || currentGroupInitStateIterator.hasNext)
+        && !isCurrentBatchFull) {
         val dataRow =
-          if (dataIter.hasNext) dataIter.next()
+          if (currentGroupDataIterator.hasNext) currentGroupDataIterator.next()
           else InternalRow.empty
         val initRow =
-          if (initIter.hasNext) initIter.next()
+          if (currentGroupInitStateIterator.hasNext) currentGroupInitStateIterator.next()
           else InternalRow.empty
-        pandasWriter.writeRow(InternalRow(dataRow, initRow))
+        isCurrentBatchFull = pandasWriter.writeRow(InternalRow(dataRow, initRow))
       }
-      pandasWriter.finalizeCurrentArrowBatch()
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
+
+      if (!currentGroupDataIterator.hasNext) {
+        currentGroupDataIterator = null
+      }
+
+      if (!currentGroupInitStateIterator.hasNext) {
+        currentGroupInitStateIterator = null
+      }
       true
     } else {
+      pandasWriter.finalizeCurrentArrowBatch()
       super[PythonArrowInput].close()
       false
     }
+    val deltaData = dataOut.size() - startData
+    pythonMetrics("pythonDataSent") += deltaData
+    hasInput
   }
 }
 
