@@ -77,7 +77,7 @@ class Observation(val name: String) {
    */
   @throws[InterruptedException]
   def get: Map[String, Any] = {
-    val row = SparkThreadUtils.awaitResult(future, Duration.Inf)
+    val row = getRow
     row.getValuesMap(row.schema.map(_.name))
   }
 
@@ -133,6 +133,16 @@ class Observation(val name: String) {
    */
   private[sql] def getRowOrEmpty: Option[Row] = {
     Try(SparkThreadUtils.awaitResult(future, 100.millis)).toOption
+  }
+
+  /**
+   * Get the observed metrics as a Row.
+   *
+   * @return
+   *   the observed metrics as a `Row`.
+   */
+  private[sql] def getRow: Row = {
+    SparkThreadUtils.awaitResult(future, Duration.Inf)
   }
 }
 
