@@ -49,6 +49,7 @@ import org.apache.parquet.hadoop.api.ReadSupport;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.io.SeekableInputStream;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
 
@@ -89,24 +90,27 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
-    initialize(inputSplit, taskAttemptContext, Option.empty());
+    initialize(inputSplit, taskAttemptContext, Option.empty(), Option.empty(), Option.empty());
   }
 
   public void initialize(
       InputSplit inputSplit,
       TaskAttemptContext taskAttemptContext,
+      Option<HadoopInputFile> inputFile,
+      Option<SeekableInputStream> inputStream,
       Option<ParquetMetadata> fileFooter) throws IOException, InterruptedException {
     Configuration configuration = taskAttemptContext.getConfiguration();
     FileSplit split = (FileSplit) inputSplit;
     this.file = split.getPath();
+    ParquetReadOptions options = HadoopReadOptions
+        .builder(configuration, file)
+        .withRange(split.getStart(), split.getStart() + split.getLength())
+        .build();
     ParquetFileReader fileReader;
-    if (fileFooter.isDefined()) {
-      fileReader = new ParquetFileReader(configuration, file, fileFooter.get());
+    if (inputFile.isDefined() && fileFooter.isDefined() && inputStream.isDefined()) {
+      fileReader = new ParquetFileReader(
+          inputFile.get(), fileFooter.get(), options, inputStream.get());
     } else {
-      ParquetReadOptions options = HadoopReadOptions
-          .builder(configuration, file)
-          .withRange(split.getStart(), split.getStart() + split.getLength())
-          .build();
       fileReader = new ParquetFileReader(
           HadoopInputFile.fromPath(file, configuration), options);
     }
