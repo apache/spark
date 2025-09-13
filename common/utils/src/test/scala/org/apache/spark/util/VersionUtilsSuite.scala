@@ -17,9 +17,9 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.SparkFunSuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-class VersionUtilsSuite extends SparkFunSuite {
+class VersionUtilsSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   import org.apache.spark.util.VersionUtils._
 
