@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import java.sql.Time
+
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
@@ -24,12 +26,15 @@ import org.apache.spark.sql.catalyst.analysis.FunctionResolution
 import org.apache.spark.sql.catalyst.expressions.{
   AttributeReference,
   Cast,
+  CurrentDate,
   Expression,
+  Literal,
+  MakeTimestampNTZ,
   TimeZoneAwareExpression
 }
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{IntegerType, StringType, TimestampNTZType, TimeType}
 
 class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
 
@@ -80,6 +85,30 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     assert(resolvedExpression.children.head == resolvedChild)
     assert(resolvedExpression.timeZoneId.nonEmpty)
     assert(resolvedExpression.getTagValue(Cast.USER_SPECIFIED_CAST).nonEmpty)
+  }
+
+  test("SPARK-52617: Rewrite Cast(TimeType -> TimestampNTZType) to MakeTimestampNTZ") {
+    val millis = Time.valueOf("12:34:56").getTime
+    val timeExpr = Literal(millis * 1000L, TimeType(6)) // microseconds since midnight
+
+    val input = Cast(timeExpr, TimestampNTZType)
+
+    val newExpressionResolver = new HardCodedExpressionResolver(
+      catalogManager = mock[CatalogManager],
+      resolvedExpression = timeExpr)
+
+    val newTimezoneAwareExpressionResolver =
+      new TimezoneAwareExpressionResolver(newExpressionResolver)
+
+    val resolvedExpr =
+      newExpressionResolver.getExpressionTreeTraversals.withNewTraversal(OneRowRelation()) {
+        newTimezoneAwareExpressionResolver.resolve(input)
+      }
+    assert(resolvedExpr.isInstanceOf[MakeTimestampNTZ])
+
+    val makeTs = resolvedExpr.asInstanceOf[MakeTimestampNTZ]
+    assert(makeTs.left.isInstanceOf[CurrentDate])
+    assert(makeTs.right.semanticEquals(timeExpr))
   }
 
   test("Timezone is applied recursively") {
