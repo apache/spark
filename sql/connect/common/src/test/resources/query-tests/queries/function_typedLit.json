@@ -77,7 +77,8 @@
     }, {
       "literal": {
         "null": {
-          "null": {
+          "string": {
+            "collation": "UTF8_BINARY"
           }
         }
       },
@@ -825,6 +826,206 @@
       "literal": {
         "array": {
           "elements": [{
+            "null": {
+              "integer": {
+              }
+            }
+          }, {
+            "null": {
+              "null": {
+              }
+            }
+          }],
+          "dataType": {
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
+            "null": {
+              "struct": {
+                "fields": [{
+                  "name": "_1",
+                  "dataType": {
+                    "integer": {
+                    }
+                  }
+                }, {
+                  "name": "_2",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            }
+          }, {
+            "null": {
+              "null": {
+              }
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 1
+              }, {
+                "string": "a"
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "_1"
+                }, {
+                  "name": "_2",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 2
+              }, {
+                "null": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                }
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "_1"
+                }, {
+                  "name": "_2",
+                  "nullable": true
+                }]
+              }
+            }
+          }],
+          "dataType": {
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
+            "null": {
+              "struct": {
+                "fields": [{
+                  "name": "_1",
+                  "dataType": {
+                    "integer": {
+                    }
+                  }
+                }, {
+                  "name": "_2",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            }
+          }, {
+            "null": {
+              "null": {
+              }
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 1
+              }, {
+                "string": "a"
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "_1"
+                }, {
+                  "name": "_2",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            }
+          }],
+          "dataType": {
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
             "integer": 1
           }, {
             "integer": 2
@@ -871,6 +1072,52 @@
                 "collation": "UTF8_BINARY"
               }
             }
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "map": {
+          "keys": [{
+            "string": "a"
+          }, {
+            "string": "b"
+          }],
+          "values": [{
+            "null": {
+              "integer": {
+              }
+            }
+          }, {
+            "null": {
+              "null": {
+              }
+            }
+          }],
+          "dataType": {
+            "keyType": {
+              "string": {
+                "collation": "UTF8_BINARY"
+              }
+            },
+            "valueContainsNull": true
           }
         }
       },
