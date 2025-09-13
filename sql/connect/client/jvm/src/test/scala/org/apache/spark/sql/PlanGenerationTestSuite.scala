@@ -3429,6 +3429,7 @@ class PlanGenerationTestSuite
       fn.typedlit[collection.immutable.Map[Int, Option[Int]]](
         collection.immutable.Map(1 -> None)),
       fn.typedLit(Seq(Seq(1, 2, 3), Seq(4, 5, 6), Seq(7, 8, 9))),
+      fn.typedLit(Seq((1, 2, 3), (4, 5, 6), (7, 8, 9))),
       fn.typedLit(
         Seq(
           mutable.LinkedHashMap("a" -> 1, "b" -> 2),

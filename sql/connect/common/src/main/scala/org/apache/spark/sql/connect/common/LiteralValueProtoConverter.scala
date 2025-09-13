@@ -220,7 +220,7 @@ object LiteralValueProtoConverter {
       mb
     }
 
-    def structBuilder(scalaValue: Any, structType: StructType) = {
+    def structBuilder(scalaValue: Any, structType: StructType, needDataType: Boolean) = {
       val sb = builder.getStructBuilder
       val fields = structType.fields
 
@@ -245,30 +245,31 @@ object LiteralValueProtoConverter {
         }
         sb.setStructType(toConnectProtoType(structType))
       } else {
-        val dataTypeStruct = proto.DataType.Struct.newBuilder()
         while (idx < structType.size) {
           val field = fields(idx)
           val literalProto =
-            toLiteralProtoWithOptions(iter.next(), Some(field.dataType), options)
+            toLiteralProtoBuilderInternal(iter.next(), field.dataType, options, needDataType)
+              .build()
           sb.addElements(literalProto)
 
-          val fieldBuilder = dataTypeStruct
-            .addFieldsBuilder()
-            .setName(field.name)
-            .setNullable(field.nullable)
+          if (needDataType) {
+            val fieldBuilder = sb.getDataTypeStructBuilder
+              .addFieldsBuilder()
+              .setName(field.name)
+              .setNullable(field.nullable)
 
-          if (LiteralValueProtoConverter.getInferredDataType(literalProto).isEmpty) {
-            fieldBuilder.setDataType(toConnectProtoType(field.dataType))
-          }
+            if (LiteralValueProtoConverter.getInferredDataType(literalProto).isEmpty) {
+              fieldBuilder.setDataType(toConnectProtoType(field.dataType))
+            }
 
-          // Set metadata if available
-          if (field.metadata != Metadata.empty) {
-            fieldBuilder.setMetadata(field.metadata.json)
+            // Set metadata if available
+            if (field.metadata != Metadata.empty) {
+              fieldBuilder.setMetadata(field.metadata.json)
+            }
           }
 
           idx += 1
         }
-        sb.setDataTypeStruct(dataTypeStruct.build())
       }
 
       sb
@@ -286,7 +287,7 @@ object LiteralValueProtoConverter {
       case (v, MapType(keyType, valueType, valueContainsNull)) =>
         builder.setMap(mapBuilder(v, keyType, valueType, valueContainsNull))
       case (v, structType: StructType) =>
-        builder.setStruct(structBuilder(v, structType))
+        builder.setStruct(structBuilder(v, structType, needDataType))
       case (v: Option[_], _: DataType) =>
         if (v.isDefined) {
           toLiteralProtoBuilderInternal(v.get, options, needDataType)
