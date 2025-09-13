@@ -25252,7 +25252,7 @@ def make_timestamp_ntz(*cols: "ColumnOrName") -> Column:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either 6 columns (years, months, days, hours, mins, secs) or 2 columns (date, time)",
+                "expected": "either (years, months, days, hours, mins, secs) or (date, time)",
                 "actual": f"{len(cols)} columns",
             },
         )

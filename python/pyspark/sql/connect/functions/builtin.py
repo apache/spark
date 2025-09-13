@@ -4036,14 +4036,14 @@ def make_timestamp_ntz(date: "ColumnOrName", time: "ColumnOrName") -> Column:
     ...
 
 
-def make_timestamp_ntz(*args: "ColumnOrName") -> Column:
-    if len(args) == 2:
+def make_timestamp_ntz(*cols: "ColumnOrName") -> Column:
+    if len(cols) == 2:
         # make_timestamp_ntz(date, time)
-        date, time = args
+        date, time = cols
         return _invoke_function_over_columns("make_timestamp_ntz", date, time)
-    elif len(args) == 6:
+    elif len(cols) == 6:
         # make_timestamp_ntz(years, months, days, hours, mins, secs)
-        years, months, days, hours, mins, secs = args
+        years, months, days, hours, mins, secs = cols
         return _invoke_function_over_columns(
             "make_timestamp_ntz", years, months, days, hours, mins, secs
         )
@@ -4053,8 +4053,8 @@ def make_timestamp_ntz(*args: "ColumnOrName") -> Column:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either 6 columns (years, months, days, hours, mins, secs) or 2 columns (date, time)",
-                "actual": f"{len(args)} columns",
+                "expected": "either (years, months, days, hours, mins, secs) or (date, time)",
+                "actual": f"{len(cols)} columns",
             },
         )
 

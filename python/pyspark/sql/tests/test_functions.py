@@ -511,7 +511,7 @@ class FunctionsTestsMixin:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either 6 columns (years, months, days, hours, mins, secs) or 2 columns (date, time)",
+                "expected": "either (years, months, days, hours, mins, secs) or (date, time)",
                 "actual": "0 columns",
             },
         )
@@ -524,7 +524,7 @@ class FunctionsTestsMixin:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either 6 columns (years, months, days, hours, mins, secs) or 2 columns (date, time)",
+                "expected": "either (years, months, days, hours, mins, secs) or (date, time)",
                 "actual": "1 columns",
             },
         )
@@ -538,7 +538,7 @@ class FunctionsTestsMixin:
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
                 "func_name": "make_timestamp_ntz",
-                "expected": "either 6 columns (years, months, days, hours, mins, secs) or 2 columns (date, time)",
+                "expected": "either (years, months, days, hours, mins, secs) or (date, time)",
                 "actual": "3 columns",
             },
         )
