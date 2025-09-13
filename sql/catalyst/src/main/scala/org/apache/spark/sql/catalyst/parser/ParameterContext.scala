@@ -41,6 +41,17 @@ case class NamedParameterContext(params: Map[String, Expression]) extends Parame
 case class PositionalParameterContext(params: Seq[Expression]) extends ParameterContext
 
 /**
+ * Context that supports both named and positional parameters.
+ * This is used by EXECUTE IMMEDIATE where the parameter type is determined by the inner query.
+ *
+ * @param positionalParams Sequence of expression values in order
+ * @param namedParams Map of parameter names to their expression values
+ */
+case class HybridParameterContext(
+    positionalParams: Seq[Expression],
+    namedParams: Map[String, Expression]) extends ParameterContext
+
+/**
  * Thread-local storage for parameter context to pass parameters
  * from SparkSession to the parser without changing method signatures.
  */

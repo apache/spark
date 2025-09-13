@@ -147,6 +147,14 @@ class ParameterHandler {
       case PositionalParameterContext(params) =>
         performSubstitution(sqlText, rule,
           positionalParams = params.map(ExpressionToSqlConverter.convert).toList)
+
+      case HybridParameterContext(positionalParams, namedParams) =>
+        // Provide both named and positional parameters - let the parser choose which to use
+        performSubstitution(sqlText, rule,
+          namedParams = namedParams.map { case (name, expr) =>
+            (name, ExpressionToSqlConverter.convert(expr))
+          },
+          positionalParams = positionalParams.map(ExpressionToSqlConverter.convert).toList)
     }
   }
 
