@@ -20,11 +20,12 @@ package org.apache.spark.sql.connector
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.QueryTest.checkAnswer
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, ColumnDefaultValue, Identifier, Table, TableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -53,6 +54,24 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       s"spark_catalog.$tableName"
     } else {
       tableName
+    }
+  }
+
+  private def tableIdentifier(tableName: String): Identifier = {
+    if (catalogAndNamespace.nonEmpty) {
+      val parts = catalogAndNamespace.stripSuffix(".").split("\\.").tail
+      Identifier.of(parts, tableName)
+    } else {
+      Identifier.of(Array("default"), tableName)
+    }
+  }
+
+  private def tableCatalog(): TableCatalog = {
+    if (catalogAndNamespace.isEmpty) {
+      spark.sessionState.catalogManager.v2SessionCatalog.asInstanceOf[TableCatalog]
+    } else {
+      val parts = catalogAndNamespace.stripSuffix(".").split("\\.")
+      spark.sessionState.catalogManager.catalog(parts(0)).asInstanceOf[TableCatalog]
     }
   }
 
@@ -1533,5 +1552,42 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           )
         }
       }
+  }
+
+  test("Alter table add nested column") {
+    val t = fullTableName("table_name")
+    withTable(t) {
+      val schema =
+        StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("m", MapType(
+            StructType(Seq(StructField("c1", IntegerType))),
+            StructType(Seq(StructField("c2", StringType))))),
+          StructField("dep", StringType)))
+
+      val ident = tableIdentifier("table_name")
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(CatalogV2Util.structTypeToV2Columns(schema))
+        .build()
+
+      val catalog = tableCatalog()
+      catalog.createTable(ident, tableInfo)
+
+      val data = Seq(
+        Row(0, Map(Row(10) -> Row("c")), "hr"),
+        Row(1, Map(Row(20) -> Row("d")), "sales"))
+
+      spark.createDataFrame(
+        spark.sparkContext.parallelize(data),
+        schema).writeTo(t).append()
+
+      sql(s"ALTER TABLE $t ADD COLUMN m.key.c5 boolean")
+      sql(s"ALTER TABLE $t ADD COLUMN m.value.c6 boolean")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $t"),
+        Seq(Row(0, Map(Row(10, null) -> Row("c", null)), "hr"),
+          Row(1, Map(Row(20, null) -> Row("d", null)), "sales")))
+    }
   }
 }
