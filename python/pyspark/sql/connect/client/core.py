@@ -107,6 +107,7 @@ from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_p
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
+    from google.rpc.status_pb2 import Status
     from pyspark.sql.connect._typing import DataTypeOrString
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
@@ -1949,7 +1950,9 @@ class SparkConnectClient(object):
         logger.exception("GRPC Error received")
         # We have to cast the value here because, a RpcError is a Call as well.
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
-        status = rpc_status.from_call(cast(grpc.Call, rpc_error))
+        error: grpc.Call = cast(grpc.Call, rpc_error)
+        status_code: grpc.StatusCode = error.code()
+        status: Optional[Status] = rpc_status.from_call(error)
         if status:
             for d in status.details:
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
@@ -1957,7 +1960,7 @@ class SparkConnectClient(object):
                     d.Unpack(info)
                     logger.debug(f"Received ErrorInfo: {info}")
 
-                    if info.metadata["errorClass"] == "INVALID_HANDLE.SESSION_CHANGED":
+                    if info.metadata.get("errorClass") == "INVALID_HANDLE.SESSION_CHANGED":
                         self._closed = True
 
                     raise convert_exception(
@@ -1965,14 +1968,18 @@ class SparkConnectClient(object):
                         status.message,
                         self._fetch_enriched_error(info),
                         self._display_server_stack_trace(),
-                        status.code,
+                        status_code,
                     ) from None
 
             raise SparkConnectGrpcException(
-                message=status.message, grpc_status_code=status.code
+                message=status.message,
+                grpc_status_code=status_code,
             ) from None
         else:
-            raise SparkConnectGrpcException(str(rpc_error)) from None
+            raise SparkConnectGrpcException(
+                message=str(error),
+                grpc_status_code=status_code,
+            ) from None
 
     def add_artifacts(self, *paths: str, pyfile: bool, archive: bool, file: bool) -> None:
         try:
