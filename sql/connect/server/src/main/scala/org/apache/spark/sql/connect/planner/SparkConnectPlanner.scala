@@ -327,8 +327,8 @@ class SparkConnectPlanner(
   }
 
   /**
-   * Helper method to handle parameter substitution for SQL queries.
-   * Consolidates the logic for handling different parameter types and sources.
+   * Helper method to handle parameter substitution for SQL queries. Consolidates the logic for
+   * handling different parameter types and sources.
    */
   private def substituteParametersInQuery(sql: proto.SQL): String = {
     val args = sql.getArgsMap
@@ -358,10 +358,6 @@ class SparkConnectPlanner(
       sql.getQuery
     }
   }
-
-
-
-
 
   private def transformSqlWithRefs(query: proto.WithRelations): LogicalPlan = {
     if (!isValidSQLWithRefs(query)) {

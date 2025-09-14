@@ -822,11 +822,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   /**
-   * Throws an internal error for unexpected parameter markers found during AST building.
-   * This should be unreachable in normal operation due to grammar-level blocking.
+   * Throws an internal error for unexpected parameter markers found during AST building. This
+   * should be unreachable in normal operation due to grammar-level blocking.
    *
-   * @param ctx The parser context containing the parameter marker
-   * @throws ParseException Always throws this exception
+   * @param ctx
+   *   The parser context containing the parameter marker
+   * @throws ParseException
+   *   Always throws this exception
    */
   def unexpectedUseOfParameterMarker(ctx: ParserRuleContext): Nothing = {
     throw new ParseException(

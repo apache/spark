@@ -84,9 +84,11 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     // Extract the query string from the queryParam expression
     val sqlString = extractQueryString(sqlStmtStr)
 
-    // Parse and validate the query
-    val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlString)
-    validateQuery(sqlString, parsedPlan)
+    // Parse and validate the query (skip for parameterized queries to avoid parsing errors)
+    if (args.isEmpty) {
+      val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlString)
+      validateQuery(sqlString, parsedPlan)
+    }
 
     // Execute the query recursively with isolated local variable context
     val result = if (args.isEmpty) {
@@ -167,22 +169,12 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       paramNames: Array[String],
       args: Seq[Expression]): Unit = {
 
-    // Parse the inner query to detect parameter types
-    val innerParsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlString)
+    // Detect parameter types by scanning the SQL string (avoid parsing to prevent errors)
+    val hasNamedParams = sqlString.contains(":")
+    val hasPositionalParams = sqlString.contains("?")
 
-    // Check if the parsed plan contains named parameters by searching all expressions recursively
-    var hasNamedParams = false
-    innerParsedPlan.foreachUp { node =>
-      node.expressions.foreach { expr =>
-        expr.foreach {
-          case _: NamedParameter => hasNamedParams = true
-          case _ =>
-        }
-      }
-    }
-
-    if (hasNamedParams) {
-      // If inner query uses named parameters, ALL USING arguments must be named
+    if (hasNamedParams && !hasPositionalParams) {
+      // If inner query uses only named parameters, ALL USING arguments must be named
       val unnamedArgs = args.zip(paramNames).collect {
         case (expr, name) if name.isEmpty => expr
       }

@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
 
 /**
- * AST builder for extracting parameter markers and their locations from SQL parse trees.
- * This builder traverses the parse tree and collects parameter information for substitution.
+ * AST builder for extracting parameter markers and their locations from SQL parse trees. This
+ * builder traverses the parse tree and collects parameter information for substitution.
  */
 class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
@@ -34,8 +34,8 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   private val positionalParamLocations = scala.collection.mutable.ListBuffer[ParameterLocation]()
 
   /**
-   * Extract parameter location information from a parse context.
-   * This method traverses the parse tree and collects parameter locations for substitution.
+   * Extract parameter location information from a parse context. This method traverses the parse
+   * tree and collects parameter locations for substitution.
    */
   def extractParameterLocations(ctx: ParseTree): ParameterLocationInfo = {
     // Clear previous state
@@ -55,78 +55,81 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   /**
    * Create a named parameter which represents a literal with a non-bound value and unknown type.
    */
-  override def visitNamedParameterLiteral(
-      ctx: NamedParameterLiteralContext): String = withOrigin(ctx) {
-    val paramName = ctx.namedParameterMarker().identifier().getText
-    namedParams += paramName
+  override def visitNamedParameterLiteral(ctx: NamedParameterLiteralContext): String =
+    withOrigin(ctx) {
+      val paramName = ctx.namedParameterMarker().identifier().getText
+      namedParams += paramName
 
-    // Calculate the location of the entire parameter (including the colon)
-    val startIndex = ctx.getStart.getStartIndex
-    val stopIndex = ctx.getStop.getStopIndex + 1
-    namedParamLocations.getOrElseUpdate(paramName,
-      scala.collection.mutable.ListBuffer[ParameterLocation]()) +=
-      ParameterLocation(startIndex, stopIndex)
+      // Calculate the location of the entire parameter (including the colon)
+      val startIndex = ctx.getStart.getStartIndex
+      val stopIndex = ctx.getStop.getStopIndex + 1
+      namedParamLocations.getOrElseUpdate(
+        paramName,
+        scala.collection.mutable.ListBuffer[ParameterLocation]()) +=
+        ParameterLocation(startIndex, stopIndex)
 
-    paramName
-  }
-
-  /**
-   * Create a positional parameter which represents a literal
-   * with a non-bound value and unknown type.
-   */
-  override def visitPosParameterLiteral(
-      ctx: PosParameterLiteralContext): String = withOrigin(ctx) {
-    val startIndex = ctx.QUESTION().getSymbol.getStartIndex
-    positionalParams += startIndex
-
-    // Calculate the location of the question mark
-    val stopIndex = ctx.QUESTION().getSymbol.getStopIndex + 1
-    positionalParamLocations += ParameterLocation(startIndex, stopIndex)
-
-    "?"
-  }
+      paramName
+    }
 
   /**
-   * Handle namedParameterValue context for parameter markers in string literal contexts.
-   * This handles the namedParameterMarker case added to the stringLit grammar rule.
+   * Create a positional parameter which represents a literal with a non-bound value and unknown
+   * type.
    */
-  override def visitNamedParameterValue(
-      ctx: NamedParameterValueContext): String = withOrigin(ctx) {
-    val paramName = ctx.namedParameterMarker().identifier().getText
-    namedParams += paramName
+  override def visitPosParameterLiteral(ctx: PosParameterLiteralContext): String =
+    withOrigin(ctx) {
+      val startIndex = ctx.QUESTION().getSymbol.getStartIndex
+      positionalParams += startIndex
 
-    // Calculate the location of the entire parameter (including the colon)
-    val startIndex = ctx.getStart.getStartIndex
-    val stopIndex = ctx.getStop.getStopIndex + 1
-    namedParamLocations.getOrElseUpdate(paramName,
-      scala.collection.mutable.ListBuffer[ParameterLocation]()) +=
-      ParameterLocation(startIndex, stopIndex)
+      // Calculate the location of the question mark
+      val stopIndex = ctx.QUESTION().getSymbol.getStopIndex + 1
+      positionalParamLocations += ParameterLocation(startIndex, stopIndex)
 
-    paramName
-  }
+      "?"
+    }
+
+  /**
+   * Handle namedParameterValue context for parameter markers in string literal contexts. This
+   * handles the namedParameterMarker case added to the stringLit grammar rule.
+   */
+  override def visitNamedParameterValue(ctx: NamedParameterValueContext): String =
+    withOrigin(ctx) {
+      val paramName = ctx.namedParameterMarker().identifier().getText
+      namedParams += paramName
+
+      // Calculate the location of the entire parameter (including the colon)
+      val startIndex = ctx.getStart.getStartIndex
+      val stopIndex = ctx.getStop.getStopIndex + 1
+      namedParamLocations.getOrElseUpdate(
+        paramName,
+        scala.collection.mutable.ListBuffer[ParameterLocation]()) +=
+        ParameterLocation(startIndex, stopIndex)
+
+      paramName
+    }
 
   /**
    * Handle namedParameterIntegerValue context for parameter markers in integer value contexts.
    * This handles the namedParameterMarker case added to the integerValue grammar rule.
    */
-  override def visitNamedParameterIntegerValue(
-      ctx: NamedParameterIntegerValueContext): String = withOrigin(ctx) {
-    val paramName = ctx.namedParameterMarker().identifier().getText
-    namedParams += paramName
+  override def visitNamedParameterIntegerValue(ctx: NamedParameterIntegerValueContext): String =
+    withOrigin(ctx) {
+      val paramName = ctx.namedParameterMarker().identifier().getText
+      namedParams += paramName
 
-    // Calculate the location of the entire parameter (including the colon)
-    val startIndex = ctx.getStart.getStartIndex
-    val stopIndex = ctx.getStop.getStopIndex + 1
-    namedParamLocations.getOrElseUpdate(paramName,
-      scala.collection.mutable.ListBuffer[ParameterLocation]()) +=
-      ParameterLocation(startIndex, stopIndex)
+      // Calculate the location of the entire parameter (including the colon)
+      val startIndex = ctx.getStart.getStartIndex
+      val stopIndex = ctx.getStop.getStopIndex + 1
+      namedParamLocations.getOrElseUpdate(
+        paramName,
+        scala.collection.mutable.ListBuffer[ParameterLocation]()) +=
+        ParameterLocation(startIndex, stopIndex)
 
-    paramName
-  }
+      paramName
+    }
 
   /**
-   * Handle positional parameter markers in integer value contexts (e.g., VARCHAR(?)).
-   * This handles the QUESTION case added to the integerValue grammar rule.
+   * Handle positional parameter markers in integer value contexts (e.g., VARCHAR(?)). This
+   * handles the QUESTION case added to the integerValue grammar rule.
    */
   override def visitPositionalParameterIntegerValue(
       ctx: PositionalParameterIntegerValueContext): String = withOrigin(ctx) {
@@ -141,18 +144,18 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     s"?$paramIndex"
   }
 
-  override def visitPositionalParameterValue(
-      ctx: PositionalParameterValueContext): String = withOrigin(ctx) {
-    val paramIndex = positionalParams.size
-    positionalParams += paramIndex
+  override def visitPositionalParameterValue(ctx: PositionalParameterValueContext): String =
+    withOrigin(ctx) {
+      val paramIndex = positionalParams.size
+      positionalParams += paramIndex
 
-    // Calculate the location of the parameter marker
-    val startIndex = ctx.getStart.getStartIndex
-    val stopIndex = ctx.getStop.getStopIndex + 1
-    positionalParamLocations += ParameterLocation(startIndex, stopIndex)
+      // Calculate the location of the parameter marker
+      val startIndex = ctx.getStart.getStartIndex
+      val stopIndex = ctx.getStop.getStopIndex + 1
+      positionalParamLocations += ParameterLocation(startIndex, stopIndex)
 
-    s"?$paramIndex"
-  }
+      s"?$paramIndex"
+    }
 
   /**
    * Override visit to ensure we traverse all children to find parameters.
@@ -216,12 +219,10 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 }
 
 /**
- * Data class to hold information about extracted parameters.
- * This is defined here to make it available to the AST builder.
+ * Data class to hold information about extracted parameters. This is defined here to make it
+ * available to the AST builder.
  */
-case class ParameterInfo(
-    namedParameters: Set[String],
-    positionalParameters: List[Int]) {
+case class ParameterInfo(namedParameters: Set[String], positionalParameters: List[Int]) {
 
   def isEmpty: Boolean = namedParameters.isEmpty && positionalParameters.isEmpty
   def nonEmpty: Boolean = !isEmpty
@@ -230,8 +231,7 @@ case class ParameterInfo(
   def merge(other: ParameterInfo): ParameterInfo = {
     ParameterInfo(
       namedParameters ++ other.namedParameters,
-      positionalParameters ++ other.positionalParameters
-    )
+      positionalParameters ++ other.positionalParameters)
   }
 
   override def toString: String = {

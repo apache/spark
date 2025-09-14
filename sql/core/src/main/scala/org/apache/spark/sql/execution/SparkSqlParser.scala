@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils.getUriBuilder
 
 /**
@@ -74,11 +74,11 @@ class SparkSqlParser extends AbstractSqlParser {
     // Instead, specific parsing methods (parseTableIdentifier, parseDataType, etc.)
     // will explicitly disable parameter substitution when needed.
     val paramSubstituted =
-      if (SQLConf.get.legacyParameterSubstitutionConstantsOnly || !wasTopLevel) {
-        // Legacy mode OR nested parsing call: skip parameter substitution
+      if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
+        // Legacy mode: skip parameter substitution
         command
       } else {
-        // Modern mode AND top-level parsing: check if we have a parameterized query context
+        // Modern mode: check if we have a parameterized query context
         org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
           case Some(context) =>
             substituteParametersIfNeeded(command, context)
@@ -188,15 +188,6 @@ class SparkSqlParser extends AbstractSqlParser {
     }
   }
 
-  override def parseDataType(sqlText: String): DataType = {
-    val wasTopLevel = isTopLevelParse.get()
-    isTopLevelParse.set(false)  // Disable parameter substitution for data type parsing
-    try {
-      super.parseDataType(sqlText)
-    } finally {
-      isTopLevelParse.set(wasTopLevel)  // Restore previous state
-    }
-  }
 
 }
 

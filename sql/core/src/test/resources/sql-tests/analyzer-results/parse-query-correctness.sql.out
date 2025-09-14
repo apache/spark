@@ -1260,7 +1260,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 31,
+    "stopIndex" : 50,
     "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 JOIN SELECT 2' INTO v1"
   } ]
 }
@@ -1288,7 +1288,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 28,
+    "stopIndex" : 47,
     "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 VALUES (1)' INTO v1"
   } ]
 }

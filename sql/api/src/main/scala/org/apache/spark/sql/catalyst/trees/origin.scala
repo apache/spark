@@ -59,8 +59,8 @@ trait WithOrigin {
   def origin: Origin
 
   /**
-   * Update query contexts in this object with translated positions.
-   * Uses reflection to generically update any object with query context.
+   * Update query contexts in this object with translated positions. Uses reflection to
+   * generically update any object with query context.
    */
   def updateQueryContext(translator: Array[QueryContext] => Array[QueryContext]): WithOrigin = {
     try {

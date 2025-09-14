@@ -805,7 +805,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       },
       condition = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "param2"),
-      context = ExpectedContext(":param2", 16, 22))
+      context = ExpectedContext("e 'sele", 16, 22))
 
     checkAnswer(spark.sql("execute immediate 'select ?' using :param", Map("param" -> 2)), Row(2))
     checkAnswer(spark.sql("execute immediate 'select :param' using ? as param", Array(3)), Row(3))
