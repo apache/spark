@@ -132,9 +132,8 @@ case class HllSketchAgg(
    * unsupported types.
    * Notes:
    *   - Null values are ignored.
-   *   - Empty values are also ignored:
-   *       * Empty strings
-   *       * Empty byte arrays
+   *   - Empty byte arrays are ignored.
+   *   - Strings that are collation-equal to the empty string are ignored.
    *
    * @param sketch The HllSketch instance.
    * @param input  an input row
@@ -151,10 +150,10 @@ case class HllSketchAgg(
         case IntegerType => sketch.update(v.asInstanceOf[Int])
         case LongType => sketch.update(v.asInstanceOf[Long])
         case st: StringType =>
+          val collation = CollationFactory.fetchCollation(st.collationId)
           val str = v.asInstanceOf[UTF8String]
-          if (str != null && str.numBytes > 0) {
-            val cKey = CollationFactory.getCollationKeyBytes(str, st.collationId)
-            sketch.update(cKey)
+          if (!collation.equalsFunction(str, UTF8String.EMPTY_UTF8)) {
+            sketch.update(collation.sortKeyFunction.apply(str))
           }
         case BinaryType => sketch.update(v.asInstanceOf[Array[Byte]])
         case dataType => throw new SparkUnsupportedOperationException(
