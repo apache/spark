@@ -57,8 +57,18 @@ VALUES
   (ARRAY(3L), ARRAY(5L)), 
   (ARRAY(4L), ARRAY(6L)) AS tab(col1, col2);
 
-DROP TABLE IF EXISTS theta_string_collation_test;
-CREATE TABLE theta_string_collation_test AS
+DROP TABLE IF EXISTS t_string_collation;
+-- `\u030A` is the "combining ring above" Unicode character: https://www.compart.com/en/unicode/U+030A
+-- `\uFFFD is the Unicode replacement character
+-- `\xC1` is an invalid Unicode byte.
+-- `\x80` is a Unicode continuation byte, that is it cannot be the first byte of a multi-byte UTF8 character.
+-- All strings are different based on the UTF8_BINARY collation.
+-- The first and second strings are equal for any collation with the RTRIM modifier, and equal to the empty string.
+-- The last three strings are respectively equal to the next last three strings for any collation with the RTRIM modifier.
+-- The strings "\xC1", "\x80" and "\uFFFD" are equal for all collations except UTF8_BINARY.
+-- The (sub)strings `å` and `a\u030A` are equal for the UNICODE family of collations.
+-- `å` is the lowercase version of `Å`.
+CREATE TABLE t_string_collation AS
 VALUES
   (''), ('  '), (CAST(X'C1' AS STRING)), (CAST(X'80' AS STRING)),
   ('\uFFFD'), ('Å'), ('å'), ('a\u030A'), ('Å '), ('å  '),
@@ -384,14 +394,14 @@ SELECT theta_sketch_estimate(theta_sketch_agg(col))
 FROM VALUES (X''), (X'01'), (X'02'), (X'03'), (CAST('  ' AS BINARY)), (X'e280'), (X'c1'), (X'c120') tab(col);
 
 -- Test theta_sketch_agg with collated string data
-SELECT theta_sketch_estimate(theta_sketch_agg(col1)) utf8_b FROM theta_string_collation_test;
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE)) utf8_lc FROM theta_string_collation_test;
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE)) unicode FROM theta_string_collation_test;
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI)) unicode_ci FROM theta_string_collation_test;
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_BINARY_RTRIM)) utf8_b_rt FROM theta_string_collation_test;
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE_RTRIM)) utf8_lc_rt FROM theta_string_collation_test;
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_RTRIM)) unicode_rt FROM theta_string_collation_test;
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI_RTRIM)) unicode_ci_rt FROM theta_string_collation_test;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1)) utf8_b FROM t_string_collation;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE)) utf8_lc FROM t_string_collation;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE)) unicode FROM t_string_collation;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI)) unicode_ci FROM t_string_collation;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_BINARY_RTRIM)) utf8_b_rt FROM t_string_collation;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE_RTRIM)) utf8_lc_rt FROM t_string_collation;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_RTRIM)) unicode_rt FROM t_string_collation;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI_RTRIM)) unicode_ci_rt FROM t_string_collation;
 
 -- Comprehensive test using all ThetaSketch functions in a single query
 -- This query demonstrates the full workflow: aggregation -> union -> intersection -> difference -> estimate
@@ -515,4 +525,4 @@ DROP TABLE IF EXISTS t_string_a_d_through_e_h;
 DROP TABLE IF EXISTS t_binary_a_b_through_e_f;
 DROP TABLE IF EXISTS t_array_int_1_3_through_4_6;
 DROP TABLE IF EXISTS t_array_long_1_3_through_4_6;
-DROP TABLE IF EXISTS theta_string_collation_test
+DROP TABLE IF EXISTS t_string_collation
