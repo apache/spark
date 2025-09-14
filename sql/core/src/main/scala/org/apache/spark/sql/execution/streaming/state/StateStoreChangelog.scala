@@ -21,21 +21,20 @@ import java.io.{DataInputStream, DataOutputStream, FileNotFoundException, IOExce
 
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FSError, Path}
 import org.json4s._
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.state.RecordType.RecordType
 import org.apache.spark.util.NextIterator
+import org.apache.spark.util.Utils
 
 /**
  * Enum used to write record types to changelog files used with RocksDBStateStoreProvider.
@@ -132,7 +131,7 @@ abstract class StateStoreChangelogWriter(
   def abort(): Unit = {
     try {
       if (backingFileStream != null) backingFileStream.cancel()
-      if (compressedStream != null) IOUtils.closeQuietly(compressedStream)
+      if (compressedStream != null) Utils.closeQuietly(compressedStream)
     } catch {
       // Closing the compressedStream causes the stream to write/flush data into the
       // rawStream. Since the rawStream is already closed, there may be errors.
@@ -448,6 +447,7 @@ abstract class StateStoreChangelogReader(
     Serialization.read[Array[LineageItem]](lineageStr)
   }
 
+  // The array contains lineage information from [mostRecentSnapShotVersion, version - 1] inclusive
   lazy val lineage: Array[LineageItem] = readLineage()
 
   def version: Short
@@ -485,14 +485,14 @@ class StateStoreChangelogReaderV1(
     } else {
       // TODO: reuse the key buffer and value buffer across records.
       val keyBuffer = new Array[Byte](keySize)
-      ByteStreams.readFully(input, keyBuffer, 0, keySize)
+      Utils.readFully(input, keyBuffer, 0, keySize)
       val valueSize = input.readInt()
       if (valueSize < 0) {
         // A deletion record
         (RecordType.DELETE_RECORD, keyBuffer, null)
       } else {
         val valueBuffer = new Array[Byte](valueSize)
-        ByteStreams.readFully(input, valueBuffer, 0, valueSize)
+        Utils.readFully(input, valueBuffer, 0, valueSize)
         // A put record.
         (RecordType.PUT_RECORD, keyBuffer, valueBuffer)
       }
@@ -516,7 +516,7 @@ class StateStoreChangelogReaderV2(
   private def parseBuffer(input: DataInputStream): Array[Byte] = {
     val blockSize = input.readInt()
     val blockBuffer = new Array[Byte](blockSize)
-    ByteStreams.readFully(input, blockBuffer, 0, blockSize)
+    Utils.readFully(input, blockBuffer, 0, blockSize)
     blockBuffer
   }
 
@@ -633,27 +633,41 @@ abstract class StateStoreChangeDataReader(
    * Iterator that iterates over the changelog files in the state store.
    */
   private class ChangeLogFileIterator extends Iterator[Path] {
+    val versionsAndUniqueIds: Iterator[(Long, Option[String])] =
+      StateStoreChangeDataReader.this.versionsAndUniqueIds.iterator
 
     private var currentVersion = StateStoreChangeDataReader.this.startVersion - 1
+    private var currentUniqueId: Option[String] = None
 
     /** returns the version of the changelog returned by the latest [[next]] function call */
     def getVersion: Long = currentVersion
 
-    override def hasNext: Boolean = currentVersion < StateStoreChangeDataReader.this.endVersion
+    override def hasNext: Boolean = versionsAndUniqueIds.hasNext
 
     override def next(): Path = {
-      currentVersion += 1
-      getChangelogPath(currentVersion)
+      val nextTuple = versionsAndUniqueIds.next()
+      currentVersion = nextTuple._1
+      currentUniqueId = nextTuple._2
+      getChangelogPath(currentVersion, currentUniqueId)
     }
 
-    private def getChangelogPath(version: Long): Path =
-      new Path(
-        StateStoreChangeDataReader.this.stateLocation,
-        s"$version.${StateStoreChangeDataReader.this.changelogSuffix}")
+    private def getChangelogPath(version: Long, checkpointUniqueId: Option[String]): Path =
+      if (checkpointUniqueId.isDefined) {
+        new Path(
+          StateStoreChangeDataReader.this.stateLocation,
+          s"${version}_${checkpointUniqueId.get}." +
+            s"${StateStoreChangeDataReader.this.changelogSuffix}")
+      } else {
+        new Path(
+          StateStoreChangeDataReader.this.stateLocation,
+          s"$version.${StateStoreChangeDataReader.this.changelogSuffix}")
+      }
   }
 
   /** file format of the changelog files */
-  protected var changelogSuffix: String
+  protected val changelogSuffix: String
+  protected val versionsAndUniqueIds: Array[(Long, Option[String])] =
+    (startVersion to endVersion).map((_, None)).toArray
   private lazy val fileIterator = new ChangeLogFileIterator
   private var changelogReader: StateStoreChangelogReader = null
 
@@ -672,11 +686,10 @@ abstract class StateStoreChangeDataReader(
         return null
       }
 
-      changelogReader = if (colFamilyNameOpt.isDefined) {
-        new StateStoreChangelogReaderV2(fm, fileIterator.next(), compressionCodec)
-      } else {
-        new StateStoreChangelogReaderV1(fm, fileIterator.next(), compressionCodec)
-      }
+      val changelogFile = fileIterator.next()
+      changelogReader =
+        new StateStoreChangelogReaderFactory(fm, changelogFile, compressionCodec)
+          .constructChangelogReader()
     }
     changelogReader
   }

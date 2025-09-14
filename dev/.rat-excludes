@@ -132,6 +132,7 @@ SqlBaseLexer.tokens
 .*\.proto.bin
 LimitedInputStream.java
 TimSort.java
+mllib-local/src/main/scala/scala/collection/compat/package.scala
 xml-resources/*
 loose_version.py
 people.xml

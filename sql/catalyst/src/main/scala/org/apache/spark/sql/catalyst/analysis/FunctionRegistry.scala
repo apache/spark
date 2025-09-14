@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1024,9 +1025,9 @@ object FunctionRegistry {
       name: String,
       builder: T,
       expressions: Seq[Expression]) : Seq[Expression] = {
-    val rearrangedExpressions = if (!builder.functionSignature.isEmpty) {
+    val rearrangedExpressions = if (builder.functionSignature.isDefined) {
       val functionSignature = builder.functionSignature.get
-      builder.rearrange(functionSignature, expressions, name)
+      builder.rearrange(functionSignature, expressions, name, SQLConf.get.resolver)
     } else {
       expressions
     }

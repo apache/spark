@@ -28,7 +28,6 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.json4s.DefaultFormats
@@ -44,6 +43,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
@@ -737,8 +737,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       provider.getStore(0).commit()
 
       // Verify we don't leak temp files
-      val tempFiles = FileUtils.listFiles(new File(provider.stateStoreId.checkpointRootLocation),
-        null, true).asScala.filter(_.getName.startsWith("temp-"))
+      val tempFiles = Utils.listFiles(new File(provider.stateStoreId.checkpointRootLocation))
+        .asScala.filter(_.getName.startsWith("temp-"))
       assert(tempFiles.isEmpty)
     }
   }
@@ -1400,7 +1400,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val hadoopConf = new Configuration()
     hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
 
-    val e = intercept[AssertionError] {
+    val e = intercept[StateStoreCheckpointIdsNotSupported] {
       provider.init(
         StateStoreId(newDir(), Random.nextInt(), 0),
         keySchema,
@@ -1411,7 +1411,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         hadoopConf)
     }
     assert(e.getMessage.contains(
-      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2"))
+      "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1"))
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
@@ -2171,6 +2171,46 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(combinedMetrics.customMetrics(customSumMetric) == 30L)
     assert(combinedMetrics.customMetrics(customSizeMetric) == 20L)
     assert(combinedMetrics.customMetrics(customTimingMetric) == 400L)
+  }
+
+  test("StateStoreIterator onClose method is called only when close() is called") {
+    // Test that the iterator functions as normal without closing
+    {
+      var closed = false
+
+      val iterator = new StateStoreIterator(Iterator(1, 2, 3, 4), () => {
+        closed = true
+      })
+
+      // next() should work as expected
+      for (i <- 1 to 4) {
+        assert(iterator.next() == i)
+      }
+
+      // close() is never called, so closed should remain false
+      assert(!closed)
+    }
+    // Test that the onClose method is called when close() is called
+    {
+      var closed = false
+
+      val iterator = new StateStoreIterator(Iterator(1, 2, 3, 4), () => {
+        closed = true
+      })
+
+      // next() should work as expected
+      assert(iterator.next() == 1)
+      assert(iterator.next() == 2)
+
+      // close() should call the onClose function which sets closed to true
+      assert(!closed)
+      iterator.close()
+      assert(closed)
+
+      // Calling close() again should not cause any issue
+      iterator.close()
+      assert(closed)
+    }
   }
 
   test("SPARK-35659: StateStore.put cannot put null value") {

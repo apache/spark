@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{BasicPythonArrowOutput, PythonArrowInput, PythonUDFRunner}
 import org.apache.spark.sql.execution.python.streaming.TransformWithStateInPySparkPythonRunner.{GroupedInType, InType}
-import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -220,7 +220,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 
     executionContext.execute(
       new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandle,
-        groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
+        groupingKeySchema,
         sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch,
         batchTimestampMs, eventTimeWatermarkForEviction))
 
@@ -245,7 +245,6 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 class TransformWithStateInPySparkPythonPreInitRunner(
     func: PythonFunction,
     workerModule: String,
-    timeZoneId: String,
     groupingKeySchema: StructType,
     processorHandleImpl: DriverStatefulProcessorHandleImpl)
   extends StreamingPythonRunner(func, "", "", workerModule)
@@ -299,8 +298,7 @@ class TransformWithStateInPySparkPythonPreInitRunner(
       override def run(): Unit = {
         try {
           new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandleImpl,
-            groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames = true,
-            largeVarTypes = sqlConf.arrowUseLargeVarTypes,
+            groupingKeySchema,
             sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch).run()
         } catch {
           case e: Exception =>

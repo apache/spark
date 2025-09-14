@@ -3990,6 +3990,174 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+CREATE FUNCTION foo3_12a(x INT) RETURNS INT CONTAINS SQL RETURN x
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12a, x INT, INT, x, true, false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12b(x INT) RETURNS INT READS SQL DATA RETURN x
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12b, x INT, INT, x, false, false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12c(x INT) RETURNS INT CONTAINS SQL RETURN (SELECT x)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12c, x INT, INT, (SELECT x), true, false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12d(x INT) RETURNS INT CONTAINS SQL RETURN (SELECT COUNT(*) FROM range(0, 3))
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12d, x INT, INT, (SELECT COUNT(*) FROM range(0, 3)), true, false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12e(x INT) RETURNS INT CONTAINS SQL RETURN (SELECT COUNT(*) FROM VALUES (0, 1))
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12e, x INT, INT, (SELECT COUNT(*) FROM VALUES (0, 1)), true, false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS INT CONTAINS SQL RETURN SELECT SUM(c2) FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS INT CONTAINS SQL RETURN foo3_12b(x) + 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS INT CONTAINS SQL RETURN 1 + (SELECT SUM(c2) FROM t1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12g(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT x, x + 1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12g, x INT, a INT, b INT, SELECT x, x + 1, true, true, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12h(x INT) RETURNS TABLE (a INT, b INT) READS SQL DATA RETURN SELECT x, x + 1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12h, x INT, a INT, b INT, SELECT x, x + 1, false, true, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12i(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT * FROM VALUES (0, 1)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12i, x INT, a INT, b INT, SELECT * FROM VALUES (0, 1), true, true, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12j(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT id, id + 1 FROM RANGE(3)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12j, x INT, a INT, b INT, SELECT id, id + 1 FROM RANGE(3), true, true, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12k(x INT) RETURNS TABLE (a INT, b INT) RETURN SELECT c1, c2 FROM t1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_12k, x INT, a INT, b INT, SELECT c1, c2 FROM t1, true, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT c1, c2 FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT foo3_12b(x), x
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT * FROM foo3_12h(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT * FROM foo3_12k(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE TABLE tbl USING PARQUET AS SELECT c1 FROM t2
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`tbl`, ErrorIfExists, [c1]
+   +- Project [c1#x]
+      +- SubqueryAlias spark_catalog.default.t2
+         +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS INT CONTAINS SQL RETURN SELECT SUM(c1) FROM tbl
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT) CONTAINS SQL RETURN SELECT * FROM tbl
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+DROP TABLE tbl
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
+
+
+-- !query
 CREATE FUNCTION foo3_14a() RETURNS INT RETURN 1
 -- !query analysis
 CreateSQLFunctionCommand spark_catalog.default.foo3_14a, INT, 1, false, false, false, false
@@ -5082,6 +5250,72 @@ DropFunctionCommand spark_catalog.default.foo3_4e, true, false
 DROP FUNCTION IF EXISTS foo3_4f
 -- !query analysis
 DropFunctionCommand spark_catalog.default.foo3_4f, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12b
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12b, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12c
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12c, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12d
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12d, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12e
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12e, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12f
+-- !query analysis
+NoopCommand DROP FUNCTION, [foo3_12f]
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12g
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12g, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12h
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12h, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12i
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12i, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12j
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12j, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12k
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_12k, true, false
 
 
 -- !query

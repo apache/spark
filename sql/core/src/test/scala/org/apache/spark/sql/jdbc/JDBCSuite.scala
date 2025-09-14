@@ -1693,7 +1693,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
       val quotedPrtColName = testH2Dialect.quoteIdentifier(expectedColumnName)
       df.logicalPlan match {
-        case LogicalRelationWithTable(JDBCRelation(_, parts, _), _) =>
+        case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
           val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
           assert(whereClauses === Set(
             s"$quotedPrtColName < 2 or $quotedPrtColName is null",
@@ -1835,7 +1835,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       .load()
 
     df1.logicalPlan match {
-      case LogicalRelationWithTable(JDBCRelation(_, parts, _), _) =>
+      case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
           """"D" < '2018-07-11' or "D" is null""",
@@ -1855,7 +1855,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       .load()
 
     df2.logicalPlan match {
-      case LogicalRelationWithTable(JDBCRelation(_, parts, _), _) =>
+      case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
           """"T" < '2018-07-15 20:50:32.5' or "T" is null""",

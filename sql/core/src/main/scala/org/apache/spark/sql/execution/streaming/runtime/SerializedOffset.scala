@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
+
+import org.apache.spark.sql.execution.streaming.Offset
 
 /**
  * Used when loading a JSON serialized offset from external storage.

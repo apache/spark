@@ -23,7 +23,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 # This file contains test cases for 'Binary operator functions'
@@ -197,6 +196,7 @@ class FrameBinaryOpsMixin:
         pser = pd.Series([1.1, 2.2, 3.3], dtype=np.float32)
         psser = ps.from_pandas(pser)
         self.assert_eq(psser / 1, pser / 1)
+        self.assert_eq(psser / 0, pser / 0)
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})

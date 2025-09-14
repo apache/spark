@@ -1,0 +1,44 @@
+<baskets>
+    <basket>
+        <entry>
+            <key>1</key>
+            <value>fork</value>
+        </entry>
+        <entry>
+            <key>2</key>
+            <value>cup</value>
+        </entry>
+    </basket>
+    <basket>
+        <entry>
+            <key>3</key>
+            <value>apple</value>
+        </entry>
+        <entry>
+            <key>4</key>
+            <value>banana</value>
+        </entry>
+    </basket>
+    <basket>
+        <entry>
+            <key>5</key>
+            <value>straw</value>
+        </entry>
+        <entry>
+            <key>6</key>
+            <value>spoon</value>
+        </entry>
+    </basket>
+    <basket invalid="true">
+        <entry>
+            <key>9027</key>
+            <value>glasstop stove in black</value>
+            <extra>123</extra>
+        </entry>
+        <entry>
+            <key>288</key>
+            <value>wooden spoon</value>
+            <extra>123</extra>
+        </entry>
+    </basket>
+</baskets>

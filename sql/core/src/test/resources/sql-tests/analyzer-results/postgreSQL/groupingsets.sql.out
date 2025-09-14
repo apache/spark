@@ -33,7 +33,7 @@ insert into gstest2 values
   (2, 2, 2, 2, 2, 2, 2, 2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/gstest2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/gstest2], Append, `spark_catalog`.`default`.`gstest2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/gstest2), [a, b, c, d, e, f, g, h]
-+- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS c#x, cast(col4#x as int) AS d#x, cast(col5#x as int) AS e#x, cast(col6#x as int) AS f#x, cast(col7#x as int) AS g#x, cast(col8#x as int) AS h#x]
++- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x, col4#x AS d#x, col5#x AS e#x, col6#x AS f#x, col7#x AS g#x, col8#x AS h#x]
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x]
 
 
@@ -49,7 +49,7 @@ insert into gstest3 values
   (2, 2, 2, 2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/gstest3, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/gstest3], Append, `spark_catalog`.`default`.`gstest3`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/gstest3), [a, b, c, d]
-+- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS c#x, cast(col4#x as int) AS d#x]
++- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x, col4#x AS d#x]
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x]
 
 
@@ -68,7 +68,7 @@ values (1,1,tinyint('0'),1), (2,2,tinyint('1'),1),
        (7,64,tinyint('2'),1), (8,128,tinyint('3'),1)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/gstest4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/gstest4], Append, `spark_catalog`.`default`.`gstest4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/gstest4), [id, v, unhashable_col, unsortable_col]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS v#x, cast(col3#x as tinyint) AS unhashable_col#x, cast(col4#x as int) AS unsortable_col#x]
++- Project [col1#x AS id#x, col2#x AS v#x, col3#x AS unhashable_col#x, col4#x AS unsortable_col#x]
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x]
 
 

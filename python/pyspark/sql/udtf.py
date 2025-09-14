@@ -24,7 +24,12 @@ import sys
 import warnings
 from typing import Any, Type, TYPE_CHECKING, Optional, Sequence, Union
 
-from pyspark.errors import PySparkAttributeError, PySparkPicklingError, PySparkTypeError
+from pyspark.errors import (
+    PySparkAttributeError,
+    PySparkPicklingError,
+    PySparkTypeError,
+    PySparkImportError,
+)
 from pyspark.util import PythonEvalType
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType, StructType, _parse_datatype_string
@@ -240,6 +245,46 @@ def _create_py_udtf(
         evalType=eval_type,
         deterministic=deterministic,
     )
+
+
+def _create_pyarrow_udtf(
+    cls: Type,
+    returnType: Optional[Union[StructType, str]],
+    name: Optional[str] = None,
+    deterministic: bool = False,
+) -> "UserDefinedTableFunction":
+    """Create a PyArrow-native Python UDTF."""
+    # Validate PyArrow dependencies
+    try:
+        require_minimum_pyarrow_version()
+    except ImportError as e:
+        raise PySparkImportError(f"PyArrow UDTF requires pyarrow dependencies: {str(e)}") from e
+
+    # Validate the handler class with PyArrow-specific checks
+    _validate_arrow_udtf_handler(cls, returnType)
+
+    return _create_udtf(
+        cls=cls,
+        returnType=returnType,
+        name=name,
+        evalType=PythonEvalType.SQL_ARROW_UDTF,
+        deterministic=deterministic,
+    )
+
+
+def _validate_arrow_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
+    """Validate the handler class of a PyArrow UDTF."""
+    # First run standard UDTF validation
+    _validate_udtf_handler(cls, returnType)
+
+    # Block analyze method usage in arrow UDTFs
+    # TODO(SPARK-53286): Support analyze method for Arrow UDTFs to enable dynamic return types
+    has_analyze = hasattr(cls, "analyze")
+    if has_analyze:
+        raise PySparkAttributeError(
+            errorClass="INVALID_ARROW_UDTF_WITH_ANALYZE",
+            messageParameters={"name": cls.__name__},
+        )
 
 
 def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
@@ -484,7 +529,11 @@ class UDTFRegistration:
                 },
             )
 
-        if f.evalType not in [PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF]:
+        if f.evalType not in [
+            PythonEvalType.SQL_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_UDTF,
+        ]:
             raise PySparkTypeError(
                 errorClass="INVALID_UDTF_EVAL_TYPE",
                 messageParameters={

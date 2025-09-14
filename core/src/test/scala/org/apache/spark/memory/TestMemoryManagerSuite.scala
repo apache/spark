@@ -47,7 +47,7 @@ class TestMemoryManagerSuite extends SparkFunSuite {
   test("markconsequentOOM") {
     val testMemoryManager = new TestMemoryManager(new SparkConf())
     assert(testMemoryManager.acquireExecutionMemory(1, 0, MemoryMode.ON_HEAP) == 1)
-    testMemoryManager.markconsequentOOM(2)
+    testMemoryManager.markConsequentOOM(2)
     assert(testMemoryManager.acquireExecutionMemory(1, 0, MemoryMode.ON_HEAP) == 0)
     assert(testMemoryManager.acquireExecutionMemory(1, 0, MemoryMode.ON_HEAP) == 0)
     assert(testMemoryManager.acquireExecutionMemory(1, 0, MemoryMode.ON_HEAP) == 1)

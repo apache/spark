@@ -135,9 +135,6 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                              if `t` was a permanent table when the current view was created, it
  *                              should still be a permanent table when resolving the current view,
  *                              even if a temp view `t` has been created.
- * @param isExecuteImmediate Whether the current plan is created by EXECUTE IMMEDIATE. Used when
- *                           resolving variables, as SQL Scripting local variables should not be
- *                           visible from EXECUTE IMMEDIATE.
  * @param outerPlan The query plan from the outer query that can be used to resolve star
  *                  expressions in a subquery.
  */
@@ -155,7 +152,6 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None,
-    isExecuteImmediate: Boolean = false,
     collation: Option[String] = None,
 
     /**
@@ -212,19 +208,11 @@ object AnalysisContext {
       viewDesc.viewReferredTempViewNames,
       mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       viewDesc.viewReferredTempVariableNames,
-      isExecuteImmediate = originContext.isExecuteImmediate,
       collation = viewDesc.collation)
     set(context)
     try f finally { set(originContext) }
   }
 
-  def withExecuteImmediateContext[A](f: => A): A = {
-    val originContext = value.get()
-    val context = originContext.copy(isExecuteImmediate = true)
-
-    set(context)
-    try f finally { set(originContext) }
-  }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
@@ -256,7 +244,10 @@ object Analyzer {
     "spark.sql.expressionTreeChangeLog.level"
   )
 
-  def retainResolutionConfigsForAnalysis(newConf: SQLConf, existingConf: SQLConf): Unit = {
+  def retainResolutionConfigsForAnalysis(
+      newConf: SQLConf,
+      existingConf: SQLConf,
+      createSparkVersion: String = ""): Unit = {
     val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
       // Also apply catalog configs
       RETAINED_ANALYSIS_FLAGS.contains(key) || key.startsWith("spark.sql.catalog.")
@@ -264,6 +255,25 @@ object Analyzer {
 
     retainedConfigs.foreach { case (k, v) =>
       newConf.settings.put(k, v)
+    }
+
+    trySetAnsiValue(newConf, createSparkVersion)
+  }
+
+  /**
+   * In case ANSI value wasn't persisted for a view or a UDF, we set it to `true` in case Spark
+   * version used to create the view is 4.0.0 or higher. We set it to `false` in case Spark version
+   * is lower than 4.0.0 or if the Spark version wasn't stored (in that case we assume that the
+   * value is `false`)
+   */
+  def trySetAnsiValue(sqlConf: SQLConf, createSparkVersion: String = ""): Unit = {
+    if (conf.getConf(SQLConf.ASSUME_ANSI_FALSE_IF_NOT_PERSISTED) &&
+      !sqlConf.settings.containsKey(SQLConf.ANSI_ENABLED.key)) {
+      if (createSparkVersion.startsWith("4.")) {
+        sqlConf.settings.put(SQLConf.ANSI_ENABLED.key, "true")
+      } else {
+        sqlConf.settings.put(SQLConf.ANSI_ENABLED.key, "false")
+      }
     }
   }
 }
@@ -422,6 +432,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveCollationName ::
+      ResolveMergeIntoSchemaEvolution ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -472,10 +483,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteMergeIntoTable ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
-      new SubstituteExecuteImmediate(
-        catalogManager,
-        resolveChild = executeSameContext,
-        checkAnalysis = checkAnalysis) ::
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
@@ -792,6 +799,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       } else {
         colResolved.havingCondition
       }
+      // `cond` might contain unresolved aggregate functions so defer its resolution to
+      // `ResolveAggregateFunctions` rule if needed.
+      if (!cond.resolved) return colResolved
+
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val (extraAggExprs, Seq(resolvedHavingCond)) =
         ResolveAggregateFunctions.resolveExprsWithAggregate(Seq(cond), aggForResolving)
@@ -1643,7 +1654,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
-        if !m.resolved && targetTable.resolved && sourceTable.resolved =>
+        if !m.resolved && targetTable.resolved && sourceTable.resolved && !m.needSchemaEvolution =>
 
         EliminateSubqueryAliases(targetTable) match {
           case r: NamedRelation if r.skipSchemaResolution =>
@@ -1666,9 +1677,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
               case UpdateStarAction(updateCondition) =>
-                val assignments = targetTable.output.map { attr =>
-                  Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
-                }
+                // Use only source columns.  Missing columns in target will be handled in
+                // ResolveRowLevelCommandAssignments.
+                val assignments = targetTable.output.flatMap{ targetAttr =>
+                  sourceTable.output.find(
+                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
+                    .map(Assignment(targetAttr, _))}
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
@@ -1689,9 +1703,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                val assignments = targetTable.output.map { attr =>
-                  Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
-                }
+                // Use only source columns.  Missing columns in target will be handled in
+                // ResolveRowLevelCommandAssignments.
+                val assignments = targetTable.output.flatMap{ targetAttr =>
+                  sourceTable.output.find(
+                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
+                    .map(Assignment(targetAttr, _))}
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
@@ -1769,8 +1786,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
 
-      // Pass for Execute Immediate as arguments will be resolved by [[SubstituteExecuteImmediate]].
-      case e : ExecuteImmediateQuery => e
 
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
@@ -1912,7 +1927,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               f1.nameParts == Seq("count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
-              case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
+              case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
                 throw QueryCompilationErrors
                   .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
               case _ => // do nothing
@@ -2225,12 +2240,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             case _ => tvf
           }
 
-          Project(
-            Seq(UnresolvedStar(Some(Seq(alias)))),
-            LateralJoin(
-              tableArgs.map(_._2).reduceLeft(Join(_, _, Inner, None, JoinHint.NONE)),
-              LateralSubquery(SubqueryAlias(alias, tvfWithTableColumnIndexes)), Inner, None)
-          )
+          val lateralJoin = LateralJoin(
+            tableArgs.map(_._2).reduceLeft(Join(_, _, Inner, None, JoinHint.NONE)),
+            LateralSubquery(SubqueryAlias(alias, tvfWithTableColumnIndexes)), Inner, None)
+
+          // Set the tag so that it can be used to differentiate lateral join added by
+          // TABLE argument vs added by user.
+          lateralJoin.setTagValue(LateralJoin.BY_TABLE_ARGUMENT, ())
+
+          Project(Seq(UnresolvedStar(Some(Seq(alias)))), lateralJoin)
         }
 
       case q: LogicalPlan =>
@@ -2285,7 +2303,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
             PythonUDTF(
               u.name, u.func, analyzeResult.schema, Some(analyzeResult.pickledAnalyzeResult),
-              newChildren, u.evalType, u.udfDeterministic, u.resultId)
+              newChildren, u.evalType, u.udfDeterministic, u.resultId, None, u.tableArguments)
           }
         }
     }
@@ -2324,7 +2342,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val inputType = extractInputType(args)
         val bound = unbound.bind(inputType)
         validateParameterModes(bound)
-        val rearrangedArgs = NamedParametersSupport.defaultRearrange(bound, args)
+        val rearrangedArgs =
+          NamedParametersSupport.defaultRearrange(bound, args, SQLConf.get.resolver)
         Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
     }
 

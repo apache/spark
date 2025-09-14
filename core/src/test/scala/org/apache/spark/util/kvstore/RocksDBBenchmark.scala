@@ -24,9 +24,8 @@ import scala.beans.BeanProperty
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.util.Utils
 
 
 /**
@@ -459,7 +458,7 @@ object RocksDBBenchmark extends BenchmarkBase {
       db = null
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath)
+      Utils.deleteQuietly(dbpath)
       dbpath = null
     }
   }

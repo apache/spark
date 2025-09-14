@@ -17,6 +17,7 @@
 
 import unittest
 from typing import cast
+from decimal import Decimal
 
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql.functions import (
@@ -33,6 +34,13 @@ from pyspark.sql.functions import (
     PandasUDFType,
 )
 from pyspark.sql.window import Window
+from pyspark.sql.types import (
+    DecimalType,
+    IntegerType,
+    LongType,
+    FloatType,
+    DoubleType,
+)
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -562,6 +570,43 @@ class WindowPandasUDFTestsMixin:
                                 func_call="weighted_mean(v => v, w)", window_spec=window_spec
                             )
                         ).show()
+
+    def test_arrow_cast_numeric_to_decimal(self):
+        import numpy as np
+        import pandas as pd
+
+        columns = [
+            "int8",
+            "int16",
+            "int32",
+            "uint8",
+            "uint16",
+            "uint32",
+            "float64",
+        ]
+
+        pdf = pd.DataFrame({key: np.arange(1, 2).astype(key) for key in columns})
+        df = self.data
+        w = self.unbounded_window
+
+        t = DecimalType(10, 0)
+        for column in columns:
+            with self.subTest(column=column):
+                value = pdf[column].iloc[0]
+                mean_udf = pandas_udf(lambda v: value, t, PandasUDFType.GROUPED_AGG)
+                result = df.select(mean_udf(df["v"]).over(w)).first()[0]
+                assert result == Decimal("1.0")
+                assert type(result) == Decimal
+
+    def test_arrow_cast_str_to_numeric(self):
+        df = self.data
+        w = self.unbounded_window
+
+        for t in [IntegerType(), LongType(), FloatType(), DoubleType()]:
+            with self.subTest(type=t):
+                mean_udf = pandas_udf(lambda v: "123", t, PandasUDFType.GROUPED_AGG)
+                result = df.select(mean_udf(df["v"]).over(w)).first()[0]
+                assert result == 123
 
 
 class WindowPandasUDFTests(WindowPandasUDFTestsMixin, ReusedSQLTestCase):

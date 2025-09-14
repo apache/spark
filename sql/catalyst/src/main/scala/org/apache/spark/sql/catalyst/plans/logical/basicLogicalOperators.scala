@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, ShufflePartitionIdPassThrough, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -97,8 +97,9 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     val noSemanticChange = projectList.length == child.output.length &&
       projectList.zip(child.output).forall {
         case (alias: Alias, attr) =>
-          alias.child.semanticEquals(attr) && alias.explicitMetadata.isEmpty &&
-            alias.qualifier.isEmpty && alias.nonInheritableMetadataKeys.isEmpty
+          alias.qualifier.isEmpty &&
+            alias.metadata == attr.metadata &&
+            alias.child.semanticEquals(attr)
         case (attr1: Attribute, attr2) => attr1.semanticEquals(attr2)
         case _ => false
       }
@@ -863,7 +864,10 @@ case class View(
 }
 
 object View {
-  def effectiveSQLConf(configs: Map[String, String], isTempView: Boolean): SQLConf = {
+  def effectiveSQLConf(
+      configs: Map[String, String],
+      isTempView: Boolean,
+      createSparkVersion: String = ""): SQLConf = {
     val activeConf = SQLConf.get
     // For temporary view, we always use captured sql configs
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
@@ -872,7 +876,12 @@ object View {
     for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
-    Analyzer.retainResolutionConfigsForAnalysis(newConf = sqlConf, existingConf = activeConf)
+    Analyzer.retainResolutionConfigsForAnalysis(
+      newConf = sqlConf,
+      existingConf = activeConf,
+      createSparkVersion = createSparkVersion
+    )
+
     sqlConf
   }
 }
@@ -1862,19 +1871,29 @@ trait HasPartitionExpressions extends SQLConfHelper {
   protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(numPartitions)
   } else {
-    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
-    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
-        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
-        "means `HashPartitioning`. In this case we have:" +
-        s"""
-           |SortOrder: $sortOrder
-           |NonSortOrder: $nonSortOrder
-       """.stripMargin)
-    if (sortOrder.nonEmpty) {
-      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+    val directShuffleExprs = partitionExpressions.filter(_.isInstanceOf[DirectShufflePartitionID])
+    if (directShuffleExprs.nonEmpty) {
+      assert(directShuffleExprs.length == 1 && partitionExpressions.length == 1,
+        s"DirectShufflePartitionID can only be used as a single partition expression, " +
+          s"but found ${directShuffleExprs.length} DirectShufflePartitionID expressions " +
+          s"out of ${partitionExpressions.length} total expressions")
+      ShufflePartitionIdPassThrough(
+        partitionExpressions.head.asInstanceOf[DirectShufflePartitionID], numPartitions)
     } else {
-      HashPartitioning(partitionExpressions, numPartitions)
+      val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+      require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+        s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of" +
+          " type `SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`," +
+          " which means `HashPartitioning`. In this case we have:" +
+          s"""
+             |SortOrder: $sortOrder
+             |NonSortOrder: $nonSortOrder
+         """.stripMargin)
+      if (sortOrder.nonEmpty) {
+        RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+      } else {
+        HashPartitioning(partitionExpressions, numPartitions)
+      }
     }
   }
 }
@@ -2113,6 +2132,15 @@ case class LateralJoin(
     copy(left = newChild)
   }
 }
+
+
+object LateralJoin {
+  /**
+   * A tag to identify if a Lateral Join is added by resolving table argument.
+   */
+  val BY_TABLE_ARGUMENT = TreeNodeTag[Unit]("by_table_argument")
+}
+
 
 /**
  * A logical plan for as-of join.

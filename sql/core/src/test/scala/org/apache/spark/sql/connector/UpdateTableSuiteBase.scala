@@ -21,6 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
@@ -609,6 +610,25 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "id": 2, "value": 2.0,  "dep": "software" }
         |{ "pk": 3, "id": 3, "value": 2.0, "dep": "hr" }
         |""".stripMargin)
+
+    // rand() always generates values in [0, 1) range
+    sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")
+
+    checkAnswer(
+      sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
+      Row(2) :: Nil)
+  }
+
+  test("SPARK-53538: update with nondeterministic assignments and no wholestage codegen") {
+    val extraColCount = SQLConf.get.wholeStageMaxNumFields - 4
+    val schema = "pk INT NOT NULL, id INT, value DOUBLE, dep STRING, " +
+      ((1 to extraColCount).map(i => s"col$i INT").mkString(", "))
+    val data = (1 to 3).map { i =>
+      s"""{ "pk": $i, "id": $i, "value": 2.0, "dep": "hr", """ +
+        ((1 to extraColCount).map(j => s""""col$j": $i""").mkString(", ")) +
+      "}"
+    }.mkString("\n")
+    createAndInitTable(schema, data)
 
     // rand() always generates values in [0, 1) range
     sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")

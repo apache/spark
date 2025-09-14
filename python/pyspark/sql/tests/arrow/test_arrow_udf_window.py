@@ -22,11 +22,13 @@ from pyspark.util import PythonEvalType
 from pyspark.sql import functions as sf
 from pyspark.sql.window import Window
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -384,6 +386,7 @@ class WindowArrowUDFTestsMixin:
 
         self.assertEqual(expected1.collect(), result1.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -427,6 +430,7 @@ class WindowArrowUDFTestsMixin:
                             ).collect(),
                         )
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments_negative(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -549,6 +553,140 @@ class WindowArrowUDFTestsMixin:
                             )
                         ).show()
 
+    def test_complex_window_collect_set(self):
+        import pyarrow as pa
+
+        df = self.spark.createDataFrame([(1, 1), (1, 2), (2, 3), (2, 5), (2, 3)], ("id", "v"))
+        w = Window.partitionBy("id").orderBy("v")
+
+        @arrow_udf("array<int>")
+        def arrow_collect_set(v: pa.Array) -> pa.Scalar:
+            assert isinstance(v, pa.Array), str(type(v))
+            s = sorted([x.as_py() for x in pa.compute.unique(v)])
+            t = pa.list_(pa.int32())
+            return pa.scalar(value=s, type=t)
+
+        result1 = df.select(
+            arrow_collect_set(df["v"]).over(w).alias("vs"),
+        )
+
+        expected1 = df.select(
+            sf.sort_array(sf.collect_set(df["v"]).over(w)).alias("vs"),
+        )
+
+        self.assertEqual(expected1.collect(), result1.collect())
+
+    def test_complex_window_collect_list(self):
+        import pyarrow as pa
+
+        df = self.spark.createDataFrame([(1, 1), (1, 2), (2, 3), (2, 5), (2, 3)], ("id", "v"))
+        w = Window.partitionBy("id").orderBy("v")
+
+        @arrow_udf("array<int>")
+        def arrow_collect_list(v: pa.Array) -> pa.Scalar:
+            assert isinstance(v, pa.Array), str(type(v))
+            s = sorted([x.as_py() for x in v])
+            t = pa.list_(pa.int32())
+            return pa.scalar(value=s, type=t)
+
+        result1 = df.select(
+            arrow_collect_list(df["v"]).over(w).alias("vs"),
+        )
+
+        expected1 = df.select(
+            sf.sort_array(sf.collect_list(df["v"]).over(w)).alias("vs"),
+        )
+
+        self.assertEqual(expected1.collect(), result1.collect())
+
+    def test_complex_window_collect_as_map(self):
+        import pyarrow as pa
+
+        df = self.spark.createDataFrame(
+            [(1, 2, 1), (1, 3, 2), (2, 4, 3), (2, 5, 5), (2, 6, 3)], ("id", "k", "v")
+        )
+        w = Window.partitionBy("id").orderBy("v")
+
+        @arrow_udf("map<int, int>")
+        def arrow_collect_as_map(id: pa.Array, v: pa.Array) -> pa.Scalar:
+            assert isinstance(id, pa.Array), str(type(id))
+            assert isinstance(v, pa.Array), str(type(v))
+            d = {i: j for i, j in zip(id.to_pylist(), v.to_pylist())}
+            t = pa.map_(pa.int32(), pa.int32())
+            return pa.scalar(value=d, type=t)
+
+        result1 = df.select(
+            arrow_collect_as_map("k", "v").over(w).alias("map"),
+        )
+
+        expected1 = df.select(
+            sf.map_from_arrays(
+                sf.collect_list("k").over(w),
+                sf.collect_list("v").over(w),
+            ).alias("map")
+        )
+
+        self.assertEqual(expected1.collect(), result1.collect())
+
+    def test_complex_window_min_max_struct(self):
+        import pyarrow as pa
+
+        df = self.spark.createDataFrame([(1, 1), (1, 2), (2, 3), (2, 5), (2, 3)], ("id", "v"))
+        w = Window.partitionBy("id").orderBy("v")
+
+        @arrow_udf("struct<m1: int, m2:int>")
+        def arrow_collect_min_max(id: pa.Array, v: pa.Array) -> pa.Scalar:
+            assert isinstance(id, pa.Array), str(type(id))
+            assert isinstance(v, pa.Array), str(type(v))
+            m1 = pa.compute.min(id)
+            m2 = pa.compute.max(v)
+            t = pa.struct([pa.field("m1", pa.int32()), pa.field("m2", pa.int32())])
+            return pa.scalar(value={"m1": m1.as_py(), "m2": m2.as_py()}, type=t)
+
+        result1 = df.select(
+            arrow_collect_min_max("id", "v").over(w).alias("struct"),
+        )
+
+        expected1 = df.select(
+            sf.struct(
+                sf.min("id").over(w).alias("m1"),
+                sf.max("v").over(w).alias("m2"),
+            ).alias("struct")
+        )
+
+        self.assertEqual(expected1.collect(), result1.collect())
+
+    def test_time_min(self):
+        import pyarrow as pa
+
+        df = self.spark.sql(
+            """
+            SELECT * FROM VALUES
+            (1, TIME '12:34:56'),
+            (1, TIME '1:2:3'),
+            (2, TIME '0:58:59'),
+            (2, TIME '10:58:59'),
+            (2, TIME '10:00:03')
+            AS tab(i, t)
+            """
+        )
+        w1 = Window.partitionBy("i").orderBy("t")
+        w2 = Window.orderBy("t")
+
+        @arrow_udf("time", ArrowUDFType.GROUPED_AGG)
+        def agg_min_time(v):
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.Time64Array)
+            return pa.compute.min(v)
+
+        expected1 = df.withColumn("res", sf.min("t").over(w1))
+        result1 = df.withColumn("res", agg_min_time("t").over(w1))
+        self.assertEqual(expected1.collect(), result1.collect())
+
+        expected2 = df.withColumn("res", sf.min("t").over(w2))
+        result2 = df.withColumn("res", agg_min_time("t").over(w2))
+        self.assertEqual(expected2.collect(), result2.collect())
+
     def test_return_type_coercion(self):
         import pyarrow as pa
 
@@ -583,6 +721,42 @@ class WindowArrowUDFTestsMixin:
             # pyarrow.lib.ArrowInvalid:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_return_numpy_scalar(self):
+        import numpy as np
+        import pyarrow as pa
+
+        df = self.spark.range(10).withColumn("v", sf.lit(1))
+        w = Window.partitionBy("id").orderBy("v")
+
+        @arrow_udf("long")
+        def np_max_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.max(v)
+
+        @arrow_udf("long")
+        def np_min_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.min(v)
+
+        @arrow_udf("double")
+        def np_avg_udf(v: pa.Array) -> np.float64:
+            assert isinstance(v, pa.Array)
+            return np.mean(v)
+
+        expected = df.select(
+            sf.max("id").over(w).alias("max"),
+            sf.min("id").over(w).alias("min"),
+            sf.avg("id").over(w).alias("avg"),
+        )
+
+        result = df.select(
+            np_max_udf("id").over(w).alias("max"),
+            np_min_udf("id").over(w).alias("min"),
+            np_avg_udf("id").over(w).alias("avg"),
+        )
+        self.assertEqual(expected.collect(), result.collect())
 
 
 class WindowArrowUDFTests(WindowArrowUDFTestsMixin, ReusedSQLTestCase):

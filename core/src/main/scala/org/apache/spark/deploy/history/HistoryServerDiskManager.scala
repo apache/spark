@@ -22,10 +22,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History._
@@ -76,7 +74,7 @@ private class HistoryServerDiskManager(
 
     // Clean up any temporary stores during start up. This assumes that they're leftover from other
     // instances and are not useful.
-    tmpStoreDir.listFiles().foreach(FileUtils.deleteQuietly)
+    tmpStoreDir.listFiles().foreach(Utils.deleteQuietly)
 
     // Go through the recorded store directories and remove any that may have been removed by
     // external code.
@@ -286,7 +284,7 @@ private class HistoryServerDiskManager(
   }
 
   /** Visible for testing. Return the size of a directory. */
-  private[history] def sizeOf(path: File): Long = FileUtils.sizeOf(path)
+  private[history] def sizeOf(path: File): Long = Utils.sizeOf(path)
 
   private[history] class Lease(val tmpPath: File, private val leased: Long) {
 

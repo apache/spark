@@ -300,6 +300,7 @@ Date and Timestamp Functions
     timestamp_millis
     timestamp_seconds
     time_diff
+    time_trunc
     to_date
     to_time
     to_timestamp
@@ -649,6 +650,8 @@ UDF, UDTF and UDT
 .. autosummary::
     :toctree: api/
 
+    arrow_udf
+    arrow_udtf
     call_udf
     pandas_udf
     udf

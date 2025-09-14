@@ -316,7 +316,9 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
    * than numPartitions) based on hashing expressions.
    */
-  def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+  def partitionIdExpression: Expression = Pmod(
+    new CollationAwareMurmur3Hash(expressions), Literal(numPartitions)
+  )
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
@@ -624,6 +626,47 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
  *   - Creating a partitioning that can be used to re-partition another child, so that to make it
  *      having a compatible partitioning as this node.
  */
+
+/**
+ * Represents a partitioning where partition IDs are passed through directly from the
+ * DirectShufflePartitionID expression. This partitioning scheme is used when users
+ * want to directly control partition placement rather than using hash-based partitioning.
+ *
+ * This partitioning maps directly to the PartitionIdPassthrough RDD partitioner.
+ */
+case class ShufflePartitionIdPassThrough(
+    expr: DirectShufflePartitionID,
+    numPartitions: Int) extends Expression with Partitioning with Unevaluable {
+
+  // TODO(SPARK-53401): Support Shuffle Spec in Direct Partition ID Pass Through
+  def partitionIdExpression: Expression = Pmod(expr.child, Literal(numPartitions))
+
+  def expressions: Seq[Expression] = expr :: Nil
+  override def children: Seq[Expression] = expr :: Nil
+  override def nullable: Boolean = false
+  override def dataType: DataType = IntegerType
+
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        // TODO(SPARK-53428): Support Direct Passthrough Partitioning in the Streaming Joins
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          val partitioningExpressions = expr.child :: Nil
+          if (requireAllClusterKeys) {
+            c.areAllClusterKeysMatched(partitioningExpressions)
+          } else {
+            partitioningExpressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+        case _ => false
+      }
+    }
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): ShufflePartitionIdPassThrough =
+    copy(expr = newChildren.head.asInstanceOf[DirectShufflePartitionID])
+}
+
 trait ShuffleSpec {
   /**
    * Returns the number of partitions of this shuffle spec

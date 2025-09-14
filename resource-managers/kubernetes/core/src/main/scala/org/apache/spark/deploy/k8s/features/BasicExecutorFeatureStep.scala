@@ -279,6 +279,8 @@ private[spark] class BasicExecutorFeatureStep(
       .editOrNewSpec()
         .withHostname(hostname)
         .withRestartPolicy(policy)
+        .withTerminationGracePeriodSeconds(
+          kubernetesConf.get(KUBERNETES_EXECUTOR_TERMINATION_GRACE_PERIOD_SECONDS))
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToNodeSelector(kubernetesConf.executorNodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
