@@ -60,13 +60,13 @@ class SparkSqlParser extends AbstractSqlParser {
    */
   def getPositionMapper: Option[PositionMapper] = parameterHandler.getPositionMapper
 
-    // Thread-local flag to track whether we're in a top-level parse operation
+  // Thread-local flag to track whether we're in a top-level parse operation
   // This is used to prevent parameter substitution during identifier/data type parsing
   private val isTopLevelParse = new ThreadLocal[Boolean] {
     override def initialValue(): Boolean = true
   }
 
-    protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     // Step 1: Check if parameter substitution is enabled and we have a parameterized query context
     // Only apply parameter substitution for top-level SQL statements
     val wasTopLevel = isTopLevelParse.get()
@@ -139,10 +139,6 @@ class SparkSqlParser extends AbstractSqlParser {
       // Individual parsing methods handle their own flag management
     }
   }
-
-
-
-
 
   private def substituteParametersIfNeeded(
       command: String,

@@ -100,8 +100,8 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       // For parameterized queries, build parameter arrays
       val (paramValues, paramNames) = buildUnifiedParameters(args)
 
-      // Validate parameter consistency between inner query and USING clause
-      validateParameterConsistency(sqlString, paramNames, args)
+      // Validate that if inner query uses named parameters, all USING arguments must be named
+      validateNamedParameterConsistency(sqlString, paramNames, args)
 
       withIsolatedLocalVariableContext {
         sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
@@ -161,20 +161,21 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
   }
 
   /**
-   * Validates parameter consistency between inner query parameter type and USING clause naming.
-   * If the inner query uses named parameters (:name), then ALL arguments in USING must be named.
+   * Validates that if the inner query uses named parameters, all USING arguments must be named.
+   * This is a specific validation for EXECUTE IMMEDIATE that complements the general parameter
+   * validation in ParameterHandler.
    */
-  private def validateParameterConsistency(
+  private def validateNamedParameterConsistency(
       sqlString: String,
       paramNames: Array[String],
       args: Seq[Expression]): Unit = {
 
-    // Detect parameter types by scanning the SQL string (avoid parsing to prevent errors)
-    val hasNamedParams = sqlString.contains(":")
-    val hasPositionalParams = sqlString.contains("?")
+    // Check if the inner query uses named parameters
+    val namedParamPattern = ":[a-zA-Z_][a-zA-Z0-9_]*".r
+    val hasNamedParams = namedParamPattern.findFirstIn(sqlString).isDefined
 
-    if (hasNamedParams && !hasPositionalParams) {
-      // If inner query uses only named parameters, ALL USING arguments must be named
+    if (hasNamedParams) {
+      // If inner query uses named parameters, ALL USING arguments must be named
       val unnamedArgs = args.zip(paramNames).collect {
         case (expr, name) if name.isEmpty => expr
       }

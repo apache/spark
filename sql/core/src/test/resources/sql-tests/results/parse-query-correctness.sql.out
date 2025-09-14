@@ -712,7 +712,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 47,
+    "stopIndex" : 66,
     "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 alias garbage garbage garbage' INTO v1"
   } ]
 }
@@ -743,7 +743,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 26,
+    "stopIndex" : 45,
     "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 WITH abc' INTO v1"
   } ]
 }
