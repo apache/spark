@@ -360,8 +360,8 @@ abstract class InMemoryBaseTable(
         val key = getKey(row, newSchema)
         dataMap += dataMap.get(key)
           .map { splits =>
-            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-              val oldSchema = splits.last.schema
+            val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
+                (splits.last.schema != oldSchema)) {
               splits :+ new BufferedRows(key, oldSchema)
             } else {
               splits
