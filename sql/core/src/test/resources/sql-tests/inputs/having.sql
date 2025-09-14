@@ -91,3 +91,8 @@ GROUP BY col1
 HAVING (
     SELECT col1[0] = 1
 );
+
+-- Missing attribute (col2) in HAVING is added only once
+
+SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2;
+SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2;

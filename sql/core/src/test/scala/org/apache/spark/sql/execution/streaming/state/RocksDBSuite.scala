@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
-import java.nio.charset.Charset
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.Executors
 
@@ -28,7 +28,6 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.rocksdb.CompressionType
@@ -42,8 +41,9 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAtomicTestManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
+import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -2152,81 +2152,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  testWithStateStoreCheckpointIdsAndColumnFamilies("disallow concurrent updates to the same " +
-    "RocksDB instance",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) {
-    case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
-    quietly {
-      val versionToUniqueId = new mutable.HashMap[Long, String]()
-      withDB(
-        Utils.createTempDir().toString,
-        conf = dbConf.copy(lockAcquireTimeoutMs = 20),
-        useColumnFamilies = colFamiliesEnabled,
-        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-        versionToUniqueId = versionToUniqueId) { db =>
-        // DB has been loaded so current thread has already
-        // acquired the lock on the RocksDB instance
-
-        db.load(0, versionToUniqueId.get(0)) // Current thread should be able to load again
-
-        // Another thread should not be able to load while current thread is using it
-        var ex = intercept[SparkException] {
-          ThreadUtils.runInNewThread("concurrent-test-thread-1") {
-            db.load(0, versionToUniqueId.get(0))
-          }
-        }
-        checkError(
-          ex,
-          condition = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
-          parameters = Map(
-            "loggingId" -> "\\[Thread-\\d+\\]",
-            "operationType" -> "load_store",
-            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
-            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
-            "timeWaitedMs" -> "\\d+",
-            "stackTraceOutput" -> "(?s).*"
-          ),
-          matchPVals = true
-        )
-
-        // Commit should release the instance allowing other threads to load new version
-        db.commit()
-        ThreadUtils.runInNewThread("concurrent-test-thread-2") {
-          db.load(1, versionToUniqueId.get(1))
-          db.commit()
-        }
-
-        // Another thread should not be able to load while current thread is using it
-        db.load(2, versionToUniqueId.get(2))
-        ex = intercept[SparkException] {
-          ThreadUtils.runInNewThread("concurrent-test-thread-2") {
-            db.load(2, versionToUniqueId.get(2))
-          }
-        }
-        checkError(
-          ex,
-          condition = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
-          parameters = Map(
-            "loggingId" -> "\\[Thread-\\d+\\]",
-            "operationType" -> "load_store",
-            "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
-            "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
-            "timeWaitedMs" -> "\\d+",
-            "stackTraceOutput" -> "(?s).*"
-          ),
-          matchPVals = true
-        )
-
-        // Rollback should release the instance allowing other threads to load new version
-        db.rollback()
-        ThreadUtils.runInNewThread("concurrent-test-thread-3") {
-          db.load(1, versionToUniqueId.get(1))
-          db.commit()
-        }
-      }
-    }
-  }
-
   testWithColumnFamilies("ensure concurrent access lock is released after Spark task completes",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     RocksDBSuite.withSingletonDB {
@@ -2251,7 +2176,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     withTempDir { dir =>
       val file2 = new File(dir, "json")
       val json2 = """{"sstFiles":[],"numKeys":0}"""
-      FileUtils.write(file2, s"v2\n$json2", Charset.defaultCharset)
+      Files.writeString(file2.toPath, s"v2\n$json2")
       val e = intercept[SparkException] {
         RocksDBCheckpointMetadata.readFromFile(file2)
       }
@@ -2269,7 +2194,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       assert(metadata.json == json)
       withTempDir { dir =>
         val file = new File(dir, "json")
-        FileUtils.write(file, s"v1\n$json", Charset.defaultCharset)
+        Files.writeString(file.toPath, s"v1\n$json")
         assert(metadata == RocksDBCheckpointMetadata.readFromFile(file))
       }
     }
@@ -2397,6 +2322,132 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
         assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
         assert(metrics.pinnedBlocksMemUsage >= 0)
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDB metric Maps do not change after retrieved") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        // These should not change after retrieval
+        val m1 = db.metricsOpt.get
+
+        db.load(1)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        val m2 = db.metricsOpt.get
+
+        // verify that the metrics maps are not shared
+        assert(!m1.lastCommitLatencyMs.eq(m2.lastCommitLatencyMs))
+        assert(!m1.loadMetrics.eq(m2.loadMetrics))
+        assert(!m1.nativeOpsHistograms.eq(m2.nativeOpsHistograms))
+        assert(!m1.nativeOpsMetrics.eq(m2.nativeOpsMetrics))
+      }
+    }
+  }
+
+  test("load metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        db.doMaintenance() // upload snapshot
+        db.rollback() // invalidate the db, so next load will reload from dfs
+
+        db.load(1)
+        db.put("a", "10")
+        db.put("b", "25")
+        db.commit()
+
+        val m1 = db.metricsOpt.get
+        assert(m1.loadMetrics("load") > 0)
+        // since we called load, loadFromSnapshot should not be populated
+        assert(!m1.loadMetrics.contains("loadFromSnapshot"))
+
+        if (conf.enableChangelogCheckpointing) {
+          assert(m1.loadMetrics("replayChangelog") > 0)
+          assert(m1.loadMetrics("numReplayChangeLogFiles") == 1)
+        } else {
+          assert(!m1.loadMetrics.contains("replayChangelog"))
+          assert(!m1.loadMetrics.contains("numReplayChangeLogFiles"))
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("load from snapshot metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      // We want a snapshot for every two delta files
+      val conf = dbConf.copy(minDeltasForSnapshot = 1)
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.commit()
+        db.doMaintenance()
+
+        db.load(1)
+        db.put("b", "10")
+        db.commit()
+        db.doMaintenance()
+
+        db.loadFromSnapshot(0, 1)
+
+        db.refreshRecordedMetricsForTest()
+        val m1 = db.metricsOpt.get
+        assert(m1.loadMetrics("loadFromSnapshot") > 0)
+        // since we called loadFromSnapshot, load should not be populated
+        assert(!m1.loadMetrics.contains("load"))
+        assert(m1.loadMetrics("replayChangelog") > 0)
+        assert(m1.loadMetrics("numReplayChangeLogFiles") == 1)
+      }
+    }
+  }
+
+  test("commit metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf.copy()
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+        db.doMaintenance() // upload snapshot
+
+        val m1 = db.metricsOpt.get
+        assert(m1.lastCommitLatencyMs("fileSync") > 0)
+
+        if (conf.enableChangelogCheckpointing) {
+          // Since changelog checkpoint is enabled, we should populate this metric
+          assert(m1.lastCommitLatencyMs("changeLogWriterCommit") > 0)
+          // A snapshot is not forced when changelog checkpointing is enabled
+          assert(!m1.lastCommitLatencyMs.contains("saveZipFiles"))
+        } else {
+          // When changelog checkpoint is NOT enabled we should
+          // always populate this metric in the snapshot
+          assert(m1.lastCommitLatencyMs("saveZipFiles") > 0)
+          // This metric is not populated when changelog checkpointing is disabled
+          assert(!m1.lastCommitLatencyMs.contains("changeLogWriterCommit"))
+        }
       }
     }
   }
@@ -2547,11 +2598,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
               db.load(0)
               db.put("a", "1")
               db.commit()
-              if (boundedMemoryUsage == "true") {
-                assert(db.metricsOpt.get.totalMemUsageBytes === 0)
-              } else {
-                assert(db.metricsOpt.get.totalMemUsageBytes > 0)
-              }
+              assert(db.metricsOpt.get.totalMemUsageBytes > 0)
               db.getWriteBufferManagerAndCache()
             }
 
@@ -2562,11 +2609,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
               db.load(0)
               db.put("a", "1")
               db.commit()
-              if (boundedMemoryUsage == "true") {
-                assert(db.metricsOpt.get.totalMemUsageBytes === 0)
-              } else {
-                assert(db.metricsOpt.get.totalMemUsageBytes > 0)
-              }
+              assert(db.metricsOpt.get.totalMemUsageBytes > 0)
               db.getWriteBufferManagerAndCache()
             }
 
@@ -2616,7 +2659,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
             db.remove("a")
             db.put("c", "3")
             db.commit()
-            assert(db.metricsOpt.get.totalMemUsageBytes === 0)
+            assert(db.metricsOpt.get.totalMemUsageBytes > 0)
           }
         } finally {
           RocksDBMemoryManager.resetWriteBufferManagerAndCache
@@ -3211,6 +3254,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  test("Calling getInstanceMemoryUsage on an ID " +
+    "that doesn't exist doesn't throw an error") {
+    RocksDBMemoryManager.getInstanceMemoryUsage("This ID doesn't exist", 0L)
+  }
+
   testWithChangelogCheckpointingEnabled(
     "SPARK-51717 - validate that RocksDB file mapping is cleared " +
       "when we reload version 0 after we have created a snapshot to avoid SST mismatch") {
@@ -3339,146 +3387,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  test("Rocks DB task completion listener does not double unlock acquireThread") {
-    // This test verifies that a thread that locks then unlocks the db and then
-    // fires a completion listener (Thread 1) does not unlock the lock validly
-    // acquired by another thread (Thread 2).
-    //
-    // Timeline of this test (* means thread is active):
-    // STATE | MAIN             | THREAD 1         | THREAD 2         |
-    // ------| ---------------- | ---------------- | ---------------- |
-    // 0.    | wait for s3      | *load, commit    | wait for s1      |
-    //       |                  | *signal s1       |                  |
-    // ------| ---------------- | ---------------- | ---------------- |
-    // 1.    |                  | wait for s2      | *load, signal s2 |
-    // ------| ---------------- | ---------------- | ---------------- |
-    // 2.    |                  | *task complete   | wait for s4      |
-    //       |                  | *signal s3, END  |                  |
-    // ------| ---------------- | ---------------- | ---------------- |
-    // 3.    | *verify locked   |                  |                  |
-    //       | *signal s4       |                  |                  |
-    // ------| ---------------- | ---------------- | ---------------- |
-    // 4.    | wait for s5      |                  | *commit          |
-    //       |                  |                  | *signal s5, END  |
-    // ------| ---------------- | ---------------- | ---------------- |
-    // 5.    | *close db, END   |                  |                  |
-    //
-    // NOTE: state 4 and 5 are only for cleanup
-
-    // Create a custom ExecutionContext with 3 threads
-    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
-      ThreadUtils.newDaemonFixedThreadPool(3, "pool-thread-executor"))
-    val stateLock = new Object()
-    var state = 0
-
-    withTempDir { dir =>
-      val remoteDir = dir.getCanonicalPath
-      val db = new RocksDB(
-        remoteDir,
-        conf = dbConf,
-        localRootDir = Utils.createTempDir(),
-        hadoopConf = new Configuration(),
-        loggingId = s"[Thread-${Thread.currentThread.getId}]",
-        useColumnFamilies = false
-      )
-      try {
-        Future { // THREAD 1
-          // Set thread 1's task context so that it is not a clone
-          // of the main thread's taskContext, which will end if the
-          // task is marked as complete
-          val taskContext = TaskContext.empty()
-          TaskContext.setTaskContext(taskContext)
-
-          stateLock.synchronized {
-            // -------------------- STATE 0 --------------------
-            // Simulate a task that loads and commits, db should be unlocked after
-            db.load(0)
-            db.put("a", "1")
-            db.commit()
-            // Signal that we have entered state 1
-            state = 1
-            stateLock.notifyAll()
-
-            // -------------------- STATE 2 --------------------
-            // Wait until we have entered state 2 (thread 2 has loaded db and acquired lock)
-            while (state != 2) {
-              stateLock.wait()
-            }
-
-            // thread 1's task context is marked as complete and signal
-            // that we have entered state 3
-            // At this point, thread 2 should still hold the DB lock.
-            taskContext.markTaskCompleted(None)
-            state = 3
-            stateLock.notifyAll()
-          }
-        }
-
-        Future { // THREAD 2
-          // Set thread 2's task context so that it is not a clone of thread 1's
-          // so it won't be marked as complete
-          val taskContext = TaskContext.empty()
-          TaskContext.setTaskContext(taskContext)
-
-          stateLock.synchronized {
-            // -------------------- STATE 1 --------------------
-            // Wait until we have entered state 1 (thread 1 finished loading and committing)
-            while (state != 1) {
-              stateLock.wait()
-            }
-
-            // Load the db and signal that we have entered state 2
-            db.load(1)
-            assertAcquiredThreadIsCurrentThread(db)
-            state = 2
-            stateLock.notifyAll()
-
-            // -------------------- STATE 4 --------------------
-            // Wait until we have entered state 4 (thread 1 completed and
-            // main thread confirmed that lock is held)
-            while (state != 4) {
-              stateLock.wait()
-            }
-
-            // Ensure we still have the lock
-            assertAcquiredThreadIsCurrentThread(db)
-
-            // commit and signal that we have entered state 5
-            db.commit()
-            state = 5
-            stateLock.notifyAll()
-          }
-        }
-
-        // MAIN THREAD
-        stateLock.synchronized {
-          // -------------------- STATE 3 --------------------
-          // Wait until we have entered state 3 (thread 1 is complete)
-          while (state != 3) {
-            stateLock.wait()
-          }
-
-          // Verify that the lock is being held
-          val threadInfo = db.getAcquiredThreadInfo()
-          assert(threadInfo.nonEmpty, s"acquiredThreadInfo was None when it should be Some")
-
-          // Signal that we have entered state 4 (thread 2 can now release lock)
-          state = 4
-          stateLock.notifyAll()
-
-          // -------------------- STATE 5 --------------------
-          // Wait until we have entered state 5 (thread 2 has released lock)
-          // so that we can clean up
-          while (state != 5) {
-            stateLock.wait()
-          }
-        }
-      } finally {
-        db.close()
-      }
-    }
-  }
-
   test("RocksDB task completion listener correctly releases for failed task") {
     // This test verifies that a thread that locks the DB and then fails
     // can rely on the completion listener to release the lock.
@@ -3500,7 +3408,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           TaskContext.setTaskContext(taskContext)
 
           db.load(0)
-          assertAcquiredThreadIsCurrentThread(db)
 
           // Task completion listener should unlock
           taskContext.markTaskCompleted(
@@ -3508,10 +3415,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         }
 
         ThreadUtils.awaitResult(fut, timeout)
-
-        // Assert that db is not locked
-        val threadInfo = db.getAcquiredThreadInfo()
-        assert(threadInfo.isEmpty, s"acquiredThreadInfo should be None but was $threadInfo")
       }
     }
   }
@@ -3566,15 +3469,53 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  private def assertAcquiredThreadIsCurrentThread(db: RocksDB): Unit = {
-    val threadInfo = db.getAcquiredThreadInfo()
-    assert(threadInfo != None,
-      "acquired thread info should not be null after load")
-    val threadId = threadInfo.get.threadRef.get.get.getId
-    assert(
-      threadId == Thread.currentThread().getId,
-      s"acquired thread should be curent thread ${Thread.currentThread().getId} " +
-        s"after load but was $threadId")
+  test("SPARK-52637: RocksDB compaction leading to incorrect file mapping during load " +
+    "does not lead to versionID mismatch") {
+    val sqlConf = new SQLConf
+    sqlConf.setConf(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT,
+      1)
+    val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+
+    withTempDir { remoteDir => withTempDir { localDir =>
+      withDB(remoteDir.toString, localDir = localDir, conf = dbConf) { db =>
+        db.load(0)
+        db.commit()
+
+        val workingDir = localDir.listFiles().filter(_.getName.startsWith("workingDir")).head
+
+        logInfo(s"files: ${db.fileManager.listRocksDBFiles(workingDir)}")
+
+        db.load(1)
+        db.put("0", "0")
+        db.commit()
+
+        db.doMaintenance() // upload snapshot to remoteDir
+
+        // confirm that sst files exist
+        assert(db.fileManager.listRocksDBFiles(workingDir)._1.nonEmpty)
+        db.fileManager.listRocksDBFiles(workingDir)._1
+          .foreach(file => file.delete()) // simulate rocksdb compaction by removing SST files
+
+        // confirm that there are entries in the mapping
+        val fileMapping = PrivateMethod[RocksDBFileMapping](Symbol("rocksDBFileMapping"))
+        val localFileMappings = PrivateMethod[mutable.Map[String, (Long, RocksDBImmutableFile)]](
+          Symbol("localFileMappings"))
+        val fileMappingObj = db invokePrivate fileMapping()
+        val localFileMappingsObj = fileMappingObj invokePrivate localFileMappings()
+        assert(localFileMappingsObj.exists { case (_, (version, _)) =>
+          version >= 1
+        })
+
+        // reload version 1
+        db.load(1)
+
+        // ensure that there are no leftover fileMappings from the first load of version 1
+        assert(!localFileMappingsObj.exists { case (_, (version, _)) =>
+          version >= 1
+        })
+      }
+    }}
   }
 
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
@@ -3667,7 +3608,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
     fileToLengths.foreach { case (fileName, length) =>
       val file = new File(dir, fileName)
-      FileUtils.write(file, "a" * length, Charset.defaultCharset)
+      file.getParentFile().mkdirs()
+      Files.writeString(file.toPath, "a".repeat(length))
     }
   }
 

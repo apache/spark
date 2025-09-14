@@ -52,6 +52,7 @@ object TimeType {
   val MICROS_PRECISION: Int = 6
   val MAX_PRECISION: Int = MICROS_PRECISION
   val DEFAULT_PRECISION: Int = MICROS_PRECISION
+  val NANOS_PRECISION: Int = 9
 
   def apply(): TimeType = new TimeType(DEFAULT_PRECISION)
 }

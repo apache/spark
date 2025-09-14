@@ -262,7 +262,7 @@ class CogroupedApplyInPandasTestsMixin:
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     self._test_merge_error(
-                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["2.0"]}),
+                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["test_string"]}),
                         output_schema="id long, k double",
                         errorClass=PythonException,
                         error_message_regex=expected,
@@ -280,6 +280,54 @@ class CogroupedApplyInPandasTestsMixin:
                         errorClass=PythonException,
                         error_message_regex=expected,
                     )
+
+    def test_cogroup_apply_int_to_decimal_coercion(self):
+        left = self.data1.limit(3)
+        right = self.data2.limit(3)
+
+        def int_to_decimal_merge(lft, rgt):
+            return pd.DataFrame(
+                [
+                    {
+                        "id": 1,
+                        "decimal_result": 98765,
+                        "left_count": len(lft),
+                        "right_count": len(rgt),
+                    }
+                ]
+            )
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
+            result = (
+                left.groupby("id")
+                .cogroup(right.groupby("id"))
+                .applyInPandas(
+                    int_to_decimal_merge,
+                    "id long, decimal_result decimal(10,2), left_count long, right_count long",
+                )
+                .collect()
+            )
+            self.assertTrue(len(result) > 0)
+            for row in result:
+                self.assertEqual(row.decimal_result, 98765.00)
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+        ):
+            with self.assertRaisesRegex(
+                PythonException, "Exception thrown when converting pandas.Series"
+            ):
+                (
+                    left.groupby("id")
+                    .cogroup(right.groupby("id"))
+                    .applyInPandas(
+                        int_to_decimal_merge,
+                        "id long, decimal_result decimal(10,2), left_count long, right_count long",
+                    )
+                    .collect()
+                )
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF("v1")

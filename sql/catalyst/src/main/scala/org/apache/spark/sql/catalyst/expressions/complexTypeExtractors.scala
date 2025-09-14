@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
@@ -99,6 +98,21 @@ object ExtractValue {
   }
 
   /**
+   * Check that [[attribute]] can be fully extracted using the given [[nestedFields]].
+   */
+  def isExtractable(
+      attribute: Attribute, nestedFields: Seq[String], resolver: Resolver): Boolean = {
+    nestedFields
+      .foldLeft(Some(attribute): Option[Expression]) {
+        case (Some(expression), field) =>
+          ExtractValue.extractValue(expression, Literal(field), resolver)
+        case _ =>
+          None
+      }
+      .isDefined
+  }
+
+  /**
    * Find the ordinal of StructField, report error if no desired field or over one
    * desired fields are found.
    */
@@ -131,7 +145,9 @@ trait ExtractValue extends Expression with QueryErrorsBase {
  * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
-  extends UnaryExpression with ExtractValue {
+  extends UnaryExpression with ExtractValue with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegralType)
 
   lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
@@ -191,6 +207,13 @@ case class GetArrayStructFields(
     ordinal: Int,
     numFields: Int,
     containsNull: Boolean) extends UnaryExpression with ExtractValue {
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(_: StructType, _) => TypeCheckResult.TypeCheckSuccess
+    // This should never happen, unless we hit a bug.
+    case other => TypeCheckResult.TypeCheckFailure(
+      "GetArrayStructFields.child must be array of struct type, but got " + other)
+  }
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def toString: String = s"$child.${field.name}"
@@ -270,8 +293,7 @@ case class GetArrayItem(
   with ExtractValue
   with SupportQueryContext {
 
-  // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegralType)
 
   override def toString: String = s"$child[$ordinal]"
   override def sql: String = s"${child.sql}[${ordinal.sql}]"
@@ -338,30 +360,6 @@ case class GetArrayItem(
         }
       """
     })
-  }
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (_: ArrayType, e2) if !e2.isInstanceOf[IntegralType] =>
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(1),
-            "requiredType" -> toSQLType(IntegralType),
-            "inputSql" -> toSQLExpr(right),
-            "inputType" -> toSQLType(right.dataType))
-        )
-      case (e1, _) if !e1.isInstanceOf[ArrayType] =>
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_INPUT_TYPE",
-          messageParameters = Map(
-            "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> toSQLType(TypeCollection(ArrayType)),
-            "inputSql" -> toSQLExpr(left),
-            "inputType" -> toSQLType(left.dataType))
-        )
-      case _ => TypeCheckResult.TypeCheckSuccess
-    }
   }
 
   override protected def withNewChildrenInternal(
@@ -492,16 +490,19 @@ case class GetMapValue(child: Expression, key: Expression)
 
   private[catalyst] def keyType = child.dataType.asInstanceOf[MapType].keyType
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f if f.isFailure => f
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(keyType, prettyName)
-    }
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case _: MapType =>
+      super.checkInputDataTypes() match {
+        case f if f.isFailure => f
+        case TypeCheckResult.TypeCheckSuccess =>
+          TypeUtils.checkForOrderingExpr(keyType, prettyName)
+      }
+    // This should never happen, unless we hit a bug.
+    case other => TypeCheckResult.TypeCheckFailure(
+      "GetMapValue.child must be map type, but got " + other)
   }
 
-  // We have done type checking for child in `ExtractValue`, so only need to check the `key`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, keyType)
 
   override def toString: String = s"$child[$key]"
   override def sql: String = s"${child.sql}[${key.sql}]"

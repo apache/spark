@@ -310,10 +310,10 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
               |""".stripMargin
 
           val expected_pattern1 =
-            "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN subquery#x"
+            "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN dynamicpruning#x"
           val expected_pattern2 =
             "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
-              "IN subquery#x\\)\\]"
+              "IN dynamicpruning#x\\)\\]"
           val expected_pattern3 =
             "Location: InMemoryFileIndex \\[\\S*org.apache.spark.sql.ExplainSuite" +
               "/df2/\\S*, ... 99 entries\\]"

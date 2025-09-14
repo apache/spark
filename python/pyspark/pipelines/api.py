@@ -35,21 +35,16 @@ def append_flow(
     *,
     target: str,
     name: Optional[str] = None,
-    comment: Optional[str] = None,
     spark_conf: Optional[Dict[str, str]] = None,
-    once: bool = False,
 ) -> Callable[[QueryFunction], None]:
     """
     Return a decorator on a query function to define a flow in a pipeline.
 
     :param name: The name of the flow. If unspecified, the query function's name will be used.
     :param target: The name of the dataset this flow writes to. Must be specified.
-    :param comment: Description of the flow. If unspecified, the dataset's comment will be used.
     :param spark_conf: A dict whose keys are the conf names and values are the conf values. \
         These confs will be set when the flow is executed; they can override confs set for the \
         destination, for the pipeline, or on the cluster.
-    :param once: If True, indicates this flow should run only once. (It will be rerun upon a full \
-        refresh operation.)
     """
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
@@ -69,7 +64,6 @@ def append_flow(
             target=target,
             spark_conf=spark_conf,
             source_code_location=source_code_location,
-            once=once,
             func=func,
         )
         get_active_graph_element_registry().register_flow(flow)
@@ -179,7 +173,6 @@ def table(
                 target=resolved_name,
                 spark_conf=spark_conf or {},
                 source_code_location=source_code_location,
-                once=False,
                 func=decorated,
             )
         )
@@ -282,7 +275,6 @@ def materialized_view(
                 target=resolved_name,
                 spark_conf=spark_conf or {},
                 source_code_location=source_code_location,
-                once=False,
                 func=decorated,
             )
         )
@@ -373,7 +365,6 @@ def temporary_view(
                 spark_conf=spark_conf or {},
                 name=resolved_name,
                 source_code_location=source_code_location,
-                once=False,
             )
         )
 
@@ -409,7 +400,6 @@ def create_streaming_table(
     name: str,
     *,
     comment: Optional[str] = None,
-    spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
@@ -423,9 +413,6 @@ def create_streaming_table(
 
     :param name: The name of the table.
     :param comment: Description of the table.
-    :param spark_conf: A dict whose keys are the conf names and values are the conf values. \
-        These confs will be set when the query for the dataset is executed and they can override \
-        confs set for the pipeline or on the cluster.
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.

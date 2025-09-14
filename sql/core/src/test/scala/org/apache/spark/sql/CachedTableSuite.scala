@@ -19,15 +19,13 @@ package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 
-import org.apache.commons.io.FileUtils
-
-import org.apache.spark.CleanerListener
+import org.apache.spark.{CleanerListener, SparkRuntimeException}
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
@@ -182,7 +180,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("too big for memory") {
     withTempView("bigData") {
-      val data = "*" * 1000
+      val data = "*".repeat(1000)
       sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
         .createOrReplaceTempView("bigData")
       spark.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
@@ -1405,7 +1403,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         .filter(_.startsWith("Location:"))
         .head
         .replace("Location: file:", "")
-      FileUtils.copyDirectory(
+      Utils.copyDirectory(
         new File(part0Loc),
         new File(part0Loc.replace("part=0", "part=1")))
 
@@ -1792,6 +1790,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
+  test("SPARK-52692: Support cache/uncache table with Time type") {
+    val tableName = "timeCache"
+    withTable(tableName) {
+      sql(s"CACHE TABLE $tableName AS SELECT TIME'22:00:00'")
+      checkAnswer(spark.table(tableName), Row(LocalTime.parse("22:00:00")))
+      spark.table(tableName).queryExecution.withCachedData.collect {
+        case cached: InMemoryRelation =>
+          assert(cached.stats.sizeInBytes === 8)
+      }
+      sql(s"UNCACHE TABLE $tableName")
+    }
+  }
+
   Seq(true, false).foreach { callerEnableAQE =>
     test(s"SPARK-49982: AQE negative caching with in memory table cache - callerEnableAQE=" +
       callerEnableAQE) {
@@ -1831,6 +1842,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           }
         }
       }
+    }
+  }
+
+  test("SPARK-52684: Atomicity of cache table on error") {
+    withTempView("SPARK_52684") {
+      intercept[SparkRuntimeException] {
+        spark.sql("CACHE TABLE SPARK_52684 AS SELECT raise_error('SPARK-52684') AS c1")
+      }
+      assert(!spark.catalog.tableExists("SPARK_52684"))
     }
   }
 }

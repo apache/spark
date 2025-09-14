@@ -40,13 +40,15 @@ import org.apache.spark.util.ArrayImplicits._
  * @since 1.3.0
  */
 @Stable
-sealed class Metadata private[types] (
-    private[types] val map: Map[String, Any],
-    @transient private[types] val runtimeMap: Map[String, Any])
+@SerialVersionUID(-3987058932362209243L)
+sealed class Metadata private[types] (private[types] val map: Map[String, Any])
     extends Serializable {
 
+  @transient private[types] var runtimeMap: Map[String, Any] = _
+  private[types] def setRuntimeMap(map: Map[String, Any]): Unit = runtimeMap = map
+
   /** No-arg constructor for kryo. */
-  protected def this() = this(null, null)
+  protected def this() = this(null)
 
   /** Tests whether this Metadata contains a binding for a key. */
   def contains(key: String): Boolean = map.contains(key)
@@ -137,7 +139,7 @@ sealed class Metadata private[types] (
 @Stable
 object Metadata {
 
-  private[this] val _empty = new Metadata(Map.empty, Map.empty)
+  private[this] val _empty = new Metadata(Map.empty)
 
   /** Returns an empty Metadata. */
   def empty: Metadata = _empty
@@ -305,7 +307,16 @@ class MetadataBuilder {
 
   /** Builds the [[Metadata]] instance. */
   def build(): Metadata = {
-    new Metadata(map.toMap, runtimeMap.toMap)
+    if (map.isEmpty && runtimeMap.isEmpty) {
+      // Save some memory when the metadata is empty
+      Metadata.empty
+    } else {
+      val metadata = new Metadata(map.toMap)
+      if (runtimeMap.nonEmpty) {
+        metadata.setRuntimeMap(runtimeMap.toMap)
+      }
+      metadata
+    }
   }
 
   private def put(key: String, value: Any): this.type = {

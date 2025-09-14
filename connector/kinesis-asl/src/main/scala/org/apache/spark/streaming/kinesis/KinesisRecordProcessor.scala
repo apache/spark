@@ -26,7 +26,7 @@ import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{KINESIS_REASON, RETRY_INTERVAL, SHARD_ID, WORKER_URL}
 
 /**

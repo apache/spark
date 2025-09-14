@@ -27,7 +27,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.common.DatasetType
 import org.apache.spark.sql.pipelines.util.{
   BatchReadOptions,
@@ -114,8 +114,7 @@ sealed trait TableInput extends Input {
  *                       path (if not defined, we will normalize a managed storage path for it).
  * @param properties Table Properties to set in table metadata.
  * @param comment User-specified comment that can be placed on the table.
- * @param isStreamingTableOpt if the table is a streaming table, will be None until we have resolved
- *                            flows into table
+ * @param isStreamingTable if the table is a streaming table, as defined by the source code.
  */
 case class Table(
     identifier: TableIdentifier,
@@ -125,7 +124,7 @@ case class Table(
     properties: Map[String, String] = Map.empty,
     comment: Option[String],
     baseOrigin: QueryOrigin,
-    isStreamingTableOpt: Option[Boolean],
+    isStreamingTable: Boolean,
     format: Option[String]
 ) extends TableInput
     with Output {
@@ -161,17 +160,6 @@ case class Table(
       throw GraphErrors.unresolvedTablePath(identifier)
     }
     normalizedPath.get
-  }
-
-  /**
-   * Tell if a table is a streaming table or not. This property is not set until we have resolved
-   * the flows into the table. The exception reminds engineers that they cant call at random time.
-   */
-  def isStreamingTable: Boolean = isStreamingTableOpt.getOrElse {
-    throw new IllegalStateException(
-      "Cannot identify whether the table is streaming table or not. You may need to resolve the " +
-      "flows into table."
-    )
   }
 
   /**

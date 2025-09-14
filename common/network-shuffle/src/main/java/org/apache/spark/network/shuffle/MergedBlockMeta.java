@@ -20,8 +20,8 @@ package org.apache.spark.network.shuffle;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
-import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.roaringbitmap.RoaringBitmap;
@@ -43,7 +43,7 @@ public class MergedBlockMeta {
 
   public MergedBlockMeta(int numChunks, ManagedBuffer chunksBitmapBuffer) {
     this.numChunks = numChunks;
-    this.chunksBitmapBuffer = Preconditions.checkNotNull(chunksBitmapBuffer);
+    this.chunksBitmapBuffer = Objects.requireNonNull(chunksBitmapBuffer);
   }
 
   public int getNumChunks() {

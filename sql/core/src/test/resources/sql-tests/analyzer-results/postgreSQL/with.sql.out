@@ -325,7 +325,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`department`, false
 INSERT INTO department VALUES (0, NULL, 'ROOT')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, cast(col2#x as int) AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -333,7 +333,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (1, 0, 'A')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -341,7 +341,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (2, 1, 'B')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -349,7 +349,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (3, 2, 'C')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -357,7 +357,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (4, 2, 'D')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -365,7 +365,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (5, 0, 'E')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -373,7 +373,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (6, 4, 'F')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -381,7 +381,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (7, 5, 'G')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -774,7 +774,7 @@ VALUES (1, NULL), (2, 1), (3,1), (4,2), (5,2), (6,2), (7,3), (8,3),
        (9,4), (10,4), (11,7), (12,7), (13,7), (14, 9), (15,11), (16,11)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tree, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/tree], Append, `spark_catalog`.`default`.`tree`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tree), [id, parent_id]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_id#x]
++- Project [col1#x AS id#x, col2#x AS parent_id#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -902,7 +902,7 @@ insert into graph values
 	(5, 1, 'arc 5 -> 1')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/graph, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/graph], Append, `spark_catalog`.`default`.`graph`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/graph), [f, t, label]
-+- Project [cast(col1#x as int) AS f#x, cast(col2#x as int) AS t#x, cast(col3#x as string) AS label#x]
++- Project [col1#x AS f#x, col2#x AS t#x, col3#x AS label#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -1111,7 +1111,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`y`, false
 INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 10))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/y, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/y], Append, `spark_catalog`.`default`.`y`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/y), [a]
-+- Project [cast(col#x as int) AS a#x]
++- Project [col#x AS a#x]
    +- Project [col#x]
       +- Generate explode(sequence(1, 10, None, Some(America/Los_Angeles))), false, [col#x]
          +- OneRowRelation
@@ -1183,20 +1183,10 @@ org.apache.spark.sql.AnalysisException
 WITH RECURSIVE x(n) AS (SELECT n FROM x UNION ALL SELECT 1)
 	SELECT * FROM x
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`n`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 32,
-    "stopIndex" : 32,
-    "fragment" : "n"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 
@@ -1210,7 +1200,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`y`, false
 INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 10))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/y, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/y], Append, `spark_catalog`.`default`.`y`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/y), [a]
-+- Project [cast(col#x as int) AS a#x]
++- Project [col#x AS a#x]
    +- Project [col#x]
       +- Generate explode(sequence(1, 10, None, Some(America/Los_Angeles))), false, [col#x]
          +- OneRowRelation
@@ -1670,15 +1660,8 @@ SELECT * FROM outermost ORDER BY 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 185,
-    "fragment" : "WITH RECURSIVE outermost(x) AS (\n  WITH innermost as (SELECT 2 FROM outermost) -- fail\n    SELECT * FROM innermost\n    UNION SELECT * from outermost\n)\nSELECT * FROM outermost ORDER BY 1"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 
@@ -1719,7 +1702,7 @@ TruncateTableCommand `spark_catalog`.`default`.`y`
 INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 3))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/y, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/y], Append, `spark_catalog`.`default`.`y`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/y), [a]
-+- Project [cast(col#x as int) AS a#x]
++- Project [col#x AS a#x]
    +- Project [col#x]
       +- Generate explode(sequence(1, 3, None, Some(America/Los_Angeles))), false, [col#x]
          +- OneRowRelation
@@ -1773,7 +1756,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`parent`, false
 INSERT INTO parent VALUES ( 1, 'p1' )
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/parent, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/parent], Append, `spark_catalog`.`default`.`parent`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/parent), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS val#x]
++- Project [col1#x AS id#x, col2#x AS val#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -1876,7 +1859,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`test`, false
 with test as (select 42) insert into test select * from test
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/test], Append, `spark_catalog`.`default`.`test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test), [i]
-+- Project [cast(42#x as int) AS i#x]
++- Project [42#x AS i#x]
    +- WithCTE
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias test

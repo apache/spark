@@ -16,6 +16,7 @@
  */
 
 import java.io._
+import java.lang.{Runtime => JRuntime}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.util.Locale
@@ -58,10 +59,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, variant, pipelines, _*
+    commonUtils, commonUtilsJava, variant, pipelines, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "variant", "pipelines"
+    "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
@@ -98,6 +99,30 @@ object SparkBuild extends PomBuild {
   import sbtunidoc.GenJavadocPlugin
   import sbtunidoc.GenJavadocPlugin.autoImport._
   import scala.collection.mutable.Map
+
+  lazy val checkJavaVersion = taskKey[Unit]("Check Java Version")
+  lazy val checkJavaVersionSettings: Seq[Setting[?]] = Seq(
+    checkJavaVersion := {
+      val currentVersion = JRuntime.version()
+      val currentVersionFeature = currentVersion.feature()
+      val currentVersionUpdate = currentVersion.update()
+      val minimumVersion = JRuntime.Version.parse(
+        SbtPomKeys.effectivePom.value.getProperties
+          .get("java.minimum.version").asInstanceOf[String])
+      val minimumVersionFeature = minimumVersion.feature()
+      val minimumVersionUpdate = minimumVersion.update()
+      val isCompatible = currentVersionFeature > minimumVersionFeature ||
+        (currentVersionFeature == minimumVersionFeature &&
+          currentVersionUpdate >= minimumVersionUpdate)
+      if (!isCompatible) {
+        throw new MessageOnlyException(
+          "The Java version used to build the project is outdated. " +
+            s"Please use Java $minimumVersion or later.")
+      }
+    },
+    (Compile / compile) := ((Compile / compile) dependsOn checkJavaVersion).value,
+    (Test / compile) := ((Test / compile) dependsOn checkJavaVersion).value
+  )
 
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
@@ -261,7 +286,8 @@ object SparkBuild extends PomBuild {
 
   val noLintOnCompile = sys.env.contains("NOLINT_ON_COMPILE") &&
       !sys.env.get("NOLINT_ON_COMPILE").contains("false")
-  lazy val sharedSettings = sparkGenjavadocSettings ++
+  lazy val sharedSettings = checkJavaVersionSettings ++
+                            sparkGenjavadocSettings ++
                             compilerWarningSettings ++
       (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
     (Compile / exportJars) := true,
@@ -374,7 +400,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
-      connectClient, variant, connectShims, profiler
+      connectClient, variant, connectShims, profiler, commonUtilsJava
     ).contains(x)
   }
 
@@ -1079,6 +1105,7 @@ object ExcludedDependencies {
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "ch.qos.logback"),
+      ExclusionRule("org.slf4j", "slf4j-simple"),
       ExclusionRule("javax.servlet", "javax.servlet-api"))
   )
 }
@@ -1517,6 +1544,9 @@ object CopyDependencies {
       val fid = (LocalProject("connect") / assembly).value
       val fidClient = (LocalProject("connect-client-jvm") / assembly).value
       val fidProtobuf = (LocalProject("protobuf") / assembly).value
+      val noProvidedSparkJars: Boolean = sys.env.getOrElse("NO_PROVIDED_SPARK_JARS", "1") == "1" ||
+        sys.env.getOrElse("NO_PROVIDED_SPARK_JARS", "true")
+          .toLowerCase(Locale.getDefault()) == "true"
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1527,17 +1557,18 @@ object CopyDependencies {
             destJar.delete()
           }
 
-          if (jar.getName.contains("spark-connect-common") &&
-            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+          if (jar.getName.contains("spark-connect-common")) {
             // Don't copy the spark connect common JAR as it is shaded in the spark connect.
           } else if (jar.getName.contains("connect-client-jvm")) {
             // Do not place Spark Connect client jars as it is not built-in.
-          } else if (jar.getName.contains("spark-connect") &&
-            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+          } else if (noProvidedSparkJars && jar.getName.contains("spark-avro")) {
+            // Do not place Spark Avro jars as it is not built-in.
+          } else if (jar.getName.contains("spark-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
-          } else if (jar.getName.contains("spark-protobuf") &&
-            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
-            Files.copy(fidProtobuf.toPath, destJar.toPath)
+          } else if (jar.getName.contains("spark-protobuf")) {
+            if (!noProvidedSparkJars) {
+              Files.copy(fidProtobuf.toPath, destJar.toPath)
+            }
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }
@@ -1652,6 +1683,7 @@ object TestSettings {
     (Test / javaOptions) ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
+    (Test / javaOptions) += s"-XX:ErrorFile=${baseDirectory.value}/target/hs_err_pid%p.log",
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
       val heapSize = sys.env.get("HEAP_SIZE").getOrElse("4g")

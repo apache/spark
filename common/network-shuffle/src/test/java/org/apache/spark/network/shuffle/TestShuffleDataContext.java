@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Files;
 
 import com.google.common.io.Closeables;
 
@@ -54,7 +55,7 @@ public class TestShuffleDataContext {
       localDirs[i] = JavaUtils.createDirectory(root, "spark").getAbsolutePath();
 
       for (int p = 0; p < subDirsPerLocalDir; p ++) {
-        new File(localDirs[i], String.format("%02x", p)).mkdirs();
+        Files.createDirectories(new File(localDirs[i], String.format("%02x", p)).toPath());
       }
     }
   }

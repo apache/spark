@@ -377,6 +377,19 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
             infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR
         )
 
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_negative_with_arrow_udf(self):
+        import pyarrow as pa
+
+        with self.assertRaisesRegex(
+            Exception,
+            "Unsupported signature:.*pyarrow.lib.Array.",
+        ):
+
+            @pandas_udf("long")
+            def multiply_arrow(a: pa.Array, b: pa.Array) -> pa.Array:
+                return pa.compute.multiply(a, b)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.pandas.test_pandas_udf_typehints import *  # noqa: #401

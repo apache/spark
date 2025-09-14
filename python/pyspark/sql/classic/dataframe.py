@@ -207,7 +207,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         except Exception as e:
             raise PySparkValueError(
                 errorClass="CANNOT_PARSE_DATATYPE",
-                messageParameters={"error": str(e)},
+                messageParameters={"msg": str(e)},
             )
 
     def printSchema(self, level: Optional[int] = None) -> None:

@@ -221,4 +221,19 @@ object SQLMetrics {
         SparkListenerDriverAccumUpdates(executionId.toLong, metrics.map(m => m.id -> m.value)))
     }
   }
+
+  /**
+   * Measures the time taken by the function `f` in nanoseconds and adds it to the provided metric.
+   *
+   * @param metric SQLMetric to record the time taken.
+   * @param f Function/Codeblock to execute and measure.
+   * @return The result of the function `f`.
+   */
+  def withTimingNs[T](metric: SQLMetric)(f: => T): T = {
+      val startTime = System.nanoTime()
+      val result = f
+      val endTime = System.nanoTime()
+      metric.add(endTime - startTime)
+      result
+  }
 }

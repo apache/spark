@@ -40,7 +40,7 @@ class SizeTrackerSuite extends SparkFunSuite {
   test("vector variable size insertions") {
     val rand = new Random(123456789)
     def randString(minLen: Int, maxLen: Int): String = {
-      "a" * (rand.nextInt(maxLen - minLen) + minLen)
+      "a".repeat(rand.nextInt(maxLen - minLen) + minLen)
     }
     testVector[String](10000, i => randString(0, 10))
     testVector[String](10000, i => randString(0, 100))
@@ -56,7 +56,7 @@ class SizeTrackerSuite extends SparkFunSuite {
   test("map variable size insertions") {
     val rand = new Random(123456789)
     def randString(minLen: Int, maxLen: Int): String = {
-      "a" * (rand.nextInt(maxLen - minLen) + minLen)
+      "a".repeat(rand.nextInt(maxLen - minLen) + minLen)
     }
     testMap[Int, String](10000, i => (i, randString(0, 10)))
     testMap[Int, String](10000, i => (i, randString(0, 100)))
@@ -66,7 +66,7 @@ class SizeTrackerSuite extends SparkFunSuite {
   test("map updates") {
     val rand = new Random(123456789)
     def randString(minLen: Int, maxLen: Int): String = {
-      "a" * (rand.nextInt(maxLen - minLen) + minLen)
+      "a".repeat(rand.nextInt(maxLen - minLen) + minLen)
     }
     testMap[String, Int](10000, i => (randString(0, 10000), i))
   }

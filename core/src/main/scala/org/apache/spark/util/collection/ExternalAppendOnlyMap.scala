@@ -29,7 +29,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager}

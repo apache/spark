@@ -99,7 +99,7 @@ class HiveIncompatibleColTypeChangeSuite extends SparkFunSuite with TestHiveSing
     spark.sql(createTableStmt)
     val oldTable = catalog.getTable("default", tableName)
     catalog.createTable(oldTable, true)
-    catalog.alterTableDataSchema("default", tableName, updatedSchema)
+    catalog.alterTableSchema("default", tableName, updatedSchema)
 
     val updatedTable = catalog.getTable("default", tableName)
     assert(updatedTable.schema.fieldNames === updatedSchema.fieldNames)

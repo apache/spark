@@ -400,9 +400,17 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 # Check query terminated with exception
                 from pyspark.sql.functions import col, udf
 
+                start_event = None
+                progress_event = None
+                terminated_event = None
                 bad_udf = udf(lambda x: 1 / 0)
                 q = df.select(bad_udf(col("value"))).writeStream.format("noop").start()
-                time.sleep(5)
+                wait_count = 0
+                while terminated_event is None:
+                    time.sleep(0.5)
+                    wait_count = wait_count + 1
+                    if wait_count > 100:
+                        self.fail("Not getting terminated event after 50 seconds")
                 q.stop()
                 self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty()
                 self.check_terminated_event(terminated_event, "ZeroDivisionError")

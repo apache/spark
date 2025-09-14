@@ -37,7 +37,7 @@ import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -52,8 +52,9 @@ import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{CallerContext, Clock, JsonProtocol, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{CallerContext, Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils.stringToSeq
 import org.apache.spark.util.kvstore._
 
 /**
@@ -306,6 +307,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .index("endTime").reverse())(_.toApplicationInfo()).iterator
   }
 
+  override def getListing(max: Int)(
+      predicate: ApplicationInfo => Boolean): Iterator[ApplicationInfo] = {
+    // Return the filtered listing in end time descending order.
+    KVUtils.mapToSeqWithFilter(
+      listing.view(classOf[ApplicationInfoWrapper]).index("endTime").reverse(),
+      max)(_.toApplicationInfo())(predicate).iterator
+  }
+
   override def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     try {
       Some(load(appId).toApplicationInfo())
@@ -319,17 +328,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getLastUpdatedTime(): Long = lastScanTime.get()
 
-  /**
-   * Split a comma separated String, filter out any empty items, and return a Sequence of strings
-   */
-  private def stringToSeq(list: String): Seq[String] = {
-    list.split(',').map(_.trim).filter(_.nonEmpty).toImmutableArraySeq
-  }
-
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
+    val logPath = RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX +
+        EventLogFileWriter.nameForAppAndAttempt(appId, attemptId)
     val app = try {
       load(appId)
      } catch {
+      case _: NoSuchElementException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
+        loadFromFallbackLocation(appId, attemptId, logPath)
       case _: NoSuchElementException =>
         return None
     }
@@ -351,6 +357,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           createInMemoryStore(attempt)
       }
     } catch {
+      case _: FileNotFoundException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
+        if (app.attempts.head.info.appSparkVersion == "unknown") {
+          listing.synchronized {
+            listing.delete(classOf[ApplicationInfoWrapper], appId)
+          }
+        }
+        return None
       case _: FileNotFoundException =>
         return None
     }
@@ -368,6 +381,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     Some(loadedUI)
+  }
+
+  private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
+    : ApplicationInfoWrapper = {
+    val date = new Date(0)
+    val lastUpdate = new Date()
+    val info = ApplicationAttemptInfo(
+      attemptId, date, date, lastUpdate, 0, "spark", false, "unknown")
+    addListing(new ApplicationInfoWrapper(
+      ApplicationInfo(appId, appId, None, None, None, None, List.empty),
+      List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None))))
+    load(appId)
   }
 
   override def getEmptyListingHtml(): Seq[Node] = {
@@ -802,7 +827,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val shouldHalt = enableOptimizations &&
       ((!appCompleted && fastInProgressParsing) || reparseChunkSize > 0)
 
-    val bus = new ReplayListenerBus(new JsonProtocol(conf))
+    val bus = new ReplayListenerBus()
     val listener = new AppListingListener(reader, clock, shouldHalt)
     bus.addListener(listener)
 
@@ -1119,7 +1144,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // to parse the event logs in the SHS.
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
     val trackingStore = new ElementTrackingStore(store, replayConf)
-    val replayBus = new ReplayListenerBus(new JsonProtocol(conf))
+    val replayBus = new ReplayListenerBus()
     val listener = new AppStatusListener(trackingStore, replayConf, false,
       lastUpdateTime = Some(lastUpdated))
     replayBus.addListener(listener)

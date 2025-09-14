@@ -145,7 +145,7 @@ public class HiveServer2 extends CompositeService {
           throw new Error("Max start attempts " + maxAttempts + " exhausted", throwable);
         } else {
           LOG.warn("Error starting HiveServer2 on attempt {}, will retry in 60 seconds",
-            throwable, MDC.of(LogKeys.NUM_RETRY$.MODULE$, attempts));
+            throwable, MDC.of(LogKeys.NUM_RETRY, attempts));
           try {
             Thread.sleep(60L * 1000L);
           } catch (InterruptedException e) {

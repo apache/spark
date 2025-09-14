@@ -174,6 +174,13 @@
       "`<func_name>` does not allow a Column in a list."
     ]
   },
+  "CONFLICTING_PIPELINE_REFRESH_OPTIONS" : {
+    "message" : [
+      "--full-refresh-all option conflicts with <conflicting_option>",
+      "The --full-refresh-all option performs a full refresh of all datasets, ",
+      "so specifying individual datasets with <conflicting_option> is not allowed."
+    ]
+  },
   "CONNECT_URL_ALREADY_DEFINED": {
     "message": [
       "Only one Spark Connect client URL can be set; however, got a different URL [<new_url>] from the existing [<existing_url>]."
@@ -375,6 +382,11 @@
   "INVALID_ARROW_UDTF_RETURN_TYPE": {
     "message": [
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
+    ]
+  },
+  "INVALID_ARROW_UDTF_WITH_ANALYZE": {
+    "message": [
+      "The arrow UDTF '<name>' is invalid. Arrow UDTFs do not support the 'analyze' method. Please remove the 'analyze' method from '<name>' and specify a returnType instead."
     ]
   },
   "INVALID_BROADCAST_OPERATION": {
@@ -884,6 +896,11 @@
       "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
     ]
   },
+  "PIPELINE_SPEC_MISSING_REQUIRED_FIELD": {
+    "message": [
+      "Pipeline spec missing required field `<field_name>`."
+    ]
+  },
   "PIPELINE_SPEC_UNEXPECTED_FIELD": {
     "message": [
       "Pipeline spec field `<field_name>` is unexpected."
@@ -950,6 +967,11 @@
       "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
     ]
   },
+  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF": {
+    "message": [
+      "Column names of the returned pyarrow.Table or pyarrow.RecordBatch do not match specified schema. Expected: <expected> Actual: <actual>"
+    ]
+  },
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF": {
     "message": [
       "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>"
@@ -970,14 +992,14 @@
       "Columns do not match in their data type: <mismatch>."
     ]
   },
-  "RETRIES_EXCEEDED": {
-    "message": [
-      "The maximum number of retries has been exceeded."
-    ]
-  },
   "REUSE_OBSERVATION": {
     "message": [
       "An Observation can be used with a DataFrame only once."
+    ]
+  },
+  "SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF": {
+    "message": [
+      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
     ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
@@ -989,6 +1011,73 @@
     "message": [
       "Cannot start a remote Spark session because there is a regular Spark session already running."
     ]
+  },
+  "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE": {
+    "message": [
+      "Session mutation <method> is not allowed in declarative pipelines."
+    ],
+    "sub_class": {
+      "SET_RUNTIME_CONF": {
+        "message": [
+          "Instead set configuration via the pipeline spec or use the 'spark_conf' argument in various decorators."
+        ]
+      },
+      "SET_CURRENT_CATALOG": {
+        "message": [
+          "Instead set catalog via the pipeline spec or the 'name' argument on the dataset decorators."
+        ]
+      },
+      "SET_CURRENT_DATABASE": {
+        "message": [
+          "Instead set database via the pipeline spec or the 'name' argument on the dataset decorators."
+        ]
+      },
+      "DROP_TEMP_VIEW": {
+        "message": [
+          "Instead remove the temporary view definition directly."
+        ]
+      },
+      "DROP_GLOBAL_TEMP_VIEW": {
+        "message": [
+          "Instead remove the temporary view definition directly."
+        ]
+      },
+      "CREATE_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "CREATE_OR_REPLACE_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "CREATE_GLOBAL_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "CREATE_OR_REPLACE_GLOBAL_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "REGISTER_UDF": {
+        "message": [
+          ""
+        ]
+      },
+      "REGISTER_JAVA_UDF": {
+        "message": [
+          ""
+        ]
+      },
+      "REGISTER_JAVA_UDAF": {
+        "message": [
+          ""
+        ]
+      }
+    }
   },
   "SESSION_NEED_CONN_STR_OR_BUILDER": {
     "message": [
@@ -1062,7 +1151,7 @@
   },
   "UDTF_ARROW_TYPE_CONVERSION_ERROR": {
     "message": [
-      "Cannot convert the output value of the input '<data>' with type '<schema>' to the specified return type of the column: '<arrow_schema>'. Please check if the data types match and try again."
+      "PyArrow UDTF must return an iterator of pyarrow.Table or pyarrow.RecordBatch objects."
     ]
   },
   "UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD": {

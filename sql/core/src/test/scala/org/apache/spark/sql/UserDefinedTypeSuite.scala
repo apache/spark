@@ -22,7 +22,7 @@ import java.util.Arrays
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, ExpressionEvalHelper, Literal, SpecificInternalRow}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -310,6 +310,31 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
           checkAnswer(df, Row(1.0) :: Row(0.0) :: Nil)
         }
       }
+    }
+  }
+
+  test("SPARK-52666: Map UDT to correct MutableValue in SpecificInternalRow") {
+    val udt = new YearUDT()
+    val row = new SpecificInternalRow(Seq(udt))
+    row.setInt(0, udt.serialize(Year.of(2018)))
+    assert(row.getInt(0) == 2018)
+  }
+
+  test("SPARK-52694: Add Encoders#udt") {
+    val udt = new YearUDT()
+    implicit val yearEncoder: Encoder[Year] = Encoders.udt(udt)
+    val ds = spark.createDataset(Seq(Year.of(2018), Year.of(2019)))
+    assert(ds.schema.head.dataType == udt)
+    checkAnswer(ds.toDF("year"), Seq(Row(Year.of(2018)), Row(Year.of(2019))))
+    checkDataset(
+      spark.range(10).map(i => Year.of(i.toInt + 2018)),
+      (0 to 9).map(i => Year.of(i + 2018)): _*)
+  }
+
+  test("SPARK-53518: No truncation for catalogString of User Defined Type") {
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "3") {
+      val string = new ExampleIntRowUDT(4).catalogString
+      assert(string == "struct<col0:int,col1:int,col2:int,col3:int>")
     }
   }
 }

@@ -19,11 +19,10 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 import java.net.URI
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 
 import scala.jdk.CollectionConverters._
-
-import com.google.common.io.{Files, FileWriteMode}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
@@ -31,7 +30,7 @@ import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{DRIVER_RESOURCES_FILE, SPARK_DRIVER_PREFIX}
 import org.apache.spark.internal.config.UI.UI_REVERSE_PROXY
@@ -145,7 +144,7 @@ private[deploy] class DriverRunner(
    */
   private def createWorkingDirectory(): File = {
     val driverDir = new File(workDir, driverId)
-    if (!driverDir.exists() && !driverDir.mkdirs()) {
+    if (!driverDir.exists() && !Utils.createDirectory(driverDir)) {
       throw new IOException("Failed to create directory " + driverDir)
     }
     driverDir
@@ -215,8 +214,8 @@ private[deploy] class DriverRunner(
       val stderr = new File(baseDir, "stderr")
       val redactedCommand = Utils.redactCommandLineArgs(conf, builder.command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
-      val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=" * 40)
-      Files.asCharSink(stderr, StandardCharsets.UTF_8, FileWriteMode.APPEND).write(header)
+      val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=".repeat(40))
+      Files.writeString(stderr.toPath, header, StandardOpenOption.APPEND)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)

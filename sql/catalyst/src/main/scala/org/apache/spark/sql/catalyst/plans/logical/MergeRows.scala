@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, Unevaluable}
-import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Instruction, ROW_ID}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -88,19 +87,14 @@ object MergeRows {
     override def dataType: DataType = NullType
   }
 
-  // A special case of Keep where the row is kept as is.
-  case class Copy(output: Seq[Expression]) extends Instruction  {
-    override def condition: Expression = TrueLiteral
-    override def outputs: Seq[Seq[Expression]] = Seq(output)
-    override def children: Seq[Expression] = output
-
-    override protected def withNewChildrenInternal(
-        newChildren: IndexedSeq[Expression]): Expression = {
-      copy(output = newChildren)
-    }
-  }
+  sealed trait Context
+  case object Copy extends Context
+  case object Delete extends Context
+  case object Insert extends Context
+  case object Update extends Context
 
   case class Keep(
+      context: Context,
       condition: Expression,
       output: Seq[Expression])
     extends Instruction {

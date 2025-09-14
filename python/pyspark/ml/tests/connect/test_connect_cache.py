@@ -51,6 +51,9 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         # the `model._summary` holds another ref to the remote model.
         assert model._java_obj._ref_count == 2
 
+        model_size = spark.client._query_model_size(model._java_obj.ref_id)
+        assert isinstance(model_size, int) and model_size > 0
+
         model2 = model.copy()
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 1)

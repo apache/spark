@@ -382,8 +382,8 @@ private[sql] object SparkResult {
     values.sizeHint(metric.getKeysCount)
     (0 until metric.getKeysCount).foreach { i =>
       val key = metric.getKeys(i)
-      val value = LiteralValueProtoConverter.toCatalystValue(metric.getValues(i))
-      schema = schema.add(key, LiteralValueProtoConverter.toDataType(value.getClass))
+      val value = LiteralValueProtoConverter.toScalaValue(metric.getValues(i))
+      schema = schema.add(key, LiteralValueProtoConverter.getDataType(metric.getValues(i)))
       values += value
     }
     new GenericRowWithSchema(values.result(), schema)

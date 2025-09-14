@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.Partition
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLAUSES, LOWER_BOUND, NEW_VALUE, NUM_PARTITIONS, OLD_VALUE, UPPER_BOUND}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -48,6 +49,9 @@ private[sql] case class JDBCPartitioningInfo(
     numPartitions: Int)
 
 private[sql] object JDBCRelation extends Logging {
+
+  val schemaFetchName = "Remote JDBC schema fetch time"
+  val schemaFetchKey = "remoteSchemaFetchTime"
   /**
    * Given a partitioning schematic (a column of integral type, a number of
    * partitions, and upper and lower bounds on the column's value), generate
@@ -255,15 +259,20 @@ private[sql] object JDBCRelation extends Logging {
       parts: Array[Partition],
       jdbcOptions: JDBCOptions)(
       sparkSession: SparkSession): JDBCRelation = {
-    val schema = JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
-    JDBCRelation(schema, parts, jdbcOptions)(sparkSession)
+    val remoteSchemaFetchMetric = JdbcUtils.createSchemaFetchMetric(sparkSession.sparkContext)
+    val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
+      JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
+    }
+    JDBCRelation(schema, parts, jdbcOptions,
+      Map(schemaFetchKey -> remoteSchemaFetchMetric))(sparkSession)
   }
 }
 
 private[sql] case class JDBCRelation(
     override val schema: StructType,
     parts: Array[Partition],
-    jdbcOptions: JDBCOptions)(@transient val sparkSession: SparkSession)
+    jdbcOptions: JDBCOptions,
+    additionalMetrics: Map[String, SQLMetric] = Map())(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
@@ -296,7 +305,8 @@ private[sql] case class JDBCRelation(
       requiredColumns,
       pushedPredicates,
       parts,
-      jdbcOptions).asInstanceOf[RDD[Row]]
+      jdbcOptions,
+      additionalMetrics = additionalMetrics).asInstanceOf[RDD[Row]]
   }
 
   def buildScan(
@@ -321,7 +331,8 @@ private[sql] case class JDBCRelation(
       tableSample,
       limit,
       sortOrders,
-      offset).asInstanceOf[RDD[Row]]
+      offset,
+      additionalMetrics).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

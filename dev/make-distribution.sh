@@ -133,7 +133,7 @@ if [ $(command -v git) ]; then
     unset GITREV
 fi
 
-if [ "$SBT_ENABLED" == "true" && ! "$(command -v "$SBT")" ]; then
+if [ "$SBT_ENABLED" == "true" ] && [ ! "$(command -v "$SBT")" ]; then
   echo -e "Could not locate SBT command: '$SBT'."
   echo -e "Specify the SBT command with the --sbt flag"
   exit -1;

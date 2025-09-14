@@ -17,17 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.{
-  FunctionResolution,
-  RelationResolution,
-  UnresolvedRelation
-}
-import org.apache.spark.sql.catalyst.plans.logical.{
-  AnalysisHelper,
-  LogicalPlan,
-  SubqueryAlias,
-  UnresolvedWith
-}
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.{RelationResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{UNRESOLVED_RELATION, UNRESOLVED_WITH}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
@@ -45,9 +37,9 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 class MetadataResolver(
     override val catalogManager: CatalogManager,
     override val relationResolution: RelationResolution,
-    functionResolution: FunctionResolution,
     override val extensions: Seq[ResolverExtension] = Seq.empty)
-    extends RelationMetadataProvider
+    extends SQLConfHelper
+    with RelationMetadataProvider
     with DelegatesResolutionToExtensions {
   override val relationsWithResolvedMetadata = new RelationsWithResolvedMetadata
 

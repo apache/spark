@@ -483,32 +483,33 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val timeZoneId = Option(zid.getId)
         sdf.setTimeZone(TimeZone.getTimeZone(zid))
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2016-01-29 10:00:00.000", sdf, dt),
             Literal(new CalendarInterval(1, 2, 123000L)),
             timeZoneId),
           timestampAnswer("2016-03-02 10:00:00.123", sdf, dt))
 
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             Literal.create(null, dt),
             Literal(new CalendarInterval(1, 2, 123000L)),
             timeZoneId),
           null)
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2016-01-29 10:00:00.000", sdf, dt),
             Literal.create(null, CalendarIntervalType),
             timeZoneId),
           null)
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             Literal.create(null, dt),
             Literal.create(null, CalendarIntervalType),
             timeZoneId),
           null)
         checkConsistencyBetweenInterpretedAndCodegen(
-          (start: Expression, interval: Expression) => TimeAdd(start, interval, timeZoneId),
+          (start: Expression, interval: Expression) =>
+            TimestampAddInterval(start, interval, timeZoneId),
           dt, CalendarIntervalType)
       }
     }
@@ -521,28 +522,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       sdf.setTimeZone(TimeZone.getTimeZone(zid))
 
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
           UnaryMinus(Literal(new CalendarInterval(1, 0, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-29 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
           UnaryMinus(Literal(new CalendarInterval(1, 1, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
           UnaryMinus(Literal(new CalendarInterval(1, 0, 2000000.toLong))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 23:59:59.000").getTime)))
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
           UnaryMinus(Literal(new CalendarInterval(1, 1, 2000000.toLong))),
           timeZoneId),
@@ -550,25 +551,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           new Timestamp(sdf.parse("2016-02-27 23:59:59.000").getTime)))
 
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal.create(null, TimestampType),
           UnaryMinus(Literal(new CalendarInterval(1, 2, 123000L))),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
           UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal.create(null, TimestampType),
           UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
       checkConsistencyBetweenInterpretedAndCodegen((start: Expression, interval: Expression) =>
-        TimeAdd(start, UnaryMinus(interval), timeZoneId),
+        TimestampAddInterval(start, UnaryMinus(interval), timeZoneId),
         TimestampType, CalendarIntervalType)
     }
   }
@@ -1637,7 +1638,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // test overflow for decimal input
     checkExceptionInExpression[ArithmeticException](
-      SecondsToTimestamp(Literal(Decimal("9" * 38))), "Overflow"
+      SecondsToTimestamp(Literal(Decimal("9".repeat(38)))), "Overflow"
     )
     // test truncation error for decimal input
     checkExceptionInExpression[ArithmeticException](
@@ -1800,13 +1801,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val timeZoneId = Option(zid.getId)
         sdf.setTimeZone(TimeZone.getTimeZone(zid))
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2021-01-01 00:00:00.123", sdf, dt),
             Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
             timeZoneId),
           timestampAnswer("2021-01-11 00:10:00.444", sdf, dt))
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2021-01-01 00:10:00.123", sdf, dt),
             Literal(Duration.ofDays(-10).minusMinutes(9).minusMillis(120)),
             timeZoneId),
@@ -1814,7 +1815,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         val e = intercept[Exception] {
           checkEvaluation(
-            TimeAdd(
+            TimestampAddInterval(
               timestampLiteral("2021-01-01 00:00:00.123", sdf, dt),
               Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
               timeZoneId),
@@ -1824,26 +1825,26 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(e.getMessage.contains("long overflow"))
 
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             Literal.create(null, dt),
             Literal(Duration.ofDays(1)),
             timeZoneId),
           null)
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2021-01-01 00:00:00.123", sdf, dt),
             Literal.create(null, DayTimeIntervalType()),
             timeZoneId),
           null)
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             Literal.create(null, dt),
             Literal.create(null, DayTimeIntervalType()),
             timeZoneId),
           null)
         dayTimeIntervalTypes.foreach { it =>
           checkConsistencyBetweenInterpretedAndCodegen((ts: Expression, interval: Expression) =>
-            TimeAdd(ts, interval, timeZoneId), dt, it)
+            TimestampAddInterval(ts, interval, timeZoneId), dt, it)
         }
       }
     }
@@ -2141,14 +2142,138 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("make timestamp_ntz from date and time") {
-    def dateLit(d: String): Expression = Literal(LocalDate.parse(d))
-    def timeLit(t: String): Expression = Literal(LocalTime.parse(t))
-    def tsNtz(s: String): Long = localDateTimeToMicros(LocalDateTime.parse(s), UTC)
+  /**
+   * Helper method to create a DATE literal from a string in date format.
+   */
+  private def dateLit(date: String): Expression = Literal(LocalDate.parse(date))
 
+  /**
+   * Helper method to create a TIME literal from a string in time format.
+   */
+  private def timeLit(time: String): Expression = Literal(LocalTime.parse(time))
+
+  /**
+   * Helper method to get the microseconds from a timestamp represented as a string.
+   */
+  private def timestampToMicros(timestamp: String, zoneId: ZoneId): Long = {
+    localDateTimeToMicros(LocalDateTime.parse(timestamp), zoneId)
+  }
+
+  private val sessionZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+
+  test("SPARK-51415: make timestamp from date") {
+    // Test with valid date.
+    checkEvaluation(
+      MakeTimestampFromDateTime(dateLit("2023-10-01")),
+      timestampToMicros("2023-10-01T00:00:00", sessionZoneId)
+    )
+
+    // Test with null date.
+    checkEvaluation(
+      MakeTimestampFromDateTime(Literal(null, DateType)),
+      null
+    )
+  }
+
+  test("SPARK-51415: make timestamp from date and time") {
+    // Test with valid date and time.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        Some(timeLit("12:34:56.123456"))
+      ),
+      timestampToMicros("2023-10-01T12:34:56.123456", sessionZoneId)
+    )
+
+    // Test with null date.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        Literal(null, DateType),
+        Some(timeLit("12:34:56.123456"))
+      ),
+      null
+    )
+    // Test with null time.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        Some(Literal(null, TimeType()))
+      ),
+      null
+    )
+    // Test with null date and null time.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        Literal(null, DateType),
+        Some(Literal(null, TimeType())
+        )),
+      null
+    )
+  }
+
+  test("SPARK-51415: make timestamp from date, time, and timezone") {
+    Seq(
+      ("-09:30", MIT),
+      ("-08:00", PST),
+      ("+00:00", UTC),
+      ("+01:00", CET),
+      ("+09:00", JST),
+      ("UTC", UTC),
+      ("America/Los_Angeles", LA)
+    ).foreach( { case (tz, zoneId) =>
+      // Test with valid date, time, and timezone.
+      checkEvaluation(
+        MakeTimestampFromDateTime(
+          dateLit("2023-10-01"),
+          Some(timeLit("12:34:56.123456")),
+          Some(Literal(tz))
+        ),
+        timestampToMicros("2023-10-01T12:34:56.123456", zoneId)
+      )
+    })
+
+    // Test with null date.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        Literal(null, DateType),
+        Some(timeLit("12:34:56.123456")),
+        Some(Literal("+00:00"))
+      ),
+      null
+    )
+    // Test with null time.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        Some(Literal(null, TimeType())),
+        Some(Literal("+00:00"))
+      ),
+      null
+    )
+    // Test with null timezone.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        Some(timeLit("12:34:56.123456")),
+        Some(Literal(null, StringType))
+      ),
+      null
+    )
+    // Test with null date and null time.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        Literal(null, DateType),
+        Some(Literal(null, TimeType())),
+        Some(Literal("+00:00"))
+      ),
+      null
+    )
+  }
+
+  test("make timestamp_ntz from date and time") {
     checkEvaluation(MakeTimestampNTZ(dateLit("1970-01-01"), timeLit("00:00:00")), 0L)
     checkEvaluation(MakeTimestampNTZ(dateLit("2025-06-20"), timeLit("15:20:30.123456")),
-      tsNtz("2025-06-20T15:20:30.123456"))
+      timestampToMicros("2025-06-20T15:20:30.123456", UTC))
     checkEvaluation(MakeTimestampNTZ(Literal(null, DateType), timeLit("15:20:30.123456")),
       null)
     checkEvaluation(MakeTimestampNTZ(dateLit("2025-06-20"), Literal(null, TimeType())),

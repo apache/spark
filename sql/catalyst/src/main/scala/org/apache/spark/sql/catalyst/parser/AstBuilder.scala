@@ -22,34 +22,35 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
-import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
-import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
+import org.apache.spark.sql.catalyst.expressions.json.JsonPathParser
+import org.apache.spark.sql.catalyst.expressions.json.PathInstruction.Named
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils, SparkParserUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_BANG_EQUALS_NOT, LEGACY_CONSECUTIVE_STRING_LITERALS}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -128,7 +129,7 @@ class AstBuilder extends DataTypeAstBuilder
    * @return The original input text, including all whitespaces and formatting.
    */
   private def getOriginalText(ctx: ParserRuleContext): String = {
-    SparkParserUtils.source(ctx)
+    source(ctx)
   }
 
   /**
@@ -280,11 +281,15 @@ class AstBuilder extends DataTypeAstBuilder
       parsingCtx: SqlScriptingParsingContext): ExceptionHandler = {
     val exceptionHandlerTriggers = visitConditionValuesImpl(ctx.conditionValues())
 
-    if (Option(ctx.CONTINUE()).isDefined) {
-      throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+    val handlerType = if (Option(ctx.CONTINUE()).isDefined) {
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED)) {
+        throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+      }
+      ExceptionHandlerType.CONTINUE
+    } else {
+      ExceptionHandlerType.EXIT
     }
 
-    val handlerType = ExceptionHandlerType.EXIT
     val body = if (Option(ctx.beginEndCompoundBlock()).isDefined) {
       visitBeginEndCompoundBlockImpl(
         ctx.beginEndCompoundBlock(),
@@ -555,6 +560,7 @@ class AstBuilder extends DataTypeAstBuilder
     val query = withOrigin(queryCtx) {
       SingleStatement(visitQuery(queryCtx))
     }
+    parsingCtx.labelContext.enterForScope(Option(ctx.multipartIdentifier()))
     val varName = Option(ctx.multipartIdentifier()).map(_.getText)
     val body = visitCompoundBodyImpl(
       ctx.compoundBody(),
@@ -562,6 +568,7 @@ class AstBuilder extends DataTypeAstBuilder
       parsingCtx,
       isScope = false
     )
+    parsingCtx.labelContext.exitForScope(Option(ctx.multipartIdentifier()))
     parsingCtx.labelContext.exitLabeledScope(Option(ctx.beginLabel()))
 
     ForStatement(query, varName, body, Some(labelText))
@@ -1145,7 +1152,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Returns the parameters for [[ExecuteImmediateQuery]] logical plan.
+   * Returns the parameters for [[UnresolvedExecuteImmediate]] logical plan.
    * Expected format:
    * {{{
    *   EXECUTE IMMEDIATE {query_string|string_literal}
@@ -1153,11 +1160,8 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitExecuteImmediate(ctx: ExecuteImmediateContext): LogicalPlan = withOrigin(ctx) {
-    // Because of how parsing rules are written, we know that either
-    // queryParam or targetVariable is non null - hence use Either to represent this.
-    val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(string(visitStringLit(sl))))
-    val queryVariable = Option(ctx.queryParam.multipartIdentifier)
-      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+    // With the new grammar, queryParam is now an expression
+    val queryParam = expression(ctx.queryParam)
 
     val targetVars = Option(ctx.targetVariable).toSeq
       .flatMap(v => visitMultipartIdentifierList(v))
@@ -1165,8 +1169,7 @@ class AstBuilder extends DataTypeAstBuilder
       visitExecuteImmediateUsing(_)
     }.getOrElse{ Seq.empty }
 
-
-    ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars)
+    UnresolvedExecuteImmediate(queryParam, exprs, targetVars)
   }
 
   override def visitExecuteImmediateUsing(
@@ -1823,7 +1826,7 @@ class AstBuilder extends DataTypeAstBuilder
             // syntax error here accordingly.
             val error: String = (if (n.name != null) n.name else n.identifierList).getText
             throw new ParseException(
-              command = Some(SparkParserUtils.command(n)),
+              command = Some(command(n)),
               start = Origin(),
               errorClass = "PARSE_SYNTAX_ERROR",
               messageParameters = Map(
@@ -3323,6 +3326,24 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create a [[SemiStructuredExtract]] expression.
+   */
+  override def visitSemiStructuredExtract(
+      ctx: SemiStructuredExtractContext): Expression = withOrigin(ctx) {
+    val field = ctx.path.getText
+    // When `field` starts with a bracket, do not add a `.` as the bracket already implies nesting
+    // Also the bracket will imply case sensitive field extraction.
+    val path = if (field.startsWith("[")) "$" + field else s"$$.$field"
+    val parsedPath = JsonPathParser.parse(path)
+    if (parsedPath.isEmpty) {
+      throw new ParseException(errorClass = "PARSE_SYNTAX_ERROR", ctx = ctx)
+    }
+    val potentialAlias = parsedPath.get.collect { case Named(name) => name }.lastOption
+    val node = SemiStructuredExtract(expression(ctx.col), path)
+    potentialAlias.map { colName => Alias(node, colName)() }.getOrElse(node)
+  }
+
+  /**
    * Create an [[UnresolvedAttribute]] expression or a [[UnresolvedRegex]] if it is a regex
    * quoted in ``
    */
@@ -3622,6 +3643,8 @@ class AstBuilder extends DataTypeAstBuilder
   private def createString(ctx: StringLiteralContext): String = {
     if (conf.escapedStringLiterals) {
       ctx.stringLit.asScala.map(x => stringWithoutUnescape(visitStringLit(x))).mkString
+    } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
+      ctx.stringLit.asScala.map(x => stringIgnoreQuoteQuote(visitStringLit(x))).mkString
     } else {
       ctx.stringLit.asScala.map(x => string(visitStringLit(x))).mkString
     }
@@ -4872,8 +4895,23 @@ class AstBuilder extends DataTypeAstBuilder
             .mkString(", ")
         throw QueryParsingErrors.multiplePrimaryKeysError(ctx, primaryKeyColumns)
       }
+      // If there is a primary key constraint, all the columns in the primary key are not null.
+      val updatedColumns = if (primaryKeys.nonEmpty) {
+        val lowerCasePkColumns = primaryKeys.head.asInstanceOf[PrimaryKeyConstraint].columns
+            .map(_.toLowerCase(Locale.ROOT))
+        columnDefs.map { colDef =>
+          if (colDef.nullable &&
+            lowerCasePkColumns.contains(colDef.name.toLowerCase(Locale.ROOT))) {
+            colDef.copy(nullable = false)
+          } else {
+            colDef
+          }
+        }
+      } else {
+        columnDefs
+      }
 
-      (columnDefs.toSeq, constraints.toSeq)
+      (updatedColumns.toSeq, constraints.toSeq)
     }
   }
 
@@ -6340,7 +6378,7 @@ class AstBuilder extends DataTypeAstBuilder
    *
    * For example:
    * {{{
-   *   DECLARE [OR REPLACE] [VARIABLE] [db_name.]variable_name
+   *   DECLARE [OR REPLACE] [VARIABLE] variable_name [COMMA variable_name]*
    *   [dataType] [defaultExpression];
    * }}}
    *
@@ -6353,7 +6391,7 @@ class AstBuilder extends DataTypeAstBuilder
         throw new ParseException(
           errorClass = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
           messageParameters = Map.empty,
-          ctx.identifierReference)
+          ctx.identifierReferences.get(0))
       }
       DefaultValueExpression(Literal(null, dataTypeOpt.get), "null")
     } else {
@@ -6361,7 +6399,11 @@ class AstBuilder extends DataTypeAstBuilder
       dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
     }
     CreateVariable(
-      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      ctx.identifierReferences.asScala.map (
+        identifierReference => {
+          withIdentClause(identifierReference, UnresolvedIdentifier(_))
+        }
+      ).toSeq,
       defaultExpression,
       ctx.REPLACE() != null
     )

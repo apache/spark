@@ -221,8 +221,10 @@ class GroupedApplyInPandasTestsMixin:
             exception=pe.exception,
             errorClass="INVALID_UDF_EVAL_TYPE",
             messageParameters={
-                "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
-                "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF"
+                "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
+                "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
+                "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
+                "SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF"
             },
         )
 
@@ -370,7 +372,7 @@ class GroupedApplyInPandasTestsMixin:
                         )
                     with self.assertRaisesRegex(PythonException, expected + "\n"):
                         self._test_apply_in_pandas(
-                            lambda key, pdf: pd.DataFrame([key + (str(pdf.v.mean()),)]),
+                            lambda key, pdf: pd.DataFrame([key + ("test_string",)]),
                             output_schema="id long, mean double",
                         )
 
@@ -385,6 +387,37 @@ class GroupedApplyInPandasTestsMixin:
                             lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]),
                             output_schema="id long, mean string",
                         )
+
+    def test_apply_in_pandas_int_to_decimal_coercion(self):
+        def int_to_decimal_func(key, pdf):
+            return pd.DataFrame([{"id": key[0], "decimal_result": 12345}])
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
+            result = (
+                self.data.groupby("id")
+                .applyInPandas(int_to_decimal_func, schema="id long, decimal_result decimal(10,2)")
+                .collect()
+            )
+
+            self.assertTrue(len(result) > 0)
+            for row in result:
+                self.assertEqual(row.decimal_result, 12345.00)
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+        ):
+            with self.assertRaisesRegex(
+                PythonException, "Exception thrown when converting pandas.Series"
+            ):
+                (
+                    self.data.groupby("id")
+                    .applyInPandas(
+                        int_to_decimal_func, schema="id long, decimal_result decimal(10,2)"
+                    )
+                    .collect()
+                )
 
     def test_datatype_string(self):
         df = self.data
@@ -867,6 +900,51 @@ class GroupedApplyInPandasTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(PythonException, error):
                 self._test_apply_in_pandas_returning_empty_dataframe(empty_df)
+
+    def test_arrow_cast_enabled_numeric_to_decimal(self):
+        import numpy as np
+
+        columns = [
+            "int8",
+            "int16",
+            "int32",
+            "uint8",
+            "uint16",
+            "uint32",
+            "float64",
+        ]
+
+        pdf = pd.DataFrame({key: np.arange(1, 2).astype(key) for key in columns})
+        df = self.spark.range(2).repartition(1)
+
+        for column in columns:
+            with self.subTest(column=column):
+                v = pdf[column].iloc[:1]
+                schema_str = "id long, value decimal(10,0)"
+
+                @pandas_udf(schema_str, PandasUDFType.GROUPED_MAP)
+                def test(pdf):
+                    return pdf.assign(**{"value": v})
+
+                row = df.groupby("id").apply(test).first()
+                res = row[1]
+                self.assertEqual(res, Decimal("1"))
+
+    def test_arrow_cast_enabled_str_to_numeric(self):
+        df = self.spark.range(2).repartition(1)
+
+        types = ["int", "long", "float", "double"]
+
+        for type_str in types:
+            with self.subTest(type=type_str):
+                schema_str = "id long, value " + type_str
+
+                @pandas_udf(schema_str, PandasUDFType.GROUPED_MAP)
+                def test(pdf):
+                    return pdf.assign(value=pd.Series(["123"]))
+
+                row = df.groupby("id").apply(test).first()
+                self.assertEqual(row[1], 123)
 
 
 class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):

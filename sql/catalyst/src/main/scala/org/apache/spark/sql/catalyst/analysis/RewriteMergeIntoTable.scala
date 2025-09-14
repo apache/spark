@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, DeleteAction, Filter, HintInfo, InsertAction, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Discard, Instruction, Keep, ROW_ID, Split}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{OPERATION_COLUMN, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
@@ -45,8 +45,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
-        matchedActions.isEmpty && notMatchedActions.size == 1 &&
+      notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
+        !m.needSchemaEvolution && matchedActions.isEmpty && notMatchedActions.size == 1 &&
         notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -79,7 +79,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       }
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
+        notMatchedBySourceActions, _)
+      if m.resolved && m.rewritable && m.aligned && !m.needSchemaEvolution &&
         matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -93,7 +94,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
           val notMatchedInstructions = notMatchedActions.map {
             case InsertAction(cond, assignments) =>
-              Keep(cond.getOrElse(TrueLiteral), assignments.map(_.value))
+              Keep(Insert, cond.getOrElse(TrueLiteral), assignments.map(_.value))
             case other =>
               throw new AnalysisException(
                 errorClass = "_LEGACY_ERROR_TEMP_3053",
@@ -120,7 +121,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       }
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned =>
+        notMatchedBySourceActions, _)
+      if m.resolved && m.rewritable && m.aligned && !m.needSchemaEvolution =>
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ DataSourceV2Relation(tbl: SupportsRowLevelOperations, _, _, _, _) =>
@@ -199,7 +201,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // as the last MATCHED and NOT MATCHED BY SOURCE instruction
     // this logic is specific to data sources that replace groups of data
     val carryoverRowsOutput = Literal(WRITE_WITH_METADATA_OPERATION) +: targetTable.output
-    val keepCarryoverRowsInstruction = Copy(carryoverRowsOutput)
+    val keepCarryoverRowsInstruction = Keep(Copy, TrueLiteral, carryoverRowsOutput)
 
     val matchedInstructions = matchedActions.map { action =>
       toInstruction(action, metadataAttrs)
@@ -436,7 +438,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         val rowValues = assignments.map(_.value)
         val metadataValues = nullifyMetadataOnUpdate(metadataAttrs)
         val output = Seq(Literal(WRITE_WITH_METADATA_OPERATION)) ++ rowValues ++ metadataValues
-        Keep(cond.getOrElse(TrueLiteral), output)
+        Keep(Update, cond.getOrElse(TrueLiteral), output)
 
       case DeleteAction(cond) =>
         Discard(cond.getOrElse(TrueLiteral))
@@ -445,7 +447,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         val rowValues = assignments.map(_.value)
         val metadataValues = metadataAttrs.map(attr => Literal(null, attr.dataType))
         val output = Seq(Literal(WRITE_OPERATION)) ++ rowValues ++ metadataValues
-        Keep(cond.getOrElse(TrueLiteral), output)
+        Keep(Insert, cond.getOrElse(TrueLiteral), output)
 
       case other =>
         throw new AnalysisException(
@@ -471,15 +473,15 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       case UpdateAction(cond, assignments) =>
         val output = deltaUpdateOutput(assignments, metadataAttrs, originalRowIdValues)
-        Keep(cond.getOrElse(TrueLiteral), output)
+        Keep(Update, cond.getOrElse(TrueLiteral), output)
 
       case DeleteAction(cond) =>
         val output = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues)
-        Keep(cond.getOrElse(TrueLiteral), output)
+        Keep(Delete, cond.getOrElse(TrueLiteral), output)
 
       case InsertAction(cond, assignments) =>
         val output = deltaInsertOutput(assignments, metadataAttrs, originalRowIdValues)
-        Keep(cond.getOrElse(TrueLiteral), output)
+        Keep(Insert, cond.getOrElse(TrueLiteral), output)
 
       case other =>
         throw new AnalysisException(

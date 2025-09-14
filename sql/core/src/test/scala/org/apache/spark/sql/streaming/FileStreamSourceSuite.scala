@@ -39,7 +39,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap, SourceFileArchiver}
+import org.apache.spark.sql.execution.streaming.runtime.{CleanSourceMode, FileStreamOptions, FileStreamSource, FileStreamSourceLog, FileStreamSourceOffset, MemoryStream, SerializedOffset, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper, StreamingRelation}
+import org.apache.spark.sql.execution.streaming.runtime.FileStreamSource.{FileEntry, SeenFilesMap, SourceFileArchiver}
+import org.apache.spark.sql.execution.streaming.sinks.{FileStreamSink, FileStreamSinkLog, SinkFileStatus}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -106,7 +108,7 @@ abstract class FileStreamSourceTest
     override def addData(source: FileStreamSource): Unit = {
       val tempFile = Utils.tempFileWith(new File(tmp, tmpFilePrefix))
       val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
+      Utils.createDirectory(src)
       require(stringToFile(tempFile, content).renameTo(finalFile))
       logInfo(s"Written text '$content' to file $finalFile")
     }
@@ -127,7 +129,7 @@ abstract class FileStreamSourceTest
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
       val tmpDir = Utils.tempFileWith(new File(tmp, "orc"))
       df.write.orc(tmpDir.getCanonicalPath)
-      src.mkdirs()
+      Utils.createDirectory(src)
       tmpDir.listFiles().foreach { f =>
         f.renameTo(new File(src, s"${f.getName}"))
       }
@@ -149,7 +151,7 @@ abstract class FileStreamSourceTest
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
       val tmpDir = Utils.tempFileWith(new File(tmp, "parquet"))
       df.write.parquet(tmpDir.getCanonicalPath)
-      src.mkdirs()
+      Utils.createDirectory(src)
       tmpDir.listFiles().foreach { f =>
         f.renameTo(new File(src, s"${f.getName}"))
       }
@@ -664,7 +666,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (baseSrc, tmp) =>
       withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
         val src = new File(baseSrc, "type=X")
-        src.mkdirs()
+        Utils.createDirectory(src)
 
         // Add a file so that we can infer its schema
         stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
@@ -1451,7 +1453,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   test("explain") {
     withTempDirs { case (src, tmp) =>
-      src.mkdirs()
+      Utils.createDirectory(src)
 
       val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_.toString + "-x")
       // Test `explain` not throwing errors
@@ -1500,7 +1502,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
     withTempDirs { case (root, tmp) =>
       val src = new File(root, "a=1")
-      src.mkdirs()
+      Utils.createDirectory(src)
 
       (1 to numFiles).map { _.toString }.foreach { i =>
         val tempFile = Utils.tempFileWith(new File(tmp, "text"))
@@ -1531,7 +1533,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         batchId: Long,
         expectedBatches: Int,
         expectedCompactInterval: Int): Boolean = {
-      import CompactibleFileStreamLog._
+      import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog._
 
       val fileSource = getSourcesFromStreamingQuery(execution).head
       val metadataLog = fileSource invokePrivate _metadataLog()
@@ -1924,8 +1926,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (dir, tmp) =>
       val sourceDir1 = new File(dir, "source1")
       val sourceDir2 = new File(dir, "source2")
-      sourceDir1.mkdirs()
-      sourceDir2.mkdirs()
+      Utils.createDirectory(sourceDir1)
+      Utils.createDirectory(sourceDir2)
 
       val source1 = createFileStream("text", s"${sourceDir1.getCanonicalPath}")
       val source2 = createFileStream("text", s"${sourceDir2.getCanonicalPath}")
@@ -2595,7 +2597,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val tempFile = Utils.tempFileWith(new File(tmp, "text"))
     val finalFile = new File(src, tempFile.getName)
     require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
-    require(src.mkdirs(), s"Cannot create $src")
+    require(Utils.createDirectory(src), s"Cannot create $src")
     require(src.isDirectory(), s"$src is not a directory")
     require(stringToFile(tempFile, content).renameTo(finalFile))
     finalFile

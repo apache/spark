@@ -80,12 +80,6 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
         val resolvedFlowsToTable = flowsToTable.map { flow =>
           resolvedFlowNodesMap.get(flow.identifier)
         }
-
-        // Assign isStreamingTable (MV or ST) to the table based on the resolvedFlowsToTable
-        val tableWithType = table.copy(
-          isStreamingTableOpt = Option(resolvedFlowsToTable.exists(f => f.df.isStreaming))
-        )
-
         // We mark all tables as virtual to ensure resolution uses incoming flows
         // rather than previously materialized tables.
         val virtualTableInput = VirtualTableInput(
@@ -95,7 +89,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
           availableFlows = resolvedFlowsToTable
         )
         resolvedInputs.put(table.identifier, virtualTableInput)
-        Seq(tableWithType)
+        Seq(table)
       case view: View =>
         // For view, add the flow to resolvedInputs and return empty.
         require(upstreamNodes.size == 1, "Found multiple flows to view")

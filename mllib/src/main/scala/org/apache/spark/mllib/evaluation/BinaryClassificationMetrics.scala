@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{COUNT, NUM_BIN}
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.RDD

@@ -19,20 +19,19 @@ package org.apache.spark.deploy.k8s
 import java.io.{File, IOException}
 import java.net.URI
 import java.security.SecureRandom
-import java.util.{Collections, UUID}
+import java.util.{Collections, HexFormat, UUID}
 
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.POD_ID
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
@@ -146,7 +145,7 @@ object KubernetesUtils extends Logging {
   @Since("3.0.0")
   def formatPairsBundle(pairs: Seq[(String, String)], indent: Int = 1) : String = {
     // Use more loggable format if value is null or empty
-    val indentStr = "\t" * indent
+    val indentStr = "\t".repeat(indent)
     pairs.map {
       case (k, v) => s"\n$indentStr $k: ${Option(v).filter(_.nonEmpty).getOrElse("N/A")}"
     }.mkString("")
@@ -241,7 +240,7 @@ object KubernetesUtils extends Logging {
     }
 
     val time = java.lang.Long.toHexString(clock.getTimeMillis() & 0xFFFFFFFFFFL)
-    Hex.encodeHexString(random) + time
+    HexFormat.of().formatHex(random) + time
   }
 
   /**

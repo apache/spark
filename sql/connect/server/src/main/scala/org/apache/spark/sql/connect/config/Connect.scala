@@ -304,7 +304,7 @@ object Connect {
       .version("4.0.0")
       .internal()
       .intConf
-      .createWithDefault(16)
+      .createWithDefault(32)
 
   val CONNECT_SESSION_PLAN_CACHE_ENABLED =
     buildConf("spark.connect.session.planCache.enabled")
@@ -313,6 +313,17 @@ object Connect {
         s" When false, the cache is disabled even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
         " greater than zero. The caching is best-effort and not guaranteed.")
       .version("4.0.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED =
+    buildConf("spark.connect.session.planCache.alwaysCacheDataSourceReadsEnabled")
+      .doc("When true, always cache the translation of Read.DataSource plans" +
+        " in the plan cache. This massively improves the performance of queries that reuse the" +
+        " same Read.DataSource within the same session, since these translations/analyses" +
+        " are usually quite costly.")
+      .version("4.1.0")
       .internal()
       .booleanConf
       .createWithDefault(true)
@@ -381,4 +392,19 @@ object Connect {
       .internal()
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10g")
+
+  val CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE =
+    buildConf("spark.connect.session.resultChunking.maxChunkSize")
+      .doc("The max size of a chunk in responses for a result batch. Result chunking is enabled" +
+        " if this config is set to a value greater than 0 and if the client allows it in" +
+        " ResultChunkingOptions. Otherwise, for example if set to -1, this feature is disabled." +
+        " While spark.connect.grpc.arrow.maxBatchSize determines the max size of a result batch," +
+        " maxChunkSize defines the max size of each individual chunk that is part of the batch" +
+        " that will be sent in a response. This allows the server to send large rows to clients." +
+        " The size is in bytes.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      // 90% of the max message size by default to allow for some overhead.
+      .createWithDefault((ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE * 0.9).toInt)
 }
