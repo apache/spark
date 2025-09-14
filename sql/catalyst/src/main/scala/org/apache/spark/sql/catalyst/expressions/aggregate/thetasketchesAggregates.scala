@@ -165,8 +165,8 @@ case class ThetaSketchAgg(
    * unsupported types.
    * Notes:
    *   - Null values are ignored.
-   *   - Empty byte arrays
-   *   - Empty arrays of supported element types
+   *   - Empty byte arrays are ignored
+   *   - Empty arrays of supported element types are ignored
    *   - Strings that are collation-equal to the empty string are ignored.
    *
    * @param updateBuffer
