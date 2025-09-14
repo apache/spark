@@ -24,7 +24,7 @@ import java.util.function.Consumer
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerStageCompleted}

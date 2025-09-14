@@ -57,7 +57,7 @@ from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.udtf import OrderingColumn, PartitioningColumn, SelectedColumn  # noqa: F401
 from pyspark.sql.udtf import SkipRestOfInputTableException  # noqa: F401
-from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
+from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf, _create_pyarrow_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import (  # noqa: F401
@@ -12700,6 +12700,46 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
 
     return _invoke_function_over_columns("timestamp_seconds", col)
+
+
+@_try_remote_functions
+def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
+    """
+    Returns `time` truncated to the `unit`.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : :class:`~pyspark.sql.Column` or column name
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    time : :class:`~pyspark.sql.Column` or column name
+        A time to truncate.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A time truncated to the specified unit.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_trunc`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("HOUR", "13:08:15")],
+    ...     ['unit', 'time']).withColumn("time", sf.col("time").cast("time"))
+    >>> df.select('*', sf.time_trunc('unit', 'time')).show()
+    +----+--------+----------------------+
+    |unit|    time|time_trunc(unit, time)|
+    +----+--------+----------------------+
+    |HOUR|13:08:15|              13:00:00|
+    +----+--------+----------------------+
+    """
+    return _invoke_function_over_columns("time_trunc", unit, time)
 
 
 @_try_remote_functions
@@ -27345,32 +27385,7 @@ def udf(
     # The following table shows most of Python data and SQL type conversions in normal UDFs that
     # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
     # future. The table might have to be eventually documented externally.
-    # Please see SPARK-28131's PR to see the codes in order to generate the table below.
-    #
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|         a(str)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|bytearray(b'ABC')(bytearray)|  1(Decimal)|{'a': 1}(dict)|Row(kwargs=1)(Row)|Row(namedtuple=1)(Row)|  # noqa
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    # |                      boolean|          None|      True|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                      tinyint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                     smallint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                          int|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       bigint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       string|          None|    'true'|   '1'|            'a'|'java.util.Gregor...|         'java.util.Gregor...|     '1.0'|         '[I@66cbb73a'|    '[1]'|'[Ljava.lang.Obje...|               '[B@5a51eb1a'|         '1'|       '{a=1}'|                 X|                     X|  # noqa
-    # |                         date|          None|         X|     X|              X|datetime.date(197...|         datetime.date(197...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
-    # |                    timestamp|          None|         X|     X|              X|                   X|         datetime.datetime...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
-    # |                        float|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       double|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                   array<int>|          None|      None|  None|           None|                None|                         None|      None|                   [1]|      [1]|                 [1]|                [65, 66, 67]|        None|          None|                 X|                     X|  # noqa
-    # |                       binary|          None|      None|  None|bytearray(b'a')|                None|                         None|      None|                  None|     None|                None|           bytearray(b'ABC')|        None|          None|                 X|                     X|  # noqa
-    # |                decimal(10,0)|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|Decimal('1')|          None|                 X|                     X|  # noqa
-    # |              map<string,int>|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|      {'a': 1}|                 X|                     X|  # noqa
-    # |               struct<_1:int>|          None|         X|     X|              X|                   X|                            X|         X|                     X|Row(_1=1)|           Row(_1=1)|                           X|           X|  Row(_1=None)|         Row(_1=1)|             Row(_1=1)|  # noqa
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    #
-    # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
-    #       used in `returnType`.
-    # Note: The values inside of the table are generated by `repr`.
-    # Note: 'X' means it throws an exception during the conversion.
+    # Please see python/pyspark/sql/tests/udf_type_tests for type tests and golden files
 
     # decorator @udf, @udf(), @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):
@@ -27553,6 +27568,75 @@ def udtf(
         return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
     else:
         return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
+
+
+@_try_remote_functions
+def arrow_udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
+    """Creates a PyArrow-native user defined table function (UDTF).
+
+    This function provides a PyArrow-native interface for UDTFs, where the eval method
+    receives PyArrow RecordBatches or Arrays and returns an Iterator of PyArrow Tables
+    or RecordBatches.
+    This enables true vectorized computation without row-by-row processing overhead.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    cls : class, optional
+        the Python user-defined table function handler class.
+    returnType : :class:`pyspark.sql.types.StructType` or str, optional
+        the return type of the user-defined table function. The value can be either a
+        :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+
+    Examples
+    --------
+    UDTF with PyArrow RecordBatch input:
+
+    >>> import pyarrow as pa
+    >>> from pyspark.sql.functions import arrow_udtf
+    >>> @arrow_udtf(returnType="x int, y int")
+    ... class MyUDTF:
+    ...     def eval(self, batch: pa.RecordBatch):
+    ...         # Process the entire batch vectorized
+    ...         x_array = batch.column('x')
+    ...         y_array = batch.column('y')
+    ...         result_table = pa.table({
+    ...             'x': x_array,
+    ...             'y': y_array
+    ...         })
+    ...         yield result_table
+    ...
+    >>> df = spark.range(10).selectExpr("id as x", "id as y")
+    >>> MyUDTF(df.asTable()).show()  # doctest: +SKIP
+
+    UDTF with PyArrow Array inputs:
+
+    >>> @arrow_udtf(returnType="x int, y int")
+    ... class MyUDTF2:
+    ...     def eval(self, x: pa.Array, y: pa.Array):
+    ...         # Process arrays vectorized
+    ...         result_table = pa.table({
+    ...             'x': x,
+    ...             'y': y
+    ...         })
+    ...         yield result_table
+    ...
+    >>> MyUDTF2(lit(1), lit(2)).show()  # doctest: +SKIP
+
+    Notes
+    -----
+    - The eval method must accept PyArrow RecordBatches or Arrays as input
+    - The eval method must yield PyArrow Tables or RecordBatches as output
+    """
+    if cls is None:
+        return functools.partial(_create_pyarrow_udtf, returnType=returnType)
+    else:
+        return _create_pyarrow_udtf(cls=cls, returnType=returnType)
 
 
 def _test() -> None:

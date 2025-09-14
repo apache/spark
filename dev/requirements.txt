@@ -2,7 +2,7 @@
 py4j>=0.10.9.9
 
 # PySpark dependencies (optional)
-numpy>=1.21
+numpy>=1.22
 pyarrow>=15.0.0
 six==1.16.0
 pandas>=2.2.0
@@ -76,7 +76,7 @@ graphviz==0.20.3
 flameprof==0.4
 
 # TorchDistributor dependencies
-torch<2.6.0
+torch
 torchvision
 torcheval
 

@@ -31,7 +31,7 @@ import org.rocksdb.RocksDBException
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.{FsHistoryProvider, FsHistoryProviderMetadata}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND

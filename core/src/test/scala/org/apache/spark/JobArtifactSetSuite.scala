@@ -20,8 +20,6 @@ package org.apache.spark
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import org.apache.commons.io.IOUtils
-
 import org.apache.spark.util.Utils
 
 class JobArtifactSetSuite extends SparkFunSuite with LocalSparkContext {
@@ -33,7 +31,7 @@ class JobArtifactSetSuite extends SparkFunSuite with LocalSparkContext {
     val zipOut = new ZipOutputStream(fos)
     val zipEntry = new ZipEntry(fileToZip.getName)
     zipOut.putNextEntry(zipEntry)
-    IOUtils.copy(fis, zipOut)
+    fis.transferTo(zipOut)
     Utils.closeQuietly(fis)
     Utils.closeQuietly(zipOut)
   }

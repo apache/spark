@@ -21,12 +21,10 @@ import java.io.File
 
 import scala.annotation.tailrec
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{StateStoreKeyRowFormatValidationFailure, StateStoreValueRowFormatValidationFailure}
 import org.apache.spark.sql.functions._
 import org.apache.spark.tags.SlowSQLTest
@@ -48,7 +46,7 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
     val resourceUri = this.getClass.getResource("/structured-streaming/" +
       s"checkpoint-version-2.4.5-for-compatibility-test-${testName}").toURI
     val checkpointDir = Utils.createTempDir().getCanonicalFile
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
     checkpointDir
   }
 

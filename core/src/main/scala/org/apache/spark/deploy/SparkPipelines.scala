@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkUserAppException
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
+import org.apache.spark.util.SparkExitCode
 
 /**
  * Outer implementation of the spark-pipelines command line interface. Responsible for routing
@@ -33,15 +34,16 @@ import org.apache.spark.launcher.SparkSubmitArgumentsParser
  */
 object SparkPipelines extends Logging {
   def main(args: Array[String]): Unit = {
-    val sparkHome = sys.env("SPARK_HOME")
-    SparkSubmit.main(constructSparkSubmitArgs(args, sparkHome).toArray)
+    val pipelinesCliFile = args(0)
+    val sparkSubmitAndPipelinesArgs = args.slice(1, args.length)
+    SparkSubmit.main(
+      constructSparkSubmitArgs(pipelinesCliFile, sparkSubmitAndPipelinesArgs).toArray)
   }
 
   protected[deploy] def constructSparkSubmitArgs(
-      args: Array[String],
-      sparkHome: String): Seq[String] = {
+      pipelinesCliFile: String,
+      args: Array[String]): Seq[String] = {
     val (sparkSubmitArgs, pipelinesArgs) = splitArgs(args)
-    val pipelinesCliFile = s"$sparkHome/python/pyspark/pipelines/cli.py"
     (sparkSubmitArgs ++ Seq(pipelinesCliFile) ++ pipelinesArgs)
   }
 
@@ -62,7 +64,7 @@ object SparkPipelines extends Logging {
           remote = value
         } else if (opt == "--class") {
           logInfo("--class argument not supported.")
-          throw SparkUserAppException(1)
+          throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
         } else if (opt == "--conf" &&
           value.startsWith("spark.api.mode=") &&
           value != "spark.api.mode=connect") {
@@ -70,7 +72,7 @@ object SparkPipelines extends Logging {
             "--spark.api.mode must be 'connect'. " +
             "Declarative Pipelines currently only supports Spark Connect."
           )
-          throw SparkUserAppException(1)
+          throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
         } else if (Seq("--name", "-h", "--help").contains(opt)) {
           pipelinesArgs += opt
           if (value != null && value.nonEmpty) {

@@ -719,7 +719,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   // Helper method to get the number of nanoseconds per the given time unit, used for calculating
   // the difference between two time values (timediff function). Supported units are: MICROSECOND,
   // MILLISECOND, SECOND, MINUTE, HOUR.
-  private def getNanosPerTimeUnit(unit: UTF8String): Long = {
+  private def getNanosPerTimeUnit(unit: UTF8String, functionName: String): Long = {
     val unitStr = unit.toString
     unitStr.toUpperCase(Locale.ROOT) match {
       case "MICROSECOND" =>
@@ -733,7 +733,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case "HOUR" =>
         NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR
       case _ =>
-        throw QueryExecutionErrors.invalidTimeUnitError("timediff", unitStr)
+        throw QueryExecutionErrors.invalidTimeUnitError(functionName, unitStr)
     }
   }
 
@@ -750,7 +750,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @return The time span between two time values, in the units specified.
    */
   def timeDiff(unit: UTF8String, startNanos: Long, endNanos: Long): Long = {
-    (endNanos - startNanos) / getNanosPerTimeUnit(unit)
+    (endNanos - startNanos) / getNanosPerTimeUnit(unit, "time_diff")
   }
 
   /**

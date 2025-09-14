@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should._
 import org.scalatest.time.{Seconds, Span}
@@ -28,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, SerializedOffset, StreamExecution, StreamingExecutionRelation}
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest, Trigger}
@@ -169,7 +169,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     testStream(streamEvent) (
       AddData(inputData, 1, 2, 3, 4, 5, 6),

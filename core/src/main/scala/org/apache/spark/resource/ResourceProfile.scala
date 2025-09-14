@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.annotation.{Evolving, Since}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
@@ -104,6 +104,14 @@ class ResourceProfile(
 
   private[spark] def getPySparkMemory: Option[Long] = {
     executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount)
+  }
+
+  private[spark] def getOverheadMemory: Option[Long] = {
+    executorResources.get(ResourceProfile.OVERHEAD_MEM).map(_.amount)
+  }
+
+  private[spark] def getExecutorOffHeap: Option[Long] = {
+    executorResources.get(ResourceProfile.OFFHEAP_MEM).map(_.amount)
   }
 
   private[spark] def getExecutorMemory: Option[Long] = {

@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper.newDir
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -52,20 +52,20 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     .add(StructField("value3", structSchema, nullable = true))
 
   private val longKeySchema = new StructType()
-    .add(StructField("key" + "1" * 64 * 1024, IntegerType, nullable = true))
-    .add(StructField("key" + "2" * 64 * 1024, StringType, nullable = true))
-    .add(StructField("key" + "3" * 64 * 1024, structSchema, nullable = true))
+    .add(StructField("key" + "1".repeat(64 * 1024), IntegerType, nullable = true))
+    .add(StructField("key" + "2".repeat(64 * 1024), StringType, nullable = true))
+    .add(StructField("key" + "3".repeat( 64 * 1024), structSchema, nullable = true))
 
   private val longValueSchema = new StructType()
-    .add(StructField("value" + "1" * 64 * 1024, IntegerType, nullable = true))
-    .add(StructField("value" + "2" * 64 * 1024, StringType, nullable = true))
-    .add(StructField("value" + "3" * 64 * 1024, structSchema, nullable = true))
+    .add(StructField("value" + "1".repeat(64 * 1024), IntegerType, nullable = true))
+    .add(StructField("value" + "2".repeat(64 * 1024), StringType, nullable = true))
+    .add(StructField("value" + "3".repeat(64 * 1024), structSchema, nullable = true))
 
   private val keySchema65535Bytes = new StructType()
-    .add(StructField("k" * (65535 - 87), IntegerType, nullable = true))
+    .add(StructField("k".repeat(65535 - 87), IntegerType, nullable = true))
 
   private val valueSchema65535Bytes = new StructType()
-    .add(StructField("v" * (65535 - 87), IntegerType, nullable = true))
+    .add(StructField("v".repeat(65535 - 87), IntegerType, nullable = true))
 
   private val keySchemaWithCollation = new StructType()
     .add(StructField("key1", IntegerType, nullable = true))

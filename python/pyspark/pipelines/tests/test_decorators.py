@@ -18,12 +18,12 @@
 import unittest
 
 from pyspark.errors import PySparkTypeError
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 
 
 class DecoratorsTest(unittest.TestCase):
     def test_dataset_name_not_string(self):
-        for decorator in [sdp.table, sdp.temporary_view, sdp.materialized_view]:
+        for decorator in [dp.table, dp.temporary_view, dp.materialized_view]:
             with self.assertRaises(PySparkTypeError) as context:
 
                 @decorator(name=5)
@@ -37,7 +37,7 @@ class DecoratorsTest(unittest.TestCase):
             }, context.exception.getMessageParameters()
 
     def test_invalid_partition_cols(self):
-        for decorator in [sdp.table, sdp.materialized_view]:
+        for decorator in [dp.table, dp.materialized_view]:
             with self.assertRaises(PySparkTypeError) as context:
 
                 @decorator(partition_cols=["a", 1, 2])  # type: ignore
@@ -51,7 +51,7 @@ class DecoratorsTest(unittest.TestCase):
             }, context.exception.getMessageParameters()
 
     def test_decorator_with_positional_arg(self):
-        for decorator in [sdp.table, sdp.temporary_view, sdp.materialized_view]:
+        for decorator in [dp.table, dp.temporary_view, dp.materialized_view]:
             with self.assertRaises(PySparkTypeError) as context:
                 decorator("table1")
 

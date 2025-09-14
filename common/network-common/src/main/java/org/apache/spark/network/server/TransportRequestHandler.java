@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
-import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 
@@ -33,6 +32,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.*;
 import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
@@ -132,8 +132,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       long chunksBeingTransferred = streamManager.chunksBeingTransferred();
       if (chunksBeingTransferred >= maxChunksBeingTransferred) {
         logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-          MDC.of(LogKeys.NUM_CHUNKS$.MODULE$, chunksBeingTransferred),
-          MDC.of(LogKeys.MAX_NUM_CHUNKS$.MODULE$, maxChunksBeingTransferred));
+          MDC.of(LogKeys.NUM_CHUNKS, chunksBeingTransferred),
+          MDC.of(LogKeys.MAX_NUM_CHUNKS, maxChunksBeingTransferred));
         channel.close();
         return;
       }
@@ -143,9 +143,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       buf = streamManager.openStream(req.streamId);
     } catch (Exception e) {
       logger.error("Error opening stream {} for request from {}", e,
-        MDC.of(LogKeys.STREAM_ID$.MODULE$, req.streamId),
-        MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
-      respond(new StreamFailure(req.streamId, Throwables.getStackTraceAsString(e)));
+        MDC.of(LogKeys.STREAM_ID, req.streamId),
+        MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
+      respond(new StreamFailure(req.streamId, JavaUtils.stackTraceToString(e)));
       return;
     }
 
@@ -172,14 +172,14 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
         @Override
         public void onFailure(Throwable e) {
-          respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+          respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
         }
       });
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() on RPC id {} from {}", e,
-        MDC.of(LogKeys.REQUEST_ID$.MODULE$, req.requestId),
-        MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
-      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+        MDC.of(LogKeys.REQUEST_ID, req.requestId),
+        MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
+      respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
     } finally {
       req.body().release();
     }
@@ -199,7 +199,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
         @Override
         public void onFailure(Throwable e) {
-          respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+          respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
         }
       };
       TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
@@ -264,9 +264,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
           new NioManagedBuffer(blockPushNonFatalFailure.getResponse())));
       } else {
         logger.error("Error while invoking RpcHandler#receive() on RPC id {} from {}", e,
-          MDC.of(LogKeys.REQUEST_ID$.MODULE$, req.requestId),
-          MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
-        respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+          MDC.of(LogKeys.REQUEST_ID, req.requestId),
+          MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
+        respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
       }
       // We choose to totally fail the channel, rather than trying to recover as we do in other
       // cases.  We don't know how many bytes of the stream the client has already sent for the
@@ -282,7 +282,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       rpcHandler.receive(reverseClient, req.body().nioByteBuffer());
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() for one-way message from {}.", e,
-        MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
+        MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
     } finally {
       req.body().release();
     }
@@ -302,16 +302,16 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
           @Override
           public void onFailure(Throwable e) {
             logger.trace("Failed to send meta for {}", req);
-            respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+            respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
           }
       });
     } catch (Exception e) {
       logger.error("Error while invoking receiveMergeBlockMetaReq() for appId {} shuffleId {} "
-        + "reduceId {} from {}", e, MDC.of(LogKeys.APP_ID$.MODULE$, req.appId),
-          MDC.of(LogKeys.SHUFFLE_ID$.MODULE$, req.shuffleId),
-          MDC.of(LogKeys.REDUCE_ID$.MODULE$, req.reduceId),
-          MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
-      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+        + "reduceId {} from {}", e, MDC.of(LogKeys.APP_ID, req.appId),
+          MDC.of(LogKeys.SHUFFLE_ID, req.shuffleId),
+          MDC.of(LogKeys.REDUCE_ID, req.reduceId),
+          MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
+      respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
     }
   }
 
@@ -326,8 +326,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         logger.trace("Sent result {} to client {}", result, remoteAddress);
       } else {
         logger.error("Error sending result {} to {}; closing connection", future.cause(),
-          MDC.of(LogKeys.RESULT$.MODULE$, result),
-          MDC.of(LogKeys.HOST_PORT$.MODULE$, remoteAddress));
+          MDC.of(LogKeys.RESULT, result),
+          MDC.of(LogKeys.HOST_PORT, remoteAddress));
         channel.close();
       }
     });

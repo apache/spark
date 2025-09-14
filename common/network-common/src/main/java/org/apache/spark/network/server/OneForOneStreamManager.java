@@ -19,18 +19,19 @@ package org.apache.spark.network.server;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import io.netty.channel.Channel;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.Pair;
 
 /**
@@ -71,7 +72,7 @@ public class OneForOneStreamManager extends StreamManager {
         Channel channel,
         boolean isBufferMaterializedOnNext) {
       this.appId = appId;
-      this.buffers = Preconditions.checkNotNull(buffers);
+      this.buffers = Objects.requireNonNull(buffers);
       this.associatedChannel = channel;
       this.isBufferMaterializedOnNext = isBufferMaterializedOnNext;
     }
@@ -166,7 +167,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void checkAuthorization(TransportClient client, long streamId) {
     if (client.getClientId() != null) {
       StreamState state = streams.get(streamId);
-      Preconditions.checkArgument(state != null, "Unknown stream ID.");
+      JavaUtils.checkArgument(state != null, "Unknown stream ID.");
       if (!client.getClientId().equals(state.appId)) {
         throw new SecurityException(String.format(
           "Client %s not authorized to read stream %d (app %s).",

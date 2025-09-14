@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils.createArray
 
 /**
  * A test suite on the vectorized Parquet reader. Unlike `ParquetIOSuite`, this focuses on
@@ -501,7 +502,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     val maxDef = if (inputValues.contains(null)) 1 else 0
     val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
     val cd = new ColumnDescriptor(Seq("a").toArray, ty, 0, maxDef)
-    val repetitionLevels = Array.fill[Int](inputValues.length)(0)
+    val repetitionLevels = createArray(inputValues.length, 0)
     val definitionLevels = inputValues.map(v => if (v == null) 0 else maxDef)
 
     val memPageStore = new MemPageStore(expectedValues.length)

@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.operators.stateful
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StreamingSessionWindowStateManager}
+import org.apache.spark.sql.execution.streaming.state.ReadStateStore
 
 /**
  * This class technically does the merge sort between input rows and existing sessions in state,

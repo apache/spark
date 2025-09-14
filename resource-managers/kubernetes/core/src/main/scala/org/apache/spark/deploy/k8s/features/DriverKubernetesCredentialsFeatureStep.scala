@@ -18,10 +18,11 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.util.Base64
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{BaseEncoding, Files}
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, Secret, SecretBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
@@ -47,7 +48,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
   private val oauthTokenBase64 = kubernetesConf
     .getOption(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$OAUTH_TOKEN_CONF_SUFFIX")
     .map { token =>
-      BaseEncoding.base64().encode(token.getBytes(StandardCharsets.UTF_8))
+      Base64.getEncoder().encodeToString(token.getBytes(StandardCharsets.UTF_8))
     }
 
   private val caCertDataBase64 = safeFileConfToBase64(
@@ -153,7 +154,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
       .map { file =>
         require(file.isFile, String.format("%s provided at %s does not exist or is not a file.",
           fileType, file.getAbsolutePath))
-        BaseEncoding.base64().encode(Files.toByteArray(file))
+        Base64.getEncoder().encodeToString(Files.readAllBytes(file.toPath))
       }
   }
 

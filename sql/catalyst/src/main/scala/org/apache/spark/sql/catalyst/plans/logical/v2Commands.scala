@@ -38,8 +38,10 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -894,6 +896,17 @@ case class MergeIntoTable(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
     copy(targetTable = newLeft, sourceTable = newRight)
+
+  def needSchemaEvolution: Boolean =
+    schemaEvolutionEnabled &&
+      MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
+
+  private def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    EliminateSubqueryAliases(targetTable) match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case _ => false
+    }
+  }
 }
 
 object MergeIntoTable {
@@ -908,6 +921,69 @@ object MergeIntoTable {
       case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
     }
     privileges.toSeq
+  }
+
+  def schemaChanges(
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String] = Array()): Array[TableChange] = {
+    schemaChanges(originalTarget, originalSource, originalTarget, originalSource, fieldPath)
+  }
+
+  private def schemaChanges(
+      current: DataType,
+      newType: DataType,
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String]): Array[TableChange] = {
+    (current, newType) match {
+      case (StructType(currentFields), StructType(newFields)) =>
+        val newFieldMap = toFieldMap(newFields)
+
+        // Update existing field types
+        val updates = {
+          currentFields collect {
+            case currentField: StructField if newFieldMap.contains(currentField.name) =>
+              schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
+                originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
+          }}.flatten
+
+        // Identify the newly added fields and append to the end
+        val currentFieldMap = toFieldMap(currentFields)
+        val adds = newFields.filterNot (f => currentFieldMap.contains (f.name))
+          .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
+
+        updates ++ adds
+
+      case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
+        schemaChanges(currentElementType, newElementType,
+          originalTarget, originalSource, fieldPath ++ Seq("element"))
+
+      case (MapType(currentKeyType, currentElementType, _),
+      MapType(updateKeyType, updateElementType, _)) =>
+        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
+          fieldPath ++ Seq("key")) ++
+          schemaChanges(currentElementType, updateElementType,
+            originalTarget, originalSource, fieldPath ++ Seq("value"))
+
+      case (currentType, newType) if currentType == newType =>
+        // No change needed
+        Array.empty[TableChange]
+
+      case _ =>
+        // For now do not support type widening
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+          originalTarget, originalSource, null)
+    }
+  }
+
+  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+    val fieldMap = fields.map(field => field.name -> field).toMap
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      fieldMap
+    } else {
+      CaseInsensitiveMap(fieldMap)
+    }
   }
 }
 
@@ -1684,12 +1760,14 @@ case class TableSpec(
  * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLE command.
  */
 case class CreateVariable(
-    name: LogicalPlan,
+    names: Seq[LogicalPlan],
     defaultExpr: DefaultValueExpression,
-    replace: Boolean) extends UnaryCommand with SupportsSubquery {
-  override def child: LogicalPlan = name
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(name = newChild)
+    replace: Boolean) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = names
+  override def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(newChildren.size == names.size, "Incorrect number of children")
+    copy(names = newChildren)
+  }
 }
 
 /**

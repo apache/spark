@@ -1458,13 +1458,13 @@ WITH RECURSIVE t1(n) AS (
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1
 -- !query schema
-struct<n:int>
+struct<>
 -- !query output
-1
-2
-3
-4
-5
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
 
 
 -- !query
@@ -1475,13 +1475,13 @@ WITH RECURSIVE t1 AS (
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1
 -- !query schema
-struct<n:int>
+struct<>
 -- !query output
-1
-2
-3
-4
-5
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
 
 
 -- !query
@@ -1931,3 +1931,19 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_RECURSIVE_CTE",
   "sqlState" : "42836"
 }
+
+
+-- !query
+WITH RECURSIVE t AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + m
+    FROM (SELECT 2 as m) subq
+             JOIN t ON n = m
+    WHERE n <> m
+)
+SELECT * FROM t
+-- !query schema
+struct<n:int>
+-- !query output
+1

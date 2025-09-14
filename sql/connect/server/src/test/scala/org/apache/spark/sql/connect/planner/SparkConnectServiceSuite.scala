@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import java.io.SequenceInputStream
 import java.util.UUID
 import java.util.concurrent.Semaphore
 
@@ -192,10 +193,11 @@ class SparkConnectServiceSuite
           }
 
           override def onCompleted(): Unit = {
+            verifyEvents.onCompleted(Some(100))
             done = true
           }
         })
-      verifyEvents.onCompleted(Some(100))
+      verifyEvents.assertClosed()
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
@@ -293,10 +295,11 @@ class SparkConnectServiceSuite
           }
 
           override def onCompleted(): Unit = {
+            verifyEvents.onCompleted(Some(6))
             done = true
           }
         })
-      verifyEvents.onCompleted(Some(6))
+      verifyEvents.assertClosed()
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
@@ -372,6 +375,153 @@ class SparkConnectServiceSuite
         assert(batch.getData.size() <= batchSize * 0.7)
       }
     }
+  }
+
+  Seq((Some(1024), None), (None, Some(1024))).foreach {
+    // Two cases are tested here:
+    // (a) client preferred chunk size is set: the server should respect it
+    // (b) client preferred chunk size is not set: the server should use its own max chunk size
+    case (preferredChunkSizeOption, maxChunkSizeOption) =>
+      test(
+        s"Arrow batch chunking with preferredMaxChunkSize=$preferredChunkSizeOption, " +
+          s"maxChunkSize=$maxChunkSizeOption") {
+        withEvents { verifyEvents =>
+          val maxChunkSizeConfigValue = maxChunkSizeOption match {
+            case Some(maxChunkSize) => maxChunkSize.toString
+            case None => Connect.CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE.defaultValueString
+          }
+          withSparkConf(
+            Connect.CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE.key ->
+              maxChunkSizeConfigValue) {
+            val instance = new SparkConnectService(false)
+            val connect = new MockRemoteSession()
+            val context = proto.UserContext
+              .newBuilder()
+              .setUserId("c1")
+              .build()
+            val plan = proto.Plan
+              .newBuilder()
+              .setRoot(
+                connect.sql("select id, CAST(id + 0.5 AS DOUBLE) from range(0, 2000, 1, 4)"))
+              .build()
+            val request = proto.ExecutePlanRequest
+              .newBuilder()
+              .setPlan(plan)
+              .addRequestOptions(
+                proto.ExecutePlanRequest.RequestOption
+                  .newBuilder()
+                  .setResultChunkingOptions({
+                    val builder = proto.ResultChunkingOptions
+                      .newBuilder()
+                      .setAllowArrowBatchChunking(true)
+                    preferredChunkSizeOption.foreach { size =>
+                      builder.setPreferredArrowChunkSize(size.toLong)
+                    }
+                    builder.build()
+                  })
+                  .build())
+              .setUserContext(context)
+              .setSessionId(UUID.randomUUID.toString())
+              .build()
+
+            // Execute plan.
+            var done = false
+            val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+            instance.executePlan(
+              request,
+              new StreamObserver[proto.ExecutePlanResponse] {
+                override def onNext(v: proto.ExecutePlanResponse): Unit = {
+                  responses += v
+                  verifyEvents.onNext(v)
+                }
+
+                override def onError(throwable: Throwable): Unit = {
+                  verifyEvents.onError(throwable)
+                  throw throwable
+                }
+
+                override def onCompleted(): Unit = {
+                  done = true
+                }
+              })
+            verifyEvents.onCompleted(Some(2000))
+            // The current implementation is expected to be blocking. This is here to make sure it
+            // is.
+            assert(done)
+
+            // ArrowBatch chunks of 4 partitions + Metrics + optional progress messages
+            val filteredResponses = responses.filter(!_.hasExecutionProgress)
+
+            // Make sure the first response is schema only
+            val head = filteredResponses.head
+            assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
+
+            // Make sure the last response is metrics only
+            val last = filteredResponses.last
+            assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
+
+            val allocator = new RootAllocator()
+
+            // Check the 'data' batches
+            val arrowResponseQueue = mutable.Queue(filteredResponses.tail.dropRight(1).toSeq: _*)
+
+            def dequeueNextBatch(): List[proto.ExecutePlanResponse] = {
+              if (arrowResponseQueue.isEmpty) return Nil
+              val n = arrowResponseQueue.front.getArrowBatch.getNumChunksInBatch.toInt
+              List.fill(n)(arrowResponseQueue.dequeue())
+            }
+
+            var batchCount = 0
+            var expectedId = 0L
+            var previousEId = 0.0d
+            while (arrowResponseQueue.nonEmpty) {
+              val batch = dequeueNextBatch()
+              // In this example, the max chunk size is set to a small value, so each Arrow batch
+              // should be split into multiple chunks.
+              assert(batch.size > 5)
+              batchCount += 1
+
+              val rowCount = batch.head.getArrowBatch.getRowCount
+              val rowStartOffset = batch.head.getArrowBatch.getStartOffset
+              batch.zipWithIndex.foreach { case (chunk, chunkIndex) =>
+                assert(chunk.getArrowBatch.getChunkIndex == chunkIndex)
+                assert(chunk.getArrowBatch.getNumChunksInBatch == batch.size)
+                assert(chunk.getArrowBatch.getRowCount == rowCount)
+                assert(chunk.getArrowBatch.getStartOffset == rowStartOffset)
+                assert(chunk.getArrowBatch.getData != null)
+                assert(chunk.getArrowBatch.getData.size() > 0)
+                assert(
+                  chunk.getArrowBatch.getData.size() <= preferredChunkSizeOption.getOrElse(
+                    maxChunkSizeOption.get))
+              }
+
+              // Reassemble the chunks into a single Arrow batch and validate its content.
+              val input = new SequenceInputStream(
+                batch.iterator.map(_.getArrowBatch.getData.newInput()).asJavaEnumeration)
+              val reader = new ArrowStreamReader(input, allocator)
+              while (reader.loadNextBatch()) {
+                val root = reader.getVectorSchemaRoot
+                val idVector = root.getVector(0).asInstanceOf[BigIntVector]
+                val eidVector = root.getVector(1).asInstanceOf[Float8Vector]
+                val numRows = root.getRowCount
+                var i = 0
+                while (i < numRows) {
+                  assert(idVector.get(i) == expectedId)
+                  expectedId += 1
+                  val eid = eidVector.get(i)
+                  assert(eid > previousEId)
+                  previousEId = eid
+                  i += 1
+                }
+              }
+              reader.close()
+            }
+            // There are 4 batches (partitions) in total.
+            assert(batchCount == 4)
+            allocator.close()
+          }
+        }
+      }
   }
 
   gridTest("SPARK-43923: commands send events")(
@@ -529,10 +679,11 @@ class SparkConnectServiceSuite
           }
 
           override def onCompleted(): Unit = {
+            verifyEvents.onCompleted(producedNumRows)
             done = true
           }
         })
-      verifyEvents.onCompleted(producedNumRows)
+      verifyEvents.assertClosed()
       // The current implementation is expected to be blocking.
       // This is here to make sure it is.
       assert(done)
@@ -620,7 +771,7 @@ class SparkConnectServiceSuite
           }
         })
       thread.join()
-      verifyEvents.onCompleted()
+      verifyEvents.assertClosed()
     }
   }
 
@@ -683,7 +834,7 @@ class SparkConnectServiceSuite
           }
         })
       assert(failures.isEmpty, s"this should have no failures but got $failures")
-      verifyEvents.onCompleted()
+      verifyEvents.assertClosed()
     }
   }
 
@@ -911,9 +1062,6 @@ class SparkConnectServiceSuite
       }
     }
     def onNext(v: proto.ExecutePlanResponse): Unit = {
-      if (v.hasSchema) {
-        assert(executeHolder.eventsManager.status == ExecuteStatus.Analyzed)
-      }
       if (v.hasMetrics) {
         assert(executeHolder.eventsManager.status == ExecuteStatus.Finished)
       }
@@ -928,6 +1076,8 @@ class SparkConnectServiceSuite
     }
     def onCompleted(producedRowCount: Option[Long] = None): Unit = {
       assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)
+    }
+    def assertClosed(): Unit = {
       // The eventsManager is closed asynchronously
       Eventually.eventually(EVENT_WAIT_TIMEOUT) {
         assert(

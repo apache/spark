@@ -21,7 +21,11 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, QueryPlanningTracker}
+import org.apache.spark.sql.catalyst.{
+  ExtendedAnalysisException,
+  QueryPlanningTracker,
+  TableIdentifier
+}
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
   Analyzer,
@@ -440,7 +444,43 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Tentative mode conf is not stored during view creation when explicitly set") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      validateConfStoredInView(
+        conf = SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
+        shouldStore = false
+      )
+    }
+  }
+
+  test("Dual-run mode conf is not stored during view creation when explicitly set") {
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true") {
+      validateConfStoredInView(
+        conf = SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
+        shouldStore = false
+      )
+    }
+  }
+
+  test("Single-pass result conf is stored during view creation when explicitly set") {
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key -> "true") {
+      validateConfStoredInView(
+        conf = SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key,
+        shouldStore = true
+      )
+    }
+  }
+
   private def assertPlansEqual(actualPlan: LogicalPlan, expectedPlan: LogicalPlan) = {
     assert(NormalizePlan(actualPlan) == NormalizePlan(expectedPlan))
+  }
+
+  private def validateConfStoredInView(conf: String, shouldStore: Boolean): Unit = {
+    withView("v1") {
+      sql("CREATE VIEW v1 AS SELECT 1")
+
+      val viewMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v1"))
+      assert(viewMetadata.properties.contains(s"view.sqlConfig.$conf") == shouldStore)
+    }
   }
 }

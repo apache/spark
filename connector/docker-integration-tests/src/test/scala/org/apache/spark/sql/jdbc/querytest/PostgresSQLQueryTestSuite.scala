@@ -14,11 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.jdbc.querytest
 
 import java.io.File
 import java.sql.Connection
 
+import org.apache.spark.sql.jdbc.PostgresDatabaseOnDocker
 import org.apache.spark.tags.DockerTest
 
 /**

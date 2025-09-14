@@ -156,9 +156,6 @@ case class SchemaOfCsv(
 
   override def nullable: Boolean = false
 
-  @transient
-  private lazy val csv = child.eval().asInstanceOf[UTF8String]
-
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!child.foldable) {
       DataTypeMismatch(

@@ -22,15 +22,14 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
-import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
-import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
@@ -44,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -282,11 +281,15 @@ class AstBuilder extends DataTypeAstBuilder
       parsingCtx: SqlScriptingParsingContext): ExceptionHandler = {
     val exceptionHandlerTriggers = visitConditionValuesImpl(ctx.conditionValues())
 
-    if (Option(ctx.CONTINUE()).isDefined) {
-      throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+    val handlerType = if (Option(ctx.CONTINUE()).isDefined) {
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED)) {
+        throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+      }
+      ExceptionHandlerType.CONTINUE
+    } else {
+      ExceptionHandlerType.EXIT
     }
 
-    val handlerType = ExceptionHandlerType.EXIT
     val body = if (Option(ctx.beginEndCompoundBlock()).isDefined) {
       visitBeginEndCompoundBlockImpl(
         ctx.beginEndCompoundBlock(),
@@ -1149,7 +1152,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Returns the parameters for [[ExecuteImmediateQuery]] logical plan.
+   * Returns the parameters for [[UnresolvedExecuteImmediate]] logical plan.
    * Expected format:
    * {{{
    *   EXECUTE IMMEDIATE {query_string|string_literal}
@@ -1157,11 +1160,8 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitExecuteImmediate(ctx: ExecuteImmediateContext): LogicalPlan = withOrigin(ctx) {
-    // Because of how parsing rules are written, we know that either
-    // queryParam or targetVariable is non null - hence use Either to represent this.
-    val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(string(visitStringLit(sl))))
-    val queryVariable = Option(ctx.queryParam.multipartIdentifier)
-      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+    // With the new grammar, queryParam is now an expression
+    val queryParam = expression(ctx.queryParam)
 
     val targetVars = Option(ctx.targetVariable).toSeq
       .flatMap(v => visitMultipartIdentifierList(v))
@@ -1169,8 +1169,7 @@ class AstBuilder extends DataTypeAstBuilder
       visitExecuteImmediateUsing(_)
     }.getOrElse{ Seq.empty }
 
-
-    ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars)
+    UnresolvedExecuteImmediate(queryParam, exprs, targetVars)
   }
 
   override def visitExecuteImmediateUsing(
@@ -6379,7 +6378,7 @@ class AstBuilder extends DataTypeAstBuilder
    *
    * For example:
    * {{{
-   *   DECLARE [OR REPLACE] [VARIABLE] [db_name.]variable_name
+   *   DECLARE [OR REPLACE] [VARIABLE] variable_name [COMMA variable_name]*
    *   [dataType] [defaultExpression];
    * }}}
    *
@@ -6392,7 +6391,7 @@ class AstBuilder extends DataTypeAstBuilder
         throw new ParseException(
           errorClass = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
           messageParameters = Map.empty,
-          ctx.identifierReference)
+          ctx.identifierReferences.get(0))
       }
       DefaultValueExpression(Literal(null, dataTypeOpt.get), "null")
     } else {
@@ -6400,7 +6399,11 @@ class AstBuilder extends DataTypeAstBuilder
       dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
     }
     CreateVariable(
-      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      ctx.identifierReferences.asScala.map (
+        identifierReference => {
+          withIdentClause(identifierReference, UnresolvedIdentifier(_))
+        }
+      ).toSeq,
       defaultExpression,
       ctx.REPLACE() != null
     )

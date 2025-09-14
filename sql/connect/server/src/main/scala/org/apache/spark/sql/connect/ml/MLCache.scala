@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable
 
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
@@ -242,8 +241,9 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   def clear(): Int = this.synchronized {
     val size = cachedModel.size()
     cachedModel.clear()
+    totalMLCacheSizeBytes.set(0)
     if (getMemoryControlEnabled) {
-      FileUtils.cleanDirectory(new File(offloadedModelsDir.toString))
+      SparkFileUtils.cleanDirectory(new File(offloadedModelsDir.toString))
     }
     size
   }

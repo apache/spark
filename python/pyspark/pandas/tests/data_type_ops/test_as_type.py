@@ -32,19 +32,17 @@ from pyspark.pandas.typedef.typehints import (
 
 
 class AsTypeTestsMixin:
-    """Unit tests for arithmetic operations of numeric data types.
-
-    A few test cases are disabled because pandas-on-Spark returns float64 whereas pandas
-    returns float32.
-    The underlying reason is the respective Spark operations return DoubleType always.
-    """
+    """Unit tests for arithmetic operations of numeric data types."""
 
     def test_astype(self):
         pdf, psdf = self.pdf, self.psdf
+        int_types = [int, np.int32, np.int16, np.int8]
+        cat_type = CategoricalDtype(categories=[2, 1, 3])
+        other_types = [float, np.float32, bool, str, "category", cat_type]
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
 
-            for int_type in [int, np.int32, np.int16, np.int8]:
+            for int_type in int_types:
                 if not pser.hasnans:
                     self.assert_eq(pser.astype(int_type), psser.astype(int_type))
                 else:
@@ -54,14 +52,9 @@ class AsTypeTestsMixin:
                         "values to integer" % psser._dtype_op.pretty_name,
                         lambda: psser.astype(int_type),
                     )
+            for other_type in other_types:
+                self.assert_eq(pser.astype(other_type), psser.astype(other_type))
 
-            self.assert_eq(pser.astype(bool), psser.astype(bool))
-            self.assert_eq(pser.astype(float), psser.astype(float))
-            self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
-            self.assert_eq(pser.astype(str), psser.astype(str))
-            self.assert_eq(pser.astype("category"), psser.astype("category"))
-            cat_type = CategoricalDtype(categories=[2, 1, 3])
-            self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
         if extension_object_dtypes_available and extension_float_dtypes_available:
             pser = pd.Series(pd.Categorical([1.0, 2.0, 3.0]), dtype=pd.Float64Dtype())
             psser = ps.from_pandas(pser)

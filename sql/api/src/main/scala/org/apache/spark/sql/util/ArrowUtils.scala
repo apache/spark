@@ -89,7 +89,7 @@ private[sql] object ArrowUtils {
         if ts.getUnit == TimeUnit.MICROSECOND && ts.getTimezone == null =>
       TimestampNTZType
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
-    case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND =>
+    case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND && t.getBitWidth == 8 * 8 =>
       TimeType(TimeType.MICROS_PRECISION)
     case ArrowType.Null.INSTANCE => NullType
     case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH =>

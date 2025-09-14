@@ -27,7 +27,6 @@ import java.math.BigDecimal;
 import scala.collection.Seq;
 import scala.jdk.javaapi.CollectionConverters;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Ints;
 import org.junit.jupiter.api.*;
 
@@ -133,7 +132,7 @@ public class JavaDataFrameSuite {
   public static class Bean implements Serializable {
     private double a = 0.0;
     private Integer[] b = { 0, 1 };
-    private Map<String, int[]> c = ImmutableMap.of("hello", new int[] { 1, 2 });
+    private Map<String, int[]> c = Map.of("hello", new int[] { 1, 2 });
     private List<String> d = Arrays.asList("floppy", "disk");
     private BigInteger e = new BigInteger("1234567");
     private NestedBean f = new NestedBean();
@@ -312,7 +311,7 @@ public class JavaDataFrameSuite {
   @Test
   public void testSampleBy() {
     Dataset<Row> df = spark.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
-    Dataset<Row> sampled = df.stat().sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    Dataset<Row> sampled = df.stat().sampleBy("key", Map.of(0, 0.1, 1, 0.2), 0L);
     List<Row> actual = sampled.groupBy("key").count().orderBy("key").collectAsList();
     Assertions.assertEquals(0, actual.get(0).getLong(0));
     Assertions.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);
@@ -338,7 +337,7 @@ public class JavaDataFrameSuite {
   @Test
   public void testSampleByColumn() {
     Dataset<Row> df = spark.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
-    Dataset<Row> sampled = df.stat().sampleBy(col("key"), ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    Dataset<Row> sampled = df.stat().sampleBy(col("key"), Map.of(0, 0.1, 1, 0.2), 0L);
     List<Row> actual = sampled.groupBy("key").count().orderBy("key").collectAsList();
     Assertions.assertEquals(0, actual.get(0).getLong(0));
     Assertions.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);

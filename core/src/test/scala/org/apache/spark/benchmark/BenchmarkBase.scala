@@ -37,7 +37,7 @@ abstract class BenchmarkBase {
   def runBenchmarkSuite(mainArgs: Array[String]): Unit
 
   final def runBenchmark(benchmarkName: String)(func: => Any): Unit = {
-    val separator = "=" * 96
+    val separator = "=".repeat(96)
     val testHeader = (separator + '\n' + benchmarkName + '\n' + separator + '\n' + '\n').getBytes
     output.foreach(_.write(testHeader))
     func
@@ -51,7 +51,7 @@ abstract class BenchmarkBase {
     System.setProperty(IS_TESTING.key, "true")
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
-      val version = System.getProperty("java.version").split("\\D+")(0).toInt
+      val version = Utils.javaVersion.split("\\D+")(0).toInt
       val jdkString = if (version > 17) s"-jdk$version" else ""
       val resultFileName =
         s"${this.getClass.getSimpleName.replace("$", "")}$jdkString$suffix-results.txt"

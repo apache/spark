@@ -248,6 +248,7 @@ __all__ = [  # noqa: F405
     "timestamp_micros",
     "timestamp_millis",
     "timestamp_seconds",
+    "time_trunc",
     "to_date",
     "to_time",
     "to_timestamp",
@@ -523,5 +524,6 @@ __all__ = [  # noqa: F405
     "pandas_udf",
     "udf",
     "udtf",
+    "arrow_udtf",
     "unwrap_udt",
 ]
