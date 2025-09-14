@@ -152,7 +152,7 @@ struct<>
 
 
 -- !query
-DROP TABLE IF EXISTS theta_string_collation_test
+DROP TABLE IF EXISTS t_string_collation
 -- !query schema
 struct<>
 -- !query output
@@ -160,7 +160,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE theta_string_collation_test AS
+CREATE TABLE t_string_collation AS
 VALUES
   (''), ('  '), (CAST(X'C1' AS STRING)), (CAST(X'80' AS STRING)),
   ('\uFFFD'), ('Å'), ('å'), ('a\u030A'), ('Å '), ('å  '),
@@ -801,7 +801,7 @@ struct<theta_sketch_estimate(theta_sketch_agg(col, 12)):bigint>
 
 
 -- !query
-SELECT theta_sketch_estimate(theta_sketch_agg(col1)) utf8_b FROM theta_string_collation_test
+SELECT theta_sketch_estimate(theta_sketch_agg(col1)) utf8_b FROM t_string_collation
 -- !query schema
 struct<utf8_b:bigint>
 -- !query output
@@ -809,7 +809,7 @@ struct<utf8_b:bigint>
 
 
 -- !query
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE)) utf8_lc FROM theta_string_collation_test
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE)) utf8_lc FROM t_string_collation
 -- !query schema
 struct<utf8_lc:bigint>
 -- !query output
@@ -817,7 +817,7 @@ struct<utf8_lc:bigint>
 
 
 -- !query
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE)) unicode FROM theta_string_collation_test
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE)) unicode FROM t_string_collation
 -- !query schema
 struct<unicode:bigint>
 -- !query output
@@ -825,7 +825,7 @@ struct<unicode:bigint>
 
 
 -- !query
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI)) unicode_ci FROM theta_string_collation_test
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI)) unicode_ci FROM t_string_collation
 -- !query schema
 struct<unicode_ci:bigint>
 -- !query output
@@ -833,7 +833,7 @@ struct<unicode_ci:bigint>
 
 
 -- !query
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_BINARY_RTRIM)) utf8_b_rt FROM theta_string_collation_test
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_BINARY_RTRIM)) utf8_b_rt FROM t_string_collation
 -- !query schema
 struct<utf8_b_rt:bigint>
 -- !query output
@@ -841,7 +841,7 @@ struct<utf8_b_rt:bigint>
 
 
 -- !query
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE_RTRIM)) utf8_lc_rt FROM theta_string_collation_test
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE_RTRIM)) utf8_lc_rt FROM t_string_collation
 -- !query schema
 struct<utf8_lc_rt:bigint>
 -- !query output
@@ -849,7 +849,7 @@ struct<utf8_lc_rt:bigint>
 
 
 -- !query
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_RTRIM)) unicode_rt FROM theta_string_collation_test
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_RTRIM)) unicode_rt FROM t_string_collation
 -- !query schema
 struct<unicode_rt:bigint>
 -- !query output
@@ -857,7 +857,7 @@ struct<unicode_rt:bigint>
 
 
 -- !query
-SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI_RTRIM)) unicode_ci_rt FROM theta_string_collation_test
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI_RTRIM)) unicode_ci_rt FROM t_string_collation
 -- !query schema
 struct<unicode_ci_rt:bigint>
 -- !query output
@@ -1287,7 +1287,7 @@ struct<>
 
 
 -- !query
-DROP TABLE IF EXISTS theta_string_collation_test
+DROP TABLE IF EXISTS t_string_collation
 -- !query schema
 struct<>
 -- !query output
