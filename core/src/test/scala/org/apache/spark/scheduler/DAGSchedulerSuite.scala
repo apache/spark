@@ -44,6 +44,7 @@ import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
+import org.apache.spark.rpc.RpcTimeoutException
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
@@ -5215,6 +5216,30 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val expectedMsg = s"$stage0 (name=${stage0.name}) has been resubmitted for the maximum " +
       s"allowable number of times: 2, which is the max value of " +
       s"config `spark.stage.maxAttempts` and `spark.stage.maxConsecutiveAttempts`."
+
+    jobResult match {
+      case JobFailed(reason) =>
+        assert(reason.getMessage.contains(expectedMsg))
+      case other => fail(s"expected JobFailed, not $other")
+    }
+  }
+
+  test("SPARK-53564: abort stage if RpcTimeout happens when submitting the stage") {
+    setupStageAbortTest(sc)
+    doAnswer(_ => throw new RpcTimeoutException("RpcTimeout", null))
+      .when(blockManagerMaster)
+      .getLocations(any(classOf[Array[BlockId]]))
+
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    shuffleMapRdd.cache()
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0))
+
+    assertDataStructuresEmpty()
+    sc.listenerBus.waitUntilEmpty()
+    assert(ended)
+    val expectedMsg = "failed to get missing parent stages for ShuffleMapStage 0"
 
     jobResult match {
       case JobFailed(reason) =>

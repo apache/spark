@@ -1479,7 +1479,9 @@ private[spark] class DAGScheduler(
             getMissingParentStages(stage).sortBy(_.id)
           } catch {
             case e: RpcTimeoutException =>
-              abortStage(stage, "Failed to get missing parent stages due to rpc timeout", Some(e))
+              val reason = s"failed to get missing parent stages for $stage " +
+                s"(name=${stage.name}) due to rpc timeout."
+              abortStage(stage, reason, Some(e))
               return
           }
           logDebug("missing: " + missing)
@@ -1488,10 +1490,12 @@ private[spark] class DAGScheduler(
                     log"which has no missing parents")
             submitMissingTasks(stage, jobId.get)
           } else {
+            // Add to waiting list before submitting missing parents so that the state can be
+            // cleaned up if any of the parents is aborted.
+            waitingStages += stage
             for (parent <- missing) {
               submitStage(parent)
             }
-            waitingStages += stage
           }
         }
       }
