@@ -259,6 +259,10 @@ object StateStoreErrors {
         QueryExecutionErrors.cannotLoadStore(e)
     }
   }
+
+  def stateStoreCheckpointIdsNotSupported(msg: String): StateStoreCheckpointIdsNotSupported = {
+    new StateStoreCheckpointIdsNotSupported(msg)
+  }
 }
 
 trait ConvertableToCannotLoadStoreError {
@@ -543,6 +547,12 @@ class StateStoreOperationOutOfOrder(errorMsg: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
     messageParameters = Map("errorMsg" -> errorMsg)
+  )
+
+class StateStoreCheckpointIdsNotSupported(msg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_CHECKPOINT_IDS_NOT_SUPPORTED",
+    messageParameters = Map("msg" -> msg)
   )
 
 class StateStoreCommitValidationFailed(

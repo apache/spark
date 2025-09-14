@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Sort}
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -685,7 +685,7 @@ class ExpressionResolver(
           case Some(lateralAttributeReference) =>
             scopes.current.lcaRegistry
               .markAttributeLaterallyReferenced(lateralAttributeReference)
-            candidate.setTagValue(ExpressionResolver.SINGLE_PASS_IS_LCA, ())
+            candidate.setTagValue(ResolverTag.SINGLE_PASS_IS_LCA, ())
             expressionResolutionContext.hasLateralColumnAlias = true
           case None =>
         }
@@ -1098,9 +1098,4 @@ class ExpressionResolver(
       s"The replacement is unresolved: ${toSQLExpr(runtimeReplaceable.replacement)}."
     )
   }
-}
-
-object ExpressionResolver {
-  val SINGLE_PASS_SUBTREE_BOUNDARY = TreeNodeTag[Unit]("single_pass_subtree_boundary")
-  val SINGLE_PASS_IS_LCA = TreeNodeTag[Unit]("single_pass_is_lca")
 }

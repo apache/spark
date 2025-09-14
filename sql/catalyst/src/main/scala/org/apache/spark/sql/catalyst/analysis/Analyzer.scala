@@ -135,9 +135,6 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                              if `t` was a permanent table when the current view was created, it
  *                              should still be a permanent table when resolving the current view,
  *                              even if a temp view `t` has been created.
- * @param isExecuteImmediate Whether the current plan is created by EXECUTE IMMEDIATE. Used when
- *                           resolving variables, as SQL Scripting local variables should not be
- *                           visible from EXECUTE IMMEDIATE.
  * @param outerPlan The query plan from the outer query that can be used to resolve star
  *                  expressions in a subquery.
  */
@@ -155,7 +152,6 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None,
-    isExecuteImmediate: Boolean = false,
     collation: Option[String] = None,
 
     /**
@@ -212,19 +208,11 @@ object AnalysisContext {
       viewDesc.viewReferredTempViewNames,
       mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       viewDesc.viewReferredTempVariableNames,
-      isExecuteImmediate = originContext.isExecuteImmediate,
       collation = viewDesc.collation)
     set(context)
     try f finally { set(originContext) }
   }
 
-  def withExecuteImmediateContext[A](f: => A): A = {
-    val originContext = value.get()
-    val context = originContext.copy(isExecuteImmediate = true)
-
-    set(context)
-    try f finally { set(originContext) }
-  }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
@@ -495,10 +483,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteMergeIntoTable ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
-      new SubstituteExecuteImmediate(
-        catalogManager,
-        resolveChild = executeSameContext,
-        checkAnalysis = checkAnalysis) ::
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
@@ -1802,8 +1786,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
 
-      // Pass for Execute Immediate as arguments will be resolved by [[SubstituteExecuteImmediate]].
-      case e : ExecuteImmediateQuery => e
 
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
@@ -1945,7 +1927,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               f1.nameParts == Seq("count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
-              case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
+              case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
                 throw QueryCompilationErrors
                   .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
               case _ => // do nothing
@@ -2360,7 +2342,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val inputType = extractInputType(args)
         val bound = unbound.bind(inputType)
         validateParameterModes(bound)
-        val rearrangedArgs = NamedParametersSupport.defaultRearrange(bound, args)
+        val rearrangedArgs =
+          NamedParametersSupport.defaultRearrange(bound, args, SQLConf.get.resolver)
         Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
     }
 

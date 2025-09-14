@@ -368,6 +368,11 @@
           "The change log writer version cannot be <version>."
         ]
       },
+      "INVALID_CHECKPOINT_LINEAGE" : {
+        "message" : [
+          "Invalid checkpoint lineage: <lineage>. <message>"
+        ]
+      },
       "KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
         "message" : [
           "<msg>"
@@ -1846,12 +1851,6 @@
     ],
     "sqlState" : "39000"
   },
-  "FOUND_MULTIPLE_DATA_SOURCES" : {
-    "message" : [
-      "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
-    ],
-    "sqlState" : "42710"
-  },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
@@ -2742,6 +2741,12 @@
       "Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
     ],
     "sqlState" : "42001"
+  },
+  "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Expression type must be string type but got <exprType>."
+    ],
+    "sqlState" : "42K09"
   },
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [
@@ -3919,12 +3924,6 @@
       }
     },
     "sqlState" : "42K0M"
-  },
-  "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
-    "message" : [
-      "Variable type must be string type but got <varType>."
-    ],
-    "sqlState" : "42K09"
   },
   "INVALID_VARIANT_CAST" : {
     "message" : [
@@ -5168,6 +5167,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_CHECKPOINT_IDS_NOT_SUPPORTED" : {
+    "message" : [
+      "<msg>"
+    ],
+    "sqlState" : "KD002"
+  },
   "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
     "message" : [
       "The checkpoint location <checkpointLocation> should be empty on batch 0",
@@ -5412,6 +5417,14 @@
       }
     },
     "sqlState" : "42616"
+  },
+  "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED" : {
+    "message" : [
+      "Reading state across different checkpoint format versions is not supported.",
+      "startBatchId=<startBatchId>, endBatchId=<endBatchId>.",
+      "startFormatVersion=<startFormatVersion>, endFormatVersion=<endFormatVersion>."
+    ],
+    "sqlState" : "KD002"
   },
   "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
     "message" : [
@@ -6643,12 +6656,6 @@
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION" : {
-    "message" : [
-      "The function <funcName> does not support streaming. Please remove the STREAM keyword"
-    ],
-    "sqlState" : "42000"
   },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [

@@ -747,6 +747,10 @@ class PlanGenerationTestSuite
     simple.repartitionByRange(fn.col("a").asc, fn.col("id").desc_nulls_first)
   }
 
+  test("repartitionById") {
+    simple.repartitionById(10, fn.col("id").cast("int"))
+  }
+
   test("coalesce") {
     simple.coalesce(5)
   }
@@ -3400,6 +3404,17 @@ class PlanGenerationTestSuite
       fn.typedLit(java.time.Period.ofDays(100)),
       fn.typedLit(java.time.LocalTime.of(23, 59, 59, 999999999)),
       fn.typedLit(new CalendarInterval(2, 20, 100L)),
+      fn.typedLit(
+        (
+          java.time.LocalDate.of(2020, 10, 10),
+          java.time.Instant.ofEpochMilli(1677155519808L),
+          new java.sql.Timestamp(12345L),
+          java.time.LocalDateTime.of(2023, 2, 23, 20, 36),
+          java.sql.Date.valueOf("2023-02-23"),
+          java.time.Duration.ofSeconds(200L),
+          java.time.Period.ofDays(100),
+          java.time.LocalTime.of(23, 59, 59, 999999999),
+          new CalendarInterval(2, 20, 100L))),
 
       // Handle parameterized scala types e.g.: List, Seq and Map.
       fn.typedLit(Some(1)),
@@ -3419,6 +3434,11 @@ class PlanGenerationTestSuite
           mutable.LinkedHashMap("a" -> 1, "b" -> 2),
           mutable.LinkedHashMap("a" -> 3, "b" -> 4),
           mutable.LinkedHashMap("a" -> 5, "b" -> 6))),
+      fn.typedLit(
+        Seq(
+          mutable.LinkedHashMap("a" -> Seq("1", "2"), "b" -> Seq("3", "4")),
+          mutable.LinkedHashMap("a" -> Seq("5", "6"), "b" -> Seq("7", "8")),
+          mutable.LinkedHashMap("a" -> Seq.empty[String], "b" -> Seq.empty[String]))),
       fn.typedLit(
         mutable.LinkedHashMap(
           1 -> mutable.LinkedHashMap("a" -> 1, "b" -> 2),

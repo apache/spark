@@ -20,14 +20,23 @@ import unittest
 from pyspark.sql.functions import arrow_udf, ArrowUDFType
 from pyspark.util import PythonEvalType
 from pyspark.sql import Row
-from pyspark.sql.types import ArrayType, YearMonthIntervalType
+from pyspark.sql.types import (
+    ArrayType,
+    YearMonthIntervalType,
+    StructType,
+    StructField,
+    VariantType,
+    VariantVal,
+)
 from pyspark.sql import functions as sf
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -139,6 +148,7 @@ class GroupedAggArrowUDFTestsMixin:
 
         self.assertEqual(expected, result.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_basic(self):
         df = self.data
         weighted_mean_udf = self.arrow_agg_weighted_mean_udf
@@ -261,6 +271,7 @@ class GroupedAggArrowUDFTestsMixin:
         self.assertEqual(expected5, result5.collect())
         self.assertEqual(expected6, result6.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_multiple_udfs(self):
         """
         Test multiple group aggregate pandas UDFs in one agg function.
@@ -530,6 +541,7 @@ class GroupedAggArrowUDFTestsMixin:
 
         assert filtered.collect()[0]["mean"] == 42.0
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -558,6 +570,7 @@ class GroupedAggArrowUDFTestsMixin:
                         df.groupby("id").agg(sf.mean(df.v).alias("wm")).collect(),
                     )
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments_negative(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -778,6 +791,73 @@ class GroupedAggArrowUDFTestsMixin:
 
         self.assertEqual(expected1.collect(), result1.collect())
 
+    def test_time_min(self):
+        import pyarrow as pa
+
+        df = self.spark.sql(
+            """
+            SELECT * FROM VALUES
+            (1, TIME '12:34:56'),
+            (1, TIME '1:2:3'),
+            (2, TIME '0:58:59'),
+            (2, TIME '10:58:59'),
+            (2, TIME '10:00:03')
+            AS tab(i, t)
+            """
+        )
+
+        @arrow_udf("time", ArrowUDFType.GROUPED_AGG)
+        def agg_min_time(v):
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.Time64Array)
+            return pa.compute.min(v)
+
+        expected1 = df.select(sf.min("t").alias("res"))
+        result1 = df.select(agg_min_time("t").alias("res"))
+        self.assertEqual(expected1.collect(), result1.collect())
+
+        expected2 = df.groupby("i").agg(sf.min("t").alias("res")).sort("i")
+        result2 = df.groupby("i").agg(agg_min_time("t").alias("res")).sort("i")
+        self.assertEqual(expected2.collect(), result2.collect())
+
+    def test_input_output_variant(self):
+        import pyarrow as pa
+
+        @arrow_udf("variant")
+        def first_variant(v: pa.Array) -> pa.Scalar:
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.StructArray)
+            assert isinstance(v.field("metadata"), pa.BinaryArray)
+            assert isinstance(v.field("value"), pa.BinaryArray)
+            return v[0]
+
+        @arrow_udf("variant")
+        def last_variant(v: pa.Array) -> pa.Scalar:
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.StructArray)
+            assert isinstance(v.field("metadata"), pa.BinaryArray)
+            assert isinstance(v.field("value"), pa.BinaryArray)
+            return v[-1]
+
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        result = df.select(
+            first_variant("v").alias("first"),
+            last_variant("v").alias("last"),
+        )
+        self.assertEqual(
+            result.schema,
+            StructType(
+                [
+                    StructField("first", VariantType(), True),
+                    StructField("last", VariantType(), True),
+                ]
+            ),
+        )
+
+        row = result.first()
+        self.assertIsInstance(row.first, VariantVal)
+        self.assertIsInstance(row.last, VariantVal)
+
     def test_return_type_coercion(self):
         import pyarrow as pa
 
@@ -811,6 +891,40 @@ class GroupedAggArrowUDFTestsMixin:
             # pyarrow.lib.ArrowInvalid:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_return_numpy_scalar(self):
+        import numpy as np
+        import pyarrow as pa
+
+        @arrow_udf("long")
+        def np_max_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.max(v)
+
+        @arrow_udf("long")
+        def np_min_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.min(v)
+
+        @arrow_udf("double")
+        def np_avg_udf(v: pa.Array) -> np.float64:
+            assert isinstance(v, pa.Array)
+            return np.mean(v)
+
+        df = self.spark.range(10)
+        expected = df.select(
+            sf.max("id").alias("max"),
+            sf.min("id").alias("min"),
+            sf.avg("id").alias("avg"),
+        )
+
+        result = df.select(
+            np_max_udf("id").alias("max"),
+            np_min_udf("id").alias("min"),
+            np_avg_udf("id").alias("avg"),
+        )
+        self.assertEqual(expected.collect(), result.collect())
 
     def test_unsupported_return_types(self):
         import pyarrow as pa

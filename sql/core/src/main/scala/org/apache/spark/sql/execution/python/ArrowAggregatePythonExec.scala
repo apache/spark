@@ -215,10 +215,10 @@ case class ArrowAggregatePythonExec(
       case Some(sessionExpression) =>
         val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
         val spillThreshold = conf.windowExecBufferSpillThreshold
-        val spillSizeThreshold = conf.windowExecBufferSpillSizeThreshold
+        val sizeInBytesSpillThreshold = conf.windowExecBufferSpillSizeThreshold
 
         new UpdatingSessionsIterator(iter, groupingWithoutSessionExpressions, sessionExpression,
-          child.output, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+          child.output, inMemoryThreshold, spillThreshold, sizeInBytesSpillThreshold)
 
       case None => iter
     }
