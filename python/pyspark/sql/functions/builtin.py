@@ -25146,7 +25146,8 @@ def make_timestamp_ntz(date: "ColumnOrName", time: "ColumnOrName") -> Column:
 @_try_remote_functions
 def make_timestamp_ntz(*cols: "ColumnOrName") -> Column:
     """
-    Create local date-time from years, months, days, hours, mins, secs fields, or from date and time fields.
+    Create local date-time from years, months, days, hours, mins, secs fields, or from
+    date and time fields.
     If there are 6 cols, then this creates a timestamp from individual time components.
     If there are 2 cols, then this creates a timestamp from date and time.
     If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
