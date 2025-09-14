@@ -57,6 +57,13 @@ VALUES
   (ARRAY(3L), ARRAY(5L)), 
   (ARRAY(4L), ARRAY(6L)) AS tab(col1, col2);
 
+DROP TABLE IF EXISTS theta_string_collation_test;
+CREATE TABLE theta_string_collation_test AS
+VALUES
+  (''), ('  '), (CAST(X'C1' AS STRING)), (CAST(X'80' AS STRING)),
+  ('\uFFFD'), ('Å'), ('å'), ('a\u030A'), ('Å '), ('å  '),
+  ('a\u030A   ') AS tab(col1);
+
 -- Test basic theta_sketch_agg with IntegerType from table
 SELECT theta_sketch_estimate(theta_sketch_agg(col1)) AS result FROM t_int_1_5_through_7_11;
 
@@ -374,7 +381,17 @@ FROM VALUES (''), ('a'), (''), ('b'), ('c') tab(col);
 
 -- Test theta_sketch_agg with empty binary data
 SELECT theta_sketch_estimate(theta_sketch_agg(col))
-FROM VALUES (X''), (X'01'), (X''), (X'02'), (X'03') tab(col);
+FROM VALUES (X''), (X'01'), (X'02'), (X'03'), (CAST('  ' AS BINARY)), (X'e280'), (X'c1'), (X'c120') tab(col);
+
+-- Test theta_sketch_agg with collated string data
+SELECT theta_sketch_estimate(theta_sketch_agg(col1)) utf8_b FROM theta_string_collation_test;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE)) utf8_lc FROM theta_string_collation_test;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE)) unicode FROM theta_string_collation_test;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI)) unicode_ci FROM theta_string_collation_test;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_BINARY_RTRIM)) utf8_b_rt FROM theta_string_collation_test;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE_RTRIM)) utf8_lc_rt FROM theta_string_collation_test;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_RTRIM)) unicode_rt FROM theta_string_collation_test;
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI_RTRIM)) unicode_ci_rt FROM theta_string_collation_test;
 
 -- Comprehensive test using all ThetaSketch functions in a single query
 -- This query demonstrates the full workflow: aggregation -> union -> intersection -> difference -> estimate
@@ -498,3 +515,4 @@ DROP TABLE IF EXISTS t_string_a_d_through_e_h;
 DROP TABLE IF EXISTS t_binary_a_b_through_e_f;
 DROP TABLE IF EXISTS t_array_int_1_3_through_4_6;
 DROP TABLE IF EXISTS t_array_long_1_3_through_4_6;
+DROP TABLE IF EXISTS theta_string_collation_test

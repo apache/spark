@@ -146,6 +146,25 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t_array_long_1_3
 
 
 -- !query
+DROP TABLE IF EXISTS theta_string_collation_test
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.theta_string_collation_test
+
+
+-- !query
+CREATE TABLE theta_string_collation_test AS
+VALUES
+  (''), ('  '), (CAST(X'C1' AS STRING)), (CAST(X'80' AS STRING)),
+  ('\uFFFD'), ('Å'), ('å'), ('a\u030A'), ('Å '), ('å  '),
+  ('a\u030A   ') AS tab(col1)
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`theta_string_collation_test`, ErrorIfExists, [col1]
+   +- SubqueryAlias tab
+      +- LocalRelation [col1#x]
+
+
+-- !query
 SELECT theta_sketch_estimate(theta_sketch_agg(col1)) AS result FROM t_int_1_5_through_7_11
 -- !query analysis
 Aggregate [theta_sketch_estimate(theta_sketch_agg(col1#x, 12, 0, 0)) AS result#xL]
@@ -863,11 +882,75 @@ Aggregate [theta_sketch_estimate(theta_sketch_agg(col#x, 12, 0, 0)) AS theta_ske
 
 -- !query
 SELECT theta_sketch_estimate(theta_sketch_agg(col))
-FROM VALUES (X''), (X'01'), (X''), (X'02'), (X'03') tab(col)
+FROM VALUES (X''), (X'01'), (X'02'), (X'03'), (CAST('  ' AS BINARY)), (X'e280'), (X'c1'), (X'c120') tab(col)
 -- !query analysis
 Aggregate [theta_sketch_estimate(theta_sketch_agg(col#x, 12, 0, 0)) AS theta_sketch_estimate(theta_sketch_agg(col, 12))#xL]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
+
+
+-- !query
+SELECT theta_sketch_estimate(theta_sketch_agg(col1)) utf8_b FROM theta_string_collation_test
+-- !query analysis
+Aggregate [theta_sketch_estimate(theta_sketch_agg(col1#x, 12, 0, 0)) AS utf8_b#xL]
++- SubqueryAlias spark_catalog.default.theta_string_collation_test
+   +- Relation spark_catalog.default.theta_string_collation_test[col1#x] parquet
+
+
+-- !query
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE)) utf8_lc FROM theta_string_collation_test
+-- !query analysis
+Aggregate [theta_sketch_estimate(theta_sketch_agg(collate(col1#x, UTF8_LCASE), 12, 0, 0)) AS utf8_lc#xL]
++- SubqueryAlias spark_catalog.default.theta_string_collation_test
+   +- Relation spark_catalog.default.theta_string_collation_test[col1#x] parquet
+
+
+-- !query
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE)) unicode FROM theta_string_collation_test
+-- !query analysis
+Aggregate [theta_sketch_estimate(theta_sketch_agg(collate(col1#x, UNICODE), 12, 0, 0)) AS unicode#xL]
++- SubqueryAlias spark_catalog.default.theta_string_collation_test
+   +- Relation spark_catalog.default.theta_string_collation_test[col1#x] parquet
+
+
+-- !query
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI)) unicode_ci FROM theta_string_collation_test
+-- !query analysis
+Aggregate [theta_sketch_estimate(theta_sketch_agg(collate(col1#x, UNICODE_CI), 12, 0, 0)) AS unicode_ci#xL]
++- SubqueryAlias spark_catalog.default.theta_string_collation_test
+   +- Relation spark_catalog.default.theta_string_collation_test[col1#x] parquet
+
+
+-- !query
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_BINARY_RTRIM)) utf8_b_rt FROM theta_string_collation_test
+-- !query analysis
+Aggregate [theta_sketch_estimate(theta_sketch_agg(collate(col1#x, UTF8_BINARY_RTRIM), 12, 0, 0)) AS utf8_b_rt#xL]
++- SubqueryAlias spark_catalog.default.theta_string_collation_test
+   +- Relation spark_catalog.default.theta_string_collation_test[col1#x] parquet
+
+
+-- !query
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UTF8_LCASE_RTRIM)) utf8_lc_rt FROM theta_string_collation_test
+-- !query analysis
+Aggregate [theta_sketch_estimate(theta_sketch_agg(collate(col1#x, UTF8_LCASE_RTRIM), 12, 0, 0)) AS utf8_lc_rt#xL]
++- SubqueryAlias spark_catalog.default.theta_string_collation_test
+   +- Relation spark_catalog.default.theta_string_collation_test[col1#x] parquet
+
+
+-- !query
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_RTRIM)) unicode_rt FROM theta_string_collation_test
+-- !query analysis
+Aggregate [theta_sketch_estimate(theta_sketch_agg(collate(col1#x, UNICODE_RTRIM), 12, 0, 0)) AS unicode_rt#xL]
++- SubqueryAlias spark_catalog.default.theta_string_collation_test
+   +- Relation spark_catalog.default.theta_string_collation_test[col1#x] parquet
+
+
+-- !query
+SELECT theta_sketch_estimate(theta_sketch_agg(col1 COLLATE UNICODE_CI_RTRIM)) unicode_ci_rt FROM theta_string_collation_test
+-- !query analysis
+Aggregate [theta_sketch_estimate(theta_sketch_agg(collate(col1#x, UNICODE_CI_RTRIM), 12, 0, 0)) AS unicode_ci_rt#xL]
++- SubqueryAlias spark_catalog.default.theta_string_collation_test
+   +- Relation spark_catalog.default.theta_string_collation_test[col1#x] parquet
 
 
 -- !query
@@ -1231,3 +1314,10 @@ DROP TABLE IF EXISTS t_array_long_1_3_through_4_6
 -- !query analysis
 DropTable true, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t_array_long_1_3_through_4_6
+
+
+-- !query
+DROP TABLE IF EXISTS theta_string_collation_test
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.theta_string_collation_test

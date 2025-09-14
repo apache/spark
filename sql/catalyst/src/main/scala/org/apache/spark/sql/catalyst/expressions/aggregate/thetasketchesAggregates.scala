@@ -165,10 +165,9 @@ case class ThetaSketchAgg(
    * unsupported types.
    * Notes:
    *   - Null values are ignored.
-   *   - Empty values are also ignored:
-   *       * Empty strings
-   *       * Empty byte arrays
-   *       * Empty arrays of supported element types
+   *   - Empty byte arrays
+   *   - Empty arrays of supported element types
+   *   - Strings that are collation-equal to the empty string are ignored.
    *
    * @param updateBuffer
    *   A previously initialized UpdateSketch instance
@@ -206,10 +205,10 @@ case class ThetaSketchAgg(
       case LongType =>
         sketch.update(v.asInstanceOf[Long])
       case st: StringType =>
+        val collation = CollationFactory.fetchCollation(st.collationId)
         val str = v.asInstanceOf[UTF8String]
-        if (str != null && str.numBytes > 0) {
-          val cKey = CollationFactory.getCollationKeyBytes(str, st.collationId)
-          sketch.update(cKey)
+        if (!collation.equalsFunction(str, UTF8String.EMPTY_UTF8)) {
+          sketch.update(collation.sortKeyFunction.apply(str))
         }
       case _ =>
         throw new SparkUnsupportedOperationException(
