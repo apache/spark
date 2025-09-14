@@ -125,7 +125,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       col: Attribute,
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String]): Expression = {
+      colPath: Seq[String],
+      fillDefaultValue: Boolean): Expression = {
 
     (value.dataType, col.dataType) match {
       // no need to reorder inner fields or cast if types are already compatible
@@ -141,17 +142,17 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath)
+          byName = true, conf, addError, colPath, fillDefaultValue)
         resolvedValue.getOrElse(value)
       case (valueType: ArrayType, colType: ArrayType) =>
         val resolvedValue = resolveArrayType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath)
+          byName = true, conf, addError, colPath, fillDefaultValue)
         resolvedValue.getOrElse(value)
       case (valueType: MapType, colType: MapType) =>
         val resolvedValue = resolveMapType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath)
+          byName = true, conf, addError, colPath, fillDefaultValue)
         resolvedValue.getOrElse(value)
       case _ =>
         checkUpdate(tableName, value, col, conf, addError, colPath)
@@ -319,15 +320,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           case (matchedType: StructType, expectedType: StructType) =>
             resolveStructType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath)
+              byName = true, conf, addError, newColPath, fillDefaultValue)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             resolveArrayType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath)
+              byName = true, conf, addError, newColPath, fillDefaultValue)
           case (matchedType: MapType, expectedType: MapType) =>
             resolveMapType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath)
+              byName = true, conf, addError, newColPath, fillDefaultValue)
           case _ =>
             checkField(
               tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath)
@@ -439,13 +440,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String]): Option[NamedExpression] = {
+      colPath: Seq[String],
+      fillDefaultValue: Boolean = false): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val fields = inputType.zipWithIndex.map { case (f, i) =>
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
     }
     val resolved = if (byName) {
-      reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath)
+      reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath,
+        fillDefaultValue)
     } else {
       resolveColumnsByPosition(
         tableName, fields, toAttributes(expectedType), conf, addError, colPath)
@@ -472,13 +475,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String]): Option[NamedExpression] = {
+      colPath: Seq[String],
+      fillDefaultValue: Boolean = false): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val param = NamedLambdaVariable("element", inputType.elementType, inputType.containsNull)
     val fakeAttr =
       AttributeReference("element", expectedType.elementType, expectedType.containsNull)()
     val res = if (byName) {
-      reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
+      reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath,
+        fillDefaultValue)
     } else {
       resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     }
@@ -506,13 +511,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       byName: Boolean,
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String]): Option[NamedExpression] = {
+      colPath: Seq[String],
+      fillDefaultValue: Boolean = false): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
 
     val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
     val fakeKeyAttr = AttributeReference("key", expectedType.keyType, nullable = false)()
     val resKey = if (byName) {
-      reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
+      reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath,
+        fillDefaultValue)
     } else {
       resolveColumnsByPosition(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
     }
@@ -522,7 +529,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val fakeValueAttr =
       AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
     val resValue = if (byName) {
-      reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
+      reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath,
+        fillDefaultValue)
     } else {
       resolveColumnsByPosition(
         tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
