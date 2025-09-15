@@ -1361,8 +1361,6 @@ class AstBuilder extends DataTypeAstBuilder
         Limit(typedVisit(limit), withOffset)
       }
     }
-
-
   }
 
   /**
