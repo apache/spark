@@ -60,7 +60,7 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
       partitioning = partitioning,
       properties = properties,
       constraints = constraints)
-    newTable.withData(table.data)
+    newTable.alterTableWithData(table.data, schema)
 
     tables.put(ident, newTable)
 
