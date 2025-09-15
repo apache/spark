@@ -73,6 +73,10 @@ class ExecutorPodsAllocator(
 
   protected val maxPendingPodsPerRpid = conf.get(KUBERNETES_MAX_PENDING_PODS_PER_RPID)
 
+  require(maxPendingPodsPerRpid <= maxPendingPods,
+    s"Maximum pending pods per resource profile ID ($maxPendingPodsPerRpid) must be less than " +
+      s"or equal to maximum pending pods ($maxPendingPods).")
+
   protected val podCreationTimeout = math.max(
     podAllocationDelay * 5,
     conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
@@ -369,9 +373,8 @@ class ExecutorPodsAllocator(
             sharedSlotFromPendingPods) =>
         val remainingSlotsForRpId = maxPendingPodsPerRpid - pendingPodCountForRpId
         val numMissingPodsForRpId = targetNum - podCountForRpId
-        val numExecutorsToAllocate =
-          math.min(math.min(math.min(numMissingPodsForRpId, podAllocationSize),
-            sharedSlotFromPendingPods), remainingSlotsForRpId)
+        val numExecutorsToAllocate = Seq(numMissingPodsForRpId, podAllocationSize,
+          sharedSlotFromPendingPods, remainingSlotsForRpId).min
 
         logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
           log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
