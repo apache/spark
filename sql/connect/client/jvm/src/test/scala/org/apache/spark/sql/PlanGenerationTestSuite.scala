@@ -3419,8 +3419,12 @@ class PlanGenerationTestSuite
       // Handle parameterized scala types e.g.: List, Seq and Map.
       fn.typedLit(Some(1)),
       fn.typedLit(Array(1, 2, 3)),
+      fn.typedLit[Array[Integer]](Array(null, null)),
+      fn.typedLit[Array[(Int, String)]](Array(null, null, (1, "a"), (2, null))),
+      fn.typedLit[Array[Option[(Int, String)]]](Array(None, None, Some((1, "a")))),
       fn.typedLit(Seq(1, 2, 3)),
       fn.typedLit(mutable.LinkedHashMap("a" -> 1, "b" -> 2)),
+      fn.typedLit(mutable.LinkedHashMap[String, Integer]("a" -> null, "b" -> null)),
       fn.typedLit(("a", 2, 1.0)),
       fn.typedLit[Option[Int]](None),
       fn.typedLit[Array[Option[Int]]](Array(Some(1))),

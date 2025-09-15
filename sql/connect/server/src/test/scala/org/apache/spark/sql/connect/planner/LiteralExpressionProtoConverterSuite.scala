@@ -53,7 +53,11 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     }
   }
 
+  // The goal of this test is to check that converting a Scala value -> Proto -> Catalyst value
+  // is equivalent to converting a Scala value directly to a Catalyst value.
   Seq[(Any, DataType)](
+    (Array[String](null, "a", null), ArrayType(StringType)),
+    (Map[String, String]("a" -> null, "b" -> null), MapType(StringType, StringType)),
     (
       (1, "string", true),
       StructType(
