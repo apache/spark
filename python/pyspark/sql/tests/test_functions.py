@@ -81,10 +81,7 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = set(
-            # TODO(SPARK-53108): Implement the time_diff function in Python
-            ["time_diff"]
-        )
+        expected_missing_in_py = set()
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
@@ -405,15 +402,15 @@ class FunctionsTestsMixin:
 
     def test_time_diff(self):
         # SPARK-53111: test the time_diff function.
-        df = self.spark.createDataFrame(
-            [(datetime.time(20, 30, 29)), (datetime.time(21, 30, 29))], ["start", "end"]
+        df = self.spark.range(1).select(
+            F.lit("hour").alias("unit"),
+            F.lit(datetime.time(20, 30, 29)).alias("start"),
+            F.lit(datetime.time(21, 30, 29)).alias("end"),
         )
         result = 1
-        row_from_col = df.select(F.time_diff("hour", df.start, df.end)).first()
-        self.assertIsInstance(row_from_col[0], datetime.time)
+        row_from_col = df.select(F.time_diff(df.unit, df.start, df.end)).first()
         self.assertEqual(row_from_col[0], result)
-        row_from_name = df.select(F.time_diff("hour", "start", "end")).first()
-        self.assertIsInstance(row_from_name[0], datetime.time)
+        row_from_name = df.select(F.time_diff("unit", "start", "end")).first()
         self.assertEqual(row_from_name[0], result)
 
     def test_time_trunc(self):
