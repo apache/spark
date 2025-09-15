@@ -47,6 +47,7 @@ from pyspark.serializers import (
     SpecialLengths,
     CPickleSerializer,
     BatchedSerializer,
+    BinaryConvertingSerializer,
 )
 from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
 from pyspark.sql.functions import SkipRestOfInputTableException
@@ -113,7 +114,7 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
+def wrap_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf=None):
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
     if return_type.needConversion():
@@ -1248,7 +1249,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
             func, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
         )
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        return wrap_udf(func, args_offsets, kwargs_offsets, return_type)
+        return wrap_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
@@ -1269,6 +1270,13 @@ def assign_cols_by_name(runner_conf):
 
 def use_large_var_types(runner_conf):
     return runner_conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false").lower() == "true"
+
+
+def use_bytes_for_binary(runner_conf):
+    return (
+        runner_conf.get("spark.sql.execution.pyspark.binaryAsBytes.enabled", "true").lower()
+        == "true"
+    )
 
 
 def use_legacy_pandas_udf_conversion(runner_conf):
@@ -1297,6 +1305,7 @@ def read_udtf(pickleSer, infile, eval_type):
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
         prefers_large_var_types = use_large_var_types(runner_conf)
+        binary_as_bytes = use_bytes_for_binary(runner_conf)
         legacy_pandas_conversion = (
             runner_conf.get(
                 "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
@@ -1326,6 +1335,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 safecheck,
                 input_types=input_types,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                binary_as_bytes=binary_as_bytes,
             )
         else:
             ser = ArrowStreamUDTFSerializer()
@@ -1337,6 +1347,7 @@ def read_udtf(pickleSer, infile, eval_type):
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
         prefers_large_var_types = use_large_var_types(runner_conf)
+        binary_as_bytes = use_bytes_for_binary(runner_conf)
         # Read the table argument offsets
         num_table_arg_offsets = read_int(infile)
         table_arg_offsets = [read_int(infile) for _ in range(num_table_arg_offsets)]
@@ -2184,7 +2195,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
     ):
-        # Load conf used for pandas_udf evaluation
+        # Load conf used for all UDF evaluations
         num_conf = read_int(infile)
         for i in range(num_conf):
             k = utf8_deserializer.loads(infile)
@@ -2208,6 +2219,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
         prefers_large_var_types = use_large_var_types(runner_conf)
+        binary_as_bytes = use_bytes_for_binary(runner_conf)
         safecheck = (
             runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
             == "true"
@@ -2296,7 +2308,9 @@ def read_udfs(pickleSer, infile, eval_type):
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
             # Arrow cast and safe check are always enabled
-            ser = ArrowStreamArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
+            ser = ArrowStreamArrowUDFSerializer(
+                timezone, True, _assign_cols_by_name, True, binary_as_bytes
+            )
         elif (
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not use_legacy_pandas_udf_conversion(runner_conf)
@@ -2305,7 +2319,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ]
             ser = ArrowBatchUDFSerializer(
-                timezone, safecheck, input_types, int_to_decimal_coercion_enabled
+                timezone, safecheck, input_types, int_to_decimal_coercion_enabled, binary_as_bytes
             )
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
@@ -2337,10 +2351,19 @@ def read_udfs(pickleSer, infile, eval_type):
                 True,
                 input_types,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                binary_as_bytes=binary_as_bytes,
             )
-    else:
+    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
+        num_conf = read_int(infile)
+        for i in range(num_conf):
+            k = utf8_deserializer.loads(infile)
+            v = utf8_deserializer.loads(infile)
+            runner_conf[k] = v
+
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
-        ser = BatchedSerializer(CPickleSerializer(), batch_size)
+        binary_as_bytes = use_bytes_for_binary(runner_conf)
+        batched_ser = BatchedSerializer(CPickleSerializer(), batch_size)
+        ser = BinaryConvertingSerializer(batched_ser, binary_as_bytes)
 
     is_profiling = read_bool(infile)
     if is_profiling:
@@ -2723,6 +2746,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         def mapper(a):
             result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+
             # In the special case of a single UDF this will return a single result rather
             # than a tuple of results; this is the format that the JVM side expects.
             if len(result) == 1:

@@ -1781,6 +1781,47 @@ class ArrowTestsMixin:
         df = self.spark.createDataFrame(t)
         self.assertIsInstance(df.schema["fsb"].dataType, BinaryType)
 
+    def test_binary_type_default_bytes_behavior(self):
+        """Test that binary values are returned as bytes by default"""
+        df = self.spark.createDataFrame([(bytearray(b"test"),)], ["binary_col"])
+        collected = df.collect()
+        self.assertIsInstance(collected[0].binary_col, bytes)
+        self.assertEqual(collected[0].binary_col, b"test")
+
+    def test_binary_type_config_enabled_bytes(self):
+        """Test that binary values are returned as bytes when config is enabled"""
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes.enabled": "true"}):
+            df = self.spark.createDataFrame([(bytearray(b"test"),)], ["binary_col"])
+            collected = df.collect()
+            self.assertIsInstance(collected[0].binary_col, bytes)
+            self.assertEqual(collected[0].binary_col, b"test")
+
+    def test_binary_type_config_disabled_bytearray(self):
+        """Test that binary values are returned as bytearray when config is disabled"""
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes.enabled": "false"}):
+            df = self.spark.createDataFrame([(bytearray(b"test"),)], ["binary_col"])
+            collected = df.collect()
+            self.assertIsInstance(collected[0].binary_col, bytearray)
+            self.assertEqual(collected[0].binary_col, bytearray(b"test"))
+
+    def test_binary_type_to_local_iterator_bytes_mode(self):
+        """Test binary type with toLocalIterator when bytes mode is enabled"""
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes.enabled": "true"}):
+            df = self.spark.createDataFrame([(b"test1",), (b"test2",)], ["binary_col"])
+            local_iter = df.toLocalIterator()
+            rows = list(local_iter)
+            for row in rows:
+                self.assertIsInstance(row.binary_col, bytes)
+
+    def test_binary_type_to_local_iterator_bytearray_mode(self):
+        """Test binary type with toLocalIterator when bytearray mode is enabled"""
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes.enabled": "false"}):
+            df = self.spark.createDataFrame([(b"test1",), (b"test2",)], ["binary_col"])
+            local_iter = df.toLocalIterator()
+            rows = list(local_iter)
+            for row in rows:
+                self.assertIsInstance(row.binary_col, bytearray)
+
     def test_createDataFrame_arrow_fixed_size_list(self):
         a = pa.array([[-1, 3]] * 5, type=pa.list_(pa.int32(), 2))
         t = pa.table([a], ["fsl"])

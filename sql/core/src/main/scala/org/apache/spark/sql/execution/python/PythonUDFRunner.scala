@@ -65,9 +65,7 @@ abstract class BasePythonUDFRunner(
       context: TaskContext): Writer = {
     new Writer(env, worker, inputIterator, partitionIndex, context) {
 
-      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        writeUDF(dataOut)
-      }
+      protected override def writeCommand(dataOut: DataOutputStream): Unit = writeUDF(dataOut)
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
         val startData = dataOut.size()
@@ -127,7 +125,11 @@ class PythonUDFRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
-  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics, jobArtifactUUID) {
+  extends BasePythonUDFRunner(funcs,
+   evalType,
+   argOffsets,
+   pythonMetrics,
+   jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
@@ -138,13 +140,23 @@ class PythonUDFWithNamedArgumentsRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argMetas: Array[Array[ArgumentMetadata]],
+    workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
   extends BasePythonUDFRunner(
-    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics, jobArtifactUUID) {
+    funcs,
+    evalType,
+    argMetas.map(_.map(_.offset)),
+    pythonMetrics,
+    jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    dataOut.writeInt(workerConf.size)
+    for ((k, v) <- workerConf) {
+      PythonWorkerUtils.writeUTF(k, dataOut)
+      PythonWorkerUtils.writeUTF(v, dataOut)
+    }
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
   }
 }
@@ -212,4 +224,5 @@ object PythonUDFRunner {
       }
     }
   }
+
 }

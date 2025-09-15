@@ -102,8 +102,14 @@ class ArrowPythonRunner(
     funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
     pythonMetrics, jobArtifactUUID) {
 
-  override protected def writeUDF(dataOut: DataOutputStream): Unit =
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    dataOut.writeInt(workerConf.size)
+    for ((k, v) <- workerConf) {
+      PythonWorkerUtils.writeUTF(k, dataOut)
+      PythonWorkerUtils.writeUTF(v, dataOut)
+    }
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
+  }
 }
 
 /**
@@ -128,6 +134,11 @@ class ArrowPythonWithNamedArgumentRunner(
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
       PythonWorkerUtils.writeUTF(schema.json, dataOut)
+    }
+    dataOut.writeInt(workerConf.size)
+    for ((k, v) <- workerConf) {
+      PythonWorkerUtils.writeUTF(k, dataOut)
+      PythonWorkerUtils.writeUTF(v, dataOut)
     }
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
   }
@@ -155,9 +166,13 @@ object ArrowPythonRunner {
     val intToDecimalCoercion = Seq(
       SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED.key ->
       conf.getConf(SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED, false).toString)
+    val binaryAsBytes = Seq(
+      SQLConf.PYSPARK_USE_BYTES_FOR_BINARY_ENABLED.key ->
+        conf.getConf(SQLConf.PYSPARK_USE_BYTES_FOR_BINARY_ENABLED, defaultValue = true).toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++
       intToDecimalCoercion ++
+      binaryAsBytes ++
       legacyPandasConversion ++ legacyPandasConversionUDF: _*)
   }
 }
