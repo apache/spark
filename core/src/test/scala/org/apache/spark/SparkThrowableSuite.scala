@@ -515,7 +515,8 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     withTempDir { dir =>
       val json = new File(dir, "errors.json")
-      Files.writeString(json.toPath,
+      Files.writeString(
+        json.toPath,
         """
           |{
           |  "TEST_ERROR": {
@@ -556,30 +557,34 @@ class SparkThrowableSuite extends SparkFunSuite {
           |    }
           |  }
           |}
-          |""".stripMargin, StandardCharsets.UTF_8)
+          |""".stripMargin,
+        StandardCharsets.UTF_8)
 
       val error1Params = Map("param1" -> "value1", "param2" -> "value2")
       val error2Params = Map("param1" -> "value1", "param2" -> "value2", "param3" -> "value3")
 
-      val reader = new ErrorClassesJsonReader(
-        Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      val reader =
+        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       val errorMessage = reader.getErrorMessage("TEST_ERROR", error1Params)
       assert(errorMessage == "Error message 1 with value1. Migration message with value2.")
       val breakingChangeInfo = reader.getBreakingChangeInfo("TEST_ERROR")
-      assert(breakingChangeInfo.contains(BreakingChangeInfo(
-        Seq("Migration message with <param2>."),
-        Some(MitigationSparkConfig("config.key1", "config.value1")),
-        autoMitigation = true,
-      )))
-      val errorMessage2 = reader.getErrorMessage(
-        "TEST_ERROR_WITH_SUBCLASS.SUBCLASS", error2Params)
-      assert(errorMessage2 =="Error message 2 with value1. Subclass message with value2." +
-        " Subclass migration message with value3.")
+      assert(
+        breakingChangeInfo.contains(
+          BreakingChangeInfo(
+            Seq("Migration message with <param2>."),
+            Some(MitigationSparkConfig("config.key1", "config.value1")),
+            autoMitigation = true)))
+      val errorMessage2 =
+        reader.getErrorMessage("TEST_ERROR_WITH_SUBCLASS.SUBCLASS", error2Params)
+      assert(
+        errorMessage2 == "Error message 2 with value1. Subclass message with value2." +
+          " Subclass migration message with value3.")
       val breakingChangeInfo2 = reader.getBreakingChangeInfo("TEST_ERROR_WITH_SUBCLASS.SUBCLASS")
-      assert(breakingChangeInfo2.contains(BreakingChangeInfo(
-        Seq("Subclass migration message with <param3>."),
-        Some(MitigationSparkConfig("config.key2", "config.value2")),
-      )))
+      assert(
+        breakingChangeInfo2.contains(
+          BreakingChangeInfo(
+            Seq("Subclass migration message with <param3>."),
+            Some(MitigationSparkConfig("config.key2", "config.value2")))))
     }
   }
 
