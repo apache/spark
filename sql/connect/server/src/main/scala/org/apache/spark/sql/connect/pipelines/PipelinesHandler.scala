@@ -187,9 +187,16 @@ private[connect] object PipelinesHandler extends Logging {
           GraphIdentifierManager.parseTableIdentifier(
             dataset.getDatasetName,
             sessionHolder.session)
+        val qualifiedTableIdentifier = GraphIdentifierManager
+          .parseAndQualifyTableIdentifier(
+            rawTableIdentifier = tableIdentifier,
+            currentCatalog = Some(graphElementRegistry.defaultCatalog),
+            currentDatabase = Some(graphElementRegistry.defaultDatabase)
+          )
+          .identifier
         graphElementRegistry.registerTable(
           Table(
-            identifier = tableIdentifier,
+            identifier = qualifiedTableIdentifier,
             comment = Option(dataset.getComment),
             specifiedSchema = Option.when(dataset.hasSchema)(
               DataTypeProtoConverter
@@ -206,11 +213,13 @@ private[connect] object PipelinesHandler extends Logging {
             normalizedPath = None,
             isStreamingTable = dataset.getDatasetType == proto.DatasetType.TABLE))
       case proto.DatasetType.TEMPORARY_VIEW =>
-        val viewIdentifier =
-          GraphIdentifierManager.parseTableIdentifier(
-            dataset.getDatasetName,
-            sessionHolder.session)
-
+        val viewIdentifier = GraphIdentifierManager
+          .parseAndValidateTemporaryViewIdentifier(
+            rawViewIdentifier =
+              GraphIdentifierManager.parseTableIdentifier(
+                dataset.getDatasetName,
+                sessionHolder.session)
+          )
         graphElementRegistry.registerView(
           TemporaryView(
             identifier = viewIdentifier,

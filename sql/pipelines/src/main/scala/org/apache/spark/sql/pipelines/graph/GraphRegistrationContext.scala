@@ -58,34 +58,12 @@ class GraphRegistrationContext(
         messageParameters = Map.empty)
     }
     val qualifiedTables = tables.toSeq.map { t =>
-      t.copy(
-        identifier = GraphIdentifierManager
-          .parseAndQualifyTableIdentifier(
-            rawTableIdentifier = t.identifier,
-            currentCatalog = Some(defaultCatalog),
-            currentDatabase = Some(defaultDatabase)
-          )
-          .identifier
-      )
+      t.copy(t.identifier)
     }
 
     val validatedViews = views.toSeq.collect {
-      case v: TemporaryView =>
-        v.copy(
-          identifier = GraphIdentifierManager
-            .parseAndValidateTemporaryViewIdentifier(
-              rawViewIdentifier = v.identifier
-            )
-        )
-      case v: PersistedView =>
-        v.copy(
-          identifier = GraphIdentifierManager
-            .parseAndValidatePersistedViewIdentifier(
-              rawViewIdentifier = v.identifier,
-              currentCatalog = Some(defaultCatalog),
-              currentDatabase = Some(defaultDatabase)
-            )
-        )
+      case v: TemporaryView => v.copy(v.identifier)
+      case v: PersistedView => v.copy(v.identifier)
     }
 
     val qualifiedFlows = flows.toSeq.map { f =>

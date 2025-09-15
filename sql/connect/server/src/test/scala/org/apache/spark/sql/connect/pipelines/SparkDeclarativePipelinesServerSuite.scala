@@ -34,7 +34,47 @@ class SparkDeclarativePipelinesServerSuite
     }
   }
 
-  test("DefineDataset returns fully qualified name") {
+  test("TEMPORARY_VIEW, DefineDataset returns fully qualified name") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      assert(Option(graphId).isDefined)
+      val defineDataset = DefineDataset
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setDatasetName("tv")
+        .setDatasetType(DatasetType.TEMPORARY_VIEW)
+      val pipelineCmd = PipelineCommand.newBuilder()
+        .setDefineDataset(defineDataset)
+        .build()
+      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
+      assert(res !== PipelineCommandResult.getDefaultInstance)
+      assert(res.hasDefineEntityResult)
+      val graphResult = res.getDefineEntityResult
+      assert(graphResult.getFullyQualifiedName == "spark_catalog.default.tv")
+    }
+  }
+
+  test("TABLE, DefineDataset returns fully qualified name") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      assert(Option(graphId).isDefined)
+      val defineDataset = DefineDataset
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setDatasetName("tb")
+        .setDatasetType(DatasetType.TABLE)
+      val pipelineCmd = PipelineCommand.newBuilder()
+        .setDefineDataset(defineDataset)
+        .build()
+      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
+      assert(res !== PipelineCommandResult.getDefaultInstance)
+      assert(res.hasDefineEntityResult)
+      val graphResult = res.getDefineEntityResult
+      assert(graphResult.getFullyQualifiedName == "spark_catalog.default.tb")
+    }
+  }
+
+  test("MV, DefineDataset returns fully qualified name") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       assert(Option(graphId).isDefined)
@@ -54,7 +94,7 @@ class SparkDeclarativePipelinesServerSuite
     }
   }
 
-  test("DefineFlow returns fully qualified name") {
+  test("MV, DefineFlow returns fully qualified name") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       assert(Option(graphId).isDefined)
