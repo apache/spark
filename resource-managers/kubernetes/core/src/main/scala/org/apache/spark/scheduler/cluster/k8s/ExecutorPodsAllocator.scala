@@ -73,9 +73,12 @@ class ExecutorPodsAllocator(
 
   protected val maxPendingPodsPerRpid = conf.get(KUBERNETES_MAX_PENDING_PODS_PER_RPID)
 
-  require(maxPendingPodsPerRpid <= maxPendingPods,
-    s"Maximum pending pods per resource profile ID ($maxPendingPodsPerRpid) must be less than " +
-      s"or equal to maximum pending pods ($maxPendingPods).")
+  // If maxPendingPodsPerRpid is set, ensure it's not greater than maxPendingPods
+  if (maxPendingPodsPerRpid != Int.MaxValue) {
+    require(maxPendingPodsPerRpid <= maxPendingPods,
+      s"Maximum pending pods per resource profile ID ($maxPendingPodsPerRpid) must be less than " +
+        s"or equal to maximum pending pods ($maxPendingPods).")
+  }
 
   protected val podCreationTimeout = math.max(
     podAllocationDelay * 5,
