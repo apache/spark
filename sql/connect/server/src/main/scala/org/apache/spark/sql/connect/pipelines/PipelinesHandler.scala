@@ -82,7 +82,7 @@ private[connect] object PipelinesHandler extends Logging {
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
         logInfo(s"Define pipelines dataset cmd received: $cmd")
         defineDataset(cmd.getDefineDataset, sessionHolder)
-        val qualifiedIdentifierString = convertToQualifiedIdentifier(
+        val qualifiedIdentifierString = convertToQualifiedTableIdentifier(
           sessionHolder,
           cmd.getDefineDataset.getDataflowGraphId,
           cmd.getDefineDataset.getDatasetName
@@ -97,7 +97,7 @@ private[connect] object PipelinesHandler extends Logging {
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
         defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
-        val qualifiedIdentifierString = convertToQualifiedIdentifier(
+        val qualifiedIdentifierString = convertToQualifiedTableIdentifier(
           sessionHolder,
           cmd.getDefineFlow.getDataflowGraphId,
           cmd.getDefineFlow.getFlowName
@@ -169,7 +169,7 @@ private[connect] object PipelinesHandler extends Logging {
 
     dataset.getDatasetType match {
       case proto.DatasetType.MATERIALIZED_VIEW | proto.DatasetType.TABLE =>
-        val qualifiedIdentifier = convertToQualifiedIdentifier(
+        val qualifiedIdentifier = convertToQualifiedTableIdentifier(
           sessionHolder,
           dataflowGraphId,
           dataset.getDatasetName
@@ -221,10 +221,11 @@ private[connect] object PipelinesHandler extends Logging {
     val dataflowGraphId = flow.getDataflowGraphId
     val graphElementRegistry =
       sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    val defaultCatalog = graphElementRegistry.defaultCatalog
+    val defaultDatabase = graphElementRegistry.defaultDatabase
 
     val isImplicitFlow = flow.getFlowName == flow.getTargetDatasetName
-
-    val flowIdentifier = GraphIdentifierManager
+    var flowIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getFlowName, spark = sessionHolder.session)
 
     // If the flow is not an implicit flow (i.e. one defined as part of dataset creation), then
@@ -235,18 +236,40 @@ private[connect] object PipelinesHandler extends Logging {
         Map("flowName" -> flow.getFlowName))
     }
 
+    var destinationIdentifier = GraphIdentifierManager
+      .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session)
+    val flowWritesToView =
+      graphElementRegistry.getViews()
+      .filter(_.isInstanceOf[TemporaryView])
+      .exists(_.identifier == destinationIdentifier)
+
+    // If the flow is created implicitly as part of defining a view, then we do not
+    // qualify the flow identifier and the flow destination. This is because views are
+    // not permitted to have multipart
+    if (!isImplicitFlow || !flowWritesToView) {
+      flowIdentifier = GraphIdentifierManager.parseAndQualifyFlowIdentifier(
+        rawFlowIdentifier = flowIdentifier,
+        currentCatalog = Some(defaultCatalog),
+        currentDatabase = Some(defaultDatabase)
+      ).identifier
+      destinationIdentifier = GraphIdentifierManager.parseAndQualifyFlowIdentifier(
+        rawFlowIdentifier = destinationIdentifier,
+        currentCatalog = Some(defaultCatalog),
+        currentDatabase = Some(defaultDatabase)
+      ).identifier
+    }
+
     graphElementRegistry.registerFlow(
       new UnresolvedFlow(
         identifier = flowIdentifier,
-        destinationIdentifier = GraphIdentifierManager
-          .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session),
+        destinationIdentifier = destinationIdentifier,
         func =
           FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getRelation)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = false,
         queryContext = QueryContext(
-          Option(graphElementRegistry.defaultCatalog),
-          Option(graphElementRegistry.defaultDatabase)),
+          Option(defaultCatalog),
+          Option(defaultDatabase)),
         origin = QueryOrigin(
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
@@ -384,7 +407,11 @@ private[connect] object PipelinesHandler extends Logging {
     }
   }
 
-  private def convertToQualifiedIdentifier(sessionHolder: SessionHolder,
+  /**
+   * Converts a logical table name into a fully qualified table identifier
+   * within the context of a specific session and dataflow graph.
+   */
+  private def convertToQualifiedTableIdentifier(sessionHolder: SessionHolder,
     dataflowGraphId: String, name: String): TableIdentifier = {
     val graphElementRegistry =
       sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
