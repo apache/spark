@@ -307,6 +307,9 @@ private[spark] class DAGScheduler(
 
   private val shuffleFinalizeRpcThreads = sc.conf.get(config.PUSH_SHUFFLE_FINALIZE_RPC_THREADS)
 
+  private val checksumMismatchFullRetryEnabled =
+    sc.getConf.get(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED)
+
   // Since SparkEnv gets initialized after DAGScheduler, externalShuffleClient needs to be
   // initialized lazily
   private lazy val externalShuffleClient: Option[BlockStoreClient] =
@@ -1551,29 +1554,41 @@ private[spark] class DAGScheduler(
     // The operation here can make sure for the partially completed intermediate stage,
     // `findMissingPartitions()` returns all partitions every time.
     stage match {
-      case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
-        // already executed at least once
-        if (sms.getNextAttemptId > 0) {
-          // While we previously validated possible rollbacks during the handling of a FetchFailure,
-          // where we were fetching from an indeterminate source map stages, this later check
-          // covers additional cases like recalculating an indeterminate stage after an executor
-          // loss. Moreover, because this check occurs later in the process, if a result stage task
-          // has successfully completed, we can detect this and abort the job, as rolling back a
-          // result stage is not possible.
-          val stagesToRollback = collectSucceedingStages(sms)
-          abortStageWithInvalidRollBack(stagesToRollback)
-          // stages which cannot be rolled back were aborted which leads to removing the
-          // the dependant job(s) from the active jobs set
-          val numActiveJobsWithStageAfterRollback =
-            activeJobs.count(job => stagesToRollback.contains(job.finalStage))
-          if (numActiveJobsWithStageAfterRollback == 0) {
-            logInfo(log"All jobs depending on the indeterminate stage " +
-              log"(${MDC(STAGE_ID, stage.id)}) were aborted so this stage is not needed anymore.")
-            return
+      case sms: ShuffleMapStage if !sms.isAvailable =>
+        if (checksumMismatchFullRetryEnabled) {
+          // When the parents of this stage are indeterminate (e.g., some parents are not
+          // checkpointed and checksum mismatches are detected), the output data of the parents
+          // may have changed due to task retries. For correctness reason, we need to
+          // retry all tasks of the current stage. The legacy way of using current stage's
+          // deterministic level to trigger full stage retry is not accurate.
+          if (stage.isParentIndeterminate) {
+            mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
+            sms.shuffleDep.newShuffleMergeState()
           }
+        } else if (stage.isIndeterminate) {
+          // already executed at least once
+          if (sms.getNextAttemptId > 0) {
+            // While we previously validated possible rollbacks during the handling of a FetchFailure,
+            // where we were fetching from an indeterminate source map stages, this later check
+            // covers additional cases like recalculating an indeterminate stage after an executor
+            // loss. Moreover, because this check occurs later in the process, if a result stage task
+            // has successfully completed, we can detect this and abort the job, as rolling back a
+            // result stage is not possible.
+            val stagesToRollback = collectSucceedingStages(sms)
+            abortStageWithInvalidRollBack(stagesToRollback)
+            // stages which cannot be rolled back were aborted which leads to removing the
+            // the dependant job(s) from the active jobs set
+            val numActiveJobsWithStageAfterRollback =
+              activeJobs.count(job => stagesToRollback.contains(job.finalStage))
+            if (numActiveJobsWithStageAfterRollback == 0) {
+              logInfo(log"All jobs depending on the indeterminate stage " +
+                log"(${MDC(STAGE_ID, stage.id)}) were aborted so this stage is not needed anymore.")
+              return
+            }
+          }
+          mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
+          sms.shuffleDep.newShuffleMergeState()
         }
-        mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
-        sms.shuffleDep.newShuffleMergeState()
       case _ =>
     }
 
@@ -1887,6 +1902,74 @@ private[spark] class DAGScheduler(
   }
 
   /**
+   * If a map stage is non-deterministic, the map tasks of the stage may return different result
+   * when re-try. To make sure data correctness, we need to re-try all the tasks of its succeeding
+   * stages, as the input data may be changed after the map tasks are re-tried. For stages where
+   * rollback and retry all tasks are not possible, we will need to abort the stages.
+   */
+  private[scheduler] def abortUnrollbackableStages(mapStage: ShuffleMapStage): Unit = {
+    // It's a little tricky to find all the succeeding stages of `mapStage`, because
+    // each stage only know its parents not children. Here we traverse the stages from
+    // the leaf nodes (the result stages of active jobs), and rollback all the stages
+    // in the stage chains that connect to the `mapStage`. To speed up the stage
+    // traversing, we collect the stages to rollback first. If a stage needs to
+    // rollback, all its succeeding stages need to rollback to.
+    val stagesToRollback = HashSet[Stage](mapStage)
+
+    def collectStagesToRollback(stageChain: List[Stage]): Unit = {
+      if (stagesToRollback.contains(stageChain.head)) {
+        stageChain.drop(1).foreach(s => stagesToRollback += s)
+      } else {
+        stageChain.head.parents.foreach { s =>
+          collectStagesToRollback(s :: stageChain)
+        }
+      }
+    }
+
+    def generateErrorMessage(stage: Stage): String = {
+      "A shuffle map stage with indeterminate output was failed and retried. " +
+        s"However, Spark cannot rollback the $stage to re-process the input data, " +
+        "and has to fail this job. Please eliminate the indeterminacy by " +
+        "checkpointing the RDD before repartition and try again."
+    }
+
+    activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
+
+    // Abort all stages where rollback is not possible. Other stages will be rolled back and
+    // the whole task set for the stages will be retried when we resubmit missing tasks for the
+    // stages.
+    val rollingBackStages = HashSet[Stage](mapStage)
+    stagesToRollback.foreach {
+      case mapStage: ShuffleMapStage =>
+        val numMissingPartitions = mapStage.findMissingPartitions().length
+        if (numMissingPartitions < mapStage.numTasks) {
+          if (sc.getConf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+            val reason = "A shuffle map stage with indeterminate output was failed " +
+              "and retried. However, Spark can only do this while using the new " +
+              "shuffle block fetching protocol. Please check the config " +
+              "'spark.shuffle.useOldFetchProtocol', see more detail in " +
+              "SPARK-27665 and SPARK-25341."
+            abortStage(mapStage, reason, None)
+          } else {
+            rollingBackStages += mapStage
+          }
+        }
+
+      case resultStage: ResultStage if resultStage.activeJob.isDefined =>
+        val numMissingPartitions = resultStage.findMissingPartitions().length
+        if (numMissingPartitions < resultStage.numTasks) {
+          // TODO: support to rollback result tasks.
+          abortStage(resultStage, generateErrorMessage(resultStage), None)
+        }
+
+      case _ =>
+    }
+    logInfo(s"The shuffle map stage $mapStage with indeterminate output was failed, " +
+      s"we will roll back and rerun below stages which include itself and all its " +
+      s"indeterminate child stages: $rollingBackStages")
+  }
+
+  /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
    */
@@ -2022,8 +2105,25 @@ private[spark] class DAGScheduler(
                 // The epoch of the task is acceptable (i.e., the task was launched after the most
                 // recent failure we're aware of for the executor), so mark the task's output as
                 // available.
-                mapOutputTracker.registerMapOutput(
+                val isChecksumMismatched = mapOutputTracker.registerMapOutput(
                   shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
+                if (isChecksumMismatched) {
+                  shuffleStage.isChecksumMismatched = isChecksumMismatched
+                  // There could be multiple checksum mismatches detected for a single stage attempt.
+                  // We check for stage abortion once and only once when we first detect checksum
+                  // mismatch for each stage attempt. For example, assume that we have
+                  // stage1 -> stage2, and we encounter checksum mismatch during the retry of stage1.
+                  // In this case, we need to call abortUnrollbackableStages() for the succeeding
+                  // stages. Assume that when stage2 is retried, some tasks finish and some tasks
+                  // failed again with FetchFailed. In case that we encounter checksum mismatch again
+                  // during the retry of stage1, we need to call abortUnrollbackableStages() again.
+                  if (shuffleStage.maxChecksumMismatchedId < smt.stageAttemptId) {
+                    shuffleStage.maxChecksumMismatchedId = smt.stageAttemptId
+                    if (checksumMismatchFullRetryEnabled && shuffleStage.isStageIndeterminate) {
+                      abortUnrollbackableStages(shuffleStage)
+                    }
+                  }
+                }
               }
             } else {
               logInfo(log"Ignoring ${MDC(TASK_NAME, smt)} completion from an older attempt of indeterminate stage")
@@ -2148,7 +2248,7 @@ private[spark] class DAGScheduler(
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
-              if (mapStage.isIndeterminate) {
+              if (mapStage.isIndeterminate && !checksumMismatchFullRetryEnabled) {
                 val stagesToRollback = collectSucceedingStages(mapStage)
                 val rollingBackStages = abortStageWithInvalidRollBack(stagesToRollback)
                 logInfo(log"The shuffle map stage ${MDC(SHUFFLE_ID, mapStage)} with indeterminate output was failed, " +
