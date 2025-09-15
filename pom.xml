@@ -279,6 +279,7 @@
     -->
     <derby.deps.scope>compile</derby.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
+    <huaweicloud.deps.scope>compile</huaweicloud.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.storage.version>2.8.1</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
@@ -3526,6 +3527,7 @@
       <id>hadoop-provided</id>
       <properties>
         <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
+        <huaweicloud.deps.scope>provided</huaweicloud.deps.scope>
       </properties>
     </profile>
     <profile>
