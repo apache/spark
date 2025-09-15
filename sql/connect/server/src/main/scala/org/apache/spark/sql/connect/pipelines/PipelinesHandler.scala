@@ -82,7 +82,7 @@ private[connect] object PipelinesHandler extends Logging {
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
         logInfo(s"Define pipelines dataset cmd received: $cmd")
         defineDataset(cmd.getDefineDataset, sessionHolder)
-        val qualifiedNameString = convertToQualifiedIdentifier(
+        val qualifiedIdentifierString = convertToQualifiedIdentifier(
           sessionHolder,
           cmd.getDefineDataset.getDataflowGraphId,
           cmd.getDefineDataset.getDatasetName
@@ -90,14 +90,14 @@ private[connect] object PipelinesHandler extends Logging {
         PipelineCommandResult.newBuilder()
           .setDefineEntityResult(
             PipelineCommandResult.DefineEntityResult.newBuilder()
-            .setFullyQualifiedName(qualifiedNameString)
+            .setFullyQualifiedName(qualifiedIdentifierString)
             .build()
           )
         .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
         defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
-        val qualifiedNameString = convertToQualifiedIdentifier(
+        val qualifiedIdentifierString = convertToQualifiedIdentifier(
           sessionHolder,
           cmd.getDefineFlow.getDataflowGraphId,
           cmd.getDefineFlow.getFlowName
@@ -105,7 +105,7 @@ private[connect] object PipelinesHandler extends Logging {
         PipelineCommandResult.newBuilder()
           .setDefineEntityResult(
             PipelineCommandResult.DefineEntityResult.newBuilder()
-            .setFullyQualifiedName(qualifiedNameString)
+            .setFullyQualifiedName(qualifiedIdentifierString)
             .build()
           )
         .build()
@@ -119,20 +119,6 @@ private[connect] object PipelinesHandler extends Logging {
         defaultResponse
       case other => throw new UnsupportedOperationException(s"$other not supported")
     }
-  }
-
-  private def convertToQualifiedIdentifier(sessionHolder: SessionHolder,
-    dataflowGraphId: String, name: String): TableIdentifier = {
-    val graphElementRegistry =
-      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
-    GraphIdentifierManager
-      .parseAndQualifyTableIdentifier(
-        rawTableIdentifier =
-          GraphIdentifierManager.parseTableIdentifier
-          (name, sessionHolder.session),
-          currentCatalog = Some(graphElementRegistry.defaultCatalog),
-          currentDatabase = Some(graphElementRegistry.defaultDatabase)
-      ).identifier
   }
 
   private def createDataflowGraph(
@@ -183,20 +169,14 @@ private[connect] object PipelinesHandler extends Logging {
 
     dataset.getDatasetType match {
       case proto.DatasetType.MATERIALIZED_VIEW | proto.DatasetType.TABLE =>
-        val tableIdentifier =
-          GraphIdentifierManager.parseTableIdentifier(
-            dataset.getDatasetName,
-            sessionHolder.session)
-        val qualifiedTableIdentifier = GraphIdentifierManager
-          .parseAndQualifyTableIdentifier(
-            rawTableIdentifier = tableIdentifier,
-            currentCatalog = Some(graphElementRegistry.defaultCatalog),
-            currentDatabase = Some(graphElementRegistry.defaultDatabase)
-          )
-          .identifier
+        val qualifiedIdentifier = convertToQualifiedIdentifier(
+          sessionHolder,
+          dataflowGraphId,
+          dataset.getDatasetName
+        )
         graphElementRegistry.registerTable(
           Table(
-            identifier = qualifiedTableIdentifier,
+            identifier = qualifiedIdentifier,
             comment = Option(dataset.getComment),
             specifiedSchema = Option.when(dataset.hasSchema)(
               DataTypeProtoConverter
@@ -207,7 +187,7 @@ private[connect] object PipelinesHandler extends Logging {
             properties = dataset.getTablePropertiesMap.asScala.toMap,
             baseOrigin = QueryOrigin(
               objectType = Option(QueryOriginType.Table.toString),
-              objectName = Option(tableIdentifier.unquotedString),
+              objectName = Option(qualifiedIdentifier.unquotedString),
               language = Option(Python())),
             format = Option.when(dataset.hasFormat)(dataset.getFormat),
             normalizedPath = None,
@@ -402,6 +382,20 @@ private[connect] object PipelinesHandler extends Logging {
           fullRefresh = SomeTables(fullRefreshTableNames),
           refresh = SomeTables(refreshTableNames))
     }
+  }
+
+  private def convertToQualifiedIdentifier(sessionHolder: SessionHolder,
+    dataflowGraphId: String, name: String): TableIdentifier = {
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    GraphIdentifierManager
+      .parseAndQualifyTableIdentifier(
+        rawTableIdentifier =
+          GraphIdentifierManager.parseTableIdentifier
+          (name, sessionHolder.session),
+          currentCatalog = Some(graphElementRegistry.defaultCatalog),
+          currentDatabase = Some(graphElementRegistry.defaultDatabase)
+      ).identifier
   }
 
   /**
