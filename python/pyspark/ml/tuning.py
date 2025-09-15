@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import json
 import os
 import sys
 import itertools
@@ -415,7 +416,7 @@ class _ValidatorSharedReadWrite:
                         "is estimator, it cannot be meta estimator such as Validator or OneVsRest"
                     )
                 else:
-                    jsonParam["value"] = v
+                    jsonParam["value"] = json.dumps(v)
                     jsonParam["isJson"] = True
                 jsonParamMap.append(jsonParam)
             jsonEstimatorParamMaps.append(jsonParamMap)
@@ -451,7 +452,7 @@ class _ValidatorSharedReadWrite:
                 est = uidToParams[jsonParam["parent"]]
                 param = getattr(est, jsonParam["name"])
                 if "isJson" not in jsonParam or ("isJson" in jsonParam and jsonParam["isJson"]):
-                    value = jsonParam["value"]
+                    value = json.loads(jsonParam["value"])
                 else:
                     relativePath = jsonParam["value"]
                     valueSavedPath = os.path.join(path, relativePath)
