@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView,
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
-import org.apache.spark.sql.catalyst.parser.{PositionTranslationUtils, SqlBaseParser}
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
@@ -66,77 +66,46 @@ class SparkSqlParser extends AbstractSqlParser {
     override def initialValue(): Boolean = true
   }
 
+
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    // Step 1: Check if parameter substitution is enabled and we have a parameterized query context
-    // Only apply parameter substitution for top-level SQL statements
     val wasTopLevel = isTopLevelParse.get()
-    // Note: We don't automatically set isTopLevelParse to false here anymore.
-    // Instead, specific parsing methods (parseTableIdentifier, parseDataType, etc.)
-    // will explicitly disable parameter substitution when needed.
-    val paramSubstituted =
+
+    // Step 1: Check if parameter substitution should occur
+    val (paramSubstituted, substitutionOccurred) =
       if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
         // Legacy mode: skip parameter substitution
-        command
+        (command, false)
       } else {
         // Modern mode: check if we have a parameterized query context
         org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
           case Some(context) =>
-            substituteParametersIfNeeded(command, context)
+            val substituted = substituteParametersIfNeeded(command, context)
+            // Position mapper is stored by the parameter handler for later retrieval
+            (substituted, substituted != command) // Track if substitution actually occurred
           case None =>
-            command  // No parameters to substitute
+            (command, false)  // No parameters to substitute
         }
       }
 
     // Step 2: Apply existing variable substitution
     val variableSubstituted = substitutor.substitute(paramSubstituted)
 
-    // Step 3: Set origin with SQL text only for top-level parameterized queries
+    // Step 3: Only set special origin if parameter substitution actually occurred
     val currentOrigin = org.apache.spark.sql.catalyst.trees.CurrentOrigin.get
-    val hasParameterContext =
-      org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get().isDefined
-    val originToUse = if (hasParameterContext && wasTopLevel) {
-      // Parameter context exists and this is top-level - set SQL text for position mapping
+    val originToUse = if (substitutionOccurred && wasTopLevel) {
+      // Parameter substitution occurred - set original SQL text for position mapping
       currentOrigin.copy(
-        sqlText = Some(variableSubstituted),
+        sqlText = Some(command), // Use original SQL text, not substituted
         startIndex = Some(0),
-        stopIndex = Some(variableSubstituted.length - 1)
+        stopIndex = Some(command.length - 1)
       )
     } else {
-      // No parameter context or nested call - use existing origin unchanged
+      // No substitution or nested call - use existing origin unchanged
       currentOrigin
     }
 
-    try {
-      org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(originToUse) {
-        super.parse(variableSubstituted)(toResult)
-      }
-    } catch {
-      case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
-        // Apply position mapping only if parameter substitution is enabled and we have a mapper
-        val translatedError = if (!SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-          parameterHandler.getPositionMapper match {
-            case Some(positionMapper) =>
-              e.updateQueryContext { contexts =>
-                contexts.map { context =>
-                  context match {
-                    case sqlContext: org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
-                      PositionTranslationUtils.translateSqlContext(sqlContext, positionMapper)
-                    case _ => context
-                  }
-                }
-              }.asInstanceOf[Throwable]
-            case None => e
-          }
-        } else {
-          e  // Legacy mode: no position translation
-        }
-        throw translatedError
-      case e: Throwable =>
-        // No WithOrigin trait, throw as-is
-        throw e
-    } finally {
-      // No need to restore the thread-local flag since we don't modify it automatically anymore
-      // Individual parsing methods handle their own flag management
+    org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(originToUse) {
+      super.parse(variableSubstituted)(toResult)
     }
   }
 
