@@ -81,21 +81,45 @@ private[connect] object PipelinesHandler extends Logging {
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
         logInfo(s"Define pipelines dataset cmd received: $cmd")
+        val dataflowGraphId = cmd.getDefineDataset.getDataflowGraphId
+        val graphElementRegistry =
+          sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+        val qualifiedFlowTargetDatasetName = GraphIdentifierManager
+            .parseAndQualifyTableIdentifier(
+              rawTableIdentifier =
+                GraphIdentifierManager.parseTableIdentifier
+                (cmd.getDefineDataset.getDatasetName, sessionHolder.session),
+              currentCatalog = Some(graphElementRegistry.defaultCatalog),
+              currentDatabase = Some(graphElementRegistry.defaultDatabase)
+            )
+            .identifier
         defineDataset(cmd.getDefineDataset, sessionHolder)
         PipelineCommandResult.newBuilder()
           .setDefineEntityResult(
             PipelineCommandResult.DefineEntityResult.newBuilder()
-            .setFullyQualifiedName("fullyqualifieddummyname")
+            .setFullyQualifiedName(qualifiedFlowTargetDatasetName.unquotedString)
             .build()
           )
         .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
+        val dataflowGraphId = cmd.getDefineFlow.getDataflowGraphId
+        val graphElementRegistry =
+          sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+        val qualifiedFlowTargetDatasetName = GraphIdentifierManager
+            .parseAndQualifyTableIdentifier(
+              rawTableIdentifier =
+                GraphIdentifierManager.parseTableIdentifier
+                (cmd.getDefineFlow.getFlowName, sessionHolder.session),
+              currentCatalog = Some(graphElementRegistry.defaultCatalog),
+              currentDatabase = Some(graphElementRegistry.defaultDatabase)
+            )
+            .identifier
         defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
         PipelineCommandResult.newBuilder()
           .setDefineEntityResult(
             PipelineCommandResult.DefineEntityResult.newBuilder()
-            .setFullyQualifiedName("fullyqualifieddummyname")
+            .setFullyQualifiedName(qualifiedFlowTargetDatasetName.unquotedString)
             .build()
           )
         .build()

@@ -50,7 +50,7 @@ class SparkDeclarativePipelinesServerSuite
       assert(res !== PipelineCommandResult.getDefaultInstance)
       assert(res.hasDefineEntityResult)
       val graphResult = res.getDefineEntityResult
-      assert(graphResult.getFullyQualifiedName == "fullyqualifieddummyname")
+      assert(graphResult.getFullyQualifiedName == "spark_catalog.default.mv")
     }
   }
 
@@ -83,7 +83,7 @@ class SparkDeclarativePipelinesServerSuite
       assert(res !== PipelineCommandResult.getDefaultInstance)
       assert(res.hasDefineEntityResult)
       val graphResult = res.getDefineEntityResult
-      assert(graphResult.getFullyQualifiedName == "fullyqualifieddummyname")
+      assert(graphResult.getFullyQualifiedName == "spark_catalog.default.mv")
     }
   }
 
