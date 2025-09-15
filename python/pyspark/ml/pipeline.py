@@ -169,6 +169,9 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
     @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
+        allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(self.getStages())
+        if allStagesAreJava:
+            return JavaMLWriter(self)  # type: ignore[arg-type]
         return PipelineWriter(self)
 
     @classmethod
@@ -320,6 +323,11 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
     @try_remote_write
     def write(self) -> MLWriter:
         """Returns an MLWriter instance for this ML instance."""
+        allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(
+            cast(List["PipelineStage"], self.stages)
+        )
+        if allStagesAreJava:
+            return JavaMLWriter(self)  # type: ignore[arg-type]
         return PipelineModelWriter(self)
 
     @classmethod

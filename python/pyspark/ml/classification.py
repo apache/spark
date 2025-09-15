@@ -3703,7 +3703,10 @@ class OneVsRest(
 
     @try_remote_write
     def write(self) -> MLWriter:
-        return OneVsRestWriter(self)
+        if isinstance(self.getClassifier(), JavaMLWritable):
+            return JavaMLWriter(self)  # type: ignore[arg-type]
+        else:
+            return OneVsRestWriter(self)
 
 
 class _OneVsRestSharedReadWrite:
@@ -3964,7 +3967,15 @@ class OneVsRestModel(
 
     @try_remote_write
     def write(self) -> MLWriter:
-        return OneVsRestModelWriter(self)
+        if all(
+            map(
+                lambda elem: isinstance(elem, JavaMLWritable),
+                [self.getClassifier()] + self.models,  # type: ignore[operator]
+            )
+        ):
+            return JavaMLWriter(self)  # type: ignore[arg-type]
+        else:
+            return OneVsRestModelWriter(self)
 
 
 @inherit_doc
