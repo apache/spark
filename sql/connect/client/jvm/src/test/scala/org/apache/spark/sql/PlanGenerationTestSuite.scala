@@ -3390,6 +3390,16 @@ class PlanGenerationTestSuite
       fn.typedLit(java.time.Duration.ofSeconds(200L)),
       fn.typedLit(java.time.Period.ofDays(100)),
       fn.typedLit(new CalendarInterval(2, 20, 100L)),
+      fn.typedLit(
+        (
+          java.time.LocalDate.of(2020, 10, 10),
+          java.time.Instant.ofEpochMilli(1677155519808L),
+          new java.sql.Timestamp(12345L),
+          java.time.LocalDateTime.of(2023, 2, 23, 20, 36),
+          java.sql.Date.valueOf("2023-02-23"),
+          java.time.Duration.ofSeconds(200L),
+          java.time.Period.ofDays(100),
+          new CalendarInterval(2, 20, 100L))),
 
       // Handle parameterized scala types e.g.: List, Seq and Map.
       fn.typedLit(Some(1)),

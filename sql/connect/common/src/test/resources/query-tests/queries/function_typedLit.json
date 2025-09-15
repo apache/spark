@@ -654,6 +654,114 @@
       }
     }, {
       "literal": {
+        "struct": {
+          "structType": {
+            "struct": {
+              "fields": [{
+                "name": "_1",
+                "dataType": {
+                  "date": {
+                  }
+                },
+                "nullable": true
+              }, {
+                "name": "_2",
+                "dataType": {
+                  "timestamp": {
+                  }
+                },
+                "nullable": true
+              }, {
+                "name": "_3",
+                "dataType": {
+                  "timestamp": {
+                  }
+                },
+                "nullable": true
+              }, {
+                "name": "_4",
+                "dataType": {
+                  "timestampNtz": {
+                  }
+                },
+                "nullable": true
+              }, {
+                "name": "_5",
+                "dataType": {
+                  "date": {
+                  }
+                },
+                "nullable": true
+              }, {
+                "name": "_6",
+                "dataType": {
+                  "dayTimeInterval": {
+                    "startField": 0,
+                    "endField": 3
+                  }
+                },
+                "nullable": true
+              }, {
+                "name": "_7",
+                "dataType": {
+                  "yearMonthInterval": {
+                    "startField": 0,
+                    "endField": 1
+                  }
+                },
+                "nullable": true
+              }, {
+                "name": "_8",
+                "dataType": {
+                  "calendarInterval": {
+                  }
+                },
+                "nullable": true
+              }]
+            }
+          },
+          "elements": [{
+            "date": 18545
+          }, {
+            "timestamp": "1677155519808000"
+          }, {
+            "timestamp": "12345000"
+          }, {
+            "timestampNtz": "1677184560000000"
+          }, {
+            "date": 19411
+          }, {
+            "dayTimeInterval": "200000000"
+          }, {
+            "yearMonthInterval": 0
+          }, {
+            "calendarInterval": {
+              "months": 2,
+              "days": 20,
+              "microseconds": "100"
+            }
+          }]
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
         "integer": 1
       },
       "common": {
