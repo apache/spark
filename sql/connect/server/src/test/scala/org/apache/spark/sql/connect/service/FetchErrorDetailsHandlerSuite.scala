@@ -52,10 +52,10 @@ class TestSparkThrowableWithBreakingChange(
     messageParams.asJava
   }
 
-  override def getBreakingChangeInfo: Optional[BreakingChangeInfo] = {
+  override def getBreakingChangeInfo: BreakingChangeInfo = {
     breakingChangeInfo match {
-      case Some(info) => Optional.of(info)
-      case None => Optional.empty()
+      case Some(info) => info
+      case None => null
     }
   }
 }
