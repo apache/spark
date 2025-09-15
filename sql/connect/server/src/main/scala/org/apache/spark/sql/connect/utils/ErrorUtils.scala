@@ -142,6 +142,25 @@ private[connect] object ErrorUtils extends Logging {
           if (sparkThrowable.getSqlState != null) {
             sparkThrowableBuilder.setSqlState(sparkThrowable.getSqlState)
           }
+          // Add breaking change info if present
+          if (sparkThrowable.getBreakingChangeInfo != null) {
+            val breakingChangeInfo = sparkThrowable.getBreakingChangeInfo
+            val breakingChangeInfoBuilder = FetchErrorDetailsResponse.BreakingChangeInfo
+              .newBuilder()
+            import scala.jdk.CollectionConverters._
+            breakingChangeInfoBuilder
+              .addAllMigrationMessage(breakingChangeInfo.migrationMessage.asJava)
+            if (breakingChangeInfo.mitigationSparkConfig.isDefined) {
+              val mitigationConfig = breakingChangeInfo.mitigationSparkConfig.get
+              val mitigationConfigBuilder = FetchErrorDetailsResponse.MitigationSparkConfig
+                .newBuilder()
+                .setKey(mitigationConfig.key)
+                .setValue(mitigationConfig.value)
+              breakingChangeInfoBuilder.setMitigationSparkConfig(mitigationConfigBuilder.build())
+            }
+            breakingChangeInfoBuilder.setAutoMitigation(breakingChangeInfo.autoMitigation)
+            sparkThrowableBuilder.setBreakingChangeInfo(breakingChangeInfoBuilder.build())
+          }
           sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>

@@ -1095,6 +1095,32 @@ message FetchErrorDetailsResponse {
     // Portable error identifier across SQL engines
     // If null, error class or SQLSTATE is not set.
     optional string sql_state = 4;
+
+    // Additional information if the error was caused by a breaking change.
+    optional BreakingChangeInfo breaking_change_info = 5;
+  }
+
+  // BreakingChangeInfo defines the schema for breaking change information.
+  message BreakingChangeInfo {
+    // A message explaining how the user can migrate their job to work
+    // with the breaking change.
+    repeated string migration_message = 1;
+
+    // A spark config flag that can be used to mitigate the breaking change.
+    optional MitigationSparkConfig mitigation_spark_config = 2;
+
+    // If true, the spark job can be automatically retried by setting the mitigationSparkConfig.
+    // If false, the breaking change must be mitigated manually.
+    optional bool auto_mitigation = 3;
+  }
+
+  // MitigationSparkConfig defines a spark config flag that can be used to mitigate a breaking change.
+  message MitigationSparkConfig {
+    // The spark config key.
+    string key = 1;
+
+    // The spark config value that mitigates the breaking change.
+    string value = 2;
   }
 
   // Error defines the schema for the representing exception.

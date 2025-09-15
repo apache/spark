@@ -3732,6 +3732,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         MESSAGE_PARAMETERS_FIELD_NUMBER: builtins.int
         QUERY_CONTEXTS_FIELD_NUMBER: builtins.int
         SQL_STATE_FIELD_NUMBER: builtins.int
+        BREAKING_CHANGE_INFO_FIELD_NUMBER: builtins.int
         error_class: builtins.str
         """Succinct, human-readable, unique, and consistent representation of the error category."""
         @property
@@ -3750,6 +3751,9 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         """Portable error identifier across SQL engines
         If null, error class or SQLSTATE is not set.
         """
+        @property
+        def breaking_change_info(self) -> global___FetchErrorDetailsResponse.BreakingChangeInfo:
+            """Additional information if the error was caused by a breaking change."""
         def __init__(
             self,
             *,
@@ -3760,14 +3764,20 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             ]
             | None = ...,
             sql_state: builtins.str | None = ...,
+            breaking_change_info: global___FetchErrorDetailsResponse.BreakingChangeInfo
+            | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "_breaking_change_info",
+                b"_breaking_change_info",
                 "_error_class",
                 b"_error_class",
                 "_sql_state",
                 b"_sql_state",
+                "breaking_change_info",
+                b"breaking_change_info",
                 "error_class",
                 b"error_class",
                 "sql_state",
@@ -3777,10 +3787,14 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_breaking_change_info",
+                b"_breaking_change_info",
                 "_error_class",
                 b"_error_class",
                 "_sql_state",
                 b"_sql_state",
+                "breaking_change_info",
+                b"breaking_change_info",
                 "error_class",
                 b"error_class",
                 "message_parameters",
@@ -3793,12 +3807,112 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_breaking_change_info", b"_breaking_change_info"
+            ],
+        ) -> typing_extensions.Literal["breaking_change_info"] | None: ...
+        @typing.overload
+        def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
         ) -> typing_extensions.Literal["error_class"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_sql_state", b"_sql_state"]
         ) -> typing_extensions.Literal["sql_state"] | None: ...
+
+    class BreakingChangeInfo(google.protobuf.message.Message):
+        """BreakingChangeInfo defines the schema for breaking change information."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MIGRATION_MESSAGE_FIELD_NUMBER: builtins.int
+        MITIGATION_SPARK_CONFIG_FIELD_NUMBER: builtins.int
+        AUTO_MITIGATION_FIELD_NUMBER: builtins.int
+        @property
+        def migration_message(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """A message explaining how the user can migrate their job to work
+            with the breaking change.
+            """
+        @property
+        def mitigation_spark_config(
+            self,
+        ) -> global___FetchErrorDetailsResponse.MitigationSparkConfig:
+            """A spark config flag that can be used to mitigate the breaking change."""
+        auto_mitigation: builtins.bool
+        """If true, the spark job can be automatically retried by setting the mitigationSparkConfig.
+        If false, the breaking change must be mitigated manually.
+        """
+        def __init__(
+            self,
+            *,
+            migration_message: collections.abc.Iterable[builtins.str] | None = ...,
+            mitigation_spark_config: global___FetchErrorDetailsResponse.MitigationSparkConfig
+            | None = ...,
+            auto_mitigation: builtins.bool | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_auto_mitigation",
+                b"_auto_mitigation",
+                "_mitigation_spark_config",
+                b"_mitigation_spark_config",
+                "auto_mitigation",
+                b"auto_mitigation",
+                "mitigation_spark_config",
+                b"mitigation_spark_config",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_auto_mitigation",
+                b"_auto_mitigation",
+                "_mitigation_spark_config",
+                b"_mitigation_spark_config",
+                "auto_mitigation",
+                b"auto_mitigation",
+                "migration_message",
+                b"migration_message",
+                "mitigation_spark_config",
+                b"mitigation_spark_config",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_auto_mitigation", b"_auto_mitigation"]
+        ) -> typing_extensions.Literal["auto_mitigation"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_mitigation_spark_config", b"_mitigation_spark_config"
+            ],
+        ) -> typing_extensions.Literal["mitigation_spark_config"] | None: ...
+
+    class MitigationSparkConfig(google.protobuf.message.Message):
+        """MitigationSparkConfig defines a spark config flag that can be used to mitigate a breaking change."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        """The spark config key."""
+        value: builtins.str
+        """The spark config value that mitigates the breaking change."""
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""
