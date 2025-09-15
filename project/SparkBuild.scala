@@ -1488,7 +1488,7 @@ object Unidoc {
     ) ++ (
       // Add links to sources when generating Scaladoc for a non-snapshot release
       if (!isSnapshot.value) {
-        Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH}.scala")
+        Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH_EXT}")
       } else {
         Seq()
       }
