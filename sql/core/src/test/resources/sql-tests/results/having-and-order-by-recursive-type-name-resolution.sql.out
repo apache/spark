@@ -276,3 +276,51 @@ HAVING col1['b'] > 1
 struct<col1:map<string,int>,col1:map<string,int>>
 -- !query output
 {"a":1,"b":2}	{"a":1,"b":2}
+
+
+-- !query
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 ORDER BY col1.a
+-- !query schema
+struct<col1:struct<b:int>>
+-- !query output
+{"b":1}
+
+
+-- !query
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 HAVING col1.a > 0
+-- !query schema
+struct<col1:struct<b:int>>
+-- !query output
+
+
+
+-- !query
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 HAVING col1.a > 0 ORDER BY col1.a
+-- !query schema
+struct<col1:struct<b:int>>
+-- !query output
+
+
+
+-- !query
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 ORDER BY col1.b
+-- !query schema
+struct<col1:struct<b:int>>
+-- !query output
+{"b":1}
+
+
+-- !query
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 HAVING col1.b > 0
+-- !query schema
+struct<col1:struct<b:int>>
+-- !query output
+{"b":1}
+
+
+-- !query
+SELECT NAMED_STRUCT('b', 1) AS col1 FROM VALUES (NAMED_STRUCT('a', 0)) t (col1) GROUP BY col1 HAVING col1.b > 0 ORDER BY col1.b
+-- !query schema
+struct<col1:struct<b:int>>
+-- !query output
+{"b":1}
