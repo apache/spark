@@ -139,7 +139,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
 
         newTable
       case _ =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
   }
 }
