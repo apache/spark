@@ -106,21 +106,44 @@ object ExtractValue {
   }
 
   /**
-   * Check that [[attribute]] can be fully extracted using the given [[nestedFields]].
+   * Check that `attribute` can be fully extracted using the given nestedFields and `extractorKey`.
+   * This method first tries to extract the innermost nested field using `nestedFields`. If such
+   * nested field is found, try to extract the value using `extractorKey`, if it exists. This
+   * method returns true if all attempted extractions are successful.
    */
   def isExtractable(
-      attribute: Attribute, nestedFields: Seq[String], resolver: Resolver): Boolean = {
-    nestedFields
+      attribute: Attribute,
+      nestedFields: Seq[String],
+      extractorKey: Option[Expression] = None,
+      resolver: Resolver): Boolean = {
+    val withExtractedNestedFields = nestedFields
       .foldLeft(Some(attribute): Option[Expression]) {
         case (Some(expression), field) =>
-          ExtractValue.extractValue(expression, Literal(field), resolver) match {
+          ExtractValue.extractValue(
+            child = expression,
+            extraction = Literal(field),
+            resolver = resolver
+          ) match {
             case Left(e) => Some(e)
             case Right(_) => None
           }
         case _ =>
           None
       }
-      .isDefined
+
+    withExtractedNestedFields match {
+      case Some(nestedField) if extractorKey.isDefined =>
+        ExtractValue.extractValue(
+          child = nestedField,
+          extraction = extractorKey.get,
+          resolver = resolver
+        ) match {
+          case Left(e) => true
+          case Right(_) => false
+        }
+      case Some(_) => true
+      case None => false
+    }
   }
 
   /**
