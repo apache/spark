@@ -552,9 +552,7 @@ class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
         )
         numFolds = metadata["paramMap"]["numFolds"]
         bestModelPath = os.path.join(path, "bestModel")
-        bestModel: Model = DefaultParamsReader.loadParamsInstance(
-            bestModelPath, self.sparkSession
-        )
+        bestModel: Model = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sparkSession)
         avgMetrics = metadata["avgMetrics"]
         if "stdMetrics" in metadata:
             stdMetrics = metadata["stdMetrics"]
@@ -585,9 +583,7 @@ class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
         cvModel.set(cvModel.estimator, estimator)
         cvModel.set(cvModel.estimatorParamMaps, estimatorParamMaps)
         cvModel.set(cvModel.evaluator, evaluator)
-        DefaultParamsReader.getAndSetParams(
-            cvModel, metadata, skipParams=["estimatorParamMaps"]
-        )
+        DefaultParamsReader.getAndSetParams(cvModel, metadata, skipParams=["estimatorParamMaps"])
         return cvModel
 
 
@@ -1223,9 +1219,7 @@ class TrainValidationSplitModelReader(MLReader["TrainValidationSplitModel"]):
             path, self.sparkSession, metadata
         )
         bestModelPath = os.path.join(path, "bestModel")
-        bestModel: Model = DefaultParamsReader.loadParamsInstance(
-            bestModelPath, self.sparkSession
-        )
+        bestModel: Model = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sparkSession)
         validationMetrics = metadata["validationMetrics"]
         persistSubModels = ("persistSubModels" in metadata) and metadata["persistSubModels"]
 
@@ -1248,9 +1242,7 @@ class TrainValidationSplitModelReader(MLReader["TrainValidationSplitModel"]):
         tvsModel.set(tvsModel.estimator, estimator)
         tvsModel.set(tvsModel.estimatorParamMaps, estimatorParamMaps)
         tvsModel.set(tvsModel.evaluator, evaluator)
-        DefaultParamsReader.getAndSetParams(
-            tvsModel, metadata, skipParams=["estimatorParamMaps"]
-        )
+        DefaultParamsReader.getAndSetParams(tvsModel, metadata, skipParams=["estimatorParamMaps"])
         return tvsModel
 
 

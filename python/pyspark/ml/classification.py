@@ -3991,9 +3991,7 @@ class OneVsRestModelReader(MLReader[OneVsRestModel]):
         subModels = [None] * numClasses
         for idx in range(numClasses):
             subModelPath = os.path.join(path, f"model_{idx}")
-            subModels[idx] = DefaultParamsReader.loadParamsInstance(
-                subModelPath, self.sparkSession
-            )
+            subModels[idx] = DefaultParamsReader.loadParamsInstance(subModelPath, self.sparkSession)
         ovaModel = OneVsRestModel(cast(List[ClassificationModel], subModels))._resetUid(
             metadata["uid"]
         )
