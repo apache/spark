@@ -278,7 +278,7 @@ def infer_eval_type(
     return eval_type
 
 
-def infer_eval_type_from_func(
+def infer_eval_type_from_func(  # type: ignore[no-untyped-def]
     f,
 ) -> Optional[
     Union[
