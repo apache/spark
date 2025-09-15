@@ -328,7 +328,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         }.getOrElse(Seq())
       }.toIndexedSeq
     }
-    override def removeExecutor(execId: String): Unit = {
+    override def removeExecutorAsync(execId: String): Unit = {
       // don't need to propagate to the driver, which we don't have
     }
 
@@ -752,7 +752,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Now the executor on hostA is lost
     runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
     // Executor is removed but shuffle files are not unregistered
-    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
     verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
 
     // The MapOutputTracker has all the shuffle files
@@ -765,9 +765,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(1), Seq(
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)
     ))
-    // blockManagerMaster.removeExecutor is not called again
+    // blockManagerMaster.removeExecutorAsync is not called again
     // but shuffle files are unregistered
-    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
     verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
 
     // Shuffle files for hostA-exec should be lost
@@ -1011,7 +1011,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(1), Seq(
       (Success, 42),
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)))
-    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
     // ask the scheduler to try it again
     scheduler.resubmitFailedStages()
     // have the 2nd attempt pass
@@ -1051,7 +1051,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         case _ => false
       }
       runEvent(ExecutorLost("hostA-exec", event))
-      verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+      verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
       if (expectFileLoss) {
         if (expectHostFileLoss) {
           verify(mapOutputTracker, times(1)).removeOutputsOnHost("hostA")
@@ -1086,7 +1086,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     submit(reduceRdd, Array(0))
     completeShuffleMapStageSuccessfully(0, 0, 1)
     runEvent(ExecutorLost("hostA-exec", event))
-    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
     verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
@@ -2188,7 +2188,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // fail the third stage because hostA went down
     completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
     // TODO assert this:
-    // blockManagerMaster.removeExecutor("hostA-exec")
+    // blockManagerMaster.removeExecutorAsync("hostA-exec")
     // have DAGScheduler try again
     scheduler.resubmitFailedStages()
     complete(taskSets(3), Seq((Success, makeMapStatus("hostA", 2))))
@@ -2214,7 +2214,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // pretend stage 2 failed because hostA went down
     completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
     // TODO assert this:
-    // blockManagerMaster.removeExecutor("hostA-exec")
+    // blockManagerMaster.removeExecutorAsync("hostA-exec")
     // DAGScheduler should notice the cached copy of the second shuffle and try to get it rerun.
     scheduler.resubmitFailedStages()
     assertLocations(taskSets(3), Seq(Seq("hostD")))
@@ -4824,7 +4824,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       ExecutorExited(-100, false, "Container marked as failed")))
 
     // Shuffle push merger executor should not be removed and the shuffle files are not unregistered
-    verify(blockManagerMaster, times(0)).removeExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    verify(blockManagerMaster, times(0))
+      .removeExecutorAsync(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
     verify(mapOutputTracker,
       times(0)).removeOutputsOnExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
 
@@ -4836,7 +4837,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     // Verify that we are not removing the executor,
     // and that we are only removing the outputs on the host
-    verify(blockManagerMaster, times(0)).removeExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    verify(blockManagerMaster, times(0))
+      .removeExecutorAsync(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
     verify(blockManagerMaster, times(1)).removeShufflePushMergerLocation("hostA")
     verify(mapOutputTracker,
       times(1)).removeOutputsOnHost("hostA")
