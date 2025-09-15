@@ -407,6 +407,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       WindowsSubstitution,
       EliminateUnions,
       EliminateLazyExpression),
+    Batch("Apply Limit All", Once, ApplyLimitAll),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
