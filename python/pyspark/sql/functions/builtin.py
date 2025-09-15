@@ -12752,10 +12752,7 @@ def time_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
     from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function(
-        "time_trunc",
-        _enum_to_value(unit),
-        _to_java_column(start),
-        _to_java_column(end)
+        "time_trunc", _enum_to_value(unit), _to_java_column(start), _to_java_column(end)
     )
 
 

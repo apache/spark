@@ -406,7 +406,8 @@ class FunctionsTestsMixin:
     def test_time_diff(self):
         # SPARK-53111: test the time_diff function.
         df = self.spark.createDataFrame(
-            [(datetime.time(20, 30, 29)), (datetime.time(21, 30, 29))], ["start", "end"])
+            [(datetime.time(20, 30, 29)), (datetime.time(21, 30, 29))], ["start", "end"]
+        )
         result = 1
         row_from_col = df.select(F.time_diff("hour", df.start, df.end)).first()
         self.assertIsInstance(row_from_col[0], datetime.time)
