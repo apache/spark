@@ -81,45 +81,31 @@ private[connect] object PipelinesHandler extends Logging {
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
         logInfo(s"Define pipelines dataset cmd received: $cmd")
-        val dataflowGraphId = cmd.getDefineDataset.getDataflowGraphId
-        val graphElementRegistry =
-          sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
-        val qualifiedFlowTargetDatasetName = GraphIdentifierManager
-            .parseAndQualifyTableIdentifier(
-              rawTableIdentifier =
-                GraphIdentifierManager.parseTableIdentifier
-                (cmd.getDefineDataset.getDatasetName, sessionHolder.session),
-              currentCatalog = Some(graphElementRegistry.defaultCatalog),
-              currentDatabase = Some(graphElementRegistry.defaultDatabase)
-            )
-            .identifier
         defineDataset(cmd.getDefineDataset, sessionHolder)
+        val qualifiedNameString = convertToQualifiedIdentifier(
+          sessionHolder,
+          cmd.getDefineDataset.getDataflowGraphId,
+          cmd.getDefineDataset.getDatasetName
+        ).unquotedString
         PipelineCommandResult.newBuilder()
           .setDefineEntityResult(
             PipelineCommandResult.DefineEntityResult.newBuilder()
-            .setFullyQualifiedName(qualifiedFlowTargetDatasetName.unquotedString)
+            .setFullyQualifiedName(qualifiedNameString)
             .build()
           )
         .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
-        val dataflowGraphId = cmd.getDefineFlow.getDataflowGraphId
-        val graphElementRegistry =
-          sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
-        val qualifiedFlowTargetDatasetName = GraphIdentifierManager
-            .parseAndQualifyTableIdentifier(
-              rawTableIdentifier =
-                GraphIdentifierManager.parseTableIdentifier
-                (cmd.getDefineFlow.getFlowName, sessionHolder.session),
-              currentCatalog = Some(graphElementRegistry.defaultCatalog),
-              currentDatabase = Some(graphElementRegistry.defaultDatabase)
-            )
-            .identifier
         defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
+        val qualifiedNameString = convertToQualifiedIdentifier(
+          sessionHolder,
+          cmd.getDefineFlow.getDataflowGraphId,
+          cmd.getDefineFlow.getFlowName
+        ).unquotedString
         PipelineCommandResult.newBuilder()
           .setDefineEntityResult(
             PipelineCommandResult.DefineEntityResult.newBuilder()
-            .setFullyQualifiedName(qualifiedFlowTargetDatasetName.unquotedString)
+            .setFullyQualifiedName(qualifiedNameString)
             .build()
           )
         .build()
@@ -133,6 +119,20 @@ private[connect] object PipelinesHandler extends Logging {
         defaultResponse
       case other => throw new UnsupportedOperationException(s"$other not supported")
     }
+  }
+
+  private def convertToQualifiedIdentifier(sessionHolder: SessionHolder,
+    dataflowGraphId: String, name: String): TableIdentifier = {
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    GraphIdentifierManager
+      .parseAndQualifyTableIdentifier(
+        rawTableIdentifier =
+          GraphIdentifierManager.parseTableIdentifier
+          (name, sessionHolder.session),
+          currentCatalog = Some(graphElementRegistry.defaultCatalog),
+          currentDatabase = Some(graphElementRegistry.defaultDatabase)
+      ).identifier
   }
 
   private def createDataflowGraph(
