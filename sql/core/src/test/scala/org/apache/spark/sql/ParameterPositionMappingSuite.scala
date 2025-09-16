@@ -120,25 +120,20 @@ class ParameterPositionMappingSuite extends QueryTest with SharedSparkSession {
     // Only proceed with position mapping if contexts exist
     // Some parse errors don't create contexts - that's existing behavior, not a regression
     if (contexts.nonEmpty) {
+      val context = contexts.head.asInstanceOf[SQLQueryContext]
 
-    val context = contexts.head.asInstanceOf[SQLQueryContext]
+      // Verify the SQL text is the original
+      assert(context.sqlText.contains(sql),
+        s"Context should reference original SQL.\n" +
+        s"Expected: $sql\n" +
+        s"Actual: ${context.sqlText}")
 
-    // Verify the SQL text is the original
-    assert(context.sqlText.contains(sql),
-      s"Context should reference original SQL.\n" +
-      s"Expected: $sql\n" +
-      s"Actual: ${context.sqlText}")
-
-      // Verify position mapping
-      assert(context.originStartIndex.contains(expectedStartPos),
-        s"Start position should be $expectedStartPos, got: ${context.originStartIndex}")
-      assert(context.originStopIndex.contains(expectedStopPos),
-        s"Stop position should be $expectedStopPos, got: ${context.originStopIndex}")
-    } else {
-      // No query context exists - this is acceptable for some parse errors
-      // We're not trying to fix the parser, just ensure no regression
-      println(s"INFO: No query context for SQL: $sql (this is acceptable)")
-    }
+        // Verify position mapping
+        assert(context.originStartIndex.contains(expectedStartPos),
+          s"Start position should be $expectedStartPos, got: ${context.originStartIndex}")
+        assert(context.originStopIndex.contains(expectedStopPos),
+          s"Stop position should be $expectedStopPos, got: ${context.originStopIndex}")
+      }
   }
 
   test("parse error with named parameter") {
@@ -188,18 +183,14 @@ class ParameterPositionMappingSuite extends QueryTest with SharedSparkSession {
     val contexts = exception.getQueryContext
     // Some parse errors may not have query context - this is acceptable
     if (contexts.nonEmpty) {
-
-    val context = contexts.head.asInstanceOf[SQLQueryContext]
-    assert(context.sqlText.contains(sqlText),
-      s"Context should contain original SQL: $sqlText")
-    assert(context.originStartIndex.contains(0),
-      s"Start index should be 0, got: ${context.originStartIndex}")
-      assert(context.originStopIndex.contains(sqlText.length - 1),
-        s"Stop index should be ${sqlText.length - 1}, got: ${context.originStopIndex}")
-    } else {
-      // No query context exists - this is acceptable for some parse errors
-      println(s"INFO: No query context for parse error (this is acceptable)")
-    }
+      val context = contexts.head.asInstanceOf[SQLQueryContext]
+      assert(context.sqlText.contains(sqlText),
+        s"Context should contain original SQL: $sqlText")
+      assert(context.originStartIndex.contains(0),
+        s"Start index should be 0, got: ${context.originStartIndex}")
+        assert(context.originStopIndex.contains(sqlText.length - 1),
+          s"Stop index should be ${sqlText.length - 1}, got: ${context.originStopIndex}")
+      }
   }
 
   test("multiple parameters with parse error") {

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, EmptyRow, Expression, L
   VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -90,22 +91,36 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       validateQuery(sqlString, parsedPlan)
     }
 
-    // Execute the query recursively with isolated local variable context
-    val result = if (args.isEmpty) {
-      // No parameters - execute directly
-      withIsolatedLocalVariableContext {
-        sparkSession.sql(sqlString)
-      }
-    } else {
-      // For parameterized queries, build parameter arrays
-      val (paramValues, paramNames) = buildUnifiedParameters(args)
+    // Create the origin for EXECUTE IMMEDIATE context - this will be used by expressions
+    // during parsing to set their queryContext, similar to how views work
+    val executeImmediateOrigin = Origin(
+      objectType = Some("EXECUTE IMMEDIATE"),
+      objectName = Some(sqlString),
+      sqlText = Some(sqlString),
+      startIndex = Some(0),
+      stopIndex = Some(sqlString.length - 1)
+    )
 
-      // Validate that if inner query uses named parameters, all USING arguments must be named
-      validateNamedParameterConsistency(sqlString, paramNames, args)
+    // Execute the query recursively with isolated local variable context and EXECUTE IMMEDIATE
+    // origin
+    // CurrentOrigin.withOrigin ensures expressions created during parsing get the proper context
+    val result = CurrentOrigin.withOrigin(executeImmediateOrigin) {
+      if (args.isEmpty) {
+        // No parameters - execute directly
+        withIsolatedLocalVariableContext {
+          sparkSession.sql(sqlString)
+        }
+      } else {
+        // For parameterized queries, build parameter arrays
+        val (paramValues, paramNames) = buildUnifiedParameters(args)
 
-      withIsolatedLocalVariableContext {
-        sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
-          .sql(sqlString, paramValues, paramNames)
+        // Validate that if inner query uses named parameters, all USING arguments must be named
+        validateNamedParameterConsistency(sqlString, paramNames, args)
+
+        withIsolatedLocalVariableContext {
+          sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+            .sql(sqlString, paramValues, paramNames)
+        }
       }
     }
 
