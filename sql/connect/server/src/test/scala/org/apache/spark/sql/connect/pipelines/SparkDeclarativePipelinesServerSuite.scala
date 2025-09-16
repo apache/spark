@@ -34,63 +34,34 @@ class SparkDeclarativePipelinesServerSuite
     }
   }
 
-  test("TEMPORARY_VIEW, DefineDataset returns fully qualified name") {
-    withRawBlockingStub { implicit stub =>
-      val graphId = createDataflowGraph
-      assert(Option(graphId).isDefined)
-      val defineDataset = DefineDataset
-        .newBuilder()
-        .setDataflowGraphId(graphId)
-        .setDatasetName("tv")
-        .setDatasetType(DatasetType.TEMPORARY_VIEW)
-      val pipelineCmd = PipelineCommand.newBuilder()
-        .setDefineDataset(defineDataset)
-        .build()
-      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
-      assert(res !== PipelineCommandResult.getDefaultInstance)
-      assert(res.hasDefineDatasetResult)
-      val graphResult = res.getDefineDatasetResult
-      assert(graphResult.getResolvedDataName == "spark_catalog.default.tv")
-    }
-  }
 
-  test("TABLE, DefineDataset returns fully qualified name") {
+  gridTest("DefineDataset returns fully qualified name for default database")(
+    Seq(
+      ("TEMPORARY_VIEW", DatasetType.TEMPORARY_VIEW, "tv"),
+      ("TABLE", DatasetType.TABLE, "tb"),
+      ("MV", DatasetType.MATERIALIZED_VIEW, "mv")
+    )
+  ) { case (_, datasetType, datasetName) =>
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       assert(Option(graphId).isDefined)
-      val defineDataset = DefineDataset
-        .newBuilder()
-        .setDataflowGraphId(graphId)
-        .setDatasetName("tb")
-        .setDatasetType(DatasetType.TABLE)
-      val pipelineCmd = PipelineCommand.newBuilder()
-        .setDefineDataset(defineDataset)
-        .build()
-      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
-      assert(res !== PipelineCommandResult.getDefaultInstance)
-      assert(res.hasDefineDatasetResult)
-      val graphResult = res.getDefineDatasetResult
-      assert(graphResult.getResolvedDataName == "spark_catalog.default.tb")
-    }
-  }
 
-  test("MV, DefineDataset returns fully qualified name") {
-    withRawBlockingStub { implicit stub =>
-      val graphId = createDataflowGraph
-      assert(Option(graphId).isDefined)
       val defineDataset = DefineDataset
         .newBuilder()
         .setDataflowGraphId(graphId)
-        .setDatasetName("mv")
-        .setDatasetType(DatasetType.MATERIALIZED_VIEW)
+        .setDatasetName(datasetName)
+        .setDatasetType(datasetType)
+
       val pipelineCmd = PipelineCommand.newBuilder()
         .setDefineDataset(defineDataset)
         .build()
+
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
       assert(res !== PipelineCommandResult.getDefaultInstance)
       assert(res.hasDefineDatasetResult)
+
       val graphResult = res.getDefineDatasetResult
-      assert(graphResult.getResolvedDataName == "spark_catalog.default.mv")
+      assert(graphResult.getResolvedDataName == s"spark_catalog.default.$datasetName")
     }
   }
 
