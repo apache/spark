@@ -6510,13 +6510,14 @@ class DataFrame:
 
         Examples
         --------
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.toArrow()  # doctest: +SKIP
         pyarrow.Table
         age: int64
         name: string
         ----
-        age: [[2,5]]
-        name: [["Alice","Bob"]]
+        age: [[2],[5]]
+        name: [["Alice"],["Bob"]]
         """
         ...
 
@@ -6540,6 +6541,7 @@ class DataFrame:
 
         Examples
         --------
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
