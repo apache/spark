@@ -461,7 +461,7 @@ class _ValidatorSharedReadWrite:
                     return json.loads(jsonParam[key])
 
                 if "isJson" not in jsonParam or ("isJson" in jsonParam and extract_value("isJson")):
-                    value = extract_value("value")
+                    value = json.loads(jsonParam["value"])
                 else:
                     relativePath = extract_value("value")
                     valueSavedPath = os.path.join(path, relativePath)
