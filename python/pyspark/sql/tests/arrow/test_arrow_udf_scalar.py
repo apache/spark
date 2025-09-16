@@ -46,11 +46,13 @@ from pyspark.sql.types import (
     YearMonthIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -813,6 +815,7 @@ class ScalarArrowUDFTestsMixin:
         [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
         self.assertEqual(row[0], 7)
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_nondeterministic_arrow_udf(self):
         import pyarrow as pa
 
@@ -835,6 +838,7 @@ class ScalarArrowUDFTestsMixin:
             self.assertEqual(random_udf.deterministic, False)
             self.assertTrue(result1["plus_ten(rand)"].equals(result1["rand"] + 10))
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_nondeterministic_arrow_udf_in_aggregate(self):
         with self.quiet():
             df = self.spark.range(10)

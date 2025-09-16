@@ -35,7 +35,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
       "spark.conf2=3"
     )
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
       Seq(
         "--deploy-mode",
         "client",
@@ -60,7 +61,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
       "pipeline.yml"
     )
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
       Seq(
         "--conf",
         "spark.api.mode=connect",
@@ -86,7 +88,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
       "spark.conf2=3"
     )
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
       Seq(
         "--supervise",
         "--conf",
@@ -109,7 +112,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
       "org.apache.spark.deploy.SparkPipelines"
     )
     intercept[SparkUserAppException] {
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc")
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args)
     }
   }
 
@@ -120,7 +124,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
       "myproject"
     )
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
         Seq(
           "--conf",
           "spark.api.mode=connect",

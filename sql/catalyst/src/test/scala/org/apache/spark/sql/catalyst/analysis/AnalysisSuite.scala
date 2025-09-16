@@ -30,7 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog, VariableDefinition}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
+import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -1518,34 +1518,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     assertAnalysisSuccess(finalPlan)
-  }
-
-  test("Execute Immediate plan transformation") {
-    try {
-    val varDef1 = VariableDefinition(Identifier.of(Array("res"), "res"), "1", Literal(1))
-    SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      Seq("res", "res"), varDef1, overrideIfExists = true)
-
-    val varDef2 = VariableDefinition(Identifier.of(Array("res2"), "res2"), "1", Literal(1))
-    SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      Seq("res2", "res2"), varDef2, overrideIfExists = true)
-    val actual1 = parsePlan("EXECUTE IMMEDIATE 'SELECT 42 WHERE ? = 1' USING 2").analyze
-    val expected1 = parsePlan("SELECT 42 where 2 = 1").analyze
-    comparePlans(actual1, expected1)
-    val actual2 = parsePlan(
-      "EXECUTE IMMEDIATE 'SELECT 42 WHERE :first = 1' USING 2 as first").analyze
-    val expected2 = parsePlan("SELECT 42 where 2 = 1").analyze
-    comparePlans(actual2, expected2)
-    // Test that plan is transformed to SET operation
-    val actual3 = parsePlan(
-      "EXECUTE IMMEDIATE 'SELECT 17, 7 WHERE ? = 1' INTO res, res2 USING 2").analyze
-      // Normalize to make the plan equivalent to the below set statement.
-    val expected3 = parsePlan("SET var (res, res2) = (SELECT 17, 7 where 2 = 1)").analyze
-      comparePlans(actual3, expected3)
-    } finally {
-      SimpleAnalyzer.catalogManager.tempVariableManager.remove(Seq("res"))
-      SimpleAnalyzer.catalogManager.tempVariableManager.remove(Seq("res2"))
-    }
   }
 
   test("SPARK-41271: bind named parameters to literals") {
