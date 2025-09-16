@@ -52,7 +52,6 @@ from pyspark.ml.util import (
     MLReader,
     MLWritable,
     MLWriter,
-    JavaMLReader,
     JavaMLWriter,
     try_remote_write,
     try_remote_read,

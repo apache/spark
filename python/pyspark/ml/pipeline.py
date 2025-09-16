@@ -25,7 +25,6 @@ from pyspark.ml.util import (
     MLReadable,
     MLWritable,
     JavaMLWriter,
-    JavaMLReader,
     DefaultParamsReader,
     DefaultParamsWriter,
     MLWriter,
