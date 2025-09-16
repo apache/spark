@@ -113,9 +113,9 @@ def _convert_exception(
                 bci = root_error.spark_throwable.breaking_change_info
                 breaking_change_info = {
                     "migration_message": list(bci.migration_message),
-                    "auto_mitigation": bci.auto_mitigation
-                    if bci.HasField("auto_mitigation")
-                    else False,
+                    "needs_audit": bci.needs_audit
+                    if bci.HasField("needs_audit")
+                    else True,
                 }
                 if bci.HasField("mitigation_config"):
                     breaking_change_info["mitigation_config"] = {

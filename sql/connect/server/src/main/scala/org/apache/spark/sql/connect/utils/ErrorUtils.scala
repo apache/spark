@@ -158,7 +158,7 @@ private[connect] object ErrorUtils extends Logging {
                 .setValue(mitigationConfig.value)
               breakingChangeInfoBuilder.setMitigationConfig(mitigationConfigBuilder.build())
             }
-            breakingChangeInfoBuilder.setAutoMitigation(breakingChangeInfo.autoMitigation)
+            breakingChangeInfoBuilder.setNeedsAudit(breakingChangeInfo.needsAudit)
             sparkThrowableBuilder.setBreakingChangeInfo(breakingChangeInfoBuilder.build())
           }
           sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)

@@ -3828,7 +3828,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
 
         MIGRATION_MESSAGE_FIELD_NUMBER: builtins.int
         MITIGATION_CONFIG_FIELD_NUMBER: builtins.int
-        AUTO_MITIGATION_FIELD_NUMBER: builtins.int
+        NEEDS_AUDIT_FIELD_NUMBER: builtins.int
         @property
         def migration_message(
             self,
@@ -3839,54 +3839,54 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         @property
         def mitigation_config(self) -> global___FetchErrorDetailsResponse.MitigationConfig:
             """A spark config flag that can be used to mitigate the breaking change."""
-        auto_mitigation: builtins.bool
-        """If true, the spark job can be automatically retried by setting the mitigationConfig.
-        If false, the breaking change must be mitigated manually.
+        needs_audit: builtins.bool
+        """If false, the spark job can be automatically retried by setting the mitigationConfig.
+        If true, the breaking change must be mitigated manually.
         """
         def __init__(
             self,
             *,
             migration_message: collections.abc.Iterable[builtins.str] | None = ...,
             mitigation_config: global___FetchErrorDetailsResponse.MitigationConfig | None = ...,
-            auto_mitigation: builtins.bool | None = ...,
+            needs_audit: builtins.bool | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_auto_mitigation",
-                b"_auto_mitigation",
                 "_mitigation_config",
                 b"_mitigation_config",
-                "auto_mitigation",
-                b"auto_mitigation",
+                "_needs_audit",
+                b"_needs_audit",
                 "mitigation_config",
                 b"mitigation_config",
+                "needs_audit",
+                b"needs_audit",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_auto_mitigation",
-                b"_auto_mitigation",
                 "_mitigation_config",
                 b"_mitigation_config",
-                "auto_mitigation",
-                b"auto_mitigation",
+                "_needs_audit",
+                b"_needs_audit",
                 "migration_message",
                 b"migration_message",
                 "mitigation_config",
                 b"mitigation_config",
+                "needs_audit",
+                b"needs_audit",
             ],
         ) -> None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_auto_mitigation", b"_auto_mitigation"]
-        ) -> typing_extensions.Literal["auto_mitigation"] | None: ...
         @typing.overload
         def WhichOneof(
             self,
             oneof_group: typing_extensions.Literal["_mitigation_config", b"_mitigation_config"],
         ) -> typing_extensions.Literal["mitigation_config"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_needs_audit", b"_needs_audit"]
+        ) -> typing_extensions.Literal["needs_audit"] | None: ...
 
     class MitigationConfig(google.protobuf.message.Message):
         """MitigationConfig defines a spark config flag that can be used to mitigate a breaking change."""

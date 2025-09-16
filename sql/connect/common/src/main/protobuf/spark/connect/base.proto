@@ -1109,9 +1109,9 @@ message FetchErrorDetailsResponse {
     // A spark config flag that can be used to mitigate the breaking change.
     optional MitigationConfig mitigation_config = 2;
 
-    // If true, the spark job can be automatically retried by setting the mitigationConfig.
-    // If false, the breaking change must be mitigated manually.
-    optional bool auto_mitigation = 3;
+    // If true, the breaking change should be inspected manually.
+    // If false, the spark job should be retried by setting the mitigationConfig.
+    optional bool needs_audit = 3;
   }
 
   // MitigationConfig defines a spark config flag that can be used to mitigate a breaking change.

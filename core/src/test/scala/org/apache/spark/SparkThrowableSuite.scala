@@ -531,7 +531,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |        "key": "config.key1",
           |        "value": "config.value1"
           |      },
-          |      "autoMitigation": true
+          |      "needsAudit": false
           |    }
           |  },
           |  "TEST_ERROR_WITH_SUBCLASS": {
@@ -551,7 +551,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |            "key": "config.key2",
           |            "value": "config.value2"
           |          },
-          |          "autoMitigation": false
+          |          "needsAudit": true
           |        }
           |      }
           |    }
@@ -573,7 +573,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           BreakingChangeInfo(
             Seq("Migration message with <param2>."),
             Some(MitigationConfig("config.key1", "config.value1")),
-            autoMitigation = true)))
+            needsAudit = false)))
       val errorMessage2 =
         reader.getErrorMessage("TEST_ERROR_WITH_SUBCLASS.SUBCLASS", error2Params)
       assert(

@@ -63,7 +63,7 @@ class ErrorsTest(unittest.TestCase):
                 "breaking_change_info": {
                     "migration_message": ["Migration message with <param2>."],
                     "mitigation_config": {"key": "config.key1", "value": "config.value1"},
-                    "autoMitigation": True,
+                    "needsAudit": False,
                 },
             },
             "TEST_ERROR_WITH_SUB_CLASS": {
@@ -77,7 +77,7 @@ class ErrorsTest(unittest.TestCase):
                                 "key": "config.key2",
                                 "value": "config.value2",
                             },
-                            "autoMitigation": False,
+                            "needsAudit": True,
                         },
                     }
                 },

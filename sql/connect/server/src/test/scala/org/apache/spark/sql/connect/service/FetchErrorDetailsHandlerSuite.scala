@@ -282,7 +282,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     // we should add a more comprehensive test that verifies:
     // - sparkThrowableProto.hasBreakingChangeInfo == true
     // - sparkThrowableProto.getBreakingChangeInfo.getMigrationMessageCount > 0
-    // - sparkThrowableProto.getBreakingChangeInfo.getAutoMitigation == expected_value
+    // - sparkThrowableProto.getBreakingChangeInfo.getNeedsAudit == expected_value
     // - If mitigation config exists:
     //     sparkThrowableProto.getBreakingChangeInfo.hasSparkConfig
   }
@@ -293,7 +293,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     val mitigationConfig =
       Some(MitigationConfig("spark.sql.legacy.behavior.enabled", "true"))
     val breakingChangeInfo =
-      BreakingChangeInfo(migrationMessages, mitigationConfig, autoMitigation = true)
+      BreakingChangeInfo(migrationMessages, mitigationConfig, needsAudit = false)
 
     val testError = new TestSparkThrowableWithBreakingChange(
       "TEST_BREAKING_CHANGE_ERROR",
@@ -318,7 +318,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     assert(bciProto.getMigrationMessageCount == 2)
     assert(bciProto.getMigrationMessage(0) == "Please update your code to use new API")
     assert(bciProto.getMigrationMessage(1) == "See documentation for details")
-    assert(bciProto.getAutoMitigation == true)
+    assert(bciProto.getNeedsAudit == false)
 
     assert(bciProto.hasMitigationConfig)
     val mitigationConfigProto = bciProto.getMitigationConfig
@@ -342,7 +342,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
   test(
     "throwableToFetchErrorDetailsResponse with breaking change info without mitigation config") {
     val migrationMessages = Seq("Migration message only")
-    val breakingChangeInfo = BreakingChangeInfo(migrationMessages, None, autoMitigation = false)
+    val breakingChangeInfo = BreakingChangeInfo(migrationMessages, None, needsAudit = true)
 
     val testError = new TestSparkThrowableWithBreakingChange(
       "TEST_BREAKING_CHANGE_NO_MITIGATION",
@@ -355,7 +355,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     val bciProto = response.getErrors(0).getSparkThrowable.getBreakingChangeInfo
     assert(bciProto.getMigrationMessageCount == 1)
     assert(bciProto.getMigrationMessage(0) == "Migration message only")
-    assert(bciProto.getAutoMitigation == false)
+    assert(bciProto.getNeedsAudit == true)
     assert(!bciProto.hasMitigationConfig)
   }
 

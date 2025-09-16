@@ -199,14 +199,14 @@ private case class ErrorSubInfo(
  *                         with the breaking change.
  * @param mitigationConfig A spark config flag that can be used to mitigate the
  *                              breaking change.
- * @param autoMitigation If true, the spark job can be automatically retried by setting the
- *                       mitigationConfig. If false, the breaking change must be
- *                       mitigated manually.
+ * @param needsAudit If true, the breaking change should be inspected manually.
+ *                       If false, the spark job should be retried by setting the
+ *                       mitigationConfig.
  */
 case class BreakingChangeInfo(
     migrationMessage: Seq[String],
     mitigationConfig: Option[MitigationConfig] = None,
-    autoMitigation: Boolean = false
+    needsAudit: Boolean = true
 )
 
 /**

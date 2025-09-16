@@ -117,7 +117,7 @@ private[spark] object SparkThrowableHelper {
                 g.writeStringField("value", mitigationConfig.value)
                 g.writeEndObject()
               }
-              g.writeBooleanField("autoMitigation", breakingChangeInfo.autoMitigation)
+              g.writeBooleanField("needsAudit", breakingChangeInfo.needsAudit)
               g.writeEndObject()
             }
           }

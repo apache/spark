@@ -211,7 +211,7 @@ class ConnectErrorsTest(unittest.TestCase):
         bci = spark_throwable.breaking_change_info
         bci.migration_message.append("Please update your code to use new API")
         bci.migration_message.append("See documentation for details")
-        bci.auto_mitigation = True
+        bci.needs_audit = False
 
         # Add mitigation config
         mitigation_config = bci.mitigation_config
@@ -236,7 +236,7 @@ class ConnectErrorsTest(unittest.TestCase):
             breaking_change_info["migration_message"],
             ["Please update your code to use new API", "See documentation for details"],
         )
-        self.assertEqual(breaking_change_info["auto_mitigation"], True)
+        self.assertEqual(breaking_change_info["needs_audit"], False)
         self.assertIn("mitigation_config", breaking_change_info)
         self.assertEqual(
             breaking_change_info["mitigation_config"]["key"],
@@ -284,7 +284,7 @@ class ConnectErrorsTest(unittest.TestCase):
         breaking_change_info = {
             "migration_message": ["Test migration message"],
             "mitigation_config": {"key": "test.config.key", "value": "test.config.value"},
-            "auto_mitigation": False,
+            "needs_audit": True,
         }
 
         exception = SparkConnectGrpcException(
@@ -301,7 +301,7 @@ class ConnectErrorsTest(unittest.TestCase):
 
         breaking_change_info = {
             "migration_message": ["Inheritance test message"],
-            "auto_mitigation": True,
+            "needs_audit": False,
         }
 
         # Test AnalysisException
@@ -345,7 +345,7 @@ class ConnectErrorsTest(unittest.TestCase):
         # Add breaking change info without mitigation config
         bci = spark_throwable.breaking_change_info
         bci.migration_message.append("Migration message only")
-        bci.auto_mitigation = False
+        bci.needs_audit = True
 
         info = ErrorInfo()
         info.reason = "org.apache.spark.SparkException"
@@ -362,7 +362,7 @@ class ConnectErrorsTest(unittest.TestCase):
         breaking_change_info = exception.getBreakingChangeInfo()
         self.assertIsNotNone(breaking_change_info)
         self.assertEqual(breaking_change_info["migration_message"], ["Migration message only"])
-        self.assertEqual(breaking_change_info["auto_mitigation"], False)
+        self.assertEqual(breaking_change_info["needs_audit"], True)
         self.assertNotIn("mitigation_config", breaking_change_info)
 
 
