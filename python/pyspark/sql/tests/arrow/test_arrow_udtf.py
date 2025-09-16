@@ -971,6 +971,42 @@ class ArrowUDTFTestsMixin:
         expected_df = self.spark.createDataFrame(expected_data, "col1_sum int, col2_sum int")
         assertDataFrameEqual(result_df, expected_df)
 
+    def test_arrow_udtf_partition_by_all_columns(self):
+        @arrow_udtf(returnType="rows int")
+        class CountRowsUDTF:
+            def __init__(self):
+                self._rows = 0
+
+            def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
+                table = pa.table(table_data)
+                self._rows += table.num_rows
+                return iter(())
+
+            def terminate(self) -> Iterator["pa.Table"]:
+                result_table = pa.table(
+                    {"rows": pa.array([self._rows], type=pa.int32())}
+                )
+                yield result_table
+
+        df = self.spark.createDataFrame(
+            [(1, 10), (1, 20), (2, 30)], "partition_key int, value int"
+        )
+        self.spark.udtf.register("count_rows_udtf", CountRowsUDTF)
+        df.createOrReplaceTempView("partition_all_columns")
+
+        result_df = self.spark.sql(
+            """
+            SELECT * FROM count_rows_udtf(
+                TABLE(partition_all_columns)
+                PARTITION BY (partition_key, value)
+            )
+            ORDER BY rows
+            """
+        )
+
+        expected_df = self.spark.createDataFrame([(1,), (1,), (1,)], "rows int")
+        assertDataFrameEqual(result_df, expected_df)
+
     def test_arrow_udtf_partition_by_single_partition_multiple_input_partitions(self):
         @arrow_udtf(returnType="partition_key int, count bigint, sum_value bigint")
         class SinglePartitionUDTF:
@@ -1110,6 +1146,39 @@ class ArrowUDTFTestsMixin:
         expected_df = self.spark.createDataFrame(
             expected_data, "partition_key int, rows_processed int, last_value int"
         )
+        assertDataFrameEqual(result_df, expected_df)
+
+    def test_arrow_udtf_with_partition_by_empty_input_batch(self):
+        @arrow_udtf(returnType="count int")
+        class EmptyBatchUDTF:
+            def __init__(self):
+                self._count = 0
+
+            def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
+                table = pa.table(table_data)
+                self._count += table.num_rows
+                return iter(())
+
+            def terminate(self) -> Iterator["pa.Table"]:
+                result_table = pa.table(
+                    {"count": pa.array([self._count], type=pa.int32())}
+                )
+                yield result_table
+
+        empty_df = self.spark.createDataFrame([], "partition_key int, value int")
+        self.spark.udtf.register("empty_batch_udtf", EmptyBatchUDTF)
+        empty_df.createOrReplaceTempView("empty_partition_by")
+
+        result_df = self.spark.sql(
+            """
+            SELECT * FROM empty_batch_udtf(
+                TABLE(empty_partition_by)
+                PARTITION BY partition_key
+            )
+            """
+        )
+
+        expected_df = self.spark.createDataFrame([], "count int")
         assertDataFrameEqual(result_df, expected_df)
 
     def test_arrow_udtf_with_partition_by_null_values(self):
