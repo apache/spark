@@ -154,9 +154,11 @@ message PipelineCommandResult {
     optional string dataflow_graph_id = 1;
   }
   message DefineDatasetResult {
+    // A quoted identifier string representing fully resolved name of the dataset
     optional string resolved_data_name = 1;
   }
   message DefineFlowResult {
+    // A quoted identifier string representing fully resolved name of the flow
     optional string resolved_flow_name = 1;
   }
 }

@@ -81,22 +81,23 @@ private[connect] object PipelinesHandler extends Logging {
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
         logInfo(s"Define pipelines dataset cmd received: $cmd")
-        val qualifiedIdentifier = defineDataset(cmd.getDefineDataset, sessionHolder)
+        val resolvedDataName =
+          defineDataset(cmd.getDefineDataset, sessionHolder).quotedString
         PipelineCommandResult.newBuilder()
           .setDefineDatasetResult(
             PipelineCommandResult.DefineDatasetResult.newBuilder()
-            .setResolvedDataName(qualifiedIdentifier.quotedString)
+            .setResolvedDataName(resolvedDataName)
             .build()
           )
         .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
-        val qualifiedIdentifier =
-          defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
+        val resolvedFlowName =
+          defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder).quotedString
         PipelineCommandResult.newBuilder()
           .setDefineFlowResult(
             PipelineCommandResult.DefineFlowResult.newBuilder()
-            .setResolvedFlowName(qualifiedIdentifier.quotedString)
+            .setResolvedFlowName(resolvedFlowName)
             .build()
           )
         .build()
@@ -179,7 +180,7 @@ private[connect] object PipelinesHandler extends Logging {
             properties = dataset.getTablePropertiesMap.asScala.toMap,
             baseOrigin = QueryOrigin(
               objectType = Option(QueryOriginType.Table.toString),
-              objectName = Option(qualifiedIdentifier.quotedString),
+              objectName = Option(qualifiedIdentifier.unquotedString),
               language = Option(Python())),
             format = Option.when(dataset.hasFormat)(dataset.getFormat),
             normalizedPath = None,
@@ -199,7 +200,7 @@ private[connect] object PipelinesHandler extends Logging {
             comment = Option(dataset.getComment),
             origin = QueryOrigin(
               objectType = Option(QueryOriginType.View.toString),
-              objectName = Option(viewIdentifier.quotedString),
+              objectName = Option(viewIdentifier.unquotedString),
               language = Option(Python())),
             properties = Map.empty))
         viewIdentifier
@@ -232,18 +233,19 @@ private[connect] object PipelinesHandler extends Logging {
 
     val rawDestinationIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session)
-    val isImplicitFlowForTempView =
+    val flowWritesToView =
       graphElementRegistry.getViews()
       .filter(_.isInstanceOf[TemporaryView])
       .exists(_.identifier == rawDestinationIdentifier)
 
+    // If the flow is created implicitly as part of defining a view, then we do not
+    // qualify the flow identifier and the flow destination. This is because views are
+    // not permitted to have multipart
+    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
     val Seq(flowIdentifier, destinationIdentifier) = Seq(
       rawFlowIdentifier, rawDestinationIdentifier
     ).map { rawIdentifier =>
-      // If the flow is created implicitly as part of defining a view, then we do not
-      // qualify the flow identifier and the flow destination. This is because views are
-      // not permitted to have multipart
-      if (isImplicitFlow && isImplicitFlowForTempView) {
+      if (isImplicitFlowForTempView) {
         rawIdentifier
       } else {
         GraphIdentifierManager.parseAndQualifyFlowIdentifier(
@@ -267,7 +269,7 @@ private[connect] object PipelinesHandler extends Logging {
           Option(defaultDatabase)),
         origin = QueryOrigin(
           objectType = Option(QueryOriginType.Flow.toString),
-          objectName = Option(flowIdentifier.quotedString),
+          objectName = Option(flowIdentifier.unquotedString),
           language = Option(Python()))))
     flowIdentifier
   }
