@@ -453,7 +453,7 @@ class _ValidatorSharedReadWrite:
                 est = uidToParams[jsonParam["parent"]]
                 param = getattr(est, jsonParam["name"])
 
-                def extract_value(key):
+                def extract_value(key: str) -> Any:
                     if is_saved_by_python_writer:
                         return jsonParam[key]
                     # If the the params are serialized by java writer,
