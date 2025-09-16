@@ -219,39 +219,39 @@ private[connect] object PipelinesHandler extends Logging {
     val defaultDatabase = graphElementRegistry.defaultDatabase
 
     val isImplicitFlow = flow.getFlowName == flow.getTargetDatasetName
-    var flowIdentifier = GraphIdentifierManager
+    val rawFlowIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getFlowName, spark = sessionHolder.session)
 
     // If the flow is not an implicit flow (i.e. one defined as part of dataset creation), then
     // it must be a single-part identifier.
-    if (!isImplicitFlow && !IdentifierHelper.isSinglePartIdentifier(flowIdentifier)) {
+    if (!isImplicitFlow && !IdentifierHelper.isSinglePartIdentifier(rawFlowIdentifier)) {
       throw new AnalysisException(
         "MULTIPART_FLOW_NAME_NOT_SUPPORTED",
         Map("flowName" -> flow.getFlowName))
     }
 
-    var destinationIdentifier = GraphIdentifierManager
+    val rawDestinationIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session)
-    val flowWritesToView =
+    val isImplicitFlowForTempView =
       graphElementRegistry.getViews()
       .filter(_.isInstanceOf[TemporaryView])
-      .exists(_.identifier == destinationIdentifier)
+      .exists(_.identifier == rawDestinationIdentifier)
 
-    // If the flow is created implicitly as part of defining a view, then we do not
-    // qualify the flow identifier and the flow destination. This is because views are
-    // not permitted to have multipart
-    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
-    if (!isImplicitFlowForTempView) {
-      flowIdentifier = GraphIdentifierManager.parseAndQualifyFlowIdentifier(
-        rawFlowIdentifier = flowIdentifier,
-        currentCatalog = Some(defaultCatalog),
-        currentDatabase = Some(defaultDatabase)
-      ).identifier
-      destinationIdentifier = GraphIdentifierManager.parseAndQualifyFlowIdentifier(
-        rawFlowIdentifier = destinationIdentifier,
-        currentCatalog = Some(defaultCatalog),
-        currentDatabase = Some(defaultDatabase)
-      ).identifier
+    val Seq(flowIdentifier, destinationIdentifier) = Seq(
+      rawFlowIdentifier, rawDestinationIdentifier
+    ).map { rawIdentifier =>
+      // If the flow is created implicitly as part of defining a view, then we do not
+      // qualify the flow identifier and the flow destination. This is because views are
+      // not permitted to have multipart
+      if (isImplicitFlow && isImplicitFlowForTempView) {
+        rawIdentifier
+      } else {
+        GraphIdentifierManager.parseAndQualifyFlowIdentifier(
+          rawFlowIdentifier = rawIdentifier,
+          currentCatalog = Some(defaultCatalog),
+          currentDatabase = Some(defaultDatabase)
+        ).identifier
+      }
     }
 
     graphElementRegistry.registerFlow(
