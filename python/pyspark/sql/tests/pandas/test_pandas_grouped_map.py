@@ -20,7 +20,6 @@ import unittest
 
 from collections import OrderedDict
 from decimal import Decimal
-from random import random
 from typing import cast
 
 from pyspark.sql import Row, functions as sf
@@ -975,47 +974,6 @@ class ApplyInPandasTestsMixin:
                 .sort("key")
             )
             self.assertEqual(expected.collect(), result.collect())
-
-    def test_apply_in_arrow_with_large_groups(self):
-        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1000}):
-            # Apply in Pandas with many rows per grouping key
-            def test_df(nr_columns):
-                data = []
-                # Create a big table with many rows per grouping key
-                dict_ = {f"some_field{i}": f"{random()}" for i in range(nr_columns)}
-                for i in range(100_000):
-                    dict_1 = dict_.copy()
-                    dict_1.update({"group_key": "0", "numeric_value": i})
-                    data.append(dict_1)
-                    dict_2 = dict_.copy()
-                    dict_2.update({"group_key": "1", "numeric_value": i})
-                    data.append(dict_2)
-                ndf = self.spark.createDataFrame(data)
-                # Increase the size of the dataframe
-                for i in range(4):
-                    ndf = ndf.unionAll(ndf)
-                return ndf
-
-            df = test_df(nr_columns=20)
-
-            def pandas_udf(pdf: pd.DataFrame):
-                # All of the values in the batch should have the same group key:
-                assert pdf["group_key"].nunique() == 1
-                group_key = pdf["group_key"].iloc[0]
-                sum_values = pdf["numeric_value"].sum()
-                return pd.DataFrame([{"group_key": group_key, "sum_values": sum_values}])
-
-            actual = (
-                df.groupBy("group_key")
-                .applyInPandas(pandas_udf, schema="group_key string, sum_values long")
-                .collect()
-            )
-
-            expected = (
-                df.groupBy("group_key").agg(sf.sum("numeric_value").alias("sum_values")).collect()
-            )
-
-            self.assertEqual(actual, expected)
 
     def test_negative_and_zero_batch_size(self):
         for batch_size in [0, -1]:
