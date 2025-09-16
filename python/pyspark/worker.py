@@ -1659,8 +1659,7 @@ def read_udtf(pickleSer, infile, eval_type):
                                 *partition_filtered_args, **partition_filtered_kwargs
                             )
                             if result is not None:
-                                for table in result:
-                                    yield table
+                                yield from result
                         except SkipRestOfInputTableException:
                             # Skip remaining rows in this partition
                             self._eval_raised_skip_rest_of_input_table = True
@@ -1672,8 +1671,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     result = self._udtf.eval(*filtered_args, **filtered_kwargs)
                     if result is not None:
                         # result is an iterator of PyArrow Tables (for Arrow UDTFs)
-                        for table in result:
-                            yield table
+                        yield from result
                 except SkipRestOfInputTableException:
                     pass
 
@@ -1694,13 +1692,21 @@ def read_udtf(pickleSer, infile, eval_type):
             """
             import pyarrow as pa
 
-            # Find the RecordBatch in the arguments
-            for arg in inputs:
-                if isinstance(arg, pa.RecordBatch):
-                    return arg
+            # Find all RecordBatch arguments
+            batches = [arg for arg in inputs if isinstance(arg, pa.RecordBatch)]
 
-            # This shouldn't happen for Arrow UDTFs with TABLE arguments
-            return None
+            if len(batches) == 0:
+                # No RecordBatch found - this shouldn't happen for Arrow UDTFs with TABLE arguments
+                return None
+            elif len(batches) == 1:
+                return batches[0]
+            else:
+                # Multiple RecordBatch arguments found - this is unexpected
+                raise RuntimeError(
+                    f"Expected exactly one pa.RecordBatch argument for TABLE parameter, "
+                    f"but found {len(batches)}. Received types: "
+                    f"{[type(arg).__name__ for arg in inputs]}"
+                )
 
         def _detect_partition_boundaries(self, batch) -> list:
             """

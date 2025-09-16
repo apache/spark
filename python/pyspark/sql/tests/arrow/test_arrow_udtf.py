@@ -733,20 +733,30 @@ class ArrowUDTFTestsMixin:
     def test_arrow_udtf_with_partition_by(self):
         @arrow_udtf(returnType="partition_key int, sum_value int")
         class SumUDTF:
+            def __init__(self):
+                self._partition_key = None
+                self._sum = 0
+
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
                 table = pa.table(table_data)
                 partition_key = pc.unique(table["partition_key"]).to_pylist()
                 assert (
                     len(partition_key) == 1
                 ), f"Expected exactly one partition key, got {partition_key}"
-                sum_value = pc.sum(table["value"]).as_py()
-                result_table = pa.table(
-                    {
-                        "partition_key": pa.array([partition_key[0]], type=pa.int32()),
-                        "sum_value": pa.array([sum_value], type=pa.int32()),
-                    }
-                )
-                yield result_table
+                self._partition_key = partition_key[0]
+                self._sum += pc.sum(table["value"]).as_py()
+                # Don't yield here - accumulate and yield in terminate
+                return iter(())
+
+            def terminate(self) -> Iterator["pa.Table"]:
+                if self._partition_key is not None:
+                    result_table = pa.table(
+                        {
+                            "partition_key": pa.array([self._partition_key], type=pa.int32()),
+                            "sum_value": pa.array([self._sum], type=pa.int32()),
+                        }
+                    )
+                    yield result_table
 
         test_data = [
             (1, 10),
@@ -983,14 +993,10 @@ class ArrowUDTFTestsMixin:
                 return iter(())
 
             def terminate(self) -> Iterator["pa.Table"]:
-                result_table = pa.table(
-                    {"rows": pa.array([self._rows], type=pa.int32())}
-                )
+                result_table = pa.table({"rows": pa.array([self._rows], type=pa.int32())})
                 yield result_table
 
-        df = self.spark.createDataFrame(
-            [(1, 10), (1, 20), (2, 30)], "partition_key int, value int"
-        )
+        df = self.spark.createDataFrame([(1, 10), (1, 20), (2, 30)], "partition_key int, value int")
         self.spark.udtf.register("count_rows_udtf", CountRowsUDTF)
         df.createOrReplaceTempView("partition_all_columns")
 
@@ -1160,9 +1166,7 @@ class ArrowUDTFTestsMixin:
                 return iter(())
 
             def terminate(self) -> Iterator["pa.Table"]:
-                result_table = pa.table(
-                    {"count": pa.array([self._count], type=pa.int32())}
-                )
+                result_table = pa.table({"count": pa.array([self._count], type=pa.int32())})
                 yield result_table
 
         empty_df = self.spark.createDataFrame([], "partition_key int, value int")
@@ -1267,6 +1271,8 @@ class ArrowUDTFTestsMixin:
 
                 # This should not be called for empty tables
                 table = pa.table(table_data)
+                if table.num_rows == 0:
+                    raise AssertionError("eval should not be called for empty tables")
                 result_table = pa.table(
                     {"result": pa.array([f"rows_{table.num_rows}"], type=pa.string())}
                 )
@@ -1288,6 +1294,46 @@ class ArrowUDTFTestsMixin:
         # This is consistent with regular UDTFs
         expected_df = self.spark.createDataFrame([], "result string")
         assertDataFrameEqual(result_df, expected_df)
+
+    def test_arrow_udtf_with_table_and_struct_arguments(self):
+        """Test that TABLE args are RecordBatch while struct args are Array."""
+
+        @arrow_udtf(returnType="table_is_batch boolean, struct_is_array boolean")
+        class TypeCheckUDTF:
+            def eval(self, table_arg, struct_arg) -> Iterator["pa.Table"]:
+                # Verify types and return result
+                result = pa.table(
+                    {
+                        "table_is_batch": pa.array(
+                            [isinstance(table_arg, pa.RecordBatch)], pa.bool_()
+                        ),
+                        "struct_is_array": pa.array(
+                            [
+                                isinstance(struct_arg, pa.Array)
+                                and not isinstance(struct_arg, pa.RecordBatch)
+                            ],
+                            pa.bool_(),
+                        ),
+                    }
+                )
+                yield result
+
+        self.spark.udtf.register("type_check_udtf", TypeCheckUDTF)
+        self.spark.range(3).createOrReplaceTempView("test_table")
+
+        result_df = self.spark.sql(
+            """
+            SELECT * FROM type_check_udtf(
+                TABLE(test_table),
+                named_struct('a', 10, 'b', 15)
+            )
+        """
+        )
+
+        # All rows should show correct types
+        for row in result_df.collect():
+            assert row.table_is_batch is True
+            assert row.struct_is_array is True
 
 
 class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
