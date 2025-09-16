@@ -272,6 +272,40 @@ class ArrowUDFTestsMixin:
         self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
+    def test_scalar_arrow_udf_with_specified_eval_type(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10).selectExpr("id", "id as v")
+        expected = df.selectExpr("(v + 1) as plus_one").collect()
+
+        @arrow_udf("long", ArrowUDFType.SCALAR)
+        def plus_one(v):
+            return pa.compute.add(v, 1)
+
+        result1 = df.select(plus_one("v").alias("plus_one")).collect()
+        self.assertEqual(expected, result1)
+
+        @arrow_udf("long", ArrowUDFType.SCALAR_ITER)
+        def plus_one_iter(it):
+            for v in it:
+                yield pa.compute.add(v, 1)
+
+        result2 = df.select(plus_one_iter("v").alias("plus_one")).collect()
+        self.assertEqual(expected, result2)
+
+    def test_agg_arrow_udf_with_specified_eval_type(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10).selectExpr("id", "id as v")
+        expected = df.selectExpr("max(v) as m").collect()
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def calc_max(v):
+            return pa.compute.max(v)
+
+        result = df.select(calc_max("v").alias("m")).collect()
+        self.assertEqual(expected, result)
+
 
 class ArrowUDFTests(ArrowUDFTestsMixin, ReusedSQLTestCase):
     def setUp(self):
