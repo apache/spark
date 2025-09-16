@@ -136,6 +136,65 @@ class ParameterPositionMappingSuite extends QueryTest with SharedSparkSession {
       }
   }
 
+  /**
+   * Verify that EXECUTE IMMEDIATE errors correctly reference the inner query context.
+   * This is the correct behavior - errors should point to the actual inner query where
+   * the error occurred, similar to how views work.
+   */
+  private def checkExecuteImmediateError[T <: Throwable](
+      executeImmediateSQL: String,
+      innerQuery: String,
+      expectedStartPos: Option[Int] = None,
+      expectedStopPos: Option[Int] = None)(implicit ct: scala.reflect.ClassTag[T]): T = {
+
+    val exception = intercept[T] {
+      spark.sql(executeImmediateSQL)
+    }
+
+    // For exceptions with query context, verify they reference the inner query
+    exception match {
+      case pe: ParseException =>
+        if (pe.getQueryContext.nonEmpty) {
+          val context = pe.getQueryContext.head.asInstanceOf[SQLQueryContext]
+          assert(context.sqlText.exists(_.contains(innerQuery)),
+            s"Parse error should reference inner query SQL.\n" +
+            s"Expected to contain: $innerQuery\n" +
+            s"Actual context SQL: ${context.sqlText}")
+
+          // Verify position mapping if expected positions are provided
+          expectedStartPos.foreach { expectedStart =>
+            assert(context.originStartIndex.contains(expectedStart),
+              s"Start position should be $expectedStart, got: ${context.originStartIndex}")
+          }
+          expectedStopPos.foreach { expectedStop =>
+            assert(context.originStopIndex.contains(expectedStop),
+              s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
+          }
+        }
+      case ae: AnalysisException =>
+        if (ae.context.nonEmpty) {
+          val context = ae.context.head.asInstanceOf[SQLQueryContext]
+          assert(context.sqlText.exists(_.contains(innerQuery)),
+            s"Analysis error should reference inner query SQL.\n" +
+            s"Expected to contain: $innerQuery\n" +
+            s"Actual context SQL: ${context.sqlText}")
+
+          // Verify position mapping if expected positions are provided
+          expectedStartPos.foreach { expectedStart =>
+            assert(context.originStartIndex.contains(expectedStart),
+              s"Start position should be $expectedStart, got: ${context.originStartIndex}")
+          }
+          expectedStopPos.foreach { expectedStop =>
+            assert(context.originStopIndex.contains(expectedStop),
+              s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
+          }
+        }
+      case _ => // Runtime exceptions may not have query context
+    }
+
+    exception
+  }
+
   test("parse error with named parameter") {
     checkParameterError[AnalysisException](
       "SELECT *** :param",
@@ -351,6 +410,115 @@ class ParameterPositionMappingSuite extends QueryTest with SharedSparkSession {
       expectedStartPos = 0,
       expectedStopPos = 16, // "SELECT :param ***".length - 1
       params = Map("param" -> null)
+    )
+  }
+
+  // =============================================================================
+  // EXECUTE IMMEDIATE POSITION MAPPING TESTS
+  // =============================================================================
+
+  test("EXECUTE IMMEDIATE - parse error with named parameter") {
+    // Test that parse errors in EXECUTE IMMEDIATE inner queries have correct position mapping
+    // The error should reference the inner query context, not the outer EXECUTE IMMEDIATE
+    spark.sql("DECLARE executeVar1 = 'SELECT :param ***'")
+    checkExecuteImmediateError[ParseException](
+      "EXECUTE IMMEDIATE executeVar1 USING 42 AS param",
+      innerQuery = "SELECT :param ***",
+      // Error positions should be relative to the inner query
+      expectedStartPos = Some(0),
+      expectedStopPos = Some(16) // Actual stop position reported by parser
+    )
+  }
+
+  test("EXECUTE IMMEDIATE - analysis error with named parameter") {
+    // Test that analysis errors in EXECUTE IMMEDIATE inner queries have correct position mapping
+    spark.sql("DECLARE executeVar2 = 'SELECT :param FROM nonexistent_table'")
+    checkExecuteImmediateError[AnalysisException](
+      "EXECUTE IMMEDIATE executeVar2 USING 42 AS param",
+      innerQuery = "SELECT :param FROM nonexistent_table",
+      // Error positions should be relative to the inner query
+      expectedStartPos = Some(19), // Position of "nonexistent_table" in inner query
+      expectedStopPos = Some(35) // End of "nonexistent_table" in inner query
+    )
+  }
+
+  test("EXECUTE IMMEDIATE - positional parameter with parse error") {
+    // Test positional parameters in EXECUTE IMMEDIATE
+    spark.sql("DECLARE executeVar3 = 'SELECT ? ***'")
+    checkExecuteImmediateError[ParseException](
+      "EXECUTE IMMEDIATE executeVar3 USING 42",
+      innerQuery = "SELECT ? ***",
+      // Error positions should be relative to the inner query
+      expectedStartPos = Some(0),
+      expectedStopPos = Some(11) // "SELECT ? ***".length - 1
+    )
+  }
+
+  test("EXECUTE IMMEDIATE - multiple parameters with different lengths") {
+    // Test multiple parameters with varying lengths in EXECUTE IMMEDIATE
+    spark.sql("DECLARE executeVar4 = 'SELECT :a, :bb, :ccc FROM nonexistent'")
+    checkExecuteImmediateError[AnalysisException](
+      "EXECUTE IMMEDIATE executeVar4 USING 1 AS a, 22 AS bb, 333 AS ccc",
+      innerQuery = "SELECT :a, :bb, :ccc FROM nonexistent",
+      // Error positions should be relative to the inner query
+      expectedStartPos = Some(26), // Position of "nonexistent" in inner query
+      expectedStopPos = Some(36) // End of "nonexistent" in inner query
+    )
+  }
+
+  test("EXECUTE IMMEDIATE - position mapping with parameter substitution") {
+    // Test that error positions within EXECUTE IMMEDIATE are correctly mapped to inner query
+    spark.sql("DECLARE executeVar5 = 'SELECT :param FROM nonexistent_table'")
+
+    val exception = intercept[AnalysisException] {
+      spark.sql("EXECUTE IMMEDIATE executeVar5 USING 42 AS param")
+    }
+
+    // Verify the error context references the inner query, not the EXECUTE IMMEDIATE statement
+    if (exception.context.nonEmpty) {
+      val context = exception.context.head.asInstanceOf[SQLQueryContext]
+      assert(context.sqlText.exists(_.contains("SELECT :param FROM nonexistent_table")),
+        s"Context should reference inner query, got: ${context.sqlText}")
+    }
+  }
+
+  test("EXECUTE IMMEDIATE - nested parameter context") {
+    // Test EXECUTE IMMEDIATE with parameters in both outer and inner contexts
+    val exception = intercept[AnalysisException] {
+      spark.sql("EXECUTE IMMEDIATE :query USING :value AS param", Map(
+        "query" -> "SELECT :param FROM nonexistent_table",
+        "value" -> 42
+      ))
+    }
+
+    // Verify the error context references the inner query
+    if (exception.context.nonEmpty) {
+      val context = exception.context.head.asInstanceOf[SQLQueryContext]
+      assert(context.sqlText.exists(_.contains("SELECT :param FROM nonexistent_table")),
+        s"Context should reference inner query, got: ${context.sqlText}")
+    }
+  }
+
+  test("EXECUTE IMMEDIATE - string parameter with complex inner query") {
+    // Test EXECUTE IMMEDIATE with string parameter containing complex query
+    checkExecuteImmediateError[AnalysisException](
+      "EXECUTE IMMEDIATE 'SELECT :a, :bb FROM nonexistent' USING 1 AS a, 22 AS bb",
+      innerQuery = "SELECT :a, :bb FROM nonexistent",
+      // Error positions should be relative to the inner query
+      expectedStartPos = Some(20), // Position of "nonexistent" in inner query
+      expectedStopPos = Some(30) // End of "nonexistent" in inner query
+    )
+  }
+
+  test("EXECUTE IMMEDIATE - position mapping with variable reference") {
+    // Test position mapping when EXECUTE IMMEDIATE uses a variable
+    spark.sql("DECLARE executeVar6 = 'SELECT :param1 + :param2 FROM nonexistent_table'")
+    checkExecuteImmediateError[AnalysisException](
+      "EXECUTE IMMEDIATE executeVar6 USING 10 AS param1, 20 AS param2",
+      innerQuery = "SELECT :param1 + :param2 FROM nonexistent_table",
+      // Error positions should be relative to the inner query
+      expectedStartPos = Some(30), // Position of "nonexistent_table" in inner query
+      expectedStopPos = Some(46) // End of "nonexistent_table" in inner query
     )
   }
 }

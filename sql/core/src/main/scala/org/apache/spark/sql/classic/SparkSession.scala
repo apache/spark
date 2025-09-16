@@ -478,6 +478,69 @@ class SparkSession private(
   }
 
   /**
+   * Applies position mapping to exceptions when parameter substitution has occurred.
+   * This translates error positions from substituted SQL back to original SQL positions.
+   */
+  private def applyPositionMappingToException[T](args: Array[_])(block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+        // Check if parameter substitution occurred and apply position mapping
+        if (!sessionState.conf.legacyParameterSubstitutionConstantsOnly && args.nonEmpty) {
+          sessionState.sqlParser match {
+            case sparkParser: org.apache.spark.sql.execution.SparkSqlParser =>
+              sparkParser.getPositionMapper match {
+                case Some(positionMapper) =>
+                  val contexts = e match {
+                    case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
+                      pe.getQueryContext
+                    case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
+                    case _ => Array.empty[org.apache.spark.QueryContext]
+                  }
+
+                  // Apply position mapping to existing contexts
+                  if (contexts.nonEmpty) {
+                    val translatedContexts = contexts.map { context =>
+                      context match {
+                        case sqlContext:
+                            org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
+                          org.apache.spark.sql.catalyst.parser.PositionTranslationUtils
+                            .translateSqlContext(sqlContext, positionMapper)
+                        case _ => context
+                      }
+                    }
+
+                    // Create a new exception with translated contexts
+                    val translatedError = e match {
+                      case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
+                        pe.updateQueryContext(_ => translatedContexts).asInstanceOf[Throwable]
+                      case ae: org.apache.spark.sql.AnalysisException =>
+                        ae.copy(context = translatedContexts.toArray)
+                      case _ =>
+                        e.updateQueryContext(_ => translatedContexts).asInstanceOf[Throwable]
+                    }
+                    throw translatedError
+                  } else {
+                    // No existing contexts - throw original
+                    throw e
+                  }
+                case None =>
+                  throw e
+              }
+            case _ =>
+              throw e
+          }
+        } else {
+          throw e
+        }
+      case e: Throwable =>
+        // No WithOrigin trait, throw as-is
+        throw e
+    }
+  }
+
+  /**
    * Executes a SQL query substituting named parameters by the given arguments,
    * returning the result as a `DataFrame`.
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
@@ -514,61 +577,8 @@ class SparkSession private(
           }
 
           // Apply position mapping to any exceptions that bubble up from the entire execution cycle
-          try {
+          applyPositionMappingToException(if (args.nonEmpty) Array(args) else Array.empty) {
             Dataset.ofRows(self, plan, tracker)
-          } catch {
-            case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
-              // Check if parameter substitution occurred and apply position mapping
-              if (!sessionState.conf.legacyParameterSubstitutionConstantsOnly && args.nonEmpty) {
-                sessionState.sqlParser match {
-                  case sparkParser: org.apache.spark.sql.execution.SparkSqlParser =>
-                    sparkParser.getPositionMapper match {
-                      case Some(positionMapper) =>
-                        val contexts = e match {
-                          case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
-                            pe.getQueryContext
-                          case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
-                          case _ => Array.empty[org.apache.spark.QueryContext]
-                        }
-
-                        // Apply position mapping to existing contexts
-                        if (contexts.nonEmpty) {
-                          val translatedContexts = contexts.map { context =>
-                            context match {
-                              case sqlContext:
-                                  org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
-                                org.apache.spark.sql.catalyst.parser.PositionTranslationUtils
-                                  .translateSqlContext(sqlContext, positionMapper)
-                              case _ => context
-                            }
-                          }
-
-                          // Create a new exception with translated contexts
-                          val translatedError = e match {
-                            case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
-                              pe.updateQueryContext(_ => translatedContexts).asInstanceOf[Throwable]
-                            case ae: org.apache.spark.sql.AnalysisException =>
-                              ae.copy(context = translatedContexts.toArray)
-                            case _ =>
-                              e.updateQueryContext(_ => translatedContexts).asInstanceOf[Throwable]
-                          }
-                          throw translatedError
-                        } else {
-                          // No existing contexts - throw original
-                          throw e
-                        }
-                      case None =>
-                        throw e
-                    }
-                  case _ =>
-                    throw e
-                }
-              } else {
-                throw e
-              }
-            case e: Throwable =>
-              // No WithOrigin trait, throw as-is
-              throw e
           }
         }
       } else {
@@ -642,7 +652,11 @@ class SparkSession private(
         }
         parsedPlan
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      // Apply position mapping to any exceptions that bubble up from the entire execution cycle
+      applyPositionMappingToException(args) {
+        Dataset.ofRows(self, plan, tracker)
+      }
     }
 
   /** @inheritdoc */
