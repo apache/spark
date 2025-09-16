@@ -253,7 +253,8 @@ private[connect] object PipelinesHandler extends Logging {
     // If the flow is created implicitly as part of defining a view, then we do not
     // qualify the flow identifier and the flow destination. This is because views are
     // not permitted to have multipart
-    if (!isImplicitFlow || !flowWritesToView) {
+    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
+    if (!isImplicitFlowForTempView) {
       flowIdentifier = GraphIdentifierManager.parseAndQualifyFlowIdentifier(
         rawFlowIdentifier = flowIdentifier,
         currentCatalog = Some(defaultCatalog),
