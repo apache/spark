@@ -19,6 +19,7 @@ import os
 import time
 import unittest
 import datetime
+from typing import Iterator
 
 from pyspark.sql.functions import arrow_udf, ArrowUDFType, PandasUDFType
 from pyspark.sql import functions as F, Row
@@ -279,14 +280,14 @@ class ArrowUDFTestsMixin:
         expected = df.selectExpr("(v + 1) as plus_one").collect()
 
         @arrow_udf("long", ArrowUDFType.SCALAR)
-        def plus_one(v):
+        def plus_one(v: pa.Array):
             return pa.compute.add(v, 1)
 
         result1 = df.select(plus_one("v").alias("plus_one")).collect()
         self.assertEqual(expected, result1)
 
         @arrow_udf("long", ArrowUDFType.SCALAR_ITER)
-        def plus_one_iter(it):
+        def plus_one_iter(it: Iterator[pa.Array]):
             for v in it:
                 yield pa.compute.add(v, 1)
 
@@ -300,7 +301,7 @@ class ArrowUDFTestsMixin:
         expected = df.selectExpr("max(v) as m").collect()
 
         @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
-        def calc_max(v):
+        def calc_max(v: pa.Array):
             return pa.compute.max(v)
 
         result = df.select(calc_max("v").alias("m")).collect()
