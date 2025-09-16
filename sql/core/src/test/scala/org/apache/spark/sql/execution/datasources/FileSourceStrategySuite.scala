@@ -627,6 +627,23 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Move translated filters to the left") {
+    val table =
+      createTable(
+        files = Seq(
+          "p1=1/file1" -> 10,
+          "p1=2/file2" -> 10))
+
+    val df = table.where("hash(c2) = 2 AND p1 = 1 AND c1 = 1")
+    val filters = df.queryExecution.executedPlan.collect {
+      case execution.FilterExec(f, _) => splitConjunctivePredicates(f)
+    }.flatten
+    assert(filters.length == 3
+      && filters(0).toString.trim.startsWith("isnotnull(c1")
+      && filters(1).toString.trim.startsWith("(c1")
+      && filters(2).toString.trim.startsWith("(hash(c2"))
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
