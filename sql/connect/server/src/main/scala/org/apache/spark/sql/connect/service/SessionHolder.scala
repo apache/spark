@@ -262,8 +262,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     lastAccessTimeMs = System.currentTimeMillis()
     logInfo(
       log"Session with userId: ${MDC(LogKeys.USER_ID, userId)} and " +
-        log"sessionId: ${MDC(LogKeys.SESSION_ID, sessionId)} accessed," +
-        log"time ${MDC(LogKeys.LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
+        log"sessionId: ${MDC(LogKeys.SESSION_ID, sessionId)} accessed at " +
+        log"timestamp ${MDC(LogKeys.LAST_ACCESS_TIME, lastAccessTimeMs)}.")
   }
 
   private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
