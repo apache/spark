@@ -38,11 +38,26 @@ import org.apache.spark.internal.config.Python.PYTHON_FACTORY_IDLE_WORKER_MAX_PO
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
-case class PythonWorker(
-  args: PythonWorkerArgs,
-  channel: SocketChannel,
-  processHandle: Option[ProcessHandle]
-) {
+private[spark] class PythonWorker(
+    val args: PythonWorkerArgs,
+    val channel: SocketChannel,
+    val processHandle: Option[ProcessHandle]) {
+
+  override def equals(other: Any): Boolean = other match {
+    case that: PythonWorker =>
+      (that canEqual this) &&
+        args == that.args &&
+        channel == that.channel &&
+        processHandle == that.processHandle
+    case _ => false
+  }
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[PythonWorker]
+
+  override def hashCode(): Int = {
+    val state = Seq(args, channel, processHandle)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
 
   private[this] var selectorOpt: Option[Selector] = None
   private[this] var selectionKeyOpt: Option[SelectionKey] = None
@@ -72,6 +87,15 @@ case class PythonWorker(
   def stop(): Unit = synchronized {
     closeSelector()
     Option(channel).foreach(_.close())
+  }
+}
+
+private[spark] object PythonWorker {
+  def apply(
+      args: PythonWorkerArgs,
+      channel: SocketChannel,
+      processHandle: Option[ProcessHandle]): PythonWorker = {
+    new PythonWorker(args, channel, processHandle)
   }
 }
 
