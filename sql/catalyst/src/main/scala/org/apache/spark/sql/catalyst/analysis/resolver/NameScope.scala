@@ -700,7 +700,11 @@ class NameScope(
 
     val filteredCandidates = if (nestedFields.nonEmpty) {
       candidates.filter { attribute =>
-        ExtractValue.isExtractable(attribute, nestedFields, nameComparator)
+        ExtractValue.isExtractable(
+          attribute = attribute,
+          nestedFields = nestedFields,
+          resolver = nameComparator
+        )
       }
     } else {
       candidates

@@ -532,7 +532,10 @@ object DecorrelateInnerQuery extends PredicateHelper {
               if (!cond.resolved) {
                 if (!RowOrdering.isOrderable(a.dataType)) {
                   throw QueryCompilationErrors.unsupportedCorrelatedReferenceDataTypeError(
-                    o, a.dataType, plan.origin)
+                    expr = a,
+                    dataType = a.dataType,
+                    origin = a.origin
+                  )
                 } else {
                   throw SparkException.internalError(s"Unable to decorrelate subquery: " +
                     s"join condition '${cond.sql}' cannot be resolved.")
