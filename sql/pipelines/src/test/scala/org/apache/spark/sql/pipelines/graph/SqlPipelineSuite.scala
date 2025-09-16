@@ -151,8 +151,9 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
 
     assert(
       resolvedDataflowGraph.resolvedFlows
-        .exists(f =>
-          f.identifier == fullyQualifiedIdentifier("other-hyphen-mv") && !f.df.isStreaming)
+        .exists(
+          f => f.identifier == fullyQualifiedIdentifier("other-hyphen-mv") && !f.df.isStreaming
+        )
     )
   }
 
@@ -207,7 +208,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     checkAnswer(
       spark
         .sql(s"SELECT * FROM ${fullyQualifiedIdentifier("b").quotedString}"),
-        Seq(Row(0), Row(1), Row(2))
+      Seq(Row(0), Row(1), Row(2))
     )
   }
 
@@ -226,7 +227,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     checkAnswer(
       spark
         .sql(s"SELECT * FROM ${fullyQualifiedIdentifier("b").quotedString}"),
-        Seq(Row(0, 8), Row(1, 9))
+      Seq(Row(0, 8), Row(1, 9))
     )
   }
 
@@ -245,7 +246,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     checkAnswer(
       spark
         .sql(s"SELECT * FROM ${fullyQualifiedIdentifier("c").quotedString}"),
-        Seq(Row(1, 1), Row(2, 2))
+      Seq(Row(1, 1), Row(2, 2))
     )
   }
 
@@ -270,8 +271,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
   test("MV/ST with partition columns works") {
     withTable("mv", "st") {
       val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
-        sqlText =
-          """
+        sqlText = """
             |CREATE MATERIALIZED VIEW mv
             |PARTITIONED BY (id_mod)
             |AS
@@ -446,8 +446,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
 
     withTable(externalTableIdent.quotedString) {
       val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
-        sqlText =
-          s"""
+        sqlText = s"""
              |CREATE MATERIALIZED VIEW a AS SELECT * FROM $fileFormat.`$tmpDir`;
              |CREATE STREAMING TABLE b AS SELECT * FROM STREAM $externalTableIdent
              |""".stripMargin
@@ -466,7 +465,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
         }
         assert(
           spark.sql(s"SELECT * FROM $datasetFullyQualifiedName").collect().toSet ==
-            expectedRows.map(Row(_))
+          expectedRows.map(Row(_))
         )
       }
     }
@@ -518,7 +517,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     checkAnswer(
       spark
         .sql(s"SELECT * FROM ${fullyQualifiedIdentifier("d").quotedString}"),
-        Row(1)
+      Row(1)
     )
   }
 
@@ -614,6 +613,23 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     assert(ex.errorClass.contains("TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS"))
   }
 
+  test("create view syntax for persisted views") {
+    val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+      sqlText = s"CREATE VIEW b COMMENT 'my persisted comment' AS SELECT * FROM range(1, 4);"
+    )
+    val graph = unresolvedDataflowGraph.resolve().validate()
+
+    val view = graph.views.last
+
+    // view identifier should be multipart for persisted views
+    assert(view.identifier == fullyQualifiedIdentifier("b"))
+    assert(view.isInstanceOf[PersistedView])
+    assert(
+      view.sqlText.isDefined && view.sqlText.get == "SELECT * FROM range(1, 4)"
+    )
+    assert(view.comment.get == "my persisted comment")
+  }
+
   test("Use database and set catalog works") {
     val pipelineCatalog = TestGraphRegistrationContext.DEFAULT_CATALOG
     val pipelineDatabase = TestGraphRegistrationContext.DEFAULT_DATABASE
@@ -633,8 +649,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     val unresolvedDataflowGraph = unresolvedDataflowGraphFromSqlFiles(
       sqlFiles = Seq(
         TestSqlFile(
-          sqlText =
-            s"""
+          sqlText = s"""
                |-- Create table in default (pipeline) catalog and database
                |     CREATE MATERIALIZED VIEW mv AS SELECT * FROM RANGE(3);
                |
@@ -677,8 +692,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
           sqlFilePath = "file1.sql"
         ),
         TestSqlFile(
-          sqlText =
-            s"""
+          sqlText = s"""
                |-- The previous file's current catalog/database should not impact other files;
                |-- the catalog/database should be reset to the pipeline's.
                |--
@@ -744,27 +758,27 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       (s"$otherDatabase2.upstream_mv4", "downstream_mv4"),
       (s"$otherCatalog.$otherDatabase.upstream_mv5", "downstream_mv5"),
       (s"$otherCatalog.$otherDatabase.upstream_mv6", s"$otherDatabase2.downstream_mv6")
-    ).foreach { case (table1Ident, table2Ident) =>
-      // The pipeline catalog is [[TestGraphRegistrationContext.DEFAULT_CATALOG]] and database is
-      // [[TestGraphRegistrationContext.DEFAULT_DATABASE]].
-      val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
-        sqlText =
-          s"""
+    ).foreach {
+      case (table1Ident, table2Ident) =>
+        // The pipeline catalog is [[TestGraphRegistrationContext.DEFAULT_CATALOG]] and database is
+        // [[TestGraphRegistrationContext.DEFAULT_DATABASE]].
+        val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+          sqlText = s"""
              |CREATE MATERIALIZED VIEW $table1Ident (id BIGINT) AS SELECT * FROM RANGE(10);
              |CREATE MATERIALIZED VIEW $table2Ident AS SELECT id FROM $table1Ident
              |WHERE (id%2)=0;
              |""".stripMargin
-      )
+        )
 
-      startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
+        startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
 
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $table2Ident"),
-        Seq(Row(0), Row(2), Row(4), Row(6), Row(8))
-      )
+        checkAnswer(
+          spark.sql(s"SELECT * FROM $table2Ident"),
+          Seq(Row(0), Row(2), Row(4), Row(6), Row(8))
+        )
 
-      spark.sql(s"DROP TABLE $table1Ident")
-      spark.sql(s"DROP TABLE $table2Ident")
+        spark.sql(s"DROP TABLE $table1Ident")
+        spark.sql(s"DROP TABLE $table2Ident")
     }
   }
 
@@ -841,8 +855,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     Seq("a.b", "a.b.c").foreach { flowIdentifier =>
       val ex = intercept[AnalysisException] {
         unresolvedDataflowGraphFromSql(
-          sqlText =
-            s"""
+          sqlText = s"""
                |CREATE STREAMING TABLE st;
                |CREATE FLOW $flowIdentifier AS INSERT INTO st BY NAME
                |SELECT * FROM STREAM $externalTable1Ident
@@ -864,8 +877,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       unresolvedDataflowGraphFromSqlFiles(
         sqlFiles = Seq(
           TestSqlFile(
-            sqlText =
-              s"""
+            sqlText = s"""
                  |CREATE STREAMING TABLE st;
                  |CREATE FLOW f AS INSERT INTO st BY NAME
                  |SELECT * FROM STREAM $externalTable1Ident
@@ -873,8 +885,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
             sqlFilePath = "file1.sql"
           ),
           TestSqlFile(
-            sqlText =
-              s"""
+            sqlText = s"""
                  |CREATE FLOW f AS INSERT INTO st BY NAME
                  |SELECT * FROM STREAM $externalTable1Ident
                  |""".stripMargin,
@@ -900,16 +911,14 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       unresolvedDataflowGraphFromSqlFiles(
         sqlFiles = Seq(
           TestSqlFile(
-            sqlText =
-              s"""
+            sqlText = s"""
                  |CREATE STREAMING TABLE st AS SELECT * FROM STREAM $externalTable1Ident;
                  |CREATE STREAMING TABLE st2;
                  |""".stripMargin,
             sqlFilePath = "file1.sql"
           ),
           TestSqlFile(
-            sqlText =
-              s"""
+            sqlText = s"""
                  |CREATE FLOW st AS INSERT INTO st2 BY NAME
                  |SELECT * FROM STREAM $externalTable2Ident
                  |""".stripMargin,
@@ -923,8 +932,10 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       condition = "PIPELINE_DUPLICATE_IDENTIFIERS.FLOW",
       parameters = Map(
         "flowName" -> fullyQualifiedIdentifier("st").unquotedString,
-        "datasetNames" -> Seq(fullyQualifiedIdentifier("st").quotedString,
-          fullyQualifiedIdentifier("st2").quotedString).mkString(",")
+        "datasetNames" -> Seq(
+          fullyQualifiedIdentifier("st").quotedString,
+          fullyQualifiedIdentifier("st2").quotedString
+        ).mkString(",")
       )
     )
   }

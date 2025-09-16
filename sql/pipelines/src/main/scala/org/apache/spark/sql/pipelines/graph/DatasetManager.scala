@@ -24,6 +24,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.PersistedView
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
   Identifier,
@@ -33,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.{
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.Expressions
+import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
 import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
@@ -116,14 +119,120 @@ object DatasetManager extends Logging {
               table
             }
           }
-        // TODO: Publish persisted views to the metastore.
+
         }
         .getDataflowGraph
     } catch {
       case e: SparkException if e.getCause != null => throw e.getCause
     }
 
+    materializeViews(materializedGraph, context)
     materializedGraph
+  }
+
+  /**
+   * Publish or refresh all the [[PersistedView]]s in the specified [[DataflowGraph]]
+   *
+   * @param virtualizedConnectedGraphWithTables virtualizedConnectedGraph that has table information
+   *                                            from the graph.
+   */
+  private def materializeViews(
+      virtualizedConnectedGraphWithTables: DataflowGraph,
+      context: PipelineUpdateContext): Unit = {
+    var viewsToPublish: Set[PersistedView] =
+      virtualizedConnectedGraphWithTables.persistedViews.toSet
+    var publishedViews: Set[TableIdentifier] = Set.empty
+    var failedViews: Set[TableIdentifier] = Set.empty
+
+    // To publish a view, it is required that all the input sources must exists in the metastore.
+    //  Thereby, if a Persisted View target reads another Persisted View source, the source must be
+    //  published first.
+    //  Here we make sure all the persisted views are published in correct order
+    val persistedViewIdentifiers =
+      virtualizedConnectedGraphWithTables.persistedViews.map(_.identifier).toSet
+    val viewToFlowMap =
+      ViewHelpers.persistedViewIdentifierToFlow(graph = virtualizedConnectedGraphWithTables)
+    val materializationDependencies =
+      virtualizedConnectedGraphWithTables.persistedViews.map { v =>
+        val flow = viewToFlowMap(v.identifier)
+        val inputs = flow.inputs.intersect(persistedViewIdentifiers)
+        (v.identifier, inputs)
+      }.toMap
+
+    // As long as all views are not materialized, we try to materialize them
+    while (viewsToPublish.nonEmpty) {
+      // Mark any views with failed inputs as skipped
+      viewsToPublish
+        .filter { v =>
+          materializationDependencies(v.identifier)
+            .exists(failedViews.contains)
+        }
+        .foreach { v =>
+          val flowToView = viewToFlowMap(v.identifier)
+          context.flowProgressEventLogger.recordSkipped(flowToView)
+
+          failedViews += v.identifier
+          viewsToPublish -= v
+        }
+
+      // Persist any views without pending inputs
+      viewsToPublish
+        .filter { v =>
+          val pendingInputs =
+            materializationDependencies(v.identifier).diff(publishedViews)
+
+          pendingInputs.isEmpty
+        }
+        .foreach { v =>
+          val flowToView = viewToFlowMap(v.identifier)
+          try {
+            materializeView(v, flowToView, context.spark)
+            publishedViews += v.identifier
+            viewsToPublish -= v
+          } catch {
+            case NonFatal(ex) =>
+              context.flowProgressEventLogger.recordFailed(
+                flowToView,
+                ex,
+                logAsWarn = false
+              )
+              failedViews += v.identifier
+              viewsToPublish -= v
+          }
+        }
+    }
+  }
+
+  private def materializeView(view: View, flow: ResolvedFlow, spark: SparkSession): Unit = {
+    val command = CreateViewCommand(
+      name = view.identifier,
+      userSpecifiedColumns = Nil,
+      viewType = PersistedView,
+      comment = view.comment,
+      collation = None,
+      properties = view.properties,
+      originalText = view.sqlText,
+      plan = flow.df.logicalPlan,
+      allowExisting = true,
+      replace = true,
+      isAnalyzed = true
+    )
+
+    val queryContext = flow.queryContext
+
+    val catalogManager = spark.sessionState.catalogManager
+    val currentCatalogName = catalogManager.currentCatalog.name()
+    val currentNamespace = catalogManager.currentNamespace
+    try {
+      // Using the catalog and database from the flow ensures that reads within the view are
+      // directed to the right catalog/database.
+      catalogManager.setCurrentCatalog(queryContext.currentCatalog.get)
+      queryContext.currentDatabase.foreach { d => catalogManager.setCurrentNamespace(Array(d))}
+      command.run(spark)
+    } finally {
+      catalogManager.setCurrentCatalog(currentCatalogName)
+      catalogManager.setCurrentNamespace(currentNamespace)
+    }
   }
 
   /**
