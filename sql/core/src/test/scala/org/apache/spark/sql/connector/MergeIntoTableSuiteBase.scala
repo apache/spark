@@ -2452,7 +2452,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("merge into schema evolution add column with nested field and set all columns") {
+  test("merge into schema evolution add column with nested struct and set all columns") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
         createAndInitTable(
@@ -2511,7 +2511,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("merge into schema evolution replace column with nested field and set explicit columns") {
+  test("merge into schema evolution replace column with nested struct and set explicit columns") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
         createAndInitTable(
@@ -2572,7 +2572,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  // TODO- support schema evolution for missing nested types using UPDATE SET * and INSERT *
+  // currently the source struct needs to be fully compatible with target struct
+  // i.e. cannot remove a nested field
   test("merge into schema evolution replace column with nested field and set all columns") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
@@ -2664,8 +2665,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           sql(mergeStmt)
           checkAnswer(
             sql(s"SELECT * FROM $tableNameAsString"),
-            // TODO- InMemoryBaseTable does not return null for nested schema evolution.
-            Seq(Row(0, Array(Row(1, "a", true), Row(2, "b", true)), "sales"),
+            Seq(Row(0, Array(Row(1, "a", null), Row(2, "b", null)), "sales"),
               Row(1, Array(Row(10, "c", true), Row(20, "d", false)), "hr"),
               Row(2, Array(Row(30, "d", false), Row(40, "e", true)), "engineering")))
         } else {

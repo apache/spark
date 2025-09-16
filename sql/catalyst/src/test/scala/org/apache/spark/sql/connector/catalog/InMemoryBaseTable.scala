@@ -351,8 +351,9 @@ abstract class InMemoryBaseTable(
     this
   }
 
-  def alterTableWithData(data: Array[BufferedRows],
-                         newSchema: StructType): InMemoryBaseTable = {
+  def alterTableWithData(
+      data: Array[BufferedRows],
+      newSchema: StructType): InMemoryBaseTable = {
     data.foreach { bufferedRow =>
       val oldSchema = bufferedRow.schema
       bufferedRow.rows.foreach { row =>
@@ -757,8 +758,7 @@ object InMemoryBaseTable {
  * @param key partition key
  * @param schema schema used to write the rows
  */
-class BufferedRows(val key: Seq[Any],
-                   val schema: StructType)
+class BufferedRows(val key: Seq[Any], val schema: StructType)
   extends WriterCommitMessage
     with InputPartition with HasPartitionKey with HasPartitionStatistics with Serializable {
   val log = new mutable.ArrayBuffer[InternalRow]()
@@ -892,8 +892,8 @@ private class BufferedRowsReader(
             if (arrayData == null) {
               null
             } else {
-              extractArrayValue(arrayData, elementType,
-                readSchema.fields(readIndex).dataType)
+              val writeType = writeSchema.fields(writeIndex).dataType.asInstanceOf[ArrayType]
+              extractArrayValue(arrayData, elementType, writeType.elementType)
             }
 
           case dt =>
@@ -906,19 +906,21 @@ private class BufferedRowsReader(
     }
   }
 
-  private def extractArrayValue(arrayData: ArrayData,
-                                readType: DataType,
-                                writeType: DataType): ArrayData = {
+  private def extractArrayValue(
+      arrayData: ArrayData,
+      readType: DataType,
+      writeType: DataType): ArrayData = {
     val elements = arrayData.toArray[Any](readType)
     val convertedElements = extractCollection(elements, readType, writeType)
     new GenericArrayData(convertedElements)
   }
 
-  private def extractMapValue(mapData: MapData,
-                              readKeyType: DataType,
-                              readValueType: DataType,
-                              writeKeyType: DataType,
-                              writeValueType: DataType): MapData = {
+  private def extractMapValue(
+      mapData: MapData,
+      readKeyType: DataType,
+      readValueType: DataType,
+      writeKeyType: DataType,
+      writeValueType: DataType): MapData = {
     val keys = mapData.keyArray().toArray[Any](readKeyType)
     val values = mapData.valueArray().toArray[Any](readValueType)
 
@@ -927,9 +929,10 @@ private class BufferedRowsReader(
     ArrayBasedMapData(convertedKeys, convertedValues)
   }
 
-  private def extractCollection(elements: Array[Any],
-                                readType: DataType,
-                                writeType: DataType) = {
+  private def extractCollection(
+      elements: Array[Any],
+      readType: DataType,
+      writeType: DataType) = {
     (readType, writeType) match {
       case (readSt: StructType, writeSt: StructType) =>
         elements.map { elem =>
