@@ -9862,6 +9862,7 @@ def dayofweek(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Examples
     --------
@@ -9942,6 +9943,7 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Returns
     -------
@@ -10124,6 +10126,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Examples
     --------
@@ -10455,6 +10458,9 @@ def weekofyear(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
 
     Examples
     --------
@@ -12218,6 +12224,7 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.date_trunc`
+    :meth:`pyspark.sql.functions.time_trunc`
 
     Examples
     --------
@@ -12271,6 +12278,7 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.time_trunc`
 
     Examples
     --------
@@ -12724,6 +12732,7 @@ def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.trunc`
     :meth:`pyspark.sql.functions.date_trunc`
 
     Examples
@@ -24762,6 +24771,7 @@ def make_timestamp(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24858,6 +24868,7 @@ def try_make_timestamp(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24969,6 +24980,7 @@ def make_timestamp_ltz(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -25065,6 +25077,7 @@ def try_make_timestamp_ltz(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -25172,6 +25185,7 @@ def make_timestamp_ntz(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -25243,6 +25257,7 @@ def try_make_timestamp_ntz(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
