@@ -48,9 +48,9 @@ class SparkDeclarativePipelinesServerSuite
         .build()
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
       assert(res !== PipelineCommandResult.getDefaultInstance)
-      assert(res.hasDefineEntityResult)
-      val graphResult = res.getDefineEntityResult
-      assert(graphResult.getFullyQualifiedName == "spark_catalog.default.tv")
+      assert(res.hasDefineDatasetResult)
+      val graphResult = res.getDefineDatasetResult
+      assert(graphResult.getResolvedDataName == "spark_catalog.default.tv")
     }
   }
 
@@ -68,9 +68,9 @@ class SparkDeclarativePipelinesServerSuite
         .build()
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
       assert(res !== PipelineCommandResult.getDefaultInstance)
-      assert(res.hasDefineEntityResult)
-      val graphResult = res.getDefineEntityResult
-      assert(graphResult.getFullyQualifiedName == "spark_catalog.default.tb")
+      assert(res.hasDefineDatasetResult)
+      val graphResult = res.getDefineDatasetResult
+      assert(graphResult.getResolvedDataName == "spark_catalog.default.tb")
     }
   }
 
@@ -88,9 +88,9 @@ class SparkDeclarativePipelinesServerSuite
         .build()
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
       assert(res !== PipelineCommandResult.getDefaultInstance)
-      assert(res.hasDefineEntityResult)
-      val graphResult = res.getDefineEntityResult
-      assert(graphResult.getFullyQualifiedName == "spark_catalog.default.mv")
+      assert(res.hasDefineDatasetResult)
+      val graphResult = res.getDefineDatasetResult
+      assert(graphResult.getResolvedDataName == "spark_catalog.default.mv")
     }
   }
 
@@ -121,9 +121,9 @@ class SparkDeclarativePipelinesServerSuite
         .build()
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
       assert(res !== PipelineCommandResult.getDefaultInstance)
-      assert(res.hasDefineEntityResult)
-      val graphResult = res.getDefineEntityResult
-      assert(graphResult.getFullyQualifiedName == "spark_catalog.default.mv")
+      assert(res.hasDefineFlowResult)
+      val graphResult = res.getDefineFlowResult
+      assert(graphResult.getResolvedFlowName == "spark_catalog.default.mv")
     }
   }
 

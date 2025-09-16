@@ -88,9 +88,9 @@ private[connect] object PipelinesHandler extends Logging {
           cmd.getDefineDataset.getDatasetName
         ).unquotedString
         PipelineCommandResult.newBuilder()
-          .setDefineEntityResult(
-            PipelineCommandResult.DefineEntityResult.newBuilder()
-            .setFullyQualifiedName(qualifiedIdentifierString)
+          .setDefineDatasetResult(
+            PipelineCommandResult.DefineDatasetResult.newBuilder()
+            .setResolvedDataName(qualifiedIdentifierString)
             .build()
           )
         .build()
@@ -103,9 +103,9 @@ private[connect] object PipelinesHandler extends Logging {
           cmd.getDefineFlow.getFlowName
         ).unquotedString
         PipelineCommandResult.newBuilder()
-          .setDefineEntityResult(
-            PipelineCommandResult.DefineEntityResult.newBuilder()
-            .setFullyQualifiedName(qualifiedIdentifierString)
+          .setDefineFlowResult(
+            PipelineCommandResult.DefineFlowResult.newBuilder()
+            .setResolvedFlowName(qualifiedIdentifierString)
             .build()
           )
         .build()
