@@ -513,18 +513,22 @@ class SparkDeclarativePipelinesServerSuite
       assert(res.hasDefineDatasetResult)
 
       val graphResult = res.getDefineDatasetResult
-      assert(graphResult.getResolvedDataName == s"spark_catalog.default.$datasetName")
+      if (datasetName.contains("tv")) {
+        assert(graphResult.getResolvedDataName == s"`${datasetName}`")
+      } else {
+        assert(graphResult.getResolvedDataName == s"`spark_catalog`.`default`.`${datasetName}`")
+      }
     }
   }
 
   gridTest("DefineDataset returns resolved data name for custom catalog/schema")(
     Seq(
       ("TEMPORARY_VIEW", DatasetType.TEMPORARY_VIEW,
-        "tv", "custom_catalog", "custom_db", "custom_catalog.custom_db.tv"),
+        "tv", "custom_catalog", "custom_db", "`tv`"),
       ("TABLE", DatasetType.TABLE,
-        "tb", "my_catalog", "my_db", "my_catalog.my_db.tb"),
+        "tb", "my_catalog", "my_db", "`my_catalog`.`my_db`.`tb`"),
       ("MV", DatasetType.MATERIALIZED_VIEW,
-        "mv", "another_catalog", "another_db", "another_catalog.another_db.mv")
+        "mv", "another_catalog", "another_db", "`another_catalog`.`another_db`.`mv`")
     )
   ) {
     case (_, datasetType, datasetName, defaultCatalog, defaultDatabase, expectedResolvedName) =>
@@ -566,9 +570,9 @@ class SparkDeclarativePipelinesServerSuite
   gridTest("DefineFlow returns resolved flow name")(
     Seq(
       ("MV default catalog/schema",
-      "spark_catalog", "default", "spark_catalog.default.mv"),
+      "spark_catalog", "default", "`spark_catalog`.`default`.`mv`"),
       ("MV custom catalog/schema",
-      "custom_catalog", "custom_db", "custom_catalog.custom_db.mv")
+      "custom_catalog", "custom_db", "`custom_catalog`.`custom_db`.`mv`")
     )
   ) { case (_, defaultCatalog, defaultDatabase, expectedResolvedFlowName) =>
     withRawBlockingStub { implicit stub =>
