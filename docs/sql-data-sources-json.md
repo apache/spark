@@ -19,6 +19,10 @@ license: |
   limitations under the License.
 ---
 
+See also: [Generic File Source Options](sql-data-sources-generic-options.html) and
+[CSV Files](sql-data-sources-csv.html).
+
+
 <div class="codetabs">
 
 <div data-lang="python"  markdown="1">
