@@ -65,10 +65,12 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
 
     val specFilePath = writePipelineSpecFile(config.pipelineSpec)
     val cliCommand: Seq[String] = generateCliCommand(config, specFilePath)
+    val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
+    val py4jPath = Paths.get(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
     val pythonPath = PythonUtils.mergePythonPaths(
-      Paths.get(sparkHome, "python").toAbsolutePath.toString, // PySpark with pipelines
-      PythonUtils.sparkPythonPath
-    ) // PySpark dependencies such as py4j
+      sourcePath.toString,
+      py4jPath.toString,
+      sys.env.getOrElse("PYTHONPATH", ""))
 
     val processBuilder = new ProcessBuilder(cliCommand: _*)
     processBuilder.environment().put("PYTHONPATH", pythonPath)
