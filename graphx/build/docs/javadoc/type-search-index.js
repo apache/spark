@@ -1,0 +1,1 @@
+typeSearchIndex = [{"l":"All Classes and Interfaces","u":"allclasses-index.html"},{"p":"org.apache.spark.graphx.impl","l":"EdgeActiveness"},{"p":"org.apache.spark.graphx","l":"TripletFields"}];updateSearchResults();

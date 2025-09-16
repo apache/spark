@@ -1,0 +1,1 @@
+typeSearchIndex = [{"l":"All Classes and Interfaces","u":"allclasses-index.html"},{"p":"org.apache.spark.status.api.v1.streaming","l":"BatchStatus"},{"p":"org.apache.spark.streaming","l":"StreamingContextState"},{"p":"org.apache.spark.streaming.util","l":"WriteAheadLog"},{"p":"org.apache.spark.streaming.util","l":"WriteAheadLogRecordHandle"}];updateSearchResults();
