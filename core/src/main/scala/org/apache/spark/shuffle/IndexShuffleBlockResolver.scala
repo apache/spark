@@ -310,13 +310,13 @@ private[spark] class IndexShuffleBlockResolver(
             val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
               shuffleId, _ => new OpenHashSet[Long](8)
             )
-            mapTaskIds.add(mapId)
+            mapTaskIds.synchronized { mapTaskIds.add(mapId) }
 
           case ShuffleDataBlockId(shuffleId, mapId, _) =>
             val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
               shuffleId, _ => new OpenHashSet[Long](8)
             )
-            mapTaskIds.add(mapId)
+            mapTaskIds.synchronized { mapTaskIds.add(mapId) }
 
           case _ => // Unreachable
         }
