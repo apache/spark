@@ -40,7 +40,6 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
 
   protected val pythonEvalType: Int
 
-  private val arrowBatchSlicingEnabled = conf.arrowBatchSlicingEnabled
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val largeVarTypes = conf.arrowUseLargeVarTypes
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
@@ -83,31 +82,17 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
 
       val data = groupedData(iter, dedupAttributes)
 
-      val runner = if (arrowBatchSlicingEnabled) {
-        new ArrowPythonRunner(
-          chainedFunc,
-          pythonEvalType,
-          Array(argOffsets),
-          groupedSchema(dedupAttributes),
-          sessionLocalTimeZone,
-          largeVarTypes,
-          pythonRunnerConf,
-          pythonMetrics,
-          jobArtifactUUID,
-          conf.pythonUDFProfiler) with GroupedPythonArrowInput
-      } else {
-        new ArrowPythonRunner(
-          chainedFunc,
-          pythonEvalType,
-          Array(argOffsets),
-          groupedSchema(dedupAttributes),
-          sessionLocalTimeZone,
-          largeVarTypes,
-          pythonRunnerConf,
-          pythonMetrics,
-          jobArtifactUUID,
-          conf.pythonUDFProfiler)
-      }
+      val runner = new ArrowPythonRunner(
+        chainedFunc,
+        pythonEvalType,
+        Array(argOffsets),
+        groupedSchema(dedupAttributes),
+        sessionLocalTimeZone,
+        largeVarTypes,
+        pythonRunnerConf,
+        pythonMetrics,
+        jobArtifactUUID,
+        conf.pythonUDFProfiler) with GroupedPythonArrowInput
 
       executePython(data, output, runner)
     }}

@@ -266,44 +266,8 @@ class ApplyInArrowTestsMixin:
 
         self.assertEqual(df2.join(df2).count(), 1)
 
-
-class ApplyInArrowTests(ApplyInArrowTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
-
-    @classmethod
-    def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-        ReusedSQLTestCase.tearDownClass()
-
-
-class GroupedMapInArrowWithArrowBatchSlicingTests(ApplyInArrowTests):
-    @classmethod
-    def setUpClass(cls):
-        ApplyInArrowTests.setUpClass()
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
-
     def test_arrow_batch_slicing(self):
-        with self.sql_conf(
-            {
-                "spark.sql.execution.arrow.arrowBatchSlicing.enabled": True,
-                "spark.sql.execution.arrow.maxRecordsPerBatch": 1000,
-            }
-        ):
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1000}):
             df = self.spark.range(10000000).select(
                 (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
             )
@@ -331,46 +295,51 @@ class GroupedMapInArrowWithArrowBatchSlicingTests(ApplyInArrowTests):
             )
             self.assertEqual(expected.collect(), result.collect())
 
-    def test_many_rows_per_grouping_key(self):
-        # Apply in Pandas with many rows per grouping key
-        def test_df(nr_columns):
-            data = []
-            # Create a big table with many rows per grouping key
-            dict_ = {f"some_field{i}": f"{random()}" for i in range(nr_columns)}
-            for i in range(100_000):
-                dict_1 = dict_.copy()
-                dict_1.update({"group_key": "0", "numeric_value": i})
-                data.append(dict_1)
-                dict_2 = dict_.copy()
-                dict_2.update({"group_key": "1", "numeric_value": i})
-                data.append(dict_2)
-            ndf = self.spark.createDataFrame(data)
-            # Increase the size of the dataframe
-            for i in range(4):
-                ndf = ndf.unionAll(ndf)
-            return ndf
+    def test_apply_in_arrow_with_large_groups(self):
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1000}):
+            # Apply in Pandas with many rows per grouping key
+            def test_df(nr_columns):
+                data = []
+                # Create a big table with many rows per grouping key
+                dict_ = {f"some_field{i}": f"{random()}" for i in range(nr_columns)}
+                for i in range(100_000):
+                    dict_1 = dict_.copy()
+                    dict_1.update({"group_key": "0", "numeric_value": i})
+                    data.append(dict_1)
+                    dict_2 = dict_.copy()
+                    dict_2.update({"group_key": "1", "numeric_value": i})
+                    data.append(dict_2)
+                ndf = self.spark.createDataFrame(data)
+                # Increase the size of the dataframe
+                for i in range(4):
+                    ndf = ndf.unionAll(ndf)
+                return ndf
 
-        df = test_df(nr_columns=20)
+            df = test_df(nr_columns=20)
 
-        def udf(table):
-            # All of the values in the batch should have the same group key:
-            group_keys = set(table["group_key"].to_pylist())
-            assert len(group_keys) == 1
-            group_key = group_keys.pop()
-            return pa.Table.from_pydict(
-                {
-                    "group_key": [group_key],
-                    "sum_values": [pa.compute.sum(table["numeric_value"]).as_py()],
-                }
+            def arrow_udf(table):
+                # All of the values in the batch should have the same group key:
+                group_keys = set(table["group_key"].to_pylist())
+                assert len(group_keys) == 1
+                group_key = group_keys.pop()
+                return pa.Table.from_pydict(
+                    {
+                        "group_key": [group_key],
+                        "sum_values": [pa.compute.sum(table["numeric_value"]).as_py()],
+                    }
+                )
+
+            actual = (
+                df.groupBy("group_key")
+                .applyInArrow(arrow_udf, schema="group_key string, sum_values long")
+                .collect()
             )
 
-        actual = df.groupBy("group_key").applyInArrow(
-            udf, schema="group_key string, sum_values long"
-        )
+            expected = (
+                df.groupBy("group_key").agg(sf.sum("numeric_value").alias("sum_values")).collect()
+            )
 
-        expected = df.groupBy("group_key").agg(sf.sum("numeric_value").alias("sum_values"))
-
-        self.assertEqual(actual.collect(), expected.collect())
+            self.assertEqual(actual, expected)
 
     def test_negative_and_zero_batch_size(self):
         for batch_size in [0, -1]:
@@ -378,13 +347,27 @@ class GroupedMapInArrowWithArrowBatchSlicingTests(ApplyInArrowTests):
                 ApplyInArrowTestsMixin.test_apply_in_arrow(self)
 
 
-class GroupedMapInArrowWithArrowBatchSlicingAndReducedBatchSizeTests(ApplyInArrowTests):
+class ApplyInArrowTests(ApplyInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        ApplyInArrowTests.setUpClass()
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
-        # Set it to a small odd value to exercise batching logic for all test cases
-        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
+        ReusedSQLTestCase.setUpClass()
+
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
+
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedSQLTestCase.tearDownClass()
 
 
 if __name__ == "__main__":

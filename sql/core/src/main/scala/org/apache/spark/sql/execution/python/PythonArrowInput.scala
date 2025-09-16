@@ -181,7 +181,7 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
   }
 }
 
-object BatchedPythonArrowInput {
+private[python] object BatchedPythonArrowInput {
   /**
    * Split a group into smaller Arrow batches within
    * a separate and complete Arrow streaming format in order
@@ -235,12 +235,12 @@ object BatchedPythonArrowInput {
  */
 private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner =>
 
-  private val maxRecordsPerBatch = {
+  val maxRecordsPerBatch: Int = {
     val v = SQLConf.get.arrowMaxRecordsPerBatch
     if (v > 0) v else Int.MaxValue
   }
 
-  private val maxBytesPerBatch = SQLConf.get.arrowMaxBytesPerBatch
+  val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
 
   protected override def newWriter(
       env: SparkEnv,

@@ -947,27 +947,8 @@ class ApplyInPandasTestsMixin:
                 row = df.groupby("id").apply(test).first()
                 self.assertEqual(row[1], 123)
 
-
-class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "false")
-
-
-class ApplyInPandasWithArrowBatchSlicingTests(ApplyInPandasTests):
-    @classmethod
-    def setUpClass(cls):
-        ApplyInPandasTests.setUpClass()
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
-
     def test_arrow_batch_slicing(self):
-        with self.sql_conf(
-            {
-                "spark.sql.execution.arrow.arrowBatchSlicing.enabled": True,
-                "spark.sql.execution.arrow.maxRecordsPerBatch": 1000,
-            }
-        ):
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1000}):
             df = self.spark.range(10000000).select(
                 (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
             )
@@ -995,45 +976,46 @@ class ApplyInPandasWithArrowBatchSlicingTests(ApplyInPandasTests):
             )
             self.assertEqual(expected.collect(), result.collect())
 
-    def test_many_rows_per_grouping_key(self):
-        # Apply in Pandas with many rows per grouping key
-        def test_df(nr_columns):
-            data = []
-            # Create a big table with many rows per grouping key
-            dict_ = {f"some_field{i}": f"{random()}" for i in range(nr_columns)}
-            for i in range(100_000):
-                dict_1 = dict_.copy()
-                dict_1.update({"group_key": "0", "numeric_value": i})
-                data.append(dict_1)
-                dict_2 = dict_.copy()
-                dict_2.update({"group_key": "1", "numeric_value": i})
-                data.append(dict_2)
-            ndf = self.spark.createDataFrame(data)
-            # Increase the size of the dataframe
-            for i in range(4):
-                ndf = ndf.unionAll(ndf)
-            return ndf
+    def test_apply_in_arrow_with_large_groups(self):
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1000}):
+            # Apply in Pandas with many rows per grouping key
+            def test_df(nr_columns):
+                data = []
+                # Create a big table with many rows per grouping key
+                dict_ = {f"some_field{i}": f"{random()}" for i in range(nr_columns)}
+                for i in range(100_000):
+                    dict_1 = dict_.copy()
+                    dict_1.update({"group_key": "0", "numeric_value": i})
+                    data.append(dict_1)
+                    dict_2 = dict_.copy()
+                    dict_2.update({"group_key": "1", "numeric_value": i})
+                    data.append(dict_2)
+                ndf = self.spark.createDataFrame(data)
+                # Increase the size of the dataframe
+                for i in range(4):
+                    ndf = ndf.unionAll(ndf)
+                return ndf
 
-        df = test_df(nr_columns=20)
+            df = test_df(nr_columns=20)
 
-        def pandas_udf(pdf: pd.DataFrame):
-            # All of the values in the batch should have the same group key:
-            assert pdf["group_key"].nunique() == 1
-            group_key = pdf["group_key"].iloc[0]
-            sum_values = pdf["numeric_value"].sum()
-            return pd.DataFrame([{"group_key": group_key, "sum_values": sum_values}])
+            def pandas_udf(pdf: pd.DataFrame):
+                # All of the values in the batch should have the same group key:
+                assert pdf["group_key"].nunique() == 1
+                group_key = pdf["group_key"].iloc[0]
+                sum_values = pdf["numeric_value"].sum()
+                return pd.DataFrame([{"group_key": group_key, "sum_values": sum_values}])
 
-        actual = (
-            df.groupBy("group_key")
-            .applyInPandas(pandas_udf, schema="group_key string, sum_values long")
-            .collect()
-        )
+            actual = (
+                df.groupBy("group_key")
+                .applyInPandas(pandas_udf, schema="group_key string, sum_values long")
+                .collect()
+            )
 
-        expected = (
-            df.groupBy("group_key").agg(sf.sum("numeric_value").alias("sum_values")).collect()
-        )
+            expected = (
+                df.groupBy("group_key").agg(sf.sum("numeric_value").alias("sum_values")).collect()
+            )
 
-        self.assertEqual(actual, expected)
+            self.assertEqual(actual, expected)
 
     def test_negative_and_zero_batch_size(self):
         for batch_size in [0, -1]:
@@ -1041,13 +1023,8 @@ class ApplyInPandasWithArrowBatchSlicingTests(ApplyInPandasTests):
                 ApplyInPandasTestsMixin.test_complex_groupby(self)
 
 
-class ApplyInPandasWithArrowBatchSlicingAndReducedBatchSizeTests(ApplyInPandasTests):
-    @classmethod
-    def setUpClass(cls):
-        ApplyInPandasTests.setUpClass()
-        cls.spark.conf.set("spark.sql.execution.arrow.arrowBatchSlicing.enabled", "true")
-        # Set it to a small odd value to exercise batching logic for all test cases
-        cls.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "3")
+class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
