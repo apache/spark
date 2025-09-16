@@ -19,6 +19,11 @@ license: |
   limitations under the License.
 ---
 
+See also: [Generic File Source Options](sql-data-sources-generic-options.html) and
+[JSON Files](sql-data-sources-json.html).
+
+
+
 Spark SQL provides `spark.read().csv("file_name")` to read a file or directory of files in CSV format into Spark DataFrame, and `dataframe.write().csv("path")` to write to a CSV file. Function `option()` can be used to customize the behavior of reading or writing, such as controlling behavior of the header, delimiter character, character set, and so on.
 
 <div class="codetabs">
