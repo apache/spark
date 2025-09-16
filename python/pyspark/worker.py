@@ -694,10 +694,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
-        import pandas as pd
-
-        values = (pd.concat(x, axis=1) for x in value_series_gen)
-        result_iter = f(stateful_processor_api_client, mode, key, values)
+        result_iter = f(stateful_processor_api_client, mode, key, value_series_gen)
 
         # TODO(SPARK-49100): add verification that elements in result_iter are
         # indeed of type pd.DataFrame and confirm to assigned cols
@@ -1970,14 +1967,8 @@ def read_udtf(pickleSer, infile, eval_type):
                         },
                     )
 
-                # Verify the type and the schema of the result.
-                verify_arrow_result(
-                    pa.Table.from_batches([result], schema=pa.schema(list(arrow_return_type))),
-                    assign_cols_by_name=False,
-                    expected_cols_and_types=[
-                        (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
-                    ],
-                )
+                # We verify the type of the result and do type corerion
+                # in the serializer
                 return result
 
             # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
@@ -2502,7 +2493,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
                 def values_gen():
                     for x in a[2]:
-                        retVal = [x[1][o] for o in parsed_offsets[0][1]]
+                        retVal = x[1].iloc[:, parsed_offsets[0][1]]
                         yield retVal
 
                 # This must be generator comprehension - do not materialize.

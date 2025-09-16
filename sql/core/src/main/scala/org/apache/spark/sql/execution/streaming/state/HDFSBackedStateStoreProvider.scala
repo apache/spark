@@ -515,7 +515,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       logInfo(log"Trying to add version=${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} to state " +
         log"cache map with current_size=${MDC(LogKeys.NUM_LOADED_ENTRIES, loadedEntries)} and " +
         log"earliest_loaded_version=" +
-        log"${MDC(LogKeys.EARLIEST_LOADED_VERSION, earliestLoadedVersion.get)}} " +
+        log"${MDC(LogKeys.EARLIEST_LOADED_VERSION, earliestLoadedVersion.get)} " +
         log"and max_versions_to_retain_in_memory=" +
         log"${MDC(LogKeys.NUM_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
     } else {
@@ -972,10 +972,22 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[HDFSBackedStateStore]]
    */
   override def replayStateFromSnapshot(
-      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
+      snapshotVersion: Long,
+      endVersion: Long,
+      readOnly: Boolean,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): StateStore = {
+    if (snapshotVersionStateStoreCkptId.isDefined || endVersionStateStoreCkptId.isDefined) {
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in")
+    }
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
@@ -990,10 +1002,21 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[HDFSBackedReadStateStore]]
    */
-  override def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long):
+  override def replayReadStateFromSnapshot(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None):
     ReadStateStore = {
+    if (snapshotVersionStateStoreCkptId.isDefined || endVersionStateStoreCkptId.isDefined) {
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in")
+    }
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +

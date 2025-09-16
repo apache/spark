@@ -11744,23 +11744,23 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00",)], ["str"])
-    >>> df.select(sf.to_time(df.str).alias("time")).show()
-    +--------+
-    |    time|
-    +--------+
-    |10:30:00|
-    +--------+
+    >>> df.select(sf.to_time(df.str)).show()
+    +------------+
+    |to_time(str)|
+    +------------+
+    |    10:30:00|
+    +------------+
 
     Example 2: Convert string to a time with a format
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["str", "format"])
-    >>> df.select(sf.to_time(df.str, df.format).alias("time")).show()
-    +--------+
-    |    time|
-    +--------+
-    |10:30:00|
-    +--------+
+    >>> df.select(sf.to_time(df.str, df.format)).show()
+    +--------------------+
+    |to_time(str, format)|
+    +--------------------+
+    |            10:30:00|
+    +--------------------+
     """
     if format is None:
         return _invoke_function_over_columns("to_time", str)
@@ -11954,9 +11954,9 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t).alias('dt')).show()
+    >>> df.select(sf.try_to_timestamp(df.t)).show()
     +-------------------+
-    |                 dt|
+    |try_to_timestamp(t)|
     +-------------------+
     |1997-02-28 10:30:00|
     +-------------------+
@@ -11965,12 +11965,12 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss')).alias('dt')).show()
-    +-------------------+
-    |                 dt|
-    +-------------------+
-    |1997-02-28 10:30:00|
-    +-------------------+
+    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss'))).show()
+    +----------------------------------------+
+    |try_to_timestamp(t, yyyy-MM-dd HH:mm:ss)|
+    +----------------------------------------+
+    |                     1997-02-28 10:30:00|
+    +----------------------------------------+
 
     Example 3: Converion failure results in NULL when ANSI mode is on
 

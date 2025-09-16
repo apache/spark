@@ -206,7 +206,9 @@ class StatePartitionReader(
         provider.asInstanceOf[SupportsFineGrainedReplay]
           .replayReadStateFromSnapshot(
             fromSnapshotOptions.snapshotStartBatchId + 1,
-            partition.sourceOptions.batchId + 1)
+            partition.sourceOptions.batchId + 1,
+            getStartStoreUniqueId,
+            getEndStoreUniqueId)
     }
   }
 

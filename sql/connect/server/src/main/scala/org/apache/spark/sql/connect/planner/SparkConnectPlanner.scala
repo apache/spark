@@ -42,7 +42,7 @@ import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
-import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
+import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
@@ -424,13 +424,13 @@ class SparkConnectPlanner(
     val cols = rel.getColsList.asScala.toArray
     val values = rel.getValuesList.asScala.toArray
     if (values.length == 1) {
-      val value = LiteralValueProtoConverter.toCatalystValue(values.head)
+      val value = LiteralValueProtoConverter.toScalaValue(values.head)
       val columns = if (cols.nonEmpty) Some(cols.toImmutableArraySeq) else None
       dataset.na.fillValue(value, columns).logicalPlan
     } else {
       val valueMap = mutable.Map.empty[String, Any]
       cols.zip(values).foreach { case (col, value) =>
-        valueMap.update(col, LiteralValueProtoConverter.toCatalystValue(value))
+        valueMap.update(col, LiteralValueProtoConverter.toScalaValue(value))
       }
       dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
     }
@@ -457,8 +457,8 @@ class SparkConnectPlanner(
     val replacement = mutable.Map.empty[Any, Any]
     rel.getReplacementsList.asScala.foreach { replace =>
       replacement.update(
-        LiteralValueProtoConverter.toCatalystValue(replace.getOldValue),
-        LiteralValueProtoConverter.toCatalystValue(replace.getNewValue))
+        LiteralValueProtoConverter.toScalaValue(replace.getOldValue),
+        LiteralValueProtoConverter.toScalaValue(replace.getNewValue))
     }
 
     if (rel.getColsCount == 0) {
@@ -1228,9 +1228,20 @@ class SparkConnectPlanner(
       // for backward compatibility
       rel.getRenameColumnsMapMap.asScala.toSeq.unzip
     }
-    Project(
-      Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
-      transformRelation(rel.getInput))
+
+    val child = transformRelation(rel.getInput)
+    try {
+      // Try the eager analysis first.
+      Dataset
+        .ofRows(session, child)
+        .withColumnsRenamed(colNames, newColNames)
+        .logicalPlan
+    } catch {
+      case _: AnalysisException | _: SparkException =>
+        Project(
+          Seq(UnresolvedStarWithColumnsRenames(existingNames = colNames, newNames = newColNames)),
+          child)
+    }
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
@@ -1249,13 +1260,23 @@ class SparkConnectPlanner(
         (alias.getName(0), transformExpression(alias.getExpr), metadata)
       }.unzip3
 
-    Project(
-      Seq(
-        UnresolvedStarWithColumns(
-          colNames = colNames,
-          exprs = exprs,
-          explicitMetadata = Some(metadata))),
-      transformRelation(rel.getInput))
+    val child = transformRelation(rel.getInput)
+    try {
+      // Try the eager analysis first.
+      Dataset
+        .ofRows(session, child)
+        .withColumns(colNames, exprs.map(expr => Column(expr)), metadata)
+        .logicalPlan
+    } catch {
+      case _: AnalysisException | _: SparkException =>
+        Project(
+          Seq(
+            UnresolvedStarWithColumns(
+              colNames = colNames,
+              exprs = exprs,
+              explicitMetadata = Some(metadata))),
+          child)
+    }
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {
@@ -1774,6 +1795,8 @@ class SparkConnectPlanner(
         transformTypedAggregateExpression(exp.getTypedAggregateExpression, baseRelationOpt)
       case proto.Expression.ExprTypeCase.SUBQUERY_EXPRESSION =>
         transformSubqueryExpression(exp.getSubqueryExpression)
+      case proto.Expression.ExprTypeCase.DIRECT_SHUFFLE_PARTITION_ID =>
+        transformDirectShufflePartitionID(exp.getDirectShufflePartitionId)
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, exp.getDescriptorForType)
     }
@@ -4107,6 +4130,11 @@ class SparkConnectPlanner(
           planId)
       case other => throw InvalidInputErrors.invalidEnum(other)
     }
+  }
+
+  private def transformDirectShufflePartitionID(
+      directShufflePartitionID: proto.Expression.DirectShufflePartitionID): Expression = {
+    DirectShufflePartitionID(transformExpression(directShufflePartitionID.getChild))
   }
 
   private def transformWithRelations(getWithRelations: proto.WithRelations): LogicalPlan = {

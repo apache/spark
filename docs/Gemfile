@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+ruby ">= 3.0.0"
 source "https://rubygems.org"
 
 # Keep these specifications as flexible as possible and leave it to Bundler

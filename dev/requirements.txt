@@ -76,7 +76,7 @@ graphviz==0.20.3
 flameprof==0.4
 
 # TorchDistributor dependencies
-torch<2.6.0
+torch
 torchvision
 torcheval
 

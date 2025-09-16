@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedArgumentExpression}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter}
@@ -67,8 +68,10 @@ trait FunctionBuilderBase[T] {
   def rearrange(
       expectedSignature: FunctionSignature,
       providedArguments: Seq[Expression],
-      functionName: String) : Seq[Expression] = {
-    NamedParametersSupport.defaultRearrange(expectedSignature, providedArguments, functionName)
+      functionName: String,
+      resolver: Resolver) : Seq[Expression] = {
+    NamedParametersSupport.defaultRearrange(
+      expectedSignature, providedArguments, functionName, resolver)
   }
 
   def build(funcName: String, expressions: Seq[Expression]): T
@@ -89,7 +92,9 @@ object NamedParametersSupport {
    */
   def splitAndCheckNamedArguments(
       args: Seq[Expression],
-      functionName: String): (Seq[Expression], Seq[NamedArgumentExpression]) = {
+      functionName: String,
+      resolver: Resolver):
+    (Seq[Expression], Seq[NamedArgumentExpression]) = {
     val (positionalArgs, namedArgs) = args.span(!_.isInstanceOf[NamedArgumentExpression])
 
     val namedParametersSet = collection.mutable.Set[String]()
@@ -97,7 +102,7 @@ object NamedParametersSupport {
     (positionalArgs,
       namedArgs.zipWithIndex.map {
         case (namedArg @ NamedArgumentExpression(parameterName, _), _) =>
-          if (namedParametersSet.contains(parameterName)) {
+          if (namedParametersSet.exists(resolver(_, parameterName))) {
             throw QueryCompilationErrors.doubleNamedArgumentReference(
               functionName, parameterName)
           }
@@ -123,15 +128,20 @@ object NamedParametersSupport {
   final def defaultRearrange(
       functionSignature: FunctionSignature,
       args: Seq[Expression],
-      functionName: String): Seq[Expression] = {
-    defaultRearrange(functionName, functionSignature.parameters, args)
+      functionName: String,
+      resolver: Resolver): Seq[Expression] = {
+    defaultRearrange(functionName, functionSignature.parameters, args, resolver)
   }
 
-  final def defaultRearrange(procedure: BoundProcedure, args: Seq[Expression]): Seq[Expression] = {
+  final def defaultRearrange(
+      procedure: BoundProcedure,
+      args: Seq[Expression],
+      resolver: Resolver): Seq[Expression] = {
     defaultRearrange(
       procedure.name,
       procedure.parameters.map(toInputParameter).toSeq,
-      args)
+      args,
+      resolver)
   }
 
   private def toInputParameter(param: ProcedureParameter): InputParameter = {
@@ -144,12 +154,13 @@ object NamedParametersSupport {
   private def defaultRearrange(
       routineName: String,
       parameters: Seq[InputParameter],
-      args: Seq[Expression]): Seq[Expression] = {
+      args: Seq[Expression],
+      resolver: Resolver): Seq[Expression] = {
     if (parameters.dropWhile(_.default.isEmpty).exists(_.default.isEmpty)) {
       throw QueryCompilationErrors.unexpectedRequiredParameter(routineName, parameters)
     }
 
-    val (positionalArgs, namedArgs) = splitAndCheckNamedArguments(args, routineName)
+    val (positionalArgs, namedArgs) = splitAndCheckNamedArguments(args, routineName, resolver)
     val namedParameters: Seq[InputParameter] = parameters.drop(positionalArgs.size)
 
     // The following loop checks for the following:
@@ -161,11 +172,11 @@ object NamedParametersSupport {
 
     namedArgs.foreach { namedArg =>
       val parameterName = namedArg.key
-      if (!parameterNamesSet.contains(parameterName)) {
+      if (!parameterNamesSet.exists(resolver(_, parameterName))) {
         throw QueryCompilationErrors.unrecognizedParameterName(routineName, namedArg.key,
           parameterNamesSet.toSeq)
       }
-      if (positionalParametersSet.contains(parameterName)) {
+      if (positionalParametersSet.exists(resolver(_, parameterName))) {
         throw QueryCompilationErrors.positionalAndNamedArgumentDoubleReference(
           routineName, namedArg.key)
       }
@@ -187,14 +198,13 @@ object NamedParametersSupport {
     // We rearrange named arguments to match their positional order.
     val rearrangedNamedArgs: Seq[Expression] = namedParameters.zipWithIndex.map {
       case (param, index) =>
-        namedArgMap.getOrElse(
-          param.name,
+        namedArgMap.view.filterKeys(resolver(_, param.name)).headOption.map(_._2).getOrElse {
           if (param.default.isEmpty) {
             throw QueryCompilationErrors.requiredParameterNotFound(routineName, param.name, index)
           } else {
             param.default.get
           }
-        )
+        }
     }
     val rearrangedArgs = positionalArgs ++ rearrangedNamedArgs
     assert(rearrangedArgs.size == parameters.size)
