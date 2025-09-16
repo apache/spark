@@ -183,7 +183,8 @@ private case class ErrorInfo(
  *                The error message is constructed by concatenating the lines with newlines.
  * @param breakingChangeInfo Additional metadata if the error is due to a breaking change.
  */
-private case class ErrorSubInfo(message: Seq[String],
+private case class ErrorSubInfo(
+    message: Seq[String],
     breakingChangeInfo: Option[BreakingChangeInfo] = None) {
   // For compatibility with multi-line error messages
   @JsonIgnore
@@ -203,9 +204,9 @@ private case class ErrorSubInfo(message: Seq[String],
  *                       mitigated manually.
  */
 case class BreakingChangeInfo(
-  migrationMessage: Seq[String],
-  mitigationSparkConfig: Option[MitigationSparkConfig] = None,
-  autoMitigation: Boolean = false
+    migrationMessage: Seq[String],
+    mitigationSparkConfig: Option[MitigationSparkConfig] = None,
+    autoMitigation: Boolean = false
 )
 
 /**

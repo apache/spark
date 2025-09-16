@@ -107,11 +107,11 @@ private[spark] object SparkThrowableHelper {
           g.writeStringField("errorClass", errorClass)
           if (format == STANDARD) {
             g.writeStringField("messageTemplate", errorReader.getMessageTemplate(errorClass))
-            errorReader.getBreakingChangeInfo(errorClass).foreach{ breakingChangeInfo =>
+            errorReader.getBreakingChangeInfo(errorClass).foreach { breakingChangeInfo =>
               g.writeObjectFieldStart("breakingChangeInfo")
               g.writeStringField("migrationMessage",
                   breakingChangeInfo.migrationMessage.mkString("\n"))
-              breakingChangeInfo.mitigationSparkConfig.foreach{ mitigationSparkConfig =>
+              breakingChangeInfo.mitigationSparkConfig.foreach { mitigationSparkConfig =>
                 g.writeObjectFieldStart("mitigationSparkConfig")
                 g.writeStringField("key", mitigationSparkConfig.key)
                 g.writeStringField("value", mitigationSparkConfig.value)
