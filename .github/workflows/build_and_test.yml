@@ -947,7 +947,7 @@ jobs:
     - uses: actions/setup-java@v4
       with:
         distribution: zulu
-        java-version: 25-ea
+        java-version: 25
     - name: Build with Maven
       run: |
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
