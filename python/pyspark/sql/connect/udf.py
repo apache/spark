@@ -96,7 +96,7 @@ def _create_py_udf(
 
         try:
             # Try to infer the eval type from type hints
-            eval_type = infer_eval_type_from_func(f)  # type: ignore[assignment]
+            eval_type = infer_eval_type_from_func(f)
         except Exception:
             warnings.warn("Cannot infer the eval type from type hints. ", UserWarning)
 
@@ -108,7 +108,7 @@ def _create_py_udf(
             # Fallback to Regular Python UDF
             eval_type = PythonEvalType.SQL_BATCHED_UDF
 
-    return _create_udf(f, returnType, cast(int, eval_type))
+    return _create_udf(f, returnType, eval_type)
 
 
 def _create_udf(
