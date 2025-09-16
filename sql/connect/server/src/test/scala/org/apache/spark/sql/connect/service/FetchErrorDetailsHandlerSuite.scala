@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.service
 
-import java.util.{Optional, UUID}
+import java.util.UUID
 
 import scala.concurrent.Promise
 import scala.concurrent.duration._
