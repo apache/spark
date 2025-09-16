@@ -445,16 +445,26 @@ class _ValidatorSharedReadWrite:
 
         jsonEstimatorParamMaps = metadata["paramMap"]["estimatorParamMaps"]
 
+        is_saved_by_python_writer = DefaultParamsReader.isPythonParamsInstance(metadata)
+
         estimatorParamMaps = []
         for jsonParamMap in jsonEstimatorParamMaps:
             paramMap = {}
             for jsonParam in jsonParamMap:
                 est = uidToParams[jsonParam["parent"]]
                 param = getattr(est, jsonParam["name"])
-                if "isJson" not in jsonParam or ("isJson" in jsonParam and jsonParam["isJson"]):
-                    value = json.loads(jsonParam["value"])
+
+                def extract_value(key):
+                    if is_saved_by_python_writer:
+                        return jsonParam[key]
+                    # If the the params are serialized by java writer,
+                    # the value is encoded as JSON string
+                    return json.loads(jsonParam[key])
+
+                if "isJson" not in jsonParam or ("isJson" in jsonParam and extract_value("isJson")):
+                    value = extract_value("value")
                 else:
-                    relativePath = jsonParam["value"]
+                    relativePath = extract_value("value")
                     valueSavedPath = os.path.join(path, relativePath)
                     value = DefaultParamsReader.loadParamsInstance(valueSavedPath, sc)
                 paramMap[param] = value
