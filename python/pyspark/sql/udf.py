@@ -122,12 +122,9 @@ def _create_py_udf(
                 RuntimeWarning,
             )
 
-    eval_type = None
-    if is_arrow_enabled:
-        # Arrow optimized Python UDF
-        eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
-    elif useArrow is None:
-        # If the user doesn't explicitly enable useArrow or the configuration
+    eval_type: Optional[int] = None
+    if useArrow is None:
+        # If the user doesn't explicitly set useArrow
         from pyspark.sql.pandas.typehints import infer_eval_type_from_func
 
         try:
@@ -136,9 +133,13 @@ def _create_py_udf(
         except Exception:
             warnings.warn("Cannot infer the eval type from type hints. ", UserWarning)
 
-    # Fallback to Regular Python UDF
     if eval_type is None:
-        eval_type = PythonEvalType.SQL_BATCHED_UDF  # type: ignore[assignment]
+        if is_arrow_enabled:
+            # Arrow optimized Python UDF
+            eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
+        else:
+            # Fallback to Regular Python UDF
+            eval_type = PythonEvalType.SQL_BATCHED_UDF
 
     return _create_udf(f, returnType, cast(int, eval_type))
 
