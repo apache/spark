@@ -829,7 +829,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       case None if table.tableType == VIEW =>
         // If this is a view created by Spark 2.2 or higher versions, we should restore its schema
         // from table properties.
-        getSchemaFromTableProperties(table.properties).foreach { schemaFromTableProps =>
+        getSchemaFromTableProperties(table.properties, false).foreach { schemaFromTableProps =>
           table = table.copy(schema = schemaFromTableProps)
         }
 
@@ -881,7 +881,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // If this is a Hive serde table created by Spark 2.1 or higher versions, we should restore its
     // schema from table properties.
-    val maybeSchemaFromTableProps = getSchemaFromTableProperties(table.properties)
+    val maybeSchemaFromTableProps = getSchemaFromTableProperties(table.properties, false)
     if (maybeSchemaFromTableProps.isDefined) {
       val schemaFromTableProps = maybeSchemaFromTableProps.get
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
@@ -911,11 +911,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def getSchemaFromTableProperties(
-      tableProperties: Map[String, String]): Option[StructType] = {
-    CatalogTable.readLargeTableProp(tableProperties, DATASOURCE_SCHEMA).map { schemaJson =>
-      val parsed = DataType.fromJson(schemaJson).asInstanceOf[StructType]
-      CharVarcharUtils.getRawSchema(parsed)
-    }
+      tableProperties: Map[String, String], failIfNumPartsMissing: Boolean): Option[StructType] = {
+    CatalogTable.readLargeTableProp(tableProperties, DATASOURCE_SCHEMA, failIfNumPartsMissing)
+      .map { schemaJson =>
+        val parsed = DataType.fromJson(schemaJson).asInstanceOf[StructType]
+        CharVarcharUtils.getRawSchema(parsed)
+      }
   }
 
   private def restoreDataSourceTable(table: CatalogTable, provider: String): CatalogTable = {
@@ -934,7 +935,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
     val schemaFromTableProps =
-      getSchemaFromTableProperties(table.properties).getOrElse(new StructType())
+      getSchemaFromTableProperties(table.properties, true).getOrElse(new StructType())
     val partColumnNames = getPartitionColumnsFromTableProperties(table)
     val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
