@@ -3827,7 +3827,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         MIGRATION_MESSAGE_FIELD_NUMBER: builtins.int
-        MITIGATION_SPARK_CONFIG_FIELD_NUMBER: builtins.int
+        MITIGATION_CONFIG_FIELD_NUMBER: builtins.int
         AUTO_MITIGATION_FIELD_NUMBER: builtins.int
         @property
         def migration_message(
@@ -3837,20 +3837,17 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             with the breaking change.
             """
         @property
-        def mitigation_spark_config(
-            self,
-        ) -> global___FetchErrorDetailsResponse.MitigationSparkConfig:
+        def mitigation_config(self) -> global___FetchErrorDetailsResponse.MitigationConfig:
             """A spark config flag that can be used to mitigate the breaking change."""
         auto_mitigation: builtins.bool
-        """If true, the spark job can be automatically retried by setting the mitigationSparkConfig.
+        """If true, the spark job can be automatically retried by setting the mitigationConfig.
         If false, the breaking change must be mitigated manually.
         """
         def __init__(
             self,
             *,
             migration_message: collections.abc.Iterable[builtins.str] | None = ...,
-            mitigation_spark_config: global___FetchErrorDetailsResponse.MitigationSparkConfig
-            | None = ...,
+            mitigation_config: global___FetchErrorDetailsResponse.MitigationConfig | None = ...,
             auto_mitigation: builtins.bool | None = ...,
         ) -> None: ...
         def HasField(
@@ -3858,12 +3855,12 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_auto_mitigation",
                 b"_auto_mitigation",
-                "_mitigation_spark_config",
-                b"_mitigation_spark_config",
+                "_mitigation_config",
+                b"_mitigation_config",
                 "auto_mitigation",
                 b"auto_mitigation",
-                "mitigation_spark_config",
-                b"mitigation_spark_config",
+                "mitigation_config",
+                b"mitigation_config",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -3871,14 +3868,14 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_auto_mitigation",
                 b"_auto_mitigation",
-                "_mitigation_spark_config",
-                b"_mitigation_spark_config",
+                "_mitigation_config",
+                b"_mitigation_config",
                 "auto_mitigation",
                 b"auto_mitigation",
                 "migration_message",
                 b"migration_message",
-                "mitigation_spark_config",
-                b"mitigation_spark_config",
+                "mitigation_config",
+                b"mitigation_config",
             ],
         ) -> None: ...
         @typing.overload
@@ -3888,13 +3885,11 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         @typing.overload
         def WhichOneof(
             self,
-            oneof_group: typing_extensions.Literal[
-                "_mitigation_spark_config", b"_mitigation_spark_config"
-            ],
-        ) -> typing_extensions.Literal["mitigation_spark_config"] | None: ...
+            oneof_group: typing_extensions.Literal["_mitigation_config", b"_mitigation_config"],
+        ) -> typing_extensions.Literal["mitigation_config"] | None: ...
 
-    class MitigationSparkConfig(google.protobuf.message.Message):
-        """MitigationSparkConfig defines a spark config flag that can be used to mitigate a breaking change."""
+    class MitigationConfig(google.protobuf.message.Message):
+        """MitigationConfig defines a spark config flag that can be used to mitigate a breaking change."""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

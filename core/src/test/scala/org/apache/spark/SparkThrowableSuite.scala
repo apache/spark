@@ -527,7 +527,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |      "migrationMessage": [
           |        "Migration message with <param2>."
           |      ],
-          |      "mitigationSparkConfig": {
+          |      "mitigationConfig": {
           |        "key": "config.key1",
           |        "value": "config.value1"
           |      },
@@ -547,7 +547,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |          "migrationMessage": [
           |            "Subclass migration message with <param3>."
           |          ],
-          |          "mitigationSparkConfig": {
+          |          "mitigationConfig": {
           |            "key": "config.key2",
           |            "value": "config.value2"
           |          },
@@ -572,7 +572,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         breakingChangeInfo.contains(
           BreakingChangeInfo(
             Seq("Migration message with <param2>."),
-            Some(MitigationSparkConfig("config.key1", "config.value1")),
+            Some(MitigationConfig("config.key1", "config.value1")),
             autoMitigation = true)))
       val errorMessage2 =
         reader.getErrorMessage("TEST_ERROR_WITH_SUBCLASS.SUBCLASS", error2Params)
@@ -584,7 +584,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         breakingChangeInfo2.contains(
           BreakingChangeInfo(
             Seq("Subclass migration message with <param3>."),
-            Some(MitigationSparkConfig("config.key2", "config.value2")))))
+            Some(MitigationConfig("config.key2", "config.value2")))))
     }
   }
 

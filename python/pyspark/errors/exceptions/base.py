@@ -148,7 +148,7 @@ class PySparkException(Exception):
             A message explaining how the user can migrate their job to work
                 with the breaking change.
 
-        mitigation_spark_config:
+        mitigation_config:
             A dict with key: str and value: str fields.
             A spark config flag that can be used to mitigate the
                 breaking change.

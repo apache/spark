@@ -111,10 +111,10 @@ private[spark] object SparkThrowableHelper {
               g.writeObjectFieldStart("breakingChangeInfo")
               g.writeStringField("migrationMessage",
                   breakingChangeInfo.migrationMessage.mkString("\n"))
-              breakingChangeInfo.mitigationSparkConfig.foreach { mitigationSparkConfig =>
-                g.writeObjectFieldStart("mitigationSparkConfig")
-                g.writeStringField("key", mitigationSparkConfig.key)
-                g.writeStringField("value", mitigationSparkConfig.value)
+              breakingChangeInfo.mitigationConfig.foreach { mitigationConfig =>
+                g.writeObjectFieldStart("mitigationConfig")
+                g.writeStringField("key", mitigationConfig.key)
+                g.writeStringField("value", mitigationConfig.value)
                 g.writeEndObject()
               }
               g.writeBooleanField("autoMitigation", breakingChangeInfo.autoMitigation)

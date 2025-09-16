@@ -214,7 +214,7 @@ class ConnectErrorsTest(unittest.TestCase):
         bci.auto_mitigation = True
 
         # Add mitigation config
-        mitigation_config = bci.mitigation_spark_config
+        mitigation_config = bci.mitigation_config
         mitigation_config.key = "spark.sql.legacy.behavior.enabled"
         mitigation_config.value = "true"
 
@@ -237,12 +237,12 @@ class ConnectErrorsTest(unittest.TestCase):
             ["Please update your code to use new API", "See documentation for details"],
         )
         self.assertEqual(breaking_change_info["auto_mitigation"], True)
-        self.assertIn("mitigation_spark_config", breaking_change_info)
+        self.assertIn("mitigation_config", breaking_change_info)
         self.assertEqual(
-            breaking_change_info["mitigation_spark_config"]["key"],
+            breaking_change_info["mitigation_config"]["key"],
             "spark.sql.legacy.behavior.enabled",
         )
-        self.assertEqual(breaking_change_info["mitigation_spark_config"]["value"], "true")
+        self.assertEqual(breaking_change_info["mitigation_config"]["value"], "true")
 
     def test_convert_exception_without_breaking_change_info(self):
         """Test that getBreakingChangeInfo returns None when no breaking change info."""
@@ -283,7 +283,7 @@ class ConnectErrorsTest(unittest.TestCase):
 
         breaking_change_info = {
             "migration_message": ["Test migration message"],
-            "mitigation_spark_config": {"key": "test.config.key", "value": "test.config.value"},
+            "mitigation_config": {"key": "test.config.key", "value": "test.config.value"},
             "auto_mitigation": False,
         }
 
@@ -363,7 +363,7 @@ class ConnectErrorsTest(unittest.TestCase):
         self.assertIsNotNone(breaking_change_info)
         self.assertEqual(breaking_change_info["migration_message"], ["Migration message only"])
         self.assertEqual(breaking_change_info["auto_mitigation"], False)
-        self.assertNotIn("mitigation_spark_config", breaking_change_info)
+        self.assertNotIn("mitigation_config", breaking_change_info)
 
 
 if __name__ == "__main__":

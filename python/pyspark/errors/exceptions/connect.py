@@ -117,10 +117,10 @@ def _convert_exception(
                     if bci.HasField("auto_mitigation")
                     else False,
                 }
-                if bci.HasField("mitigation_spark_config"):
-                    breaking_change_info["mitigation_spark_config"] = {
-                        "key": bci.mitigation_spark_config.key,
-                        "value": bci.mitigation_spark_config.value,
+                if bci.HasField("mitigation_config"):
+                    breaking_change_info["mitigation_config"] = {
+                        "key": bci.mitigation_config.key,
+                        "value": bci.mitigation_config.value,
                     }
 
     if "org.apache.spark.api.python.PythonException" in classes:

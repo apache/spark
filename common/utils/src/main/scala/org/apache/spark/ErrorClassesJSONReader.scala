@@ -197,15 +197,15 @@ private case class ErrorSubInfo(
  *
  * @param migrationMessage A message explaining how the user can migrate their job to work
  *                         with the breaking change.
- * @param mitigationSparkConfig A spark config flag that can be used to mitigate the
+ * @param mitigationConfig A spark config flag that can be used to mitigate the
  *                              breaking change.
  * @param autoMitigation If true, the spark job can be automatically retried by setting the
- *                       mitigationSparkConfig. If false, the breaking change must be
+ *                       mitigationConfig. If false, the breaking change must be
  *                       mitigated manually.
  */
 case class BreakingChangeInfo(
     migrationMessage: Seq[String],
-    mitigationSparkConfig: Option[MitigationSparkConfig] = None,
+    mitigationConfig: Option[MitigationConfig] = None,
     autoMitigation: Boolean = false
 )
 
@@ -214,7 +214,7 @@ case class BreakingChangeInfo(
  * @param key The spark config key.
  * @param value The spark config value that mitigates the breaking change.
  */
-case class MitigationSparkConfig(key: String, value: String)
+case class MitigationConfig(key: String, value: String)
 
 /**
  * Information associated with an error state / SQLSTATE.

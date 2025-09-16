@@ -24,7 +24,7 @@ import scala.util.Try
 
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{BreakingChangeInfo, MitigationSparkConfig, SparkThrowable}
+import org.apache.spark.{BreakingChangeInfo, MitigationConfig, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.sql.AnalysisException
@@ -284,14 +284,14 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     // - sparkThrowableProto.getBreakingChangeInfo.getMigrationMessageCount > 0
     // - sparkThrowableProto.getBreakingChangeInfo.getAutoMitigation == expected_value
     // - If mitigation config exists:
-    //     sparkThrowableProto.getBreakingChangeInfo.hasMitigationSparkConfig
+    //     sparkThrowableProto.getBreakingChangeInfo.hasSparkConfig
   }
 
   test("throwableToFetchErrorDetailsResponse includes breaking change info") {
     val migrationMessages =
       Seq("Please update your code to use new API", "See documentation for details")
     val mitigationConfig =
-      Some(MitigationSparkConfig("spark.sql.legacy.behavior.enabled", "true"))
+      Some(MitigationConfig("spark.sql.legacy.behavior.enabled", "true"))
     val breakingChangeInfo =
       BreakingChangeInfo(migrationMessages, mitigationConfig, autoMitigation = true)
 
@@ -320,8 +320,8 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     assert(bciProto.getMigrationMessage(1) == "See documentation for details")
     assert(bciProto.getAutoMitigation == true)
 
-    assert(bciProto.hasMitigationSparkConfig)
-    val mitigationConfigProto = bciProto.getMitigationSparkConfig
+    assert(bciProto.hasMitigationConfig)
+    val mitigationConfigProto = bciProto.getMitigationConfig
     assert(mitigationConfigProto.getKey == "spark.sql.legacy.behavior.enabled")
     assert(mitigationConfigProto.getValue == "true")
   }
@@ -356,7 +356,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     assert(bciProto.getMigrationMessageCount == 1)
     assert(bciProto.getMigrationMessage(0) == "Migration message only")
     assert(bciProto.getAutoMitigation == false)
-    assert(!bciProto.hasMitigationSparkConfig)
+    assert(!bciProto.hasMitigationConfig)
   }
 
   test("throwableToFetchErrorDetailsResponse with non-SparkThrowable") {

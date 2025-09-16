@@ -62,7 +62,7 @@ class ErrorsTest(unittest.TestCase):
                 "message": ["Error message 1 with <param>."],
                 "breaking_change_info": {
                     "migration_message": ["Migration message with <param2>."],
-                    "mitigation_spark_config": {"key": "config.key1", "value": "config.value1"},
+                    "mitigation_config": {"key": "config.key1", "value": "config.value1"},
                     "autoMitigation": True,
                 },
             },
@@ -73,7 +73,7 @@ class ErrorsTest(unittest.TestCase):
                         "message": ["Subclass message with <param2>."],
                         "breaking_change_info": {
                             "migration_message": ["Subclass migration message with <param3>."],
-                            "mitigation_spark_config": {
+                            "mitigation_config": {
                                 "key": "config.key2",
                                 "value": "config.value2",
                             },

@@ -1107,15 +1107,15 @@ message FetchErrorDetailsResponse {
     repeated string migration_message = 1;
 
     // A spark config flag that can be used to mitigate the breaking change.
-    optional MitigationSparkConfig mitigation_spark_config = 2;
+    optional MitigationConfig mitigation_config = 2;
 
-    // If true, the spark job can be automatically retried by setting the mitigationSparkConfig.
+    // If true, the spark job can be automatically retried by setting the mitigationConfig.
     // If false, the breaking change must be mitigated manually.
     optional bool auto_mitigation = 3;
   }
 
-  // MitigationSparkConfig defines a spark config flag that can be used to mitigate a breaking change.
-  message MitigationSparkConfig {
+  // MitigationConfig defines a spark config flag that can be used to mitigate a breaking change.
+  message MitigationConfig {
     // The spark config key.
     string key = 1;
 
