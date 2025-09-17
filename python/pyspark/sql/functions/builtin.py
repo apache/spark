@@ -25296,18 +25296,20 @@ def try_make_timestamp_ntz(
     yearsOrDate : :class:`~pyspark.sql.Column` or column name
         Either:
 
-            - The year to represent, from 1 to 9999;
-            for timsetamp creation based on year, month, day, hour, minute and second.
-            - The date to represent, in valid DATE format;
-            for timsetamp creation based on date and time.
+          - The year to represent, from 1 to 9999;
+          for timsetamp creation based on year, month, day, hour, minute and second.
+
+          - The date to represent, in valid DATE format;
+          for timsetamp creation based on date and time.
 
     monthsOrTime : :class:`~pyspark.sql.Column` or column name
         Either:
 
-            - The month-of-year to represent, from 1 (January) to 12 (December);
-            for timsetamp creation based on year, month, day, hour, minute and second.
-            - The time to represent, in valid TIME format;
-            for timsetamp creation based on date and time.
+          - The month-of-year to represent, from 1 (January) to 12 (December);
+          for timsetamp creation based on year, month, day, hour, minute and second.
+
+          - The time to represent, in valid TIME format;
+          for timsetamp creation based on date and time.
 
     days : :class:`~pyspark.sql.Column` or column name, optional
         The day-of-month to represent, from 1 to 31;
