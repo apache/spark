@@ -921,6 +921,11 @@ class ArrowUDTFTestsMixin:
     def test_arrow_udtf_partition_column_removal(self):
         @arrow_udtf(returnType="col1_sum int, col2_sum int")
         class PartitionColumnTestUDTF:
+            def __init__(self):
+                self._col1_sum = 0
+                self._col2_sum = 0
+                self._columns_verified = False
+
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
                 import pyarrow.compute as pc
 
@@ -930,24 +935,33 @@ class ArrowUDTFTestsMixin:
                 # Catalyst adds the expression result as a new column at the beginning.
                 # The ArrowUDTFWithPartition._remove_partition_by_exprs method should
                 # remove this added column, leaving only the original table columns.
-                column_names = table.column_names
 
-                # Verify we only have the original columns, not the partition expression
-                assert "col1" in column_names, f"Expected col1 in columns: {column_names}"
-                assert "col2" in column_names, f"Expected col2 in columns: {column_names}"
-                # The partition expression column should have been removed
-                assert len(column_names) == 2, (
-                    f"Expected only col1 and col2 after partition column removal, "
-                    f"but got: {column_names}"
-                )
+                # Verify columns only once per partition
+                if not self._columns_verified:
+                    column_names = table.column_names
+                    # Verify we only have the original columns, not the partition expression
+                    assert "col1" in column_names, f"Expected col1 in columns: {column_names}"
+                    assert "col2" in column_names, f"Expected col2 in columns: {column_names}"
+                    # The partition expression column should have been removed
+                    assert len(column_names) == 2, (
+                        f"Expected only col1 and col2 after partition column removal, "
+                        f"but got: {column_names}"
+                    )
+                    self._columns_verified = True
 
-                col1_sum = pc.sum(table["col1"]).as_py()
-                col2_sum = pc.sum(table["col2"]).as_py()
+                # Accumulate sums - don't yield here to avoid multiple results per partition
+                self._col1_sum += pc.sum(table["col1"]).as_py()
+                self._col2_sum += pc.sum(table["col2"]).as_py()
 
+                # Return empty iterator - results come from terminate
+                return iter(())
+
+            def terminate(self) -> Iterator["pa.Table"]:
+                # Yield accumulated results for this partition
                 result_table = pa.table(
                     {
-                        "col1_sum": pa.array([col1_sum], type=pa.int32()),
-                        "col2_sum": pa.array([col2_sum], type=pa.int32()),
+                        "col1_sum": pa.array([self._col1_sum], type=pa.int32()),
+                        "col2_sum": pa.array([self._col2_sum], type=pa.int32()),
                     }
                 )
                 yield result_table

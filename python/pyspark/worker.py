@@ -1625,8 +1625,7 @@ def read_udtf(pickleSer, infile, eval_type):
                         if hasattr(self._udtf, "terminate"):
                             terminate_result = self._udtf.terminate()
                             if terminate_result is not None:
-                                for table in terminate_result:
-                                    yield table
+                                yield from terminate_result
                         # Create new UDTF instance for new partition
                         self._udtf = self._create_udtf()
                         self._eval_raised_skip_rest_of_input_table = False
