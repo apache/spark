@@ -55,8 +55,13 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
     // Create each source file in the temporary directory
     sources.foreach { file =>
       val filePath = Paths.get(file.name)
-      val fileName = filePath.getFileName.toString
-      val tempFilePath = projectDir.resolve(fileName)
+      val tempFilePath = projectDir.resolve(filePath)
+
+      // Create any necessary parent directories
+      val parentDir = tempFilePath.getParent
+      if (parentDir != null) {
+        Files.createDirectories(parentDir)
+      }
 
       // Create the file with the specified contents
       Files.write(tempFilePath, file.contents.getBytes("UTF-8"))
