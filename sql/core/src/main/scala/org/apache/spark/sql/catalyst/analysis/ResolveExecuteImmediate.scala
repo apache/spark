@@ -114,9 +114,6 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
         // For parameterized queries, build parameter arrays
         val (paramValues, paramNames) = buildUnifiedParameters(args)
 
-        // Validate that if inner query uses named parameters, all USING arguments must be named
-        validateNamedParameterConsistency(sqlString, paramNames, args)
-
         withIsolatedLocalVariableContext {
           sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
             .sql(sqlString, paramValues, paramNames)
@@ -172,32 +169,6 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     // Check for compound bodies (SQL scripting)
     if (parsedPlan.isInstanceOf[CompoundBody]) {
       throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
-    }
-  }
-
-  /**
-   * Validates that if the inner query uses named parameters, all USING arguments must be named.
-   * This is a specific validation for EXECUTE IMMEDIATE that complements the general parameter
-   * validation in ParameterHandler.
-   */
-  private def validateNamedParameterConsistency(
-      sqlString: String,
-      paramNames: Array[String],
-      args: Seq[Expression]): Unit = {
-
-    // Check if the inner query uses named parameters
-    val namedParamPattern = ":[a-zA-Z_][a-zA-Z0-9_]*".r
-    val hasNamedParams = namedParamPattern.findFirstIn(sqlString).isDefined
-
-    if (hasNamedParams) {
-      // If inner query uses named parameters, ALL USING arguments must be named
-      val unnamedArgs = args.zip(paramNames).collect {
-        case (expr, name) if name.isEmpty => expr
-      }
-
-      if (unnamedArgs.nonEmpty) {
-        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedArgs)
-      }
     }
   }
 

@@ -148,7 +148,8 @@ class ParameterHandler {
         performSubstitution(sqlText, rule,
           positionalParams = params.map(ExpressionToSqlConverter.convert).toList)
 
-      case HybridParameterContext(positionalParams, namedParams) =>
+      case HybridParameterContext(args, paramNames) =>
+        import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
         // Detect which parameter types are actually used in the query (single call)
         val (hasPositional, hasNamed) = detectParameters(sqlText, rule)
 
@@ -158,12 +159,30 @@ class ParameterHandler {
             .invalidQueryMixedQueryParameters()
         }
 
+        // Validate ALL_PARAMETERS_MUST_BE_NAMED: if query uses named parameters,
+        // all USING expressions must have names
+        if (hasNamed && !hasPositional) {
+          val unnamedExpressions = paramNames.zipWithIndex.collect {
+            case ("", index) => index // empty strings are unnamed
+          }
+          if (unnamedExpressions.nonEmpty) {
+            val unnamedExprs = unnamedExpressions.map(args(_))
+              .map(Literal(_).asInstanceOf[Expression]).toSeq
+            throw org.apache.spark.sql.errors.QueryCompilationErrors
+              .invalidQueryAllParametersMustBeNamed(unnamedExprs)
+          }
+        }
+
         if (hasPositional && !hasNamed) {
           // Query uses only positional parameters
+          val positionalParams = args.map(Literal(_).asInstanceOf[Expression]).toSeq
           performSubstitution(sqlText, rule,
             positionalParams = positionalParams.map(ExpressionToSqlConverter.convert).toList)
         } else if (hasNamed && !hasPositional) {
           // Query uses only named parameters
+          val namedParams = paramNames.zip(args).collect {
+            case (name, value) if name.nonEmpty => name -> Literal(value).asInstanceOf[Expression]
+          }.toMap
           performSubstitution(sqlText, rule,
             namedParams = namedParams.map { case (name, expr) =>
               (name, ExpressionToSqlConverter.convert(expr))

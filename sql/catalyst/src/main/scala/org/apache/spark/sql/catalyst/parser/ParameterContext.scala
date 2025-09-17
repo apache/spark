@@ -44,12 +44,12 @@ case class PositionalParameterContext(params: Seq[Expression]) extends Parameter
  * Context that supports both named and positional parameters.
  * This is used by EXECUTE IMMEDIATE where the parameter type is determined by the inner query.
  *
- * @param positionalParams Sequence of expression values in order
- * @param namedParams Map of parameter names to their expression values
+ * @param args Raw argument values from USING clause
+ * @param paramNames Parameter names from USING clause (empty strings for positional)
  */
 case class HybridParameterContext(
-    positionalParams: Seq[Expression],
-    namedParams: Map[String, Expression]) extends ParameterContext
+    args: Array[_],
+    paramNames: Array[String]) extends ParameterContext
 
 /**
  * Thread-local storage for parameter context to pass parameters

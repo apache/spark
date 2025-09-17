@@ -622,11 +622,7 @@ class SparkSession private(
         val parsedPlan = if (args.nonEmpty) {
           // For EXECUTE IMMEDIATE, provide both named and positional parameters since the inner
           // query determines which type to use. The preparser will choose the appropriate type.
-          val positionalParams = args.map(lit(_).expr).toSeq
-          val namedParams = paramNames.zip(args).collect {
-            case (name, value) if name.nonEmpty => name -> lit(value).expr
-          }.toMap
-          val paramContext = HybridParameterContext(positionalParams, namedParams)
+          val paramContext = HybridParameterContext(args, paramNames)
 
           ThreadLocalParameterContext.withContext(paramContext) {
             val parsed = sessionState.sqlParser.parsePlan(sqlText)
