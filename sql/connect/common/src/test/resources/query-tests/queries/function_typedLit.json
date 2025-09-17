@@ -1398,6 +1398,196 @@
       "literal": {
         "array": {
           "elements": [{
+            "struct": {
+              "elements": [{
+                "integer": 1
+              }, {
+                "string": "2"
+              }, {
+                "array": {
+                  "elements": [{
+                    "string": "3"
+                  }, {
+                    "string": "4"
+                  }],
+                  "dataType": {
+                    "elementType": {
+                      "string": {
+                        "collation": "UTF8_BINARY"
+                      }
+                    },
+                    "containsNull": true
+                  }
+                }
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "_1"
+                }, {
+                  "name": "_2",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }, {
+                  "name": "_3",
+                  "nullable": true
+                }]
+              }
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 5
+              }, {
+                "string": "6"
+              }, {
+                "array": {
+                  "dataType": {
+                    "elementType": {
+                      "string": {
+                        "collation": "UTF8_BINARY"
+                      }
+                    },
+                    "containsNull": true
+                  }
+                }
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "_1"
+                }, {
+                  "name": "_2",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }, {
+                  "name": "_3",
+                  "nullable": true
+                }]
+              }
+            }
+          }],
+          "dataType": {
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
+            "struct": {
+              "elements": [{
+                "integer": 1
+              }, {
+                "string": "2"
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "a"
+                }, {
+                  "name": "b",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 3
+              }, {
+                "string": "4"
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "a"
+                }, {
+                  "name": "b",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 5
+              }, {
+                "string": "6"
+              }],
+              "dataTypeStruct": {
+                "fields": [{
+                  "name": "a"
+                }, {
+                  "name": "b",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            }
+          }],
+          "dataType": {
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
             "map": {
               "keys": [{
                 "string": "a"

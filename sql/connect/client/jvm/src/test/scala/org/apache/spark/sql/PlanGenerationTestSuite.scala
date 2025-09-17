@@ -307,6 +307,8 @@ class PlanGenerationTestSuite
   private def temporals = createLocalRelation(temporalsSchemaString)
   private def boolean = createLocalRelation(booleanSchemaString)
 
+  private case class CaseClass(a: Int, b: String)
+
   /* Spark Session API */
   test("range") {
     session.range(1, 10, 1, 2)
@@ -3433,6 +3435,8 @@ class PlanGenerationTestSuite
       fn.typedlit[collection.immutable.Map[Int, Option[Int]]](
         collection.immutable.Map(1 -> None)),
       fn.typedLit(Seq(Seq(1, 2, 3), Seq(4, 5, 6), Seq(7, 8, 9))),
+      fn.typedLit(Seq((1, "2", Seq("3", "4")), (5, "6", Seq.empty[String]))),
+      fn.typedLit(Seq(CaseClass(1, "2"), CaseClass(3, "4"), CaseClass(5, "6"))),
       fn.typedLit(
         Seq(
           mutable.LinkedHashMap("a" -> 1, "b" -> 2),
