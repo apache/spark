@@ -3840,8 +3840,8 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         def mitigation_config(self) -> global___FetchErrorDetailsResponse.MitigationConfig:
             """A spark config flag that can be used to mitigate the breaking change."""
         needs_audit: builtins.bool
-        """If false, the spark job can be automatically retried by setting the mitigationConfig.
-        If true, the breaking change must be mitigated manually.
+        """If true, the breaking change should be inspected manually.
+        If false, the spark job should be retried by setting the mitigationConfig.
         """
         def __init__(
             self,
