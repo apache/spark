@@ -1942,6 +1942,13 @@ def _test() -> None:
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.
     globs = pyspark.sql.dataframe.__dict__.copy()
+
+    try:
+        import pandas as pd
+    except Exception:
+        del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.classic.dataframe tests").getOrCreate()
     )

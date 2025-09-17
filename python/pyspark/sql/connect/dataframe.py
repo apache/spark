@@ -2315,6 +2315,12 @@ def _test() -> None:
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
 
+    try:
+        import pandas as pd
+    except Exception:
+        del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
+
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
         .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))

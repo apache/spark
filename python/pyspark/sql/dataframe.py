@@ -6364,7 +6364,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
         ...
-        >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
+        >>> df.mapInPandas(filter_func, df.schema).show()
         +---+---+
         | id|age|
         +---+---+
@@ -6377,7 +6377,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf.groupby("id").mean().reset_index()
         ...
-        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()  # doctest: +SKIP
+        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()
         +---+----+
         | id| age|
         +---+----+
@@ -6393,7 +6393,7 @@ class DataFrame:
         ...         yield pdf
         ...
         >>> df.mapInPandas(
-        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()  # doctest: +SKIP
+        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()
         +---+---+----------+
         | id|age|double_age|
         +---+---+----------+
