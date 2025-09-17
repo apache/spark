@@ -487,59 +487,102 @@ class SparkDeclarativePipelinesServerSuite
     }
   }
 
-  gridTest("DefineDataset returns resolved data name for default catalog/schema")(
-    Seq(
-      ("TEMPORARY_VIEW", DatasetType.TEMPORARY_VIEW, "tv"),
-      ("TABLE", DatasetType.TABLE, "tb"),
-      ("MV", DatasetType.MATERIALIZED_VIEW, "mv")
+  // Define a case class to hold test parameters
+  private case class DefineDatasetTestCase(
+    name: String,
+    datasetType: DatasetType,
+    datasetName: String,
+    defaultCatalog: String = "",
+    defaultDatabase: String = "",
+    expectedResolvedName: String
+  )
+
+  // Reuse DefineDatasetTestCase for default catalog/schema, ignore unused fields
+  private val defineDatasetDefaultTests = Seq(
+    DefineDatasetTestCase(
+      name = "TEMPORARY_VIEW",
+      datasetType = DatasetType.TEMPORARY_VIEW,
+      datasetName = "tv",
+      expectedResolvedName = "`tv`"
+    ),
+    DefineDatasetTestCase(
+      name = "TABLE",
+      datasetType = DatasetType.TABLE,
+      datasetName = "tb",
+      expectedResolvedName = "`spark_catalog`.`default`.`tb`"
+    ),
+    DefineDatasetTestCase(
+      name = "MV",
+      datasetType = DatasetType.MATERIALIZED_VIEW,
+      datasetName = "mv",
+      expectedResolvedName = "`spark_catalog`.`default`.`mv`"
     )
-  ) { case (_, datasetType, datasetName) =>
+  ).map(tc => tc.name -> tc).toMap
+
+  // Create a sequence of test cases
+  private val defineDatasetCustomTests = Seq(
+    DefineDatasetTestCase(
+      "TEMPORARY_VIEW",
+      DatasetType.TEMPORARY_VIEW,
+      "tv",
+      "custom_catalog",
+      "custom_db",
+      "`tv`"
+    ),
+    DefineDatasetTestCase(
+      "TABLE",
+      DatasetType.TABLE,
+      "tb",
+      "my_catalog",
+      "my_db",
+      "`my_catalog`.`my_db`.`tb`"
+    ),
+    DefineDatasetTestCase(
+      "MV",
+      DatasetType.MATERIALIZED_VIEW,
+      "mv",
+      "another_catalog",
+      "another_db",
+      "`another_catalog`.`another_db`.`mv`"
+    )
+  ).map(tc => tc.name -> tc).toMap
+
+  namedGridTest("DefineDataset returns resolved data name for default catalog/schema")(
+    defineDatasetDefaultTests
+  ) { testCase =>
     withRawBlockingStub { implicit stub =>
+      // Build and send the CreateDataflowGraph command with default catalog/db
       val graphId = createDataflowGraph
       assert(Option(graphId).isDefined)
 
       val defineDataset = DefineDataset
         .newBuilder()
         .setDataflowGraphId(graphId)
-        .setDatasetName(datasetName)
-        .setDatasetType(datasetType)
-
+        .setDatasetName(testCase.datasetName)
+        .setDatasetType(testCase.datasetType)
       val pipelineCmd = PipelineCommand.newBuilder()
         .setDefineDataset(defineDataset)
         .build()
-
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
+
       assert(res !== PipelineCommandResult.getDefaultInstance)
       assert(res.hasDefineDatasetResult)
-
       val graphResult = res.getDefineDatasetResult
-      if (datasetName.contains("tv")) {
-        assert(graphResult.getResolvedDataName == s"`${datasetName}`")
-      } else {
-        assert(graphResult.getResolvedDataName == s"`spark_catalog`.`default`.`${datasetName}`")
-      }
+      assert(graphResult.getResolvedDataName == testCase.expectedResolvedName)
     }
   }
 
-  gridTest("DefineDataset returns resolved data name for custom catalog/schema")(
-    Seq(
-      ("TEMPORARY_VIEW", DatasetType.TEMPORARY_VIEW,
-        "tv", "custom_catalog", "custom_db", "`tv`"),
-      ("TABLE", DatasetType.TABLE,
-        "tb", "my_catalog", "my_db", "`my_catalog`.`my_db`.`tb`"),
-      ("MV", DatasetType.MATERIALIZED_VIEW,
-        "mv", "another_catalog", "another_db", "`another_catalog`.`another_db`.`mv`")
-    )
-  ) {
-    case (_, datasetType, datasetName, defaultCatalog, defaultDatabase, expectedResolvedName) =>
+  namedGridTest("DefineDataset returns resolved data name for custom catalog/schema")(
+    defineDatasetCustomTests
+  ) { testCase =>
       withRawBlockingStub { implicit stub =>
         // Build and send the CreateDataflowGraph command with custom catalog/db
         val graphId = sendPlan(
           buildCreateDataflowGraphPlan(
             proto.PipelineCommand.CreateDataflowGraph
               .newBuilder()
-              .setDefaultCatalog(defaultCatalog)
-              .setDefaultDatabase(defaultDatabase)
+              .setDefaultCatalog(testCase.defaultCatalog)
+              .setDefaultDatabase(testCase.defaultDatabase)
               .build()
           )
         ).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
@@ -550,20 +593,17 @@ class SparkDeclarativePipelinesServerSuite
         val defineDataset = DefineDataset
           .newBuilder()
           .setDataflowGraphId(graphId)
-          .setDatasetName(datasetName)
-          .setDatasetType(datasetType)
-
+          .setDatasetName(testCase.datasetName)
+          .setDatasetType(testCase.datasetType)
         val pipelineCmd = PipelineCommand.newBuilder()
           .setDefineDataset(defineDataset)
           .build()
 
         val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
-
         assert(res !== PipelineCommandResult.getDefaultInstance)
         assert(res.hasDefineDatasetResult)
-
         val graphResult = res.getDefineDatasetResult
-        assert(graphResult.getResolvedDataName == expectedResolvedName)
+        assert(graphResult.getResolvedDataName == testCase.expectedResolvedName)
       }
   }
 
