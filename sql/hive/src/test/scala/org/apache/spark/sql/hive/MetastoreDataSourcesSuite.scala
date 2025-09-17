@@ -1398,19 +1398,9 @@ class MetastoreDataSourcesSuite extends QueryTest
 
         hiveClient.createTable(hiveTableWithoutNumPartsProp, ignoreIfExists = false)
 
-        if (isHiveTable) {
-          val tableMeta = sharedState.externalCatalog.getTable("default", "t")
-          assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
-          assert(!tableMeta.properties.contains(DATASOURCE_PROVIDER))
-        } else {
-          checkError(
-            exception = intercept[AnalysisException] {
-              sharedState.externalCatalog.getTable("default", "t")
-            },
-            condition = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY",
-            parameters = Map("key" -> toSQLConf("spark.sql.sources.schema"))
-          )
-        }
+        val tableMeta = sharedState.externalCatalog.getTable("default", "t")
+        assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
+        assert(!tableMeta.properties.contains(DATASOURCE_PROVIDER))
 
         val hiveTableWithNumPartsProp = CatalogTable(
           identifier = TableIdentifier("t2", Some("default")),
