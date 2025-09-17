@@ -592,11 +592,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "SELCT Fa",
     "startIndex" : 1,
-    "stopIndex" : 28,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa'"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -613,11 +613,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "SELCT Fa",
     "startIndex" : 1,
-    "stopIndex" : 40,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa' INTO res_id"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -881,11 +881,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "5",
     "startIndex" : 1,
-    "stopIndex" : 28,
-    "fragment" : "EXECUTE IMMEDIATE sql_string"
+    "stopIndex" : 1,
+    "fragment" : "5"
   } ]
 }
 
