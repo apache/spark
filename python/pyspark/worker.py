@@ -1643,80 +1643,79 @@ def read_udtf(pickleSer, infile, eval_type):
             """
             import pyarrow as pa
 
-            if self._partition_child_indexes:
-                # Detect partition boundaries.
-                boundaries = self._detect_partition_boundaries(original_batch)
+            # This class should only be used when partition_child_indexes is non-empty
+            assert self._partition_child_indexes, (
+                "ArrowUDTFWithPartition should only be instantiated when "
+                "len(partition_child_indexes) > 0"
+            )
 
-                # Process each contiguous partition
-                for i in range(len(boundaries) - 1):
-                    start_idx = boundaries[i]
-                    end_idx = boundaries[i + 1]
+            # Detect partition boundaries.
+            boundaries = self._detect_partition_boundaries(original_batch)
 
-                    # Get the partition key for this segment
-                    partition_key = tuple(
-                        original_batch.column(idx)[start_idx].as_py()
-                        for idx in self._partition_child_indexes
-                    )
+            # Process each contiguous partition
+            for i in range(len(boundaries) - 1):
+                start_idx = boundaries[i]
+                end_idx = boundaries[i + 1]
 
-                    # Check if this is a continuation of the previous batch's partition
-                    is_new_partition = (
-                        self._last_partition_key is not None
-                        and partition_key != self._last_partition_key
-                    )
+                # Get the partition key for this segment
+                partition_key = tuple(
+                    original_batch.column(idx)[start_idx].as_py()
+                    for idx in self._partition_child_indexes
+                )
 
-                    if is_new_partition:
-                        # Previous partition ended, call terminate
-                        if hasattr(self._udtf, "terminate"):
-                            terminate_result = self._udtf.terminate()
-                            if terminate_result is not None:
-                                yield from terminate_result
-                        # Create new UDTF instance for new partition
-                        self._udtf = self._create_udtf()
-                        self._eval_raised_skip_rest_of_input_table = False
+                # Check if this is a continuation of the previous batch's partition
+                # TODO: This check is only necessary for the first boundary in each batch.
+                # The following boundaries are always for new partitions within the same batch.
+                # This could be optimized by only checking i == 0.
+                is_new_partition = (
+                    self._last_partition_key is not None
+                    and partition_key != self._last_partition_key
+                )
 
-                    # Slice the filtered batch for this partition
-                    partition_batch = filtered_batch.slice(start_idx, end_idx - start_idx)
+                if is_new_partition:
+                    # Previous partition ended, call terminate
+                    if hasattr(self._udtf, "terminate"):
+                        terminate_result = self._udtf.terminate()
+                        if terminate_result is not None:
+                            yield from terminate_result
+                    # Create new UDTF instance for new partition
+                    self._udtf = self._create_udtf()
+                    self._eval_raised_skip_rest_of_input_table = False
 
-                    # Update the last partition key
-                    self._last_partition_key = partition_key
+                # Slice the filtered batch for this partition
+                partition_batch = filtered_batch.slice(start_idx, end_idx - start_idx)
 
-                    # Update filtered args to use the partition batch
-                    partition_filtered_args = []
-                    for arg in filtered_args:
-                        if isinstance(arg, pa.RecordBatch):
-                            partition_filtered_args.append(partition_batch)
-                        else:
-                            partition_filtered_args.append(arg)
+                # Update the last partition key
+                self._last_partition_key = partition_key
 
-                    partition_filtered_kwargs = {}
-                    for key, value in filtered_kwargs.items():
-                        if isinstance(value, pa.RecordBatch):
-                            partition_filtered_kwargs[key] = partition_batch
-                        else:
-                            partition_filtered_kwargs[key] = value
+                # Update filtered args to use the partition batch
+                partition_filtered_args = []
+                for arg in filtered_args:
+                    if isinstance(arg, pa.RecordBatch):
+                        partition_filtered_args.append(partition_batch)
+                    else:
+                        partition_filtered_args.append(arg)
 
-                    # Call the UDTF with this partition's data
-                    if not self._eval_raised_skip_rest_of_input_table:
-                        try:
-                            result = self._udtf.eval(
-                                *partition_filtered_args, **partition_filtered_kwargs
-                            )
-                            if result is not None:
-                                yield from result
-                        except SkipRestOfInputTableException:
-                            # Skip remaining rows in this partition
-                            self._eval_raised_skip_rest_of_input_table = True
+                partition_filtered_kwargs = {}
+                for key, value in filtered_kwargs.items():
+                    if isinstance(value, pa.RecordBatch):
+                        partition_filtered_kwargs[key] = partition_batch
+                    else:
+                        partition_filtered_kwargs[key] = value
 
-                    # Don't terminate here - let the next batch or final terminate handle it
-            else:
-                # No partitions, process the entire batch as one group
-                try:
-                    result = self._udtf.eval(*filtered_args, **filtered_kwargs)
-                    if result is not None:
-                        # result is an iterator of PyArrow Tables (for Arrow UDTFs)
-                        yield from result
-                except SkipRestOfInputTableException:
-                    pass
+                # Call the UDTF with this partition's data
+                if not self._eval_raised_skip_rest_of_input_table:
+                    try:
+                        result = self._udtf.eval(
+                            *partition_filtered_args, **partition_filtered_kwargs
+                        )
+                        if result is not None:
+                            yield from result
+                    except SkipRestOfInputTableException:
+                        # Skip remaining rows in this partition
+                        self._eval_raised_skip_rest_of_input_table = True
+
+            # Don't terminate here - let the next batch or final terminate handle it
 
         def terminate(self) -> Iterator:
             if hasattr(self._udtf, "terminate"):
@@ -1764,7 +1763,7 @@ def read_udtf(pickleSer, infile, eval_type):
             """
             boundaries = [0]  # First partition starts at index 0
 
-            if batch.num_rows <= 1 or not self._partition_child_indexes:
+            if batch.num_rows <= 1:
                 boundaries.append(batch.num_rows)
                 return boundaries
 
