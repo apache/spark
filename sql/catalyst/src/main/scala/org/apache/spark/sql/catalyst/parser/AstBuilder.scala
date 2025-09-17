@@ -6365,12 +6365,6 @@ class AstBuilder extends DataTypeAstBuilder
     NamedParameter(ctx.namedParameterMarker().identifier().getText)
   }
 
-
-
-
-
-
-
   /**
    * Create a positional parameter which represents a literal
    * with a non-bound value and unknown type.

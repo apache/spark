@@ -234,16 +234,6 @@ case class ParameterInfo(namedParameters: Set[String], positionalParameters: Lis
       positionalParameters ++ other.positionalParameters)
   }
 
-  override def toString: String = {
-    val named = if (namedParameters.nonEmpty) {
-      s"named: ${namedParameters.mkString(", ")}"
-    } else ""
-    val positional = if (positionalParameters.nonEmpty) {
-      s"positional: ${positionalParameters.size}"
-    } else ""
-    val parts = Seq(named, positional).filter(_.nonEmpty)
-    if (parts.nonEmpty) s"ParameterInfo(${parts.mkString(", ")})" else "ParameterInfo(empty)"
-  }
 }
 
 /**

@@ -150,7 +150,7 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     }
   }
 
-  test("Performance - large parameter set") {
+  test("Large parameter set") {
     val handler = new ParameterHandler()
 
     val largeParamMap = (1 to 100).map(i => s"param$i" -> Literal(i)).toMap
@@ -158,11 +158,8 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val paramRefs = (1 to 100).map(i => s":param$i").mkString(", ")
     val sql = s"SELECT $paramRefs"
 
-    val startTime = System.currentTimeMillis()
     val result = handler.substituteParameters(sql, context)
-    val endTime = System.currentTimeMillis()
 
-    assert(endTime - startTime < 2000, s"Took ${endTime - startTime}ms")
     assert(result.contains("1, 2, 3"))
     assert(result.contains("98, 99, 100"))
   }

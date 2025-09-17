@@ -1469,5 +1469,4 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw invalidStatement(ctx.getText, ctx)
     }
   }
-
 }

@@ -45,30 +45,15 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  override def visitStringLiteralValue(ctx: StringLiteralValueContext): Token = {
-    if (ctx != null) {
-      ctx.STRING_LITERAL.getSymbol
-    } else {
-      null
-    }
-  }
+  override def visitStringLiteralValue(ctx: StringLiteralValueContext): Token =
+    Option(ctx).map(_.STRING_LITERAL.getSymbol).orNull
 
   override def visitDoubleQuotedStringLiteralValue(
-      ctx: DoubleQuotedStringLiteralValueContext): Token = {
-    if (ctx != null) {
-      ctx.DOUBLEQUOTED_STRING.getSymbol
-    } else {
-      null
-    }
-  }
+      ctx: DoubleQuotedStringLiteralValueContext): Token =
+    Option(ctx).map(_.DOUBLEQUOTED_STRING.getSymbol).orNull
 
-  override def visitIntegerVal(ctx: IntegerValContext): Token = {
-    if (ctx != null) {
-      ctx.INTEGER_VALUE.getSymbol
-    } else {
-      null
-    }
-  }
+  override def visitIntegerVal(ctx: IntegerValContext): Token =
+    Option(ctx).map(_.INTEGER_VALUE.getSymbol).orNull
 
   override def visitStringLiteralInContext(ctx: StringLiteralInContextContext): Token = {
     visit(ctx.stringLitWithoutMarker).asInstanceOf[Token]
@@ -306,13 +291,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   /**
    * Visit a stringLit context by delegating to the appropriate labeled visitor.
    */
-  def visitStringLit(ctx: StringLitContext): Token = {
-    if (ctx == null) {
-      null
-    } else {
-      visit(ctx).asInstanceOf[Token]
-    }
-  }
+  def visitStringLit(ctx: StringLitContext): Token =
+    Option(ctx).map(visit(_).asInstanceOf[Token]).orNull
 
   /**
    * Returns a collation name.

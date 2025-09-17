@@ -149,11 +149,15 @@ class ParameterHandler {
           positionalParams = params.map(ExpressionToSqlConverter.convert).toList)
 
       case HybridParameterContext(positionalParams, namedParams) =>
-        // First validate that the query doesn't mix parameter types
-        validateParameterConsistency(sqlText, rule)
-
-        // Detect which parameter types are actually used in the query
+        // Detect which parameter types are actually used in the query (single call)
         val (hasPositional, hasNamed) = detectParameters(sqlText, rule)
+
+        // Validate that the query doesn't mix parameter types
+        if (hasPositional && hasNamed) {
+          throw org.apache.spark.sql.errors.QueryCompilationErrors
+            .invalidQueryMixedQueryParameters()
+        }
+
         if (hasPositional && !hasNamed) {
           // Query uses only positional parameters
           performSubstitution(sqlText, rule,

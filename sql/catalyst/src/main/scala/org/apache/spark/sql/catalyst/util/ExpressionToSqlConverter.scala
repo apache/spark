@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -35,7 +34,6 @@ import org.apache.spark.sql.types._
  * - Proper SQL escaping and formatting
  * - Robust error handling with meaningful error messages
  * - Constant folding for foldable expressions
- * - Special handling for UnresolvedFunction expressions
  *
  * Supported data types:
  * - Primitives: String, Integer, Long, Float, Double, Boolean, Decimal
@@ -208,26 +206,6 @@ object ExpressionToSqlConverter {
         val evaluatedChildren = children.map { child =>
           if (child.foldable) child.eval() else child
         }
-        val keyType = if (children.nonEmpty) children.head.dataType else StringType
-        val valueType = if (children.length > 1) children(1).dataType else StringType
-        val mapType = MapType(keyType, valueType)
-        val keyValues = evaluatedChildren.grouped(2).map {
-          case Seq(k, v) => (k, v)
-        }.toMap
-        convert(Literal.create(keyValues, mapType))
-
-      case UnresolvedFunction(Seq("array"), children, _, _, _, _, _)
-          if children.forall(_.foldable) =>
-        // Handle unresolved array function with foldable children
-        val evaluatedChildren = children.map(_.eval())
-        val elementType = if (children.nonEmpty) children.head.dataType else IntegerType
-        val arrayType = ArrayType(elementType)
-        convert(Literal.create(evaluatedChildren.toArray, arrayType))
-
-      case UnresolvedFunction(Seq("map"), children, _, _, _, _, _)
-          if children.forall(_.foldable) =>
-        // Handle unresolved map function with foldable children
-        val evaluatedChildren = children.map(_.eval())
         val keyType = if (children.nonEmpty) children.head.dataType else StringType
         val valueType = if (children.length > 1) children(1).dataType else StringType
         val mapType = MapType(keyType, valueType)
