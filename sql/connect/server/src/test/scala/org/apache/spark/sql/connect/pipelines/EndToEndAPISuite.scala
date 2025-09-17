@@ -24,7 +24,7 @@ import scala.concurrent.duration.Duration
 
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.connect.SparkConnectServerTest
-import org.apache.spark.sql.pipelines.utils.PipelineTest
+import org.apache.spark.sql.pipelines.utils.{APITest, PipelineReference, PipelineSourceFile, PipelineTest, TestPipelineConfiguration, TestPipelineSpec}
 
 case class PipelineReferenceImpl(executionProcess: Process) extends PipelineReference
 

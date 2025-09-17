@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.pipelines
+package org.apache.spark.sql.pipelines.utils
 
 import scala.concurrent.duration._
 import scala.concurrent.duration.Duration
