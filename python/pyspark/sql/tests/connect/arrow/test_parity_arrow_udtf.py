@@ -22,12 +22,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ArrowUDTFParityTests(ArrowUDTFTestsMixin, ReusedConnectTestCase):
-    def test_arrow_udtf_with_table_argument_basic(self):
-        super().test_arrow_udtf_with_table_argument_basic()
-
-    def test_arrow_udtf_with_table_argument_and_scalar(self):
-        super().test_arrow_udtf_with_table_argument_and_scalar()
-
+    pass
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.arrow.test_parity_arrow_udtf import *  # noqa: F401
