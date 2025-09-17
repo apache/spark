@@ -21,7 +21,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, ExceptionHandlerType, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
@@ -103,14 +103,19 @@ class SqlScriptingExecution(
 
       // If the last frame is a handler, set leave statement to be the next one in the
       // innermost scope that should be exited.
-      if (lastFrame.frameType == SqlScriptingFrameType.HANDLER && context.frames.nonEmpty) {
+      if ((lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER
+          || lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER)
+          && context.frames.nonEmpty) {
         // Remove the scope if handler is executed.
         if (context.firstHandlerScopeLabel.isDefined
           && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
           context.firstHandlerScopeLabel = None
         }
-        // Inject leave statement into the execution plan of the last frame.
-        injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
+
+        if (lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER) {
+          // Inject leave statement into the execution plan of the last frame.
+          injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
+        }
       }
     }
     // If there are still frames available, get the next statement.
@@ -169,7 +174,11 @@ class SqlScriptingExecution(
       case Some(handler) =>
         val handlerFrame = new SqlScriptingExecutionFrame(
           handler.body,
-          SqlScriptingFrameType.HANDLER,
+          if (handler.handlerType == ExceptionHandlerType.CONTINUE) {
+            SqlScriptingFrameType.CONTINUE_HANDLER
+          } else {
+            SqlScriptingFrameType.EXIT_HANDLER
+          },
           handler.scopeLabel
         )
         context.frames.append(

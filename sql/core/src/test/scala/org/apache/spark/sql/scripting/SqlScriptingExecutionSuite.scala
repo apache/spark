@@ -36,6 +36,16 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key)
+    super.afterAll()
+  }
+
   // Tests setup
   override protected def sparkConf: SparkConf = {
     super.sparkConf
