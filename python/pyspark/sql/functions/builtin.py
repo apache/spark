@@ -25295,25 +25295,32 @@ def try_make_timestamp_ntz(
     ----------
     yearsOrDate : :class:`~pyspark.sql.Column` or column name
         Either:
-        - The year to represent, from 1 to 9999;
-          for timsetamp creation based on year, month, day, hour, minute and second.
-        - The date to represent, in valid DATE format;
-          for timsetamp creation based on date and time.
+
+            - The year to represent, from 1 to 9999;
+            for timsetamp creation based on year, month, day, hour, minute and second.
+            - The date to represent, in valid DATE format;
+            for timsetamp creation based on date and time.
+
     monthsOrTime : :class:`~pyspark.sql.Column` or column name
         Either:
-        - The month-of-year to represent, from 1 (January) to 12 (December);
-          for timsetamp creation based on year, month, day, hour, minute and second.
-        - The time to represent, in valid TIME format;
-          for timsetamp creation based on date and time.
+
+            - The month-of-year to represent, from 1 (January) to 12 (December);
+            for timsetamp creation based on year, month, day, hour, minute and second.
+            - The time to represent, in valid TIME format;
+            for timsetamp creation based on date and time.
+
     days : :class:`~pyspark.sql.Column` or column name, optional
         The day-of-month to represent, from 1 to 31;
           only used for timsetamp creation based on year, month, day, hour, minute and second.
+
     hours : :class:`~pyspark.sql.Column` or column name, optional
         The hour-of-day to represent, from 0 to 23;
           only used for timsetamp creation based on year, month, day, hour, minute and second.
+
     mins : :class:`~pyspark.sql.Column` or column name, optional
         The minute-of-hour to represent, from 0 to 59;
           only used for timsetamp creation based on year, month, day, hour, minute and second.
+
     secs : :class:`~pyspark.sql.Column` or column name, optional
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
         The value can be either an integer like 13 , or a fraction like 13.123.
