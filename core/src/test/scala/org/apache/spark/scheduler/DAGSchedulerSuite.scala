@@ -3423,8 +3423,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       checksumVal: Long = 0): Unit = {
     assert(taskSets(taskSetIndex).stageId == stageId)
     assert(taskSets(taskSetIndex).stageAttemptId == 1)
-    assert(taskSets(taskSetIndex).tasks.length == 2)
-    completeShuffleMapStageSuccessfully(stageId, 1, 2)
+    assert(taskSets(taskSetIndex).tasks.length == numTasks)
+    completeShuffleMapStageSuccessfully(stageId, 1, 2, checksumVal = checksumVal)
     assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
   }
 
