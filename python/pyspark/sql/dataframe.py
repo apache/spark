@@ -6405,12 +6405,8 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInPandas(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
-        +---+---+
-        | id|age|
-        +---+---+
-        |  1| 21|
-        +---+---+
+        >>> df.mapInPandas(filter_func, df.schema, barrier=True).collect()  # doctest: +SKIP
+        [Row(id=1, age=21)]
 
         See Also
         --------
@@ -6478,12 +6474,8 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInArrow(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
-        +---+---+
-        | id|age|
-        +---+---+
-        |  1| 21|
-        +---+---+
+        >>> df.mapInArrow(filter_func, df.schema, barrier=True).collect()  # doctest: +SKIP
+        [Row(id=1, age=21)]
 
         See Also
         --------
