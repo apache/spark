@@ -83,24 +83,26 @@ private[connect] object PipelinesHandler extends Logging {
         logInfo(s"Define pipelines dataset cmd received: $cmd")
         val resolvedDataName =
           defineDataset(cmd.getDefineDataset, sessionHolder).quotedString
-        PipelineCommandResult.newBuilder()
+        PipelineCommandResult
+          .newBuilder()
           .setDefineDatasetResult(
-            PipelineCommandResult.DefineDatasetResult.newBuilder()
-            .setResolvedDataName(resolvedDataName)
-            .build()
-          )
-        .build()
+            PipelineCommandResult.DefineDatasetResult
+              .newBuilder()
+              .setResolvedDataName(resolvedDataName)
+              .build())
+          .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
         val resolvedFlowName =
           defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder).quotedString
-        PipelineCommandResult.newBuilder()
+        PipelineCommandResult
+          .newBuilder()
           .setDefineFlowResult(
-            PipelineCommandResult.DefineFlowResult.newBuilder()
-            .setResolvedFlowName(resolvedFlowName)
-            .build()
-          )
-        .build()
+            PipelineCommandResult.DefineFlowResult
+              .newBuilder()
+              .setResolvedFlowName(resolvedFlowName)
+              .build())
+          .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
         logInfo(s"Start pipeline cmd received: $cmd")
         startRun(cmd.getStartRun, responseObserver, sessionHolder)
@@ -161,12 +163,13 @@ private[connect] object PipelinesHandler extends Logging {
 
     dataset.getDatasetType match {
       case proto.DatasetType.MATERIALIZED_VIEW | proto.DatasetType.TABLE =>
-        val qualifiedIdentifier = GraphIdentifierManager.parseAndQualifyTableIdentifier(
-          rawTableIdentifier = GraphIdentifierManager.parseTableIdentifier
-          (dataset.getDatasetName, sessionHolder.session),
-          currentCatalog = Some(graphElementRegistry.defaultCatalog),
-          currentDatabase = Some(graphElementRegistry.defaultDatabase)
-        ).identifier
+        val qualifiedIdentifier = GraphIdentifierManager
+          .parseAndQualifyTableIdentifier(
+            rawTableIdentifier = GraphIdentifierManager
+              .parseTableIdentifier(dataset.getDatasetName, sessionHolder.session),
+            currentCatalog = Some(graphElementRegistry.defaultCatalog),
+            currentDatabase = Some(graphElementRegistry.defaultDatabase))
+          .identifier
         graphElementRegistry.registerTable(
           Table(
             identifier = qualifiedIdentifier,
@@ -188,12 +191,8 @@ private[connect] object PipelinesHandler extends Logging {
         qualifiedIdentifier
       case proto.DatasetType.TEMPORARY_VIEW =>
         val viewIdentifier = GraphIdentifierManager
-          .parseAndValidateTemporaryViewIdentifier(
-            rawViewIdentifier =
-              GraphIdentifierManager.parseTableIdentifier(
-                dataset.getDatasetName,
-                sessionHolder.session)
-          )
+          .parseAndValidateTemporaryViewIdentifier(rawViewIdentifier = GraphIdentifierManager
+            .parseTableIdentifier(dataset.getDatasetName, sessionHolder.session))
         graphElementRegistry.registerView(
           TemporaryView(
             identifier = viewIdentifier,
@@ -234,27 +233,28 @@ private[connect] object PipelinesHandler extends Logging {
     val rawDestinationIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session)
     val flowWritesToView =
-      graphElementRegistry.getViews()
-      .filter(_.isInstanceOf[TemporaryView])
-      .exists(_.identifier == rawDestinationIdentifier)
+      graphElementRegistry
+        .getViews()
+        .filter(_.isInstanceOf[TemporaryView])
+        .exists(_.identifier == rawDestinationIdentifier)
 
     // If the flow is created implicitly as part of defining a view, then we do not
     // qualify the flow identifier and the flow destination. This is because views are
     // not permitted to have multipart
     val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
-    val Seq(flowIdentifier, destinationIdentifier) = Seq(
-      rawFlowIdentifier, rawDestinationIdentifier
-    ).map { rawIdentifier =>
-      if (isImplicitFlowForTempView) {
-        rawIdentifier
-      } else {
-        GraphIdentifierManager.parseAndQualifyFlowIdentifier(
-          rawFlowIdentifier = rawIdentifier,
-          currentCatalog = Some(defaultCatalog),
-          currentDatabase = Some(defaultDatabase)
-        ).identifier
+    val Seq(flowIdentifier, destinationIdentifier) =
+      Seq(rawFlowIdentifier, rawDestinationIdentifier).map { rawIdentifier =>
+        if (isImplicitFlowForTempView) {
+          rawIdentifier
+        } else {
+          GraphIdentifierManager
+            .parseAndQualifyFlowIdentifier(
+              rawFlowIdentifier = rawIdentifier,
+              currentCatalog = Some(defaultCatalog),
+              currentDatabase = Some(defaultDatabase))
+            .identifier
+        }
       }
-    }
 
     graphElementRegistry.registerFlow(
       new UnresolvedFlow(
@@ -264,9 +264,7 @@ private[connect] object PipelinesHandler extends Logging {
           FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getRelation)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = false,
-        queryContext = QueryContext(
-          Option(defaultCatalog),
-          Option(defaultDatabase)),
+        queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
         origin = QueryOrigin(
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
