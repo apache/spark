@@ -1,0 +1,613 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License. See accompanying LICENSE file.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.hadoop</groupId>
+    <artifactId>hadoop-project</artifactId>
+    <version>3.5.0-SNAPSHOT</version>
+    <relativePath>../../hadoop-project</relativePath>
+  </parent>
+  <artifactId>hadoop-aws</artifactId>
+  <version>3.5.0-SNAPSHOT</version>
+  <name>Apache Hadoop Amazon Web Services support</name>
+  <description>
+    This module contains code to support integration with Amazon Web Services.
+    It also declares the dependencies needed to work with AWS services.
+  </description>
+  <packaging>jar</packaging>
+
+  <properties>
+    <file.encoding>UTF-8</file.encoding>
+    <downloadSources>true</downloadSources>
+    <hadoop.tmp.dir>${project.build.directory}/test</hadoop.tmp.dir>
+
+    <!-- are scale tests enabled ? -->
+    <fs.s3a.scale.test.enabled>unset</fs.s3a.scale.test.enabled>
+    <!-- Size in MB of huge files. -->
+    <fs.s3a.scale.test.huge.filesize>unset</fs.s3a.scale.test.huge.filesize>
+    <!-- Size in MB of the partion size in huge file uploads. -->
+    <fs.s3a.scale.test.huge.partitionsize>unset</fs.s3a.scale.test.huge.partitionsize>
+    <!-- Timeout in seconds for scale tests.-->
+    <fs.s3a.scale.test.timeout>3600</fs.s3a.scale.test.timeout>
+
+    <!-- Set a longer timeout for integration test (in milliseconds) -->
+    <test.integration.timeout>200000</test.integration.timeout>
+
+    <!-- stream type to use in tests; passed down in fs.s3a.input.stream.type  -->
+    <stream>classic</stream>
+    <!-- Job ID; allows for parallel jobs on same bucket -->
+    <!-- job.id is used to build the path for tests; default is 00.-->
+    <job.id>00</job.id>
+    <!-- are root tests enabled. Set to false when running parallel jobs on same bucket -->
+    <root.tests.enabled>unset</root.tests.enabled>
+  </properties>
+
+  <profiles>
+    <profile>
+      <id>tests-off</id>
+      <activation>
+        <file>
+          <missing>src/test/resources/auth-keys.xml</missing>
+        </file>
+      </activation>
+      <properties>
+        <skipITs>true</skipITs>
+      </properties>
+    </profile>
+    <profile>
+      <id>tests-on</id>
+      <activation>
+        <file>
+          <exists>src/test/resources/auth-keys.xml</exists>
+        </file>
+      </activation>
+      <properties>
+        <skipITs>false</skipITs>
+      </properties>
+    </profile>
+    <profile>
+      <id>parallel-tests</id>
+      <activation>
+        <property>
+          <name>parallel-tests</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-maven-plugins</artifactId>
+            <executions>
+              <execution>
+                <id>parallel-tests-createdir</id>
+                <goals>
+                  <goal>parallel-tests-createdir</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <forkCount>${testsThreadCount}</forkCount>
+              <reuseForks>false</reuseForks>
+              <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+              <systemPropertyVariables>
+                <testsThreadCount>${testsThreadCount}</testsThreadCount>
+                <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+                <test.unique.fork.id>job-${job.id}-fork-000${surefire.forkNumber}</test.unique.fork.id>
+
+                <!-- Propagate scale parameters -->
+                <fs.s3a.scale.test.enabled>${fs.s3a.scale.test.enabled}</fs.s3a.scale.test.enabled>
+                <fs.s3a.scale.test.huge.filesize>${fs.s3a.scale.test.huge.filesize}</fs.s3a.scale.test.huge.filesize>
+                <fs.s3a.scale.test.huge.huge.partitionsize>${fs.s3a.scale.test.huge.partitionsize}</fs.s3a.scale.test.huge.huge.partitionsize>
+                <fs.s3a.scale.test.timeout>${fs.s3a.scale.test.timeout}</fs.s3a.scale.test.timeout>
+                <!-- Stream Type -->
+                <fs.s3a.input.stream.type>${stream}</fs.s3a.input.stream.type>
+              </systemPropertyVariables>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>default-integration-test</id>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <forkCount>${testsThreadCount}</forkCount>
+                  <reuseForks>false</reuseForks>
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.s3a.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <!-- Tell tests that they are being executed in parallel -->
+                    <test.parallel.execution>true</test.parallel.execution>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+
+                    <!-- Due to a Maven quirk, setting this to just -->
+                    <!-- surefire.forkNumber won't do the parameter -->
+                    <!-- substitution.  Putting a prefix in front of it like -->
+                    <!-- "fork-" makes it work. -->
+                    <test.unique.fork.id>job-${job.id}-fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <!-- Propagate scale parameters -->
+                    <fs.s3a.scale.test.enabled>${fs.s3a.scale.test.enabled}</fs.s3a.scale.test.enabled>
+                    <fs.s3a.scale.test.huge.filesize>${fs.s3a.scale.test.huge.filesize}</fs.s3a.scale.test.huge.filesize>
+                    <fs.s3a.scale.test.huge.huge.partitionsize>${fs.s3a.scale.test.huge.partitionsize}</fs.s3a.scale.test.huge.huge.partitionsize>
+                    <fs.s3a.scale.test.timeout>${fs.s3a.scale.test.timeout}</fs.s3a.scale.test.timeout>
+                    <test.default.timeout>${test.integration.timeout}</test.default.timeout>
+                    <!-- Stream Type -->
+                    <fs.s3a.input.stream.type>${stream}</fs.s3a.input.stream.type>
+                    <!-- are root tests enabled. Set to false when running parallel jobs on same bucket -->
+                    <fs.s3a.root.tests.enabled>${root.tests.enabled}</fs.s3a.root.tests.enabled>
+
+                  </systemPropertyVariables>
+                  <!-- Some tests cannot run in parallel.  Tests that cover -->
+                  <!-- access to the root directory must run in isolation -->
+                  <!-- from anything else that could modify the bucket. -->
+                  <!-- MiniYARNCluster has not yet been -->
+                  <!-- changed to handle parallel test execution gracefully. -->
+                  <!-- Exclude all of these tests from parallel execution, -->
+                  <!-- and instead run them sequentially in a separate -->
+                  <!-- Surefire execution step later. -->
+                  <includes>
+                    <include>**/ITest*.java</include>
+                  </includes>
+                  <excludes>
+                    <exclude>**/ITestS3AContractRootDir.java</exclude>
+                    <exclude>**/ITestS3AFileContextStatistics.java</exclude>
+                    <exclude>**/ITestS3AEncryptionSSEC*.java</exclude>
+                    <exclude>**/ITestS3AHuge*.java</exclude>
+                    <!-- Terasort MR jobs spawn enough processes that they use up all RAM -->
+                    <exclude>**/ITestTerasort*.java</exclude>
+                    <!-- Root marker tool tests -->
+                    <exclude>**/ITestMarkerToolRootOperations.java</exclude>
+                    <!-- leave this until the end for better statistics -->
+                    <exclude>**/ITestAggregateIOStatistics.java</exclude>
+                    <!-- cache file based assertions cannot be properly achieved with parallel
+                         execution, let this be sequential -->
+                    <exclude>**/ITestS3APrefetchingCacheFiles.java</exclude>
+                  </excludes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>sequential-integration-tests</id>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <forkedProcessTimeoutInSeconds>${fs.s3a.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <!-- Tell tests that they are being executed sequentially -->
+                    <test.parallel.execution>false</test.parallel.execution>
+                    <!-- Propagate scale parameters -->
+                    <fs.s3a.scale.test.enabled>${fs.s3a.scale.test.enabled}</fs.s3a.scale.test.enabled>
+                    <fs.s3a.scale.test.huge.filesize>${fs.s3a.scale.test.huge.filesize}</fs.s3a.scale.test.huge.filesize>
+                    <fs.s3a.scale.test.huge.huge.partitionsize>${fs.s3a.scale.test.huge.partitionsize}</fs.s3a.scale.test.huge.huge.partitionsize>
+                    <fs.s3a.scale.test.timeout>${fs.s3a.scale.test.timeout}</fs.s3a.scale.test.timeout>
+                    <!-- Stream Type -->
+                    <fs.s3a.input.stream.type>${stream}</fs.s3a.input.stream.type>
+                    <!-- are root tests enabled. Set to false when running parallel jobs on same bucket -->
+                    <fs.s3a.root.tests.enabled>${root.tests.enabled}</fs.s3a.root.tests.enabled>
+                    <test.unique.fork.id>job-${job.id}</test.unique.fork.id>
+                  </systemPropertyVariables>
+                  <!-- Do a sequential run for tests that cannot handle -->
+                  <!-- parallel execution. -->
+                  <includes>
+                    <include>**/ITestS3AFileContextStatistics.java</include>
+                    <!-- large uploads consuming all bandwidth -->
+                    <include>**/ITestS3AHuge*.java</include>
+                    <!-- SSE encrypted files confuse everything else -->
+                    <include>**/ITestS3AEncryptionSSEC*.java</include>
+                    <!-- the terasort tests both work with a file in the same path in -->
+                    <!--  the local FS. Running them sequentially guarantees isolation -->
+                    <!-- and that they don't conflict with the other MR jobs for RAM -->
+                    <include>**/ITestTerasort*.java</include>
+                    <!-- Root marker tool tests -->
+                    <!-- MUST be run before the other root ops so there's
+                     more likelihood of files in the bucket -->
+                    <include>**/ITestMarkerToolRootOperations.java</include>
+                    <!-- operations on the root dir -->
+                    <include>**/ITestS3AContractRootDir.java</include>
+                    <!-- leave this until the end for better statistics -->
+                    <include>**/ITestAggregateIOStatistics.java</include>
+                    <!-- sequential execution for the better cleanup -->
+                    <include>**/ITestS3APrefetchingCacheFiles.java</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>sequential-tests</id>
+      <activation>
+        <property>
+          <name>!parallel-tests</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <systemPropertyVariables>
+                    <!-- Propagate scale parameters -->
+                    <fs.s3a.scale.test.enabled>${fs.s3a.scale.test.enabled}</fs.s3a.scale.test.enabled>
+                    <fs.s3a.scale.test.huge.filesize>${fs.s3a.scale.test.huge.filesize}</fs.s3a.scale.test.huge.filesize>
+                    <fs.s3a.scale.test.timeout>${fs.s3a.scale.test.timeout}</fs.s3a.scale.test.timeout>
+                    <!-- Stream Type -->
+                    <fs.s3a.input.stream.type>${stream}</fs.s3a.input.stream.type>
+                    <test.unique.fork.id>job-${job.id}</test.unique.fork.id>
+                  </systemPropertyVariables>
+                  <forkedProcessTimeoutInSeconds>${fs.s3a.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!-- Turn on scale tests-->
+    <profile>
+      <id>scale</id>
+      <activation>
+        <property>
+          <name>scale</name>
+        </property>
+      </activation>
+      <properties >
+        <fs.s3a.scale.test.enabled>true</fs.s3a.scale.test.enabled>
+      </properties>
+    </profile>
+
+    <!-- Turn on prefetching-->
+    <profile>
+      <id>prefetch</id>
+      <activation>
+        <property>
+          <name>prefetch</name>
+        </property>
+      </activation>
+      <properties>
+        <stream>prefetch</stream>
+      </properties>
+    </profile>
+
+    <!-- Switch to the analytics input stream-->
+    <profile>
+      <id>analytics</id>
+      <activation>
+        <property>
+          <name>analytics</name>
+        </property>
+      </activation>
+      <properties>
+        <stream>analytics</stream>
+      </properties>
+    </profile>
+
+  </profiles>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <configuration>
+          <xmlOutput>true</xmlOutput>
+          <excludeFilterFile>${basedir}/dev-support/findbugs-exclude.xml
+          </excludeFilterFile>
+          <effort>Max</effort>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <forkedProcessTimeoutInSeconds>3600</forkedProcessTimeoutInSeconds>
+          <systemPropertyVariables>
+            <test.default.timeout>${test.integration.timeout}</test.default.timeout>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>deplist1</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>list</goal>
+            </goals>
+            <configuration>
+              <!-- build a shellprofile for hadoop-aws optional tools -->
+              <outputFile>${project.basedir}/target/hadoop-tools-deps/${project.artifactId}.tools-optional.txt</outputFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeScope>test</includeScope>
+              <includeTypes>so,dll,dylib</includeTypes>
+              <outputDirectory>${project.build.directory}/native-libs</outputDirectory>
+            </configuration>
+          </execution>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/lib</outputDirectory>
+            </configuration>
+          </execution>
+          <execution>
+            <id>deplist2</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>list</goal>
+            </goals>
+            <configuration>
+              <!-- referenced by the s3guard command -->
+              <outputFile>${project.basedir}/target/hadoop-tools-deps/${project.artifactId}.tools-builtin.txt</outputFile>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>banned-illegal-imports</id>
+            <phase>process-sources</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <restrictImports>
+                  <includeTestCode>false</includeTestCode>
+                  <reason>Restrict mapreduce imports to committer code</reason>
+                  <exclusions>
+                    <exclusion>org.apache.hadoop.fs.s3a.commit.AbstractS3ACommitter</exclusion>
+                    <exclusion>org.apache.hadoop.fs.s3a.commit.AbstractS3ACommitterFactory</exclusion>
+                    <exclusion>org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory</exclusion>
+                    <exclusion>org.apache.hadoop.fs.s3a.commit.impl.*</exclusion>
+                    <exclusion>org.apache.hadoop.fs.s3a.commit.magic.*</exclusion>
+                    <exclusion>org.apache.hadoop.fs.s3a.commit.staging.*</exclusion>
+                  </exclusions>
+                  <bannedImports>
+                    <bannedImport>org.apache.hadoop.mapreduce.**</bannedImport>
+                    <bannedImport>org.apache.hadoop.mapred.**</bannedImport>
+                  </bannedImports>
+                </restrictImports>
+                <restrictImports>
+                  <includeTestCode>false</includeTestCode>
+                  <reason>Restrict encryption client imports to encryption client factory</reason>
+                  <exclusions>
+                    <exclusion>org.apache.hadoop.fs.s3a.impl.EncryptionS3ClientFactory</exclusion>
+                  </exclusions>
+                  <bannedImports>
+                    <bannedImport>software.amazon.encryption.s3.**</bannedImport>
+                  </bannedImports>
+                </restrictImports>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+      <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>javax.servlet</groupId>
+          <artifactId>servlet-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>javax.enterprise</groupId>
+          <artifactId>cdi-api</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+
+    <!-- The v1 SDK is used at compilation time for adapter classes in
+         org.apache.hadoop.fs.s3a.adapter. It is not needed at runtime
+         unless a non-standard v1 credential provider is declared. -->
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>bundle</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.encryption.s3</groupId>
+      <artifactId>amazon-s3-encryption-client-java</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.s3.analyticsaccelerator</groupId>
+      <artifactId>analyticsaccelerator-s3</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.wildfly.openssl</groupId>
+      <artifactId>wildfly-openssl</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-inline</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-server-tests</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+       <artifactId>hadoop-mapreduce-client-hs</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-examples</artifactId>
+      <scope>test</scope>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+      <exclusions>
+        <exclusion>
+          <groupId>org.ow2.asm</groupId>
+          <artifactId>asm-commons</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-distcp</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-distcp</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+    <!-- artifacts needed to bring up a Mini MR Yarn cluster-->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-app</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-app</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest-library</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Used to create SSL certs for a secure Keystore -->
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-launcher</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+  <groupId>org.apache.hadoop</groupId>
+  <artifactId>hadoop-client-api</artifactId>
+  <versioning>
+    <versions>
+      <version>3.5.0-SNAPSHOT</version>
+    </versions>
+    <lastUpdated>20250916091430</lastUpdated>
+  </versioning>
+</metadata>

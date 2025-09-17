@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata modelVersion="1.1.0">
+  <groupId>org.apache.hadoop</groupId>
+  <artifactId>hadoop-client-api</artifactId>
+  <version>3.5.0-SNAPSHOT</version>
+  <versioning>
+    <snapshot>
+      <localCopy>true</localCopy>
+    </snapshot>
+    <lastUpdated>20250916091430</lastUpdated>
+    <snapshotVersions>
+      <snapshotVersion>
+        <extension>jar</extension>
+        <value>3.5.0-SNAPSHOT</value>
+        <updated>20250916091430</updated>
+      </snapshotVersion>
+      <snapshotVersion>
+        <extension>pom</extension>
+        <value>3.5.0-SNAPSHOT</value>
+        <updated>20250916091430</updated>
+      </snapshotVersion>
+    </snapshotVersions>
+  </versioning>
+</metadata>
