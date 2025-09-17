@@ -85,12 +85,6 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     // Extract the query string from the queryParam expression
     val sqlString = extractQueryString(sqlStmtStr)
 
-    // Parse and validate the query (skip for parameterized queries to avoid parsing errors)
-    if (args.isEmpty) {
-      val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlString)
-      validateQuery(sqlString, parsedPlan)
-    }
-
     // Create the origin for EXECUTE IMMEDIATE context - this will be used by expressions
     // during parsing to set their queryContext, similar to how views work
     val executeImmediateOrigin = Origin(
@@ -102,22 +96,33 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     )
 
     // Execute the query recursively with isolated local variable context and EXECUTE IMMEDIATE
-    // origin
+    // origin. The isolation must cover parsing, analysis, and execution phases.
     // CurrentOrigin.withOrigin ensures expressions created during parsing get the proper context
-    val result = CurrentOrigin.withOrigin(executeImmediateOrigin) {
-      if (args.isEmpty) {
-        // No parameters - execute directly
-        withIsolatedLocalVariableContext {
-          sparkSession.sql(sqlString)
+    val result = withIsolatedLocalVariableContext {
+      CurrentOrigin.withOrigin(executeImmediateOrigin) {
+        // Parse and validate the query inside the isolation context to ensure
+        // local variables are not accessible during parsing
+        if (args.isEmpty) {
+          val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlString)
+          validateQuery(sqlString, parsedPlan)
         }
-      } else {
-        // For parameterized queries, build parameter arrays
-        val (paramValues, paramNames) = buildUnifiedParameters(args)
 
-        withIsolatedLocalVariableContext {
+        val df = if (args.isEmpty) {
+          // No parameters - execute directly
+          sparkSession.sql(sqlString)
+        } else {
+          // For parameterized queries, build parameter arrays
+          val (paramValues, paramNames) = buildUnifiedParameters(args)
+
           sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
             .sql(sqlString, paramValues, paramNames)
         }
+
+        // Force analysis to happen within the isolated context to ensure local variables
+        // are not accessible. This is critical because DataFrames are lazy and analysis
+        // would otherwise happen outside the isolation context.
+        df.queryExecution.analyzed
+        df
       }
     }
 

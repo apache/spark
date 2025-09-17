@@ -44,7 +44,7 @@ case class PositionalParameterContext(params: Seq[Expression]) extends Parameter
  * Context that supports both named and positional parameters.
  * This is used by EXECUTE IMMEDIATE where the parameter type is determined by the inner query.
  *
- * @param args Raw argument values from USING clause
+ * @param args Raw argument values from USING clause (already evaluated)
  * @param paramNames Parameter names from USING clause (empty strings for positional)
  */
 case class HybridParameterContext(

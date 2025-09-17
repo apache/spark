@@ -620,9 +620,12 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = if (args.nonEmpty) {
-          // For EXECUTE IMMEDIATE, provide both named and positional parameters since the inner
-          // query determines which type to use. The preparser will choose the appropriate type.
-          val paramContext = HybridParameterContext(args, paramNames)
+          // For EXECUTE IMMEDIATE, evaluate any expressions (including local variable references)
+          // in the outer context before passing to the isolated inner query execution
+          val evaluatedArgs = args.map { arg =>
+            lit(arg).expr.eval()  // This evaluates local variables in the outer context
+          }
+          val paramContext = HybridParameterContext(evaluatedArgs, paramNames)
 
           ThreadLocalParameterContext.withContext(paramContext) {
             val parsed = sessionState.sqlParser.parsePlan(sqlText)
