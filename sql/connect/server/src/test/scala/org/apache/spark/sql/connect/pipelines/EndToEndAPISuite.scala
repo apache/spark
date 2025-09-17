@@ -29,7 +29,7 @@ import org.apache.spark.sql.pipelines.utils.{APITest, PipelineReference, Pipelin
 case class PipelineReferenceImpl(executionProcess: Process) extends PipelineReference
 
 /**
- * End-to-end test suite for the Spark Data Pipelines API using the CLI.
+ * End-to-end test suite for the Spark Declarative Pipelines API using the CLI.
  *
  * This suite creates a temporary directory for each test case, writes the necessary pipeline
  * specification and source files, and invokes the CLI as a separate process.
