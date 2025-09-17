@@ -519,28 +519,28 @@ class SparkDeclarativePipelinesServerSuite
 
   private val defineDatasetCustomTests = Seq(
     DefineDatasetTestCase(
-      "TEMPORARY_VIEW",
-      DatasetType.TEMPORARY_VIEW,
-      "tv",
-      "custom_catalog",
-      "custom_db",
-      "`tv`"
+      name = "TEMPORARY_VIEW",
+      datasetType = DatasetType.TEMPORARY_VIEW,
+      datasetName = "tv",
+      defaultCatalog = "custom_catalog",
+      defaultDatabase = "custom_db",
+      expectedResolvedName = "`tv`"
     ),
     DefineDatasetTestCase(
-      "TABLE",
-      DatasetType.TABLE,
-      "tb",
-      "my_catalog",
-      "my_db",
-      "`my_catalog`.`my_db`.`tb`"
+      name = "TABLE",
+      datasetType = DatasetType.TABLE,
+      datasetName = "tb",
+      defaultCatalog = "my_catalog",
+      defaultDatabase = "my_db",
+      expectedResolvedName = "`my_catalog`.`my_db`.`tb`"
     ),
     DefineDatasetTestCase(
-      "MV",
-      DatasetType.MATERIALIZED_VIEW,
-      "mv",
-      "another_catalog",
-      "another_db",
-      "`another_catalog`.`another_db`.`mv`"
+      name = "MV",
+      datasetType = DatasetType.MATERIALIZED_VIEW,
+      datasetName = "mv",
+      defaultCatalog = "another_catalog",
+      defaultDatabase = "another_db",
+      expectedResolvedName = "`another_catalog`.`another_db`.`mv`"
     )
   ).map(tc => tc.name -> tc).toMap
 
@@ -615,39 +615,39 @@ class SparkDeclarativePipelinesServerSuite
 
   private val defineFlowDefaultTests = Seq(
     DefineFlowTestCase(
-      "MV",
-      DatasetType.MATERIALIZED_VIEW,
-      "mv",
-      "spark_catalog",
-      "default",
-      "`spark_catalog`.`default`.`mv`"
+      name = "MV",
+      datasetType = DatasetType.MATERIALIZED_VIEW,
+      flowName = "mv",
+      defaultCatalog = "spark_catalog",
+      defaultDatabase = "default",
+      expectedResolvedName = "`spark_catalog`.`default`.`mv`"
     ),
     DefineFlowTestCase(
-      "TV",
-      DatasetType.TEMPORARY_VIEW,
-      "tv",
-      "spark_catalog",
-      "default",
-      "`tv`"
+      name = "TV",
+      datasetType = DatasetType.TEMPORARY_VIEW,
+      flowName = "tv",
+      defaultCatalog = "spark_catalog",
+      defaultDatabase = "default",
+      expectedResolvedName = "`tv`"
     )
   ).map(tc => tc.name -> tc).toMap
 
   private val defineFlowCustomTests = Seq(
     DefineFlowTestCase(
-      "MV custom",
-      DatasetType.MATERIALIZED_VIEW,
-      "mv",
-      "custom_catalog",
-      "custom_db",
-      "`custom_catalog`.`custom_db`.`mv`"
+      name = "MV custom",
+      datasetType = DatasetType.MATERIALIZED_VIEW,
+      flowName = "mv",
+      defaultCatalog = "custom_catalog",
+      defaultDatabase = "custom_db",
+      expectedResolvedName = "`custom_catalog`.`custom_db`.`mv`"
     ),
     DefineFlowTestCase(
-      "TV custom",
-      DatasetType.TEMPORARY_VIEW,
-      "TempA",
-      "custom_catalog",
-      "custom_db",
-      "`TempA`"
+      name = "TV custom",
+      datasetType = DatasetType.TEMPORARY_VIEW,
+      flowName = "tv",
+      defaultCatalog = "custom_catalog",
+      defaultDatabase = "custom_db",
+      expectedResolvedName = "`tv`"
     )
   ).map(tc => tc.name -> tc).toMap
 
