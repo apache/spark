@@ -24,6 +24,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class ArrowUDTFParityTests(ArrowUDTFTestsMixin, ReusedConnectTestCase):
     pass
 
+
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.arrow.test_parity_arrow_udtf import *  # noqa: F401
 
