@@ -1135,7 +1135,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
   }
 
   Seq("true", "false").foreach { sideCharPadding =>
-    test(s"ES-1560144: file metadata in streaming with char type, " +
+    test(s"SPARK-53625: file metadata in streaming with char type, " +
       s"sideCharPadding=$sideCharPadding") {
       withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> sideCharPadding) {
         withTempDir { dir =>
