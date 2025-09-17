@@ -892,8 +892,8 @@ private class BufferedRowsReader(
             if (arrayData == null) {
               null
             } else {
-              extractArrayValue(arrayData, elementType,
-                readSchema.fields(readIndex).dataType)
+              val writeType = writeSchema.fields(writeIndex).dataType.asInstanceOf[ArrayType]
+              extractArrayValue(arrayData, elementType, writeType.elementType)
             }
 
           case dt =>
