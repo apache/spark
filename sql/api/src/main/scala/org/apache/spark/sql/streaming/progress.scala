@@ -22,6 +22,7 @@ import java.lang.{Long => JLong}
 import java.util.UUID
 
 import scala.jdk.CollectionConverters._
+import scala.math.BigDecimal.RoundingMode
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -35,7 +36,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDoubleToJValue, safeMapToJValue}
+import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDecimalToJValue, safeMapToJValue}
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
@@ -183,8 +184,8 @@ class StreamingQueryProgress private[spark] (
       ("batchId" -> JInt(batchId)) ~
       ("batchDuration" -> JInt(batchDuration)) ~
       ("numInputRows" -> JInt(numInputRows)) ~
-      ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
-      ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
+      ("inputRowsPerSecond" -> safeDecimalToJValue(inputRowsPerSecond)) ~
+      ("processedRowsPerSecond" -> safeDecimalToJValue(processedRowsPerSecond)) ~
       ("durationMs" -> safeMapToJValue[JLong](durationMs, v => JInt(v.toLong))) ~
       ("eventTime" -> safeMapToJValue[String](eventTime, s => JString(s))) ~
       ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
@@ -255,8 +256,8 @@ class SourceProgress protected[spark] (
       ("endOffset" -> tryParse(endOffset)) ~
       ("latestOffset" -> tryParse(latestOffset)) ~
       ("numInputRows" -> JInt(numInputRows)) ~
-      ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
-      ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
+      ("inputRowsPerSecond" -> safeDecimalToJValue(inputRowsPerSecond)) ~
+      ("processedRowsPerSecond" -> safeDecimalToJValue(processedRowsPerSecond)) ~
       ("metrics" -> safeMapToJValue[String](metrics, s => JString(s)))
   }
 
@@ -316,6 +317,8 @@ private[sql] object SinkProgress {
 }
 
 private object SafeJsonSerializer {
+
+  /** Convert Double to JValue while handling empty or infinite values */
   def safeDoubleToJValue(value: Double): JValue = {
     if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
   }
@@ -325,5 +328,11 @@ private object SafeJsonSerializer {
     if (map == null || map.isEmpty) return JNothing
     val keys = map.asScala.keySet.toSeq.sorted
     keys.map { k => k -> valueToJValue(map.get(k)): JObject }.reduce(_ ~ _)
+  }
+
+  /** Convert BigDecimal to JValue while handling empty or infinite values */
+  def safeDecimalToJValue(value: Double): JValue = {
+    if (value.isNaN || value.isInfinity) JNothing
+    else JDecimal(BigDecimal(value).setScale(1, RoundingMode.HALF_UP))
   }
 }

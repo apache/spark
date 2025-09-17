@@ -306,6 +306,7 @@ try:
             "pyspark.pandas.spark",
             "pyspark.pandas.typedef",
             "pyspark.pandas.usage_logging",
+            "pyspark.pipelines",
             "pyspark.python.pyspark",
             "pyspark.python.lib",
             "pyspark.testing",

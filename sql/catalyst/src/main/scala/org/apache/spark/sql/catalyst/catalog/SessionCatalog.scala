@@ -268,7 +268,8 @@ class SessionCatalog(
 
   private def requireTableExists(name: TableIdentifier): Unit = {
     if (!tableExists(name)) {
-      throw new NoSuchTableException(db = name.database.get, table = name.table)
+      throw new NoSuchTableException(
+        Seq(name.catalog.get, name.database.get, name.table))
     }
   }
 
@@ -1936,7 +1937,7 @@ class SessionCatalog(
       }
 
     NamedParametersSupport.defaultRearrange(
-      FunctionSignature(paramNames), expressions, functionName)
+      FunctionSignature(paramNames), expressions, functionName, SQLConf.get.resolver)
   }
 
   /**

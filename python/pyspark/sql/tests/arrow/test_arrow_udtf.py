@@ -699,6 +699,37 @@ class ArrowUDTFTestsMixin:
         expected_df = self.spark.createDataFrame([(60, 180)], "computed_value int, multiplied int")
         assertDataFrameEqual(result_df, expected_df)
 
+    def test_arrow_udtf_with_named_arguments(self):
+        @arrow_udtf(returnType="x int, y int, sum int")
+        class NamedArgsUDTF:
+            def eval(self, x: "pa.Array", y: "pa.Array") -> Iterator["pa.Table"]:
+                assert isinstance(x, pa.Array), f"Expected pa.Array, got {type(x)}"
+                assert isinstance(y, pa.Array), f"Expected pa.Array, got {type(y)}"
+
+                x_val = x[0].as_py()
+                y_val = y[0].as_py()
+                result_table = pa.table(
+                    {
+                        "x": pa.array([x_val], type=pa.int32()),
+                        "y": pa.array([y_val], type=pa.int32()),
+                        "sum": pa.array([x_val + y_val], type=pa.int32()),
+                    }
+                )
+                yield result_table
+
+        # Test SQL registration and usage with named arguments
+        self.spark.udtf.register("named_args_udtf", NamedArgsUDTF)
+
+        # Test with named arguments in SQL
+        sql_result_df = self.spark.sql("SELECT * FROM named_args_udtf(y => 10, x => 5)")
+        expected_df = self.spark.createDataFrame([(5, 10, 15)], "x int, y int, sum int")
+        assertDataFrameEqual(sql_result_df, expected_df)
+
+        # Test with mixed positional and named arguments
+        sql_result_df2 = self.spark.sql("SELECT * FROM named_args_udtf(7, y => 3)")
+        expected_df2 = self.spark.createDataFrame([(7, 3, 10)], "x int, y int, sum int")
+        assertDataFrameEqual(sql_result_df2, expected_df2)
+
 
 class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
     pass

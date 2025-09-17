@@ -252,9 +252,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 44,
-    "stopIndex" : 44,
-    "fragment" : "y"
+    "startIndex" : 23,
+    "stopIndex" : 66,
+    "fragment" : "(select sum(y2) from y where xm[y2] = ym[1])"
   } ]
 }
 
@@ -283,9 +283,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 44,
-    "stopIndex" : 44,
-    "fragment" : "y"
+    "startIndex" : 23,
+    "stopIndex" : 65,
+    "fragment" : "(select sum(y2) from y where xm[1] = ym[1])"
   } ]
 }
 

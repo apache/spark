@@ -20,6 +20,8 @@ package org.apache.spark.sql.connect.planner
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.ToLiteralProtoOptions
@@ -51,7 +53,11 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     }
   }
 
-  Seq(
+  // The goal of this test is to check that converting a Scala value -> Proto -> Catalyst value
+  // is equivalent to converting a Scala value directly to a Catalyst value.
+  Seq[(Any, DataType)](
+    (Array[String](null, "a", null), ArrayType(StringType)),
+    (Map[String, String]("a" -> null, "b" -> null), MapType(StringType, StringType)),
     (
       (1, "string", true),
       StructType(
@@ -76,7 +82,6 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
             "b",
             StructType(Seq(StructField("c", IntegerType), StructField("d", IntegerType))))))),
     (Array(true, false, true), ArrayType(BooleanType)),
-    (Array(1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType)),
     (Array(1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType)),
     (Array(1, 2, 3), ArrayType(IntegerType)),
     (Array(1L, 2L, 3L), ArrayType(LongType)),
@@ -87,15 +92,16 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     (
       Array(Array(Array(Array(Array(Array(1, 2, 3)))))),
       ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(IntegerType))))))),
-    (Array(Map(1 -> 2)), ArrayType(MapType(IntegerType, IntegerType))),
     (Map[String, String]("1" -> "2", "3" -> "4"), MapType(StringType, StringType)),
     (Map[String, Boolean]("1" -> true, "2" -> false), MapType(StringType, BooleanType)),
     (Map[Int, Int](), MapType(IntegerType, IntegerType)),
     (Map(1 -> 2, 3 -> 4, 5 -> 6), MapType(IntegerType, IntegerType))).zipWithIndex.foreach {
     case ((v, t), idx) =>
+      val convert = CatalystTypeConverters.createToCatalystConverter(t)
+      val expected = expressions.Literal(convert(v), t)
       test(s"complex proto value and catalyst value conversion #$idx") {
-        assertResult(v)(
-          LiteralValueProtoConverter.toScalaValue(
+        assertResult(expected)(
+          LiteralExpressionProtoConverter.toCatalystExpression(
             LiteralValueProtoConverter.toLiteralProtoWithOptions(
               v,
               Some(t),
@@ -103,8 +109,8 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
       }
 
       test(s"complex proto value and catalyst value conversion #$idx - backward compatibility") {
-        assertResult(v)(
-          LiteralValueProtoConverter.toScalaValue(
+        assertResult(expected)(
+          LiteralExpressionProtoConverter.toCatalystExpression(
             LiteralValueProtoConverter.toLiteralProtoWithOptions(
               v,
               Some(t),
@@ -186,12 +192,12 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     val result = LiteralValueProtoConverter.toScalaStruct(structProto.getStruct)
     val resultType = LiteralValueProtoConverter.getProtoStructType(structProto.getStruct)
 
-    // Verify the result is a tuple with correct values
-    assert(result.isInstanceOf[Product])
-    val product = result.asInstanceOf[Product]
-    assert(product.productArity == 2)
-    assert(product.productElement(0) == 1)
-    assert(product.productElement(1) == "test")
+    // Verify the result is a GenericRowWithSchema with correct values
+    assert(result.isInstanceOf[GenericRowWithSchema])
+    val row = result.asInstanceOf[GenericRowWithSchema]
+    assert(row.length == 2)
+    assert(row.get(0) == 1)
+    assert(row.get(1) == "test")
 
     // Verify the returned struct type matches the original
     assert(resultType.getFieldsCount == 2)
