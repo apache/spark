@@ -217,6 +217,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
             for i in range(batch.num_columns):
                 if i in self.table_arg_offsets:
                     struct = batch.column(i)
+                    # Flatten the struct and create a RecordBatch from it
                     flattened_batch = pa.RecordBatch.from_arrays(
                         struct.flatten(), schema=pa.schema(struct.type)
                     )
