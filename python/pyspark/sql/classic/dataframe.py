@@ -1945,9 +1945,12 @@ def _test() -> None:
 
     try:
         import pandas as pd
+        import pyarrow as pa
     except Exception:
-        del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
         del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.classic.dataframe tests").getOrCreate()
