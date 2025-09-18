@@ -2304,6 +2304,7 @@ def _test() -> None:
     from pyspark.util import is_remote_only
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.dataframe
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.
@@ -2315,10 +2316,7 @@ def _test() -> None:
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
 
-    try:
-        import pandas as pd
-        import pyarrow as pa
-    except Exception:
+    if not have_pandas or not have_pyarrow:
         del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
         del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
         del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
