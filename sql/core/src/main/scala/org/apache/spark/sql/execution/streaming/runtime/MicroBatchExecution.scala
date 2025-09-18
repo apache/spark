@@ -802,9 +802,7 @@ class MicroBatchExecution(
           }
           val finalDataPlan = dataPlan transformUp {
             // SPARK-53625: Propagate metadata columns through Projects
-            case p: Project if sparkSession.sessionState.conf.getConf(
-              SQLConf.STREAMING_PROJECT_METADATA_COLS_ENABLED)
-              && hasFileMetadata =>
+            case p: Project if hasFileMetadata =>
               // Check if there is any metadata fields not in the output list
               val newMetadata = p.metadataOutput.filterNot(p.outputSet.contains)
               if (newMetadata.nonEmpty) {

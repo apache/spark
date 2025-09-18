@@ -6322,14 +6322,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STREAMING_PROJECT_METADATA_COLS_ENABLED =
-    buildConf("spark.sql.streaming.projectMetadataCols.enabled")
-      .internal()
-      .doc("Whether to propagate metadata cols through projections for streaming queries.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
   /**
    * Holds information about keys that have been deprecated.
    *

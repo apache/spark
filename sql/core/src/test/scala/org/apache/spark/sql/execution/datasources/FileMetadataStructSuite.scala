@@ -1147,7 +1147,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           val charSchemaStruct = new StructType()
             .add(StructField("char_col", StringType, metadata = metadata))
 
-          val data: Seq[Row] = Seq(Row("A"), Row("B"))
+          val data = Seq(Row("A"), Row("B"))
           val df = spark.createDataFrame(data.asJava, charSchemaStruct)
           df.coalesce(1).write.format("json")
             .save(dir.getCanonicalPath + "/source/new-streaming-data")
