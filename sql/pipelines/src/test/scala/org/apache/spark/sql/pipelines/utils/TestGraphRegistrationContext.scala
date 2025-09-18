@@ -199,7 +199,7 @@ class TestGraphRegistrationContext(
       database: Option[String] = None
   ): Unit = {
 
-    val viewIdentifier = GraphIdentifierManager
+    val tempViewIdentifier = GraphIdentifierManager
       .parseAndValidateTemporaryViewIdentifier(rawViewIdentifier = TableIdentifier(name))
 
     val persistedViewIdentifier = GraphIdentifierManager
@@ -209,8 +209,8 @@ class TestGraphRegistrationContext(
         currentDatabase = Some(defaultDatabase)
       )
 
-    val viewIdentifier2: TableIdentifier = viewType match {
-      case LocalTempView => viewIdentifier
+    val viewIdentifier: TableIdentifier = viewType match {
+      case LocalTempView => tempViewIdentifier
       case _ => persistedViewIdentifier
     }
 
@@ -218,14 +218,14 @@ class TestGraphRegistrationContext(
       viewType match {
         case LocalTempView =>
           TemporaryView(
-            identifier = viewIdentifier2,
+            identifier = viewIdentifier,
             comment = comment,
             origin = origin,
             properties = Map.empty
           )
         case _ =>
           PersistedView(
-            identifier = viewIdentifier2,
+            identifier = viewIdentifier,
             comment = comment,
             origin = origin,
             properties = Map.empty
@@ -235,31 +235,24 @@ class TestGraphRegistrationContext(
 
     val flowWritesToView = getViews()
         .filter(_.isInstanceOf[TemporaryView])
-        .exists(_.identifier == viewIdentifier2)
+        .exists(_.identifier == viewIdentifier)
 
     // If the flow is created implicitly as part of defining a view, then we do not
     // qualify the flow identifier and the flow destination. This is because views are
     // not permitted to have multipart
-    val isImplicitFlow = viewIdentifier2 == viewIdentifier2
-    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
-    val Seq(flowIdentifier, flowDestinationIdentifier) =
-      Seq(viewIdentifier2, viewIdentifier2).map { rawIdentifier =>
-        if (isImplicitFlowForTempView) {
-          rawIdentifier
-        } else {
-          GraphIdentifierManager
-            .parseAndQualifyFlowIdentifier(
-              rawFlowIdentifier = rawIdentifier,
-              currentCatalog = Some(defaultCatalog),
-              currentDatabase = Some(defaultDatabase))
-            .identifier
-        }
-      }
+    val flowIdentifier = {
+      if (flowWritesToView) viewIdentifier
+      else GraphIdentifierManager.parseAndQualifyFlowIdentifier(
+        rawFlowIdentifier = viewIdentifier,
+        currentCatalog = Some(defaultCatalog),
+        currentDatabase = Some(defaultDatabase))
+        .identifier
+    }
 
     registerFlow(
       new UnresolvedFlow(
         identifier = flowIdentifier,
-        destinationIdentifier = flowDestinationIdentifier,
+        destinationIdentifier = flowIdentifier,
         func = query,
         queryContext = QueryContext(
           currentCatalog = catalog.orElse(Some(defaultCatalog)),
