@@ -1,0 +1,4 @@
+#NOTE: This is a Maven Resolver internal implementation file, its format can be changed without prior notice.
+#Tue Sep 16 09:21:19 UTC 2025
+hadoop-client-minicluster-3.5.0-SNAPSHOT.jar>=
+hadoop-client-minicluster-3.5.0-SNAPSHOT.pom>=
