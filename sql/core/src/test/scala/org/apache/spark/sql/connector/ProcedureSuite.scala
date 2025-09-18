@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpr
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DataTypes, IntegerType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -65,6 +66,24 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   test("named arguments") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
     checkAnswer(sql("CALL cat.ns.sum(in2 => 3, in1 => 5)"), Row(8) :: Nil)
+  }
+
+  test("SPARK-53523: named arguments respect spark.sql.caseSensitive") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    withSQLConf(CASE_SENSITIVE.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("CALL cat.ns.sum(IN1 => 3, in2 => 5)")
+        ),
+        condition = "UNRECOGNIZED_PARAMETER_NAME",
+        parameters = Map(
+          "routineName" -> toSQLId("sum"),
+          "argumentName" -> toSQLId("IN1"),
+          "proposal" -> (toSQLId("in1") + " " + toSQLId("in2"))))
+    }
+    withSQLConf(CASE_SENSITIVE.key -> "false") {
+      checkAnswer(sql("CALL cat.ns.sum(IN1 => 3, in2 => 5)"), Row(8) :: Nil)
+    }
   }
 
   test("position and named arguments") {
