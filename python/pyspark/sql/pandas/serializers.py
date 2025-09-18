@@ -1689,6 +1689,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         safecheck,
         assign_cols_by_name,
         arrow_max_records_per_batch,
+        arrow_max_bytes_per_batch,
         int_to_decimal_coercion_enabled,
     ):
         super(TransformWithStateInPandasInitStateSerializer, self).__init__(
@@ -1696,6 +1697,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             safecheck,
             assign_cols_by_name,
             arrow_max_records_per_batch,
+            arrow_max_bytes_per_batch,
             int_to_decimal_coercion_enabled,
         )
         self.init_key_offsets = None
