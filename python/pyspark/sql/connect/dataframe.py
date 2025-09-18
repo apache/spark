@@ -22,6 +22,7 @@ from pyspark.errors.exceptions.base import (
     PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
+from pyspark.sql.connect.expressions import DirectShufflePartitionID
 from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.utils import check_dependencies
 
@@ -446,6 +447,7 @@ class DataFrame(ParentDataFrame):
     def repartitionById(
         self, numPartitions: int, partitionIdCol: "ColumnOrName"
     ) -> ParentDataFrame:
+        from pyspark.sql.connect.column import Column as ConnectColumn
         if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
             raise PySparkTypeError(
                 errorClass="NOT_INT",
@@ -463,9 +465,9 @@ class DataFrame(ParentDataFrame):
                 },
             )
 
-        from pyspark.sql.connect.expressions import DirectShufflePartitionID, Expression
-        direct_partition_col = DirectShufflePartitionID(F._to_col(partitionIdCol)._expr)
-
+        partition_connect_col = cast(ConnectColumn, F._to_col(partitionIdCol))
+        direct_partition_expr = DirectShufflePartitionID(partition_connect_col._expr)
+        direct_partition_col = ConnectColumn(direct_partition_expr)
         res = DataFrame(
             plan.RepartitionByExpression(self._plan, numPartitions, [direct_partition_col]),
             self._session,
