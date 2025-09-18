@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.util.ExpressionToSqlConverter
+import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
 import org.apache.spark.sql.types._
 
 /**
@@ -91,32 +91,67 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     assert(result2 === "SELECT 1")
   }
 
-  test("ExpressionToSqlConverter - basic literals") {
-    assert(ExpressionToSqlConverter.convert(Literal(42)) === "42")
-    assert(ExpressionToSqlConverter.convert(Literal("hello")) === "'hello'")
-    assert(ExpressionToSqlConverter.convert(Literal(true)) === "TRUE")
-    assert(ExpressionToSqlConverter.convert(Literal(null, StringType)) === "NULL")
+  test("LiteralToSqlConverter - basic literals") {
+    assert(LiteralToSqlConverter.convert(Literal(42)) === "42")
+    assert(LiteralToSqlConverter.convert(Literal("hello")) === "'hello'")
+    assert(LiteralToSqlConverter.convert(Literal(true)) === "true")
+    assert(LiteralToSqlConverter.convert(Literal(null, StringType)) === "NULL")
   }
 
-  test("ExpressionToSqlConverter - string escaping") {
-    assert(ExpressionToSqlConverter.convert(Literal("it's")) === "'it''s'")
-    assert(ExpressionToSqlConverter.convert(Literal("'quoted'")) === "'''quoted'''")
+  test("LiteralToSqlConverter - string escaping") {
+    assert(LiteralToSqlConverter.convert(Literal("it's")) === "'it''s'")
+    assert(LiteralToSqlConverter.convert(Literal("'quoted'")) === "'''quoted'''")
   }
 
-  test("ExpressionToSqlConverter - array literals") {
+  test("LiteralToSqlConverter - array literals") {
     val arrayData = Array(1, 2, 3)
     val arrayLiteral = Literal.create(arrayData, ArrayType(IntegerType))
-    val result = ExpressionToSqlConverter.convert(arrayLiteral)
+    val result = LiteralToSqlConverter.convert(arrayLiteral)
     assert(result === "ARRAY(1, 2, 3)")
   }
 
-  test("ExpressionToSqlConverter - map literals") {
+  test("LiteralToSqlConverter - map literals") {
     val mapData = Map("key1" -> "value1", "key2" -> "value2")
     val mapLiteral = Literal.create(mapData, MapType(StringType, StringType))
-    val result = ExpressionToSqlConverter.convert(mapLiteral)
+    val result = LiteralToSqlConverter.convert(mapLiteral)
     assert(result.startsWith("MAP("))
     assert(result.contains("'key1', 'value1'"))
     assert(result.contains("'key2', 'value2'"))
+  }
+
+  test("LiteralToSqlConverter - handles complex data types") {
+    // Test with more complex data types to ensure comprehensive support
+
+    // Test with nested array
+    val nestedArrayData = Array(Array(1, 2), Array(3, 4))
+    val nestedArrayLit = Literal.create(nestedArrayData, ArrayType(ArrayType(IntegerType)))
+    val nestedResult = LiteralToSqlConverter.convert(nestedArrayLit)
+    assert(nestedResult.startsWith("ARRAY("))
+    assert(nestedResult.contains("ARRAY(1, 2)"))
+    assert(nestedResult.contains("ARRAY(3, 4)"))
+
+    // Test with null values
+    val nullLit = Literal.create(null, StringType)
+    assert(LiteralToSqlConverter.convert(nullLit) === "NULL")
+  }
+
+  test("LiteralToSqlConverter - handles foldable expressions") {
+    import org.apache.spark.sql.catalyst.expressions.Add
+
+    // Test with a foldable expression (should evaluate and convert)
+    val addExpr = Add(Literal(1), Literal(2))
+    val result = LiteralToSqlConverter.convert(addExpr)
+    assert(result === "3")
+
+    // Test with non-foldable expression (should throw error)
+    import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+    val columnRef = UnresolvedAttribute("myColumn")
+    val exception = intercept[SparkException] {
+      LiteralToSqlConverter.convert(columnRef)
+    }
+    assert(exception.getMessage.contains(
+      "LiteralToSqlConverter cannot convert non-foldable expression"))
+    assert(exception.getMessage.contains("UnresolvedAttribute"))
   }
 
   test("Integration - complex parameter substitution") {

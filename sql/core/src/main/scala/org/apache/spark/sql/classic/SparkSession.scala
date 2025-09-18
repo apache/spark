@@ -620,10 +620,17 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = if (args.nonEmpty) {
-          // For EXECUTE IMMEDIATE, evaluate any expressions (including local variable references)
-          // in the outer context before passing to the isolated inner query execution
+          // For EXECUTE IMMEDIATE, handle parameter arguments appropriately
+          // Pass Literal objects directly, evaluate expressions for local variables
           val evaluatedArgs = args.map { arg =>
-            lit(arg).expr.eval()  // This evaluates local variables in the outer context
+            arg match {
+              case literal: org.apache.spark.sql.catalyst.expressions.Literal =>
+                // Already a Literal from ResolveExecuteImmediate - pass it through
+                literal
+              case _ =>
+                // Raw value - convert to expression and evaluate (for local variables)
+                lit(arg).expr.eval()
+            }
           }
           val paramContext = HybridParameterContext(evaluatedArgs, paramNames)
 

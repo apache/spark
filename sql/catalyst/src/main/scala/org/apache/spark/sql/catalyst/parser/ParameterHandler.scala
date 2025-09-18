@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
-import org.apache.spark.sql.catalyst.util.ExpressionToSqlConverter
+import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
 
 /**
  * Handler for parameter substitution across different Spark SQL contexts.
@@ -141,15 +141,15 @@ class ParameterHandler {
     context match {
       case NamedParameterContext(params) =>
         performSubstitution(sqlText, rule, namedParams = params.map { case (name, expr) =>
-          (name, ExpressionToSqlConverter.convert(expr))
+          (name, LiteralToSqlConverter.convert(expr))
         })
 
       case PositionalParameterContext(params) =>
         performSubstitution(sqlText, rule,
-          positionalParams = params.map(ExpressionToSqlConverter.convert).toList)
+          positionalParams = params.map(expr =>
+            LiteralToSqlConverter.convert(expr)).toList)
 
       case HybridParameterContext(args, paramNames) =>
-        import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
         // Detect which parameter types are actually used in the query (single call)
         val (hasPositional, hasNamed) = detectParameters(sqlText, rule)
 
@@ -166,8 +166,14 @@ class ParameterHandler {
             case ("", index) => index // empty strings are unnamed
           }
           if (unnamedExpressions.nonEmpty) {
-            val unnamedExprs = unnamedExpressions.map(args(_))
-              .map(Literal(_).asInstanceOf[Expression]).toSeq
+            val unnamedExprs = unnamedExpressions.map(args(_)).map {
+              case literal: org.apache.spark.sql.catalyst.expressions.Literal =>
+                // Already a Literal from ResolveExecuteImmediate - use it directly
+                literal.asInstanceOf[Expression]
+              case value =>
+                // Raw value - create new Literal
+                Literal(value).asInstanceOf[Expression]
+            }.toSeq
             throw org.apache.spark.sql.errors.QueryCompilationErrors
               .invalidQueryAllParametersMustBeNamed(unnamedExprs)
           }
@@ -175,17 +181,31 @@ class ParameterHandler {
 
         if (hasPositional && !hasNamed) {
           // Query uses only positional parameters
-          val positionalParams = args.map(Literal(_).asInstanceOf[Expression]).toSeq
+          val positionalParams = args.map {
+            case literal: org.apache.spark.sql.catalyst.expressions.Literal =>
+              // Already a Literal from ResolveExecuteImmediate - use it directly
+              literal.asInstanceOf[Expression]
+            case value =>
+              // Raw value - create new Literal
+              Literal(value).asInstanceOf[Expression]
+          }.toSeq
           performSubstitution(sqlText, rule,
-            positionalParams = positionalParams.map(ExpressionToSqlConverter.convert).toList)
+            positionalParams = positionalParams.map(expr =>
+              LiteralToSqlConverter.convert(expr)).toList)
         } else if (hasNamed && !hasPositional) {
           // Query uses only named parameters
           val namedParams = paramNames.zip(args).collect {
-            case (name, value) if name.nonEmpty => name -> Literal(value).asInstanceOf[Expression]
+            case (name, literal: org.apache.spark.sql.catalyst.expressions.Literal)
+                if name.nonEmpty =>
+              // Already a Literal from ResolveExecuteImmediate - use it directly
+              name -> literal.asInstanceOf[Expression]
+            case (name, value) if name.nonEmpty =>
+              // Raw value - create new Literal
+              name -> Literal(value).asInstanceOf[Expression]
           }.toMap
           performSubstitution(sqlText, rule,
             namedParams = namedParams.map { case (name, expr) =>
-              (name, ExpressionToSqlConverter.convert(expr))
+              (name, LiteralToSqlConverter.convert(expr))
             })
         } else {
           // No parameters in query - return as-is
@@ -230,7 +250,7 @@ class ParameterHandler {
     if (paramMap.isEmpty) return sqlText
 
     val paramValues = paramMap.map { case (name, expr) =>
-      (name, ExpressionToSqlConverter.convert(expr))
+      (name, LiteralToSqlConverter.convert(expr))
     }
     performSubstitution(sqlText, rule, namedParams = paramValues)
   }
@@ -250,7 +270,8 @@ class ParameterHandler {
 
     if (paramList.isEmpty) return sqlText
 
-    val paramValues = paramList.map(ExpressionToSqlConverter.convert).toList
+    val paramValues = paramList.map(expr =>
+      LiteralToSqlConverter.convert(expr)).toList
     performSubstitution(sqlText, rule, positionalParams = paramValues)
   }
 

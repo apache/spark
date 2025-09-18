@@ -209,7 +209,10 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
         // Variable references should be evaluated to their values
         varRef.eval(EmptyRow)
       case foldable if foldable.foldable =>
-        Literal.create(foldable.eval(EmptyRow), foldable.dataType).value
+        // For foldable expressions, we need to preserve type information by returning
+        // the Literal object itself, not just its raw value. This ensures that
+        // DATE '2023-12-25' remains a DateType literal, not just an Int.
+        Literal.create(foldable.eval(EmptyRow), foldable.dataType)
       case other =>
         // Expression is not foldable - not supported for parameters
         throw QueryCompilationErrors.unsupportedParameterExpression(other)
