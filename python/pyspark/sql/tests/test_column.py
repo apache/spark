@@ -230,13 +230,12 @@ class ColumnTestsMixin:
         ).withColumn("square_value", mapping_expr[sf.col("key")])
         self.assertEqual(df.count(), 3)
 
-    # SPARK-51426: Ensure setting metadata to '{]' clears the metadata
-    def test_alias_empty_metadata(self):
+    def test_alias_metadata(self):
         df = self.spark.createDataFrame([("",)], ["a"])
         df = df.withMetadata("a", {"foo": "bar"})
         self.assertEqual(df.schema["a"].metadata, {"foo": "bar"})
 
-        # Ensure setting to `{}` clears the metadata
+        # SPARK-51426: Ensure setting metadata to '{]' clears it
         df = df.select([sf.col("a").alias("a", metadata={})])
         self.assertEqual(df.schema["a"].metadata, {})
 
