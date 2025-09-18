@@ -572,7 +572,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def repartitionById(
         self, numPartitions: int, partitionIdCol: "ColumnOrName"
     ) -> ParentDataFrame:
-        if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
+        if not isinstance(numPartitions, (int, bool)):
             raise PySparkTypeError(
                 errorClass="NOT_INT",
                 messageParameters={
