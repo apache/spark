@@ -110,40 +110,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
             ) -> None: ...
 
-        class Response(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-            dataflow_graph_id: builtins.str
-            """The ID of the created graph."""
-            def __init__(
-                self,
-                *,
-                dataflow_graph_id: builtins.str | None = ...,
-            ) -> None: ...
-            def HasField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_dataflow_graph_id",
-                    b"_dataflow_graph_id",
-                    "dataflow_graph_id",
-                    b"dataflow_graph_id",
-                ],
-            ) -> builtins.bool: ...
-            def ClearField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_dataflow_graph_id",
-                    b"_dataflow_graph_id",
-                    "dataflow_graph_id",
-                    b"dataflow_graph_id",
-                ],
-            ) -> None: ...
-            def WhichOneof(
-                self,
-                oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-            ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
-
         DEFAULT_CATALOG_FIELD_NUMBER: builtins.int
         DEFAULT_DATABASE_FIELD_NUMBER: builtins.int
         SQL_CONF_FIELD_NUMBER: builtins.int

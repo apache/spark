@@ -48,11 +48,6 @@ message PipelineCommand {
 
     // SQL configurations for all flows in this graph.
     map<string, string> sql_conf = 5;
-
-    message Response {
-      // The ID of the created graph.
-      optional string dataflow_graph_id = 1;
-    }
   }
 
   // Drops the graph and stops any running attached flows.
