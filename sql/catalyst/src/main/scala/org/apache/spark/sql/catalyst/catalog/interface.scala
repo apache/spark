@@ -756,7 +756,7 @@ object CatalogTable {
     props.get(key).orElse {
       if (props.exists { case (mapKey, _) => mapKey.startsWith(key) }) {
         props.get(s"$key.numParts") match {
-          case None => throw QueryCompilationErrors.insufficientTablePropertyError(key)
+          case None => None
           case Some(numParts) =>
             val parts = (0 until numParts.toInt).map { index =>
               val keyPart = s"$key.part.$index"
