@@ -63,6 +63,7 @@ trait FunctionBuilderBase[T] {
    * @param expectedSignature The method signature which we rearrange our arguments according to
    * @param providedArguments The list of arguments passed from function invocation
    * @param functionName The name of the function
+   * @param resolver The resolver used to match the arguments
    * @return The rearranged argument list with arguments in positional order
    */
   def rearrange(
@@ -86,15 +87,15 @@ object NamedParametersSupport {
    * - the named arguments don't contains positional arguments once keyword arguments start
    * - the named arguments don't use the duplicated names
    *
-   * @param functionSignature The function signature that defines the positional ordering
    * @param args The argument list provided in function invocation
+   * @param functionName The name of the function
+   * @param resolver The resolver used to match the arguments
    * @return A tuple of a list of positional arguments and a list of keyword arguments
    */
   def splitAndCheckNamedArguments(
       args: Seq[Expression],
       functionName: String,
-      resolver: Resolver):
-    (Seq[Expression], Seq[NamedArgumentExpression]) = {
+      resolver: Resolver): (Seq[Expression], Seq[NamedArgumentExpression]) = {
     val (positionalArgs, namedArgs) = args.span(!_.isInstanceOf[NamedArgumentExpression])
 
     val namedParametersSet = collection.mutable.Set[String]()
@@ -123,6 +124,7 @@ object NamedParametersSupport {
    * @param functionSignature The function signature that defines the positional ordering
    * @param args The argument list provided in function invocation
    * @param functionName The name of the function
+   * @param resolver The resolver used to match the arguments
    * @return A list of arguments rearranged in positional order defined by the provided signature
    */
   final def defaultRearrange(
