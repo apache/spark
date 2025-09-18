@@ -179,8 +179,14 @@ class SparkConnectServiceServicer(object):
         raise NotImplementedError("Method not implemented!")
 
     def CloneSession(self, request, context):
-        """Clone a session. Creates a new session that shares the same configuration and state
-        as the original session, but with a new session ID.
+        """Create a clone of a Spark Connect session on the server side. The server-side session
+        is cloned with all its current state (SQL configurations, temporary views, registered
+        functions, catalog state) copied over to a new independent session. The cloned session
+        is isolated from the source session - any subsequent changes to either session's
+        server-side state will not be reflected in the other.
+
+        The request can optionally specify a custom session ID for the cloned session (must be
+        a valid UUID). If not provided, a new UUID will be generated automatically.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
