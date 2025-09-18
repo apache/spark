@@ -50,8 +50,9 @@ import org.apache.spark.unsafe.types.UTF8String
 class ApplyInPandasWithStateWriter(
     root: VectorSchemaRoot,
     writer: ArrowStreamWriter,
-    arrowMaxRecordsPerBatch: Int)
-  extends BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch) {
+    arrowMaxRecordsPerBatch: Int,
+    arrowMaxBytesPerBatch: Long)
+  extends BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch, arrowMaxRecordsPerBatch) {
 
   import ApplyInPandasWithStateWriter._
 

@@ -106,12 +106,14 @@ class ApplyInPandasWithStatePythonRunner(
   }
 
   private val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
+  private val arrowMaxBytesPerBatch = sqlConf.arrowMaxBytesPerBatch
 
   // applyInPandasWithState has its own mechanism to construct the Arrow RecordBatch instance.
   // Configurations are both applied to executor and Python worker, set them to the worker conf
   // to let Python worker read the config properly.
   override protected val workerConf: Map[String, String] = initialWorkerConf +
-    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
+    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString) +
+    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
@@ -142,7 +144,11 @@ class ApplyInPandasWithStatePythonRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[InType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new ApplyInPandasWithStateWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new ApplyInPandasWithStateWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch)
     }
     if (inputIterator.hasNext) {
       val startData = dataOut.size()

@@ -236,6 +236,9 @@ class StatefulProcessorCompositeTypeFactory(StatefulProcessorFactory):
     def row(self):
         return RowStatefulProcessorCompositeType()
 
+class ChunkCountProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasChunkCountProcessor()
 
 # StatefulProcessor implementations
 
@@ -1819,6 +1822,20 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
             map_state_arr=json.dumps(attributes_map, sort_keys=True),
             nested_map_state_arr=json.dumps(confs_map, sort_keys=True),
         )
+
+    def close(self) -> None:
+        pass
+
+class PandasChunkCountProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        pass
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        chunk_count = 0
+        for _ in rows:
+            chunk_count += 1
+        yield pd.DataFrame({'id': [key[0]], 'chunkCount': [chunk_count]})
+
 
     def close(self) -> None:
         pass
