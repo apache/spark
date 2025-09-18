@@ -593,7 +593,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
-    "objectName" : "SELCT Fa",
+    "objectName" : "",
     "startIndex" : 1,
     "stopIndex" : 8,
     "fragment" : "SELCT Fa"
@@ -614,7 +614,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
-    "objectName" : "SELCT Fa",
+    "objectName" : "",
     "startIndex" : 1,
     "stopIndex" : 8,
     "fragment" : "SELCT Fa"
@@ -882,7 +882,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
-    "objectName" : "5",
+    "objectName" : "",
     "startIndex" : 1,
     "stopIndex" : 1,
     "fragment" : "5"

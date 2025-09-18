@@ -89,7 +89,7 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     // during parsing to set their queryContext, similar to how views work
     val executeImmediateOrigin = Origin(
       objectType = Some("EXECUTE IMMEDIATE"),
-      objectName = Some(sqlString),
+      objectName = None, // No named object for EXECUTE IMMEDIATE, unlike views
       sqlText = Some(sqlString),
       startIndex = Some(0),
       stopIndex = Some(sqlString.length - 1)
