@@ -5522,12 +5522,14 @@ class DataFrame:
 
         Examples
         --------
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(1, 11), (1, 11), (3, 10), (4, 8), (4, 8)], ["c1", "c2"])
-        >>> df.freqItems(["c1", "c2"]).show()  # doctest: +SKIP
+        >>> df = df.freqItems(["c1", "c2"])
+        >>> df.select([sf.sort_array(c).alias(c) for c in df.columns]).show()
         +------------+------------+
         |c1_freqItems|c2_freqItems|
         +------------+------------+
-        |   [4, 1, 3]| [8, 11, 10]|
+        |   [1, 3, 4]| [8, 10, 11]|
         +------------+------------+
         """
         ...
