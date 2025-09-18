@@ -743,7 +743,7 @@ class AdaptiveQueryExecSuite
     // if the right side is completed first and the left side is still being executed,
     // the right side does not know whether there are many empty partitions on the left side,
     // so there is no demote, and then the right side is broadcast in the planning stage.
-    // so retry several times here to avoid unit test failure.
+    // so apply `slow_udf` to delay right side to avoid unit test failure.
     withUserDefinedFunction("slow_udf" -> true) {
       spark.udf.register("slow_udf", (x: Int) => {
         Thread.sleep(300)
