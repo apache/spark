@@ -29,6 +29,7 @@ import com.google.protobuf.ByteString
 import io.grpc._
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -421,6 +422,7 @@ private[sql] class SparkConnectClient(
    *
    * @return A new SparkConnectClient instance with the cloned session.
    */
+  @DeveloperApi
   def cloneSession(): SparkConnectClient = {
     clone(None)
   }
@@ -432,6 +434,7 @@ private[sql] class SparkConnectClient(
    * @param newSessionId Custom session ID to use for the cloned session (must be a valid UUID).
    * @return A new SparkConnectClient instance with the cloned session.
    */
+  @DeveloperApi
   def clone(newSessionId: String): SparkConnectClient = {
     clone(Some(newSessionId))
   }

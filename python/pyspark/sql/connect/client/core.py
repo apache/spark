@@ -2042,8 +2042,11 @@ class SparkConnectClient(object):
 
     def clone(self, new_session_id: Optional[str] = None) -> "SparkConnectClient":
         """
-        Clone this client session, creating a new session with the same configuration
-        and shared state as the current session but with independent runtime state.
+        Clone this client session on the server side. The server-side session is cloned with
+        all its current state (SQL configurations, temporary views, registered functions,
+        catalog state) copied over to a new independent session. The returned client with the
+        cloned session is isolated from this client's session - any subsequent changes to
+        either session's server-side state will not be reflected in the other.
 
         Parameters
         ----------
@@ -2055,6 +2058,14 @@ class SparkConnectClient(object):
         -------
         SparkConnectClient
             A new SparkConnectClient instance with the cloned session.
+
+        Notes
+        -----
+        This creates a new server-side session with the specified or generated session ID
+        while preserving the current session's configuration and state.
+
+        .. note::
+            This is a developer API.
         """
         from pyspark.sql.connect.proto import base_pb2 as pb2
 
