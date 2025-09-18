@@ -417,10 +417,11 @@ private[sql] class SparkConnectClient(
   }
 
   /**
-   * Clone this client session, creating a new session with the same configuration
-   * and shared state as the current session but with independent runtime state.
+   * Clone this client session, creating a new session with the same configuration and shared
+   * state as the current session but with independent runtime state.
    *
-   * @return A new SparkConnectClient instance with the cloned session.
+   * @return
+   *   A new SparkConnectClient instance with the cloned session.
    */
   @DeveloperApi
   def cloneSession(): SparkConnectClient = {
@@ -431,8 +432,10 @@ private[sql] class SparkConnectClient(
    * Clone this client session with a custom session ID, creating a new session with the same
    * configuration and shared state as the current session but with independent runtime state.
    *
-   * @param newSessionId Custom session ID to use for the cloned session (must be a valid UUID).
-   * @return A new SparkConnectClient instance with the cloned session.
+   * @param newSessionId
+   *   Custom session ID to use for the cloned session (must be a valid UUID).
+   * @return
+   *   A new SparkConnectClient instance with the cloned session.
    */
   @DeveloperApi
   def clone(newSessionId: String): SparkConnectClient = {
@@ -440,7 +443,8 @@ private[sql] class SparkConnectClient(
   }
 
   private def clone(newSessionId: Option[String]): SparkConnectClient = {
-    val requestBuilder = proto.CloneSessionRequest.newBuilder()
+    val requestBuilder = proto.CloneSessionRequest
+      .newBuilder()
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType("scala")
@@ -451,9 +455,10 @@ private[sql] class SparkConnectClient(
 
     // Assert that the returned session ID matches the requested ID if one was provided
     newSessionId.foreach { expectedId =>
-      require(response.getNewSessionId == expectedId,
+      require(
+        response.getNewSessionId == expectedId,
         s"Returned session ID '${response.getNewSessionId}' does not match " +
-        s"requested ID '$expectedId'")
+          s"requested ID '$expectedId'")
     }
 
     // Create a new client with the cloned session ID

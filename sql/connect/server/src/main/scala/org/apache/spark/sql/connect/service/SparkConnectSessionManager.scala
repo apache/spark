@@ -115,9 +115,9 @@ class SparkConnectSessionManager extends Logging {
   }
 
   /**
-   * Clone an existing session with a new session ID.
-   * Creates a new SessionHolder with a cloned SparkSession that shares configuration
-   * and catalog state but has independent caches and runtime state.
+   * Clone an existing session with a new session ID. Creates a new SessionHolder with a cloned
+   * SparkSession that shares configuration and catalog state but has independent caches and
+   * runtime state.
    */
   private[connect] def cloneSession(
       sourceKey: SessionKey,

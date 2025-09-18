@@ -61,8 +61,9 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession with BeforeAndAft
       SparkConnectService.sessionManager.cloneSession(sourceKey, targetSessionId, None)
     }
 
-    assert(ex.getCondition ==
-      "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_CLOSED")
+    assert(
+      ex.getCondition ==
+        "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_CLOSED")
     assert(ex.getMessage.contains(s"target session ID $targetSessionId"))
     assert(ex.getMessage.contains("was previously closed"))
   }
@@ -80,8 +81,9 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession with BeforeAndAft
       SparkConnectService.sessionManager.cloneSession(sourceKey, targetSessionId, None)
     }
 
-    assert(ex.getCondition ==
-      "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_EXISTS")
+    assert(
+      ex.getCondition ==
+        "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_EXISTS")
     assert(ex.getMessage.contains(s"target session ID $targetSessionId"))
     assert(ex.getMessage.contains("already exists"))
   }
@@ -168,7 +170,8 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession with BeforeAndAft
     val udfResult1 = clonedSession.session.sql("SELECT double_value(5)").collect()
     assert(udfResult1(0).getInt(0) == 10)
 
-    val udfResult2 = clonedSession.session.sql("SELECT concat_strings('hello', 'world')").collect()
+    val udfResult2 =
+      clonedSession.session.sql("SELECT concat_strings('hello', 'world')").collect()
     assert(udfResult2(0).getString(0) == "helloworld")
 
     // Current database is copied
@@ -197,8 +200,10 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession with BeforeAndAft
     assert(clonedSession.session.conf.get("spark.sql.custom.config") == "modified-clone")
 
     // Test independence of temp views - modify shared view differently
-    sourceSession.session.sql("CREATE OR REPLACE TEMPORARY VIEW shared_view AS SELECT 10 as value")
-    clonedSession.session.sql("CREATE OR REPLACE TEMPORARY VIEW shared_view AS SELECT 20 as value")
+    sourceSession.session.sql(
+      "CREATE OR REPLACE TEMPORARY VIEW shared_view AS SELECT 10 as value")
+    clonedSession.session.sql(
+      "CREATE OR REPLACE TEMPORARY VIEW shared_view AS SELECT 20 as value")
 
     // Each session should see its own version of the view
     val sourceViewResult = sourceSession.session.sql("SELECT * FROM shared_view").collect()
@@ -243,14 +248,12 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession with BeforeAndAft
 
     // Test independence: add new artifacts to each session
     val sourceOnlyFile = Files.createTempFile("source-only", ".txt")
-    Files.write(sourceOnlyFile,
-      "source only content".getBytes(StandardCharsets.UTF_8))
+    Files.write(sourceOnlyFile, "source only content".getBytes(StandardCharsets.UTF_8))
     val sourceOnlyPath = Paths.get("jars/source.jar")
     sourceSession.artifactManager.addArtifact(sourceOnlyPath, sourceOnlyFile, None)
 
     val clonedOnlyFile = Files.createTempFile("cloned-only", ".txt")
-    Files.write(clonedOnlyFile,
-      "cloned only content".getBytes(StandardCharsets.UTF_8))
+    Files.write(clonedOnlyFile, "cloned only content".getBytes(StandardCharsets.UTF_8))
     val clonedOnlyPath = Paths.get("jars/cloned.jar")
     clonedSession.artifactManager.addArtifact(clonedOnlyPath, clonedOnlyFile, None)
 

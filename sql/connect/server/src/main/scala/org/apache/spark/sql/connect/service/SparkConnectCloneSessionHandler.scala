@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 
 class SparkConnectCloneSessionHandler(
     responseObserver: StreamObserver[proto.CloneSessionResponse])
-  extends Logging {
+    extends Logging {
 
   def handle(request: proto.CloneSessionRequest): Unit = {
     val sourceKey = SessionKey(request.getUserContext.getUserId, request.getSessionId)
@@ -35,21 +35,22 @@ class SparkConnectCloneSessionHandler(
     } else {
       UUID.randomUUID().toString
     }
-    val previouslyObservedSessionId = if (request.hasClientObservedServerSideSessionId &&
+    val previouslyObservedSessionId =
+      if (request.hasClientObservedServerSideSessionId &&
         request.getClientObservedServerSideSessionId.nonEmpty) {
-      Some(request.getClientObservedServerSideSessionId)
-    } else {
-      None
-    }
+        Some(request.getClientObservedServerSideSessionId)
+      } else {
+        None
+      }
     // Get the original session to retrieve its server session ID for validation
     val originalSessionHolder = SparkConnectService.sessionManager
       .getIsolatedSession(sourceKey, previouslyObservedSessionId)
     val clonedSessionHolder = SparkConnectService.sessionManager.cloneSession(
       sourceKey,
       newSessionId,
-      previouslyObservedSessionId
-    )
-    val response = proto.CloneSessionResponse.newBuilder()
+      previouslyObservedSessionId)
+    val response = proto.CloneSessionResponse
+      .newBuilder()
       .setSessionId(request.getSessionId)
       .setNewSessionId(clonedSessionHolder.sessionId)
       .setServerSideSessionId(originalSessionHolder.serverSessionId)
