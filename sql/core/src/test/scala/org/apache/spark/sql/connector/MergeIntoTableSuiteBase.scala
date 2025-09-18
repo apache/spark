@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 
 abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   with AdaptiveSparkPlanHelper {
@@ -2446,6 +2446,274 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         }
 
         sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge into schema evolution type widening from short to int") {
+    Seq((true, true), (false, true), (true, false)).foreach {
+      case (withSchemaEvolution, schemaEvolutionEnabled) =>
+        withTempView("source") {
+          createAndInitTable("pk INT NOT NULL, salary SMALLINT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "finance" }
+              |{ "pk": 3, "salary": 300, "dep": "engineering" }
+              |""".stripMargin)
+
+          if (!schemaEvolutionEnabled) {
+            sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
+                   | ('auto-schema-evolution' = 'false')""".stripMargin)
+          }
+
+          // Source data with int salary values that would exceed short range
+          val sourceRows = Seq(
+            (1, 50000, "hr"),
+            (4, 40000, "sales"),
+            (5, 500, "marketing"))
+          sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          val mergeStmt = s"""MERGE $schemaEvolutionClause
+                             |INTO $tableNameAsString t
+                             |USING source s
+                             |ON t.pk = s.pk
+                             |WHEN MATCHED THEN
+                             | UPDATE SET salary = s.salary
+                             |WHEN NOT MATCHED THEN
+                             | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)
+                             |""".stripMargin
+
+          if (withSchemaEvolution && schemaEvolutionEnabled) {
+            // Schema evolution should allow type widening from SMALLINT to INT for salary column
+            sql(mergeStmt)
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+              Seq(
+                Row(1, 50000, "hr"),
+                Row(2, 200, "finance"),
+                Row(3, 300, "engineering"),
+                Row(4, 40000, "sales"),
+                Row(5, 500, "marketing")))
+              val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+              val salaryField = tableSchema.find(_.name == "salary").get
+              assert(salaryField.dataType == IntegerType)
+          } else {
+            val exception = intercept[Exception] {
+              sql(mergeStmt)
+            }
+            assert(exception.getMessage.contains(
+              "Fail to assign a value of \"INT\" type to the \"SMALLINT\" " +
+                "type column or variable `salary` due to an overflow"))
+          }
+          sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+        }
+    }
+  }
+
+  test("merge into schema evolution type widening nested struct from int to long") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+        withTempView("source") {
+          // Create table with nested struct containing int field
+          createAndInitTable(
+            s"""pk INT NOT NULL,
+               |employee STRUCT<salary: INT, details: STRUCT<bonus: INT, years: INT>>,
+               |dep STRING""".stripMargin,
+            """{ "pk": 1, "employee": { "salary": 50000, "details":
+              |{ "bonus": 5000, "years": 2 } }, "dep": "hr" }""".stripMargin.replace("\n", "")
+              + "\n" +
+            """{ "pk": 2, "employee": { "salary": 60000, "details":
+              |{ "bonus": 6000, "years": 3 } }, "dep": "finance" }""".stripMargin.replace("\n", "")
+          )
+
+          // Source data with long values that exceed int range for nested fields
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("employee", StructType(Seq(
+              StructField("salary", IntegerType),
+              StructField("details", StructType(Seq(
+                StructField("bonus", LongType), // Changed from INT to LONG
+                StructField("years", IntegerType)
+              )))
+            ))),
+            StructField("dep", StringType)
+          ))
+
+          val data = Seq(
+            Row(1, Row(75000, Row(3000000000L, 5)), "hr"),
+            Row(3, Row(80000, Row(4000000000L, 1)), "engineering")
+          )
+
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          val mergeStmt = s"""MERGE $schemaEvolutionClause
+                             |INTO $tableNameAsString t
+                             |USING source s
+                             |ON t.pk = s.pk
+                             |WHEN MATCHED THEN
+                             | UPDATE SET *
+                             |WHEN NOT MATCHED THEN
+                             | INSERT (pk, employee, dep) VALUES (s.pk, s.employee, s.dep)
+                             |""".stripMargin
+
+          if (withSchemaEvolution) {
+            // Schema evolution should allow type widening from INT to LONG for nested bonus field
+            sql(mergeStmt)
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+              Seq(
+                Row(1, Row(75000, Row(3000000000L, 5)), "hr"),
+                Row(2, Row(60000, Row(6000, 3)), "finance"),
+                Row(3, Row(80000, Row(4000000000L, 1)), "engineering")
+              ))
+
+            val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+            val employeeField = tableSchema.find(_.name == "employee").get.dataType
+              .asInstanceOf[StructType]
+            val detailsField = employeeField.find(_.name == "details").get.dataType
+              .asInstanceOf[StructType]
+            val bonusField = detailsField.find(_.name == "bonus").get
+            assert(bonusField.dataType == LongType)
+          } else {
+            val exception = intercept[Exception] {
+              sql(mergeStmt)
+            }
+            assert(exception.getMessage.contains("Fail to assign a value of \"BIGINT\" type " +
+              "to the \"INT\" type column or variable `employee`.`details`.`bonus`" +
+              " due to an overflow"))
+          }
+          sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+        }
+    }
+  }
+
+  test("merge into schema evolution type widening in array from int to long") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        // Create table with array of int values
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |scores ARRAY<INT>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "scores": [1000, 2000, 3000], "dep": "hr" }
+            |{ "pk": 2, "scores": [4000, 5000, 6000], "dep": "finance" }
+            |""".stripMargin)
+
+        // Source data with array of long values that exceed int range
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType),
+          StructField("scores", ArrayType(LongType)), // Changed from INT to LONG
+          StructField("dep", StringType)
+        ))
+
+        val data = Seq(
+          Row(1, Array(3000000000L, 4000000000L), "hr"),
+          Row(3, Array(5000000000L, 6000000000L), "engineering")
+        )
+
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED THEN
+                           | UPDATE SET *
+                           |WHEN NOT MATCHED THEN
+                           | INSERT (pk, scores, dep) VALUES (s.pk, s.scores, s.dep)
+                           |""".stripMargin
+
+        if (withSchemaEvolution) {
+          // Schema evolution should allow type widening from ARRAY<INT> to ARRAY<LONG>
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+            Seq(
+              Row(1, Array(3000000000L, 4000000000L), "hr"),
+              Row(2, Array(4000L, 5000L, 6000L), "finance"),
+              Row(3, Array(5000000000L, 6000000000L), "engineering")
+            ))
+
+          val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+          val scoresField = tableSchema.find(_.name == "scores").get
+          val arrayElementType = scoresField.dataType.asInstanceOf[ArrayType].elementType
+          assert(arrayElementType == LongType)
+        } else {
+          val exception = intercept[Exception] {
+            sql(mergeStmt)
+          }
+          assert(exception.getMessage.contains(" Fail to assign a value of \"BIGINT\" type " +
+            "to the \"INT\" type column or variable `scores`.`element` due to an overflow"))
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge into schema evolution type widening in map from int to long") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        // Create table with map of string to int values
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |metrics MAP<STRING, INT>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "metrics": {"revenue": 100000, "profit": 50000}, "dep": "hr" }
+            |{ "pk": 2, "metrics": {"revenue": 200000, "profit": 80000}, "dep": "finance" }
+            |""".stripMargin)
+
+        // Source data with map of string to long values that exceed int range
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType),
+          StructField("metrics", MapType(StringType, LongType)),
+          StructField("dep", StringType)
+        ))
+
+        val data = Seq(
+          Row(1, Map("revenue" -> 3000000000L, "profit" -> 1500000000L), "hr"),
+          Row(3, Map("revenue" -> 4000000000L, "profit" -> 2000000000L), "engineering")
+        )
+
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED THEN
+                           | UPDATE SET *
+                           |WHEN NOT MATCHED THEN
+                           | INSERT (pk, metrics, dep) VALUES (s.pk, s.metrics, s.dep)
+                           |""".stripMargin
+
+        if (withSchemaEvolution) {
+          // Schema evolution should allow type widening from MAP<STRING, INT> to MAP<STRING, LONG>
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+            Seq(
+              Row(1, Map("revenue" -> 3000000000L, "profit" -> 1500000000L), "hr"),
+              Row(2, Map("revenue" -> 200000L, "profit" -> 80000L), "finance"),
+              Row(3, Map("revenue" -> 4000000000L, "profit" -> 2000000000L), "engineering")
+            ))
+
+          val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+          val metricsField = tableSchema.find(_.name == "metrics").get
+          val mapValueType = metricsField.dataType.asInstanceOf[MapType].valueType
+          assert(mapValueType == LongType)
+        } else {
+          val exception = intercept[Exception] {
+            sql(mergeStmt)
+          }
+          assert(exception.getMessage.contains("Fail to assign a value of \"BIGINT\" type " +
+            "to the \"INT\" type column or variable `metrics`.`value` due to an overflow"))
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
       }
     }
   }

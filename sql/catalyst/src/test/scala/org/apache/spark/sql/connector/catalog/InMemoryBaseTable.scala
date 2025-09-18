@@ -28,11 +28,12 @@ import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
+import org.apache.spark.sql.catalyst.expressions.{Cast, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
+import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
@@ -146,7 +147,7 @@ abstract class InMemoryBaseTable(
     case _: BucketTransform =>
     case _: SortedBucketTransform =>
     case _: ClusterByTransform =>
-    case NamedTransform("truncate", Seq(_: NamedReference, _: Literal[_])) =>
+    case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -244,7 +245,7 @@ abstract class InMemoryBaseTable(
         var dataTypeHashCode = 0
         valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
         ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
-      case NamedTransform("truncate", Seq(ref: NamedReference, length: Literal[_])) =>
+      case NamedTransform("truncate", Seq(ref: NamedReference, length: V2Literal[_])) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>
             str.substring(0, length.value.asInstanceOf[Int])
@@ -910,7 +911,7 @@ private class BufferedRowsReader(
       arrayData: ArrayData,
       readType: DataType,
       writeType: DataType): ArrayData = {
-    val elements = arrayData.toArray[Any](readType)
+    val elements = arrayData.toArray[Any](writeType)
     val convertedElements = extractCollection(elements, readType, writeType)
     new GenericArrayData(convertedElements)
   }
@@ -921,12 +922,21 @@ private class BufferedRowsReader(
       readValueType: DataType,
       writeKeyType: DataType,
       writeValueType: DataType): MapData = {
-    val keys = mapData.keyArray().toArray[Any](readKeyType)
-    val values = mapData.valueArray().toArray[Any](readValueType)
+    val keys = mapData.keyArray().toArray[Any](writeKeyType)
+    val values = mapData.valueArray().toArray[Any](writeValueType)
 
     val convertedKeys = extractCollection(keys, readKeyType, writeKeyType)
     val convertedValues = extractCollection(values, readValueType, writeValueType)
     ArrayBasedMapData(convertedKeys, convertedValues)
+  }
+
+  private def castElement(elem: Any, toType: DataType, fromType: DataType): Any = {
+    try {
+      val castExpr = Cast(Literal(elem, fromType), toType)
+      castExpr.eval(null)
+    } catch {
+      case _: Exception => elem
+    }
   }
 
   private def extractCollection(
@@ -960,6 +970,14 @@ private class BufferedRowsReader(
           } else {
             extractMapValue(elem.asInstanceOf[MapData], rKeyType, rValueType,
               wKeyType, wValueType)
+          }
+        }
+      case (readType: AtomicType, writeType: AtomicType) if readType != writeType =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            castElement(elem, readType, writeType)
           }
         }
       case (_, _) => elements
