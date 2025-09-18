@@ -201,7 +201,7 @@ class TestGraphRegistrationContext(
 
     val viewIdentifier = GraphIdentifierManager
       .parseAndValidateTemporaryViewIdentifier(rawViewIdentifier = TableIdentifier(name))
-    
+
     val persistedViewIdentifier = GraphIdentifierManager
       .parseAndValidatePersistedViewIdentifier(
         rawViewIdentifier = TableIdentifier(name),
@@ -209,18 +209,23 @@ class TestGraphRegistrationContext(
         currentDatabase = Some(defaultDatabase)
       )
 
+    val viewIdentifier2: TableIdentifier = viewType match {
+      case LocalTempView => viewIdentifier
+      case _ => persistedViewIdentifier
+    }
+
     registerView(
       viewType match {
         case LocalTempView =>
           TemporaryView(
-            identifier = viewIdentifier,
+            identifier = viewIdentifier2,
             comment = comment,
             origin = origin,
             properties = Map.empty
           )
         case _ =>
           PersistedView(
-            identifier = persistedViewIdentifier,
+            identifier = viewIdentifier2,
             comment = comment,
             origin = origin,
             properties = Map.empty
@@ -228,10 +233,33 @@ class TestGraphRegistrationContext(
       }
     )
 
+    val flowWritesToView = getViews()
+        .filter(_.isInstanceOf[TemporaryView])
+        .exists(_.identifier == viewIdentifier2)
+
+    // If the flow is created implicitly as part of defining a view, then we do not
+    // qualify the flow identifier and the flow destination. This is because views are
+    // not permitted to have multipart
+    val isImplicitFlow = viewIdentifier2 == viewIdentifier2
+    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
+    val Seq(flowIdentifier, flowDestinationIdentifier) =
+      Seq(viewIdentifier2, viewIdentifier2).map { rawIdentifier =>
+        if (isImplicitFlowForTempView) {
+          rawIdentifier
+        } else {
+          GraphIdentifierManager
+            .parseAndQualifyFlowIdentifier(
+              rawFlowIdentifier = rawIdentifier,
+              currentCatalog = Some(defaultCatalog),
+              currentDatabase = Some(defaultDatabase))
+            .identifier
+        }
+      }
+
     registerFlow(
       new UnresolvedFlow(
-        identifier = viewIdentifier,
-        destinationIdentifier = viewIdentifier,
+        identifier = flowIdentifier,
+        destinationIdentifier = flowDestinationIdentifier,
         func = query,
         queryContext = QueryContext(
           currentCatalog = catalog.orElse(Some(defaultCatalog)),
