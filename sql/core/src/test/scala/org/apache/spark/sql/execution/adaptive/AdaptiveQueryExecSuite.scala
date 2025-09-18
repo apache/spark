@@ -22,7 +22,6 @@ import java.net.URI
 
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
@@ -745,7 +744,12 @@ class AdaptiveQueryExecSuite
     // the right side does not know whether there are many empty partitions on the left side,
     // so there is no demote, and then the right side is broadcast in the planning stage.
     // so retry several times here to avoid unit test failure.
-    eventually(timeout(15.seconds), interval(500.milliseconds)) {
+    withUserDefinedFunction("slow_udf" -> true) {
+      spark.udf.register("slow_udf", (x: Int) => {
+        Thread.sleep(300)
+        x
+      })
+
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
@@ -753,7 +757,8 @@ class AdaptiveQueryExecSuite
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
           val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
             "SELECT * FROM (select * from testData where value = '1') td" +
-              " left outer join testData2 ON key = a")
+              " left outer join (select slow_udf(a) as a, b from testData2) as td2" +
+              " ON td.key = td2.a")
           val smj = findTopLevelSortMergeJoin(plan)
           assert(smj.size == 1)
           val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
