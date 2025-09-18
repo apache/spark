@@ -30,11 +30,13 @@ from pyspark.sql.types import (
 )
 from pyspark.sql import functions as sf
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -146,6 +148,7 @@ class GroupedAggArrowUDFTestsMixin:
 
         self.assertEqual(expected, result.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_basic(self):
         df = self.data
         weighted_mean_udf = self.arrow_agg_weighted_mean_udf
@@ -268,6 +271,7 @@ class GroupedAggArrowUDFTestsMixin:
         self.assertEqual(expected5, result5.collect())
         self.assertEqual(expected6, result6.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_multiple_udfs(self):
         """
         Test multiple group aggregate pandas UDFs in one agg function.
@@ -537,6 +541,7 @@ class GroupedAggArrowUDFTestsMixin:
 
         assert filtered.collect()[0]["mean"] == 42.0
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -565,6 +570,7 @@ class GroupedAggArrowUDFTestsMixin:
                         df.groupby("id").agg(sf.mean(df.v).alias("wm")).collect(),
                     )
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments_negative(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -886,6 +892,7 @@ class GroupedAggArrowUDFTestsMixin:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_return_numpy_scalar(self):
         import numpy as np
         import pyarrow as pa

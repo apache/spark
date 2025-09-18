@@ -71,7 +71,7 @@ trait TestPrematureExit {
 
     @volatile var exitedCleanly = false
     val original = mainObject.exitFn
-    mainObject.exitFn = (_) => exitedCleanly = true
+    mainObject.exitFn = (_, _) => exitedCleanly = true
     try {
       @volatile var exception: Exception = null
       val thread = new Thread {

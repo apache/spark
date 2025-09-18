@@ -990,7 +990,7 @@ if [[ "$1" == "publish-release" ]]; then
     EMAIL_SUBJECT="[VOTE] Release Spark ${SPARK_VERSION} (RC${SPARK_RC_COUNT})"
 
     # Calculate deadline in Pacific Time (PST/PDT)
-    DEADLINE=$(TZ=America/Los_Angeles date -d "+4 days" "+%a, %d %b %Y %H:%M:%S %Z")
+    DEADLINE=$(TZ=America/Los_Angeles date -d "+73 hour" "+%a, %d %b %Y %H:%M:%S %Z")
     PYSPARK_VERSION=`echo "$RELEASE_VERSION" |  sed -e "s/-/./" -e "s/preview/dev/"`
 
     JIRA_API_URL="https://issues.apache.org/jira/rest/api/2/project/SPARK/versions"

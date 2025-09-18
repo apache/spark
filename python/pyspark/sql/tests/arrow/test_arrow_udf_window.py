@@ -22,11 +22,13 @@ from pyspark.util import PythonEvalType
 from pyspark.sql import functions as sf
 from pyspark.sql.window import Window
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -384,6 +386,7 @@ class WindowArrowUDFTestsMixin:
 
         self.assertEqual(expected1.collect(), result1.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -427,6 +430,7 @@ class WindowArrowUDFTestsMixin:
                             ).collect(),
                         )
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments_negative(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -718,6 +722,7 @@ class WindowArrowUDFTestsMixin:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_return_numpy_scalar(self):
         import numpy as np
         import pyarrow as pa

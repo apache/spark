@@ -610,14 +610,6 @@ object StateSourceOptions extends DataSourceOptions {
       )
     }
 
-    if (startOperatorStateUniqueIds.isDefined) {
-      if (fromSnapshotOptions.isDefined) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          SNAPSHOT_START_BATCH_ID,
-          "Snapshot reading is currently not supported with checkpoint v2.")
-      }
-    }
-
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,

@@ -143,7 +143,7 @@
     <parquet.version>1.16.0</parquet.version>
     <orc.version>2.2.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.25</jetty.version>
+    <jetty.version>11.0.26</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -217,8 +217,8 @@
     <bouncycastle.version>1.81</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.1.126.Final</netty.version>
-    <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
+    <netty.version>4.1.127.Final</netty.version>
+    <netty-tcnative.version>2.0.73.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.13.1</junit-jupiter.version>
     <junit-platform.version>1.13.1</junit-platform.version>
@@ -238,7 +238,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.3.1</kubernetes-client.version>
+    <kubernetes-client.version>7.4.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -279,6 +279,7 @@
     -->
     <derby.deps.scope>compile</derby.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
+    <huaweicloud.deps.scope>compile</huaweicloud.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.storage.version>2.8.1</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
@@ -3232,7 +3233,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.21.2</version>
+            <version>11.0.1</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3526,6 +3527,7 @@
       <id>hadoop-provided</id>
       <properties>
         <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
+        <huaweicloud.deps.scope>provided</huaweicloud.deps.scope>
       </properties>
     </profile>
     <profile>

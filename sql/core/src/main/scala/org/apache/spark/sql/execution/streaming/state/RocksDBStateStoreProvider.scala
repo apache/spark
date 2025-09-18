@@ -844,10 +844,17 @@ private[sql] class RocksDBStateStoreProvider
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[StateStore]]
    */
   override def replayStateFromSnapshot(
-      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
+      snapshotVersion: Long,
+      endVersion: Long,
+      readOnly: Boolean,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): StateStore = {
     try {
       if (snapshotVersion < 1) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
@@ -857,7 +864,11 @@ private[sql] class RocksDBStateStoreProvider
       }
       val stamp = stateMachine.acquireStamp()
       try {
-        rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
+        rocksDB.loadFromSnapshot(
+          snapshotVersion,
+          endVersion,
+          snapshotVersionStateStoreCkptId,
+          endVersionStateStoreCkptId)
         new RocksDBStateStore(endVersion, stamp, readOnly)
       } catch {
         case e: Throwable =>

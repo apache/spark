@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, KEY, VALUE}
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, VariableResolution}
+import org.apache.spark.sql.catalyst.analysis.VariableResolution
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
@@ -112,8 +112,7 @@ case class SetCommand(kv: Option[(String, Option[String])])
             sparkSession.sessionState.analyzer.catalogManager.tempVariableManager
           )
           val variable = variableResolution.lookupVariable(
-            nameParts = varName,
-            resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate
+            nameParts = varName
           )
           if (variable.isDefined) {
             throw new AnalysisException(
