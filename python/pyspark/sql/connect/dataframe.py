@@ -448,6 +448,7 @@ class DataFrame(ParentDataFrame):
         self, numPartitions: int, partitionIdCol: "ColumnOrName"
     ) -> ParentDataFrame:
         from pyspark.sql.connect.column import Column as ConnectColumn
+
         if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
             raise PySparkTypeError(
                 errorClass="NOT_INT",
