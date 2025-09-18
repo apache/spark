@@ -6293,7 +6293,7 @@ class DataFrame:
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
 
-        >>> df.pandas_api()  # doctest: +SKIP
+        >>> df.pandas_api()
            age   name
         0   14    Tom
         1   23  Alice
@@ -6301,7 +6301,7 @@ class DataFrame:
 
         We can specify the index columns.
 
-        >>> df.pandas_api(index_col="age")  # doctest: +SKIP
+        >>> df.pandas_api(index_col="age")
               name
         age
         14     Tom
