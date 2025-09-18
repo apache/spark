@@ -130,9 +130,16 @@ class TestGraphRegistrationContext(
   ): Unit = {
     // scalastyle:on
     val tableIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
+    val qualifiedIdentifier = GraphIdentifierManager
+          .parseAndQualifyTableIdentifier(
+            rawTableIdentifier = GraphIdentifierManager
+              .parseTableIdentifier(name, spark),
+            currentCatalog = Some(defaultCatalog),
+            currentDatabase = Some(defaultDatabase))
+          .identifier
     registerTable(
       Table(
-        identifier = GraphIdentifierManager.parseTableIdentifier(name, spark),
+        identifier = qualifiedIdentifier,
         comment = comment,
         specifiedSchema = specifiedSchema,
         partitionCols = partitionCols,
@@ -147,8 +154,8 @@ class TestGraphRegistrationContext(
     if (query.isDefined) {
       registerFlow(
         new UnresolvedFlow(
-          identifier = tableIdentifier,
-          destinationIdentifier = tableIdentifier,
+          identifier = qualifiedIdentifier,
+          destinationIdentifier = qualifiedIdentifier,
           func = query.get,
           queryContext = QueryContext(
             currentCatalog = catalog.orElse(Some(defaultCatalog)),
@@ -194,6 +201,13 @@ class TestGraphRegistrationContext(
 
     val viewIdentifier = GraphIdentifierManager
       .parseAndValidateTemporaryViewIdentifier(rawViewIdentifier = TableIdentifier(name))
+    
+    val persistedViewIdentifier = GraphIdentifierManager
+      .parseAndValidatePersistedViewIdentifier(
+        rawViewIdentifier = TableIdentifier(name),
+        currentCatalog = Some(defaultCatalog),
+        currentDatabase = Some(defaultDatabase)
+      )
 
     registerView(
       viewType match {
@@ -206,7 +220,7 @@ class TestGraphRegistrationContext(
           )
         case _ =>
           PersistedView(
-            identifier = viewIdentifier,
+            identifier = persistedViewIdentifier,
             comment = comment,
             origin = origin,
             properties = Map.empty
@@ -238,9 +252,32 @@ class TestGraphRegistrationContext(
       catalog: Option[String] = None,
       database: Option[String] = None
   ): Unit = {
-    val flowIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
-    val flowDestinationIdentifier =
+    val rawFlowIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
+    val rawDestinationIdentifier =
       GraphIdentifierManager.parseTableIdentifier(destinationName, spark)
+
+    val flowWritesToView = getViews()
+        .filter(_.isInstanceOf[TemporaryView])
+        .exists(_.identifier == rawDestinationIdentifier)
+
+    // If the flow is created implicitly as part of defining a view, then we do not
+    // qualify the flow identifier and the flow destination. This is because views are
+    // not permitted to have multipart
+    val isImplicitFlow = rawFlowIdentifier == rawDestinationIdentifier
+    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
+    val Seq(flowIdentifier, flowDestinationIdentifier) =
+      Seq(rawFlowIdentifier, rawDestinationIdentifier).map { rawIdentifier =>
+        if (isImplicitFlowForTempView) {
+          rawIdentifier
+        } else {
+          GraphIdentifierManager
+            .parseAndQualifyFlowIdentifier(
+              rawFlowIdentifier = rawIdentifier,
+              currentCatalog = Some(defaultCatalog),
+              currentDatabase = Some(defaultDatabase))
+            .identifier
+        }
+      }
 
     registerFlow(
       new UnresolvedFlow(

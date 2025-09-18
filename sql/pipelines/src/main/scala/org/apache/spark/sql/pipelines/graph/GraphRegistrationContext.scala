@@ -62,16 +62,49 @@ class GraphRegistrationContext(
         messageParameters = Map.empty)
     }
 
+    val qualifiedFlows = flows.toSeq.map { f =>
+      val isImplicitFlow = f.identifier == f.destinationIdentifier
+      val flowWritesToView =
+        views.toSeq
+          .filter(_.isInstanceOf[TemporaryView])
+          .exists(_.identifier == f.destinationIdentifier)
+
+      // If the flow is created implicitly as part of defining a view, then we do not
+      // qualify the flow identifier and the flow destination. This is because views are
+      // not permitted to have multipart
+      println(s"condition in context = ${isImplicitFlow && flowWritesToView}")
+      if (isImplicitFlow && flowWritesToView) {
+        f
+      } else {
+        f.copy(
+          identifier = GraphIdentifierManager
+            .parseAndQualifyFlowIdentifier(
+              rawFlowIdentifier = f.identifier,
+              currentCatalog = Some(defaultCatalog),
+              currentDatabase = Some(defaultDatabase)
+            )
+            .identifier,
+          destinationIdentifier = GraphIdentifierManager
+            .parseAndQualifyFlowIdentifier(
+              rawFlowIdentifier = f.destinationIdentifier,
+              currentCatalog = Some(defaultCatalog),
+              currentDatabase = Some(defaultDatabase)
+            )
+            .identifier
+        )
+      }
+    }
+
     assertNoDuplicates(
       qualifiedTables = tables.toSeq,
       validatedViews = views.toSeq,
-      qualifiedFlows = flows.toSeq
+      qualifiedFlows = qualifiedFlows
     )
 
     new DataflowGraph(
       tables = tables.toSeq,
       views = views.toSeq,
-      flows = flows.toSeq
+      flows = qualifiedFlows
     )
   }
 
