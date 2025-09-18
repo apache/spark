@@ -1023,12 +1023,13 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     var exitCode: Int = 1
+    var cause: Throwable = null
     try {
       app.start(childArgs.toArray, sparkConf)
       exitCode = 0
     } catch {
       case t: Throwable =>
-        val cause = findCause(t)
+        cause = findCause(t)
         cause match {
           case e: SparkUserAppException =>
             exitCode = e.exitCode
@@ -1049,7 +1050,7 @@ private[spark] class SparkSubmit extends Logging {
         logInfo(
           log"Calling System.exit() with exit code ${MDC(LogKeys.EXIT_CODE, exitCode)} " +
           log"because ${MDC(LogKeys.CONFIG, SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key)}=true")
-        exitFn(exitCode)
+        exitFn(exitCode, Option(cause))
       }
     }
   }
@@ -1143,7 +1144,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
           super.doSubmit(args)
         } catch {
           case e: SparkUserAppException =>
-            exitFn(e.exitCode)
+            exitFn(e.exitCode, Some(e))
         }
       }
 

@@ -476,6 +476,9 @@ object LiteralValueProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
         SparkIntervalUtils.microsToDuration(literal.getDayTimeInterval)
 
+      case proto.Expression.Literal.LiteralTypeCase.TIME =>
+        SparkDateTimeUtils.nanosToLocalTime(literal.getTime.getNano)
+
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         toScalaArray(literal.getArray)
 

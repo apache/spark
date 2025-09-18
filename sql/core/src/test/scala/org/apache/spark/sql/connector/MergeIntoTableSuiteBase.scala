@@ -2332,6 +2332,65 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("Merge schema evolution replacing column with default value and set all column") {
+    Seq((true, true), (false, true), (true, false)).foreach {
+      case (withSchemaEvolution, schemaEvolutionEnabled) =>
+        withTempView("source") {
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |{ "pk": 4, "salary": 400, "dep": "marketing" }
+              |{ "pk": 5, "salary": 500, "dep": "executive" }
+              |""".stripMargin)
+
+          if (!schemaEvolutionEnabled) {
+            sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
+                   | ('auto-schema-evolution' = 'false')""".stripMargin)
+          }
+          sql(s"""ALTER TABLE $tableNameAsString ALTER COLUMN dep SET DEFAULT 'unknown'""")
+
+          val sourceDF = Seq((4, 150, true),
+            (5, 250, true),
+            (6, 350, false)).toDF("pk", "salary", "active")
+          sourceDF.createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          sql(s"""MERGE $schemaEvolutionClause
+                 |INTO $tableNameAsString t
+                 |USING source s
+                 |ON t.pk = s.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin)
+          if (withSchemaEvolution && schemaEvolutionEnabled) {
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(1, 100, "hr", null),
+                Row(2, 200, "software", null),
+                Row(3, 300, "hr", null),
+                Row(4, 150, "marketing", true),
+                Row(5, 250, "executive", true),
+                Row(6, 350, "unknown", false)))
+          } else {
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(1, 100, "hr"),
+                Row(2, 200, "software"),
+                Row(3, 300, "hr"),
+                Row(4, 150, "marketing"),
+                Row(5, 250, "executive"),
+                Row(6, 350, "unknown")))
+          }
+          sql(s"DROP TABLE $tableNameAsString")
+        }
+    }
+  }
+
   test("Merge schema evolution replacing column with set explicit column") {
     Seq((true, true), (false, true), (true, false)).foreach {
       case (withSchemaEvolution, schemaEvolutionEnabled) =>
@@ -2452,7 +2511,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("merge into schema evolution add column with nested field and set all columns") {
+  test("merge into schema evolution add column with nested struct and set all columns") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
         createAndInitTable(
@@ -2511,7 +2570,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("merge into schema evolution replace column with nested field and set explicit columns") {
+  test("merge into schema evolution replace column with nested struct and set explicit columns") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
         createAndInitTable(
@@ -2572,7 +2631,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  // TODO- support schema evolution for missing nested types using UPDATE SET * and INSERT *
+  // currently the source struct needs to be fully compatible with target struct
+  // i.e. cannot remove a nested field
   test("merge into schema evolution replace column with nested field and set all columns") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
@@ -2664,8 +2724,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           sql(mergeStmt)
           checkAnswer(
             sql(s"SELECT * FROM $tableNameAsString"),
-            // TODO- InMemoryBaseTable does not return null for nested schema evolution.
-            Seq(Row(0, Array(Row(1, "a", true), Row(2, "b", true)), "sales"),
+            Seq(Row(0, Array(Row(1, "a", null), Row(2, "b", null)), "sales"),
               Row(1, Array(Row(10, "c", true), Row(20, "d", false)), "hr"),
               Row(2, Array(Row(30, "d", false), Row(40, "e", true)), "engineering")))
         } else {

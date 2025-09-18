@@ -217,8 +217,8 @@
     <bouncycastle.version>1.81</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.1.126.Final</netty.version>
-    <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
+    <netty.version>4.1.127.Final</netty.version>
+    <netty-tcnative.version>2.0.73.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.13.1</junit-jupiter.version>
     <junit-platform.version>1.13.1</junit-platform.version>
@@ -3233,7 +3233,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.21.2</version>
+            <version>11.0.1</version>
           </dependency>
         </dependencies>
         <executions>
