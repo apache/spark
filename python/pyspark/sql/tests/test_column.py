@@ -232,20 +232,19 @@ class ColumnTestsMixin:
 
     # SPARK-51426: Ensure setting metadata to '{]' clears the metadata
     def test_alias_empty_metadata(self):
-        df = self.spark.createDataFrame([('',)], ['a'])
-        df = df.withMetadata('a', {'foo': 'bar'})
-        assert df.schema['a'].metadata == {'foo': 'bar'}
+        df = self.spark.createDataFrame([("",)], ["a"])
+        df = df.withMetadata("a", {"foo": "bar"})
+        self.assertEqual(df.schema["a"].metadata, {"foo": "bar"})
 
         # Ensure setting to `{}` clears the metadata
-        df = df.select([sf.col('a').alias('a', metadata={})])
-        assert df.schema['a'].metadata == {}
+        df = df.select([sf.col("a").alias("a", metadata={})])
+        self.assertEqual(df.schema["a"].metadata, {})
 
-        df = df.withMetadata('a', {'baz': 'burr'})
-        assert df.schema['a'].metadata == {'baz': 'burr'}
+        df = df.withMetadata("a", {"baz": "burr"})
+        self.assertEqual(df.schema["a"].metadata, {"baz": "burr"})
 
-        df = df.withMetadata('a', {})
-        assert df.schema['a'].metadata == {}
-
+        df = df.withMetadata("a", {})
+        self.assertEqual(df.schema["a"].metadata, {})
 
     def test_alias_negative(self):
         with self.assertRaises(PySparkValueError) as pe:
