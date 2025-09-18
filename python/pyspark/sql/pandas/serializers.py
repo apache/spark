@@ -20,7 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from decimal import Decimal
-from itertools import groupby, accumulate
+from itertools import groupby
 from typing import TYPE_CHECKING, Optional
 
 import pyspark
