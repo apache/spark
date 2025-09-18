@@ -463,16 +463,22 @@ class DataFrame(ParentDataFrame):
                 },
             )
 
-        from pyspark.sql.connect.expressions import DirectShufflePartitionID
-        from pyspark.sql.connect.column import Column
+        from pyspark.sql.connect.expressions import DirectShufflePartitionID, Expression
+        from pyspark.sql.connect.column import Column as ConnectColumn
 
         # Convert the partition column to a DirectShufflePartitionID expression
         if isinstance(partitionIdCol, str):
-            partition_col = F.col(partitionIdCol)
-        else:
+            partition_col = self[partitionIdCol]
+        elif isinstance(partitionIdCol, ConnectColumn):
             partition_col = partitionIdCol
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_COLUMN_OR_STR",
+                messageParameters={"arg_name": "partitionIdCol", "arg_type": type(partitionIdCol).__name__},
+            )
 
-        direct_partition_expr = DirectShufflePartitionID(partition_col._expr)
+        partition_col_expr: Expression = cast(ConnectColumn, partition_col)._expr
+        direct_partition_expr = DirectShufflePartitionID(partition_col_expr)
         direct_partition_col = Column(direct_partition_expr)
 
         res = DataFrame(
