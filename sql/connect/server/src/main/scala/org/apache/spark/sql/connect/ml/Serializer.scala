@@ -165,18 +165,21 @@ private[ml] object Serializer {
           case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
             (literal.getBoolean.asInstanceOf[Object], classOf[Boolean])
           case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-            val array = literal.getArray
-            array.getElementType.getKindCase match {
+            val scalaArray = LiteralValueProtoConverter.toScalaArray(literal.getArray)
+            val arrayType = LiteralValueProtoConverter.getProtoArrayType(literal.getArray)
+            arrayType.getElementType.getKindCase match {
               case proto.DataType.KindCase.DOUBLE =>
-                (parseDoubleArray(array), classOf[Array[Double]])
+                (MLUtils.reconcileArray(classOf[Double], scalaArray), classOf[Array[Double]])
               case proto.DataType.KindCase.STRING =>
-                (parseStringArray(array), classOf[Array[String]])
+                (MLUtils.reconcileArray(classOf[String], scalaArray), classOf[Array[String]])
               case proto.DataType.KindCase.ARRAY =>
-                array.getElementType.getArray.getElementType.getKindCase match {
+                arrayType.getElementType.getArray.getElementType.getKindCase match {
                   case proto.DataType.KindCase.STRING =>
-                    (parseStringArrayArray(array), classOf[Array[Array[String]]])
+                    (
+                      MLUtils.reconcileArray(classOf[Array[String]], scalaArray),
+                      classOf[Array[Array[String]]])
                   case _ =>
-                    throw MlUnsupportedException(s"Unsupported inner array $array")
+                    throw MlUnsupportedException(s"Unsupported inner array ${literal.getArray}")
                 }
               case _ =>
                 throw MlUnsupportedException(s"Unsupported array $literal")
@@ -191,37 +194,6 @@ private[ml] object Serializer {
         throw MlUnsupportedException(s"$arg not supported")
       }
     }
-  }
-
-  private def parseDoubleArray(array: proto.Expression.Literal.Array): Array[Double] = {
-    val values = new Array[Double](array.getElementsCount)
-    var i = 0
-    while (i < array.getElementsCount) {
-      values(i) = array.getElements(i).getDouble
-      i += 1
-    }
-    values
-  }
-
-  private def parseStringArray(array: proto.Expression.Literal.Array): Array[String] = {
-    val values = new Array[String](array.getElementsCount)
-    var i = 0
-    while (i < array.getElementsCount) {
-      values(i) = array.getElements(i).getString
-      i += 1
-    }
-    values
-  }
-
-  private def parseStringArrayArray(
-      array: proto.Expression.Literal.Array): Array[Array[String]] = {
-    val values = new Array[Array[String]](array.getElementsCount)
-    var i = 0
-    while (i < array.getElementsCount) {
-      values(i) = parseStringArray(array.getElements(i).getArray)
-      i += 1
-    }
-    values
   }
 
   /**

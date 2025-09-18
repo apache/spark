@@ -9862,6 +9862,7 @@ def dayofweek(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Examples
     --------
@@ -9942,6 +9943,7 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Returns
     -------
@@ -10124,6 +10126,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Examples
     --------
@@ -10455,6 +10458,9 @@ def weekofyear(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
 
     Examples
     --------
@@ -11744,23 +11750,23 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00",)], ["str"])
-    >>> df.select(sf.to_time(df.str).alias("time")).show()
-    +--------+
-    |    time|
-    +--------+
-    |10:30:00|
-    +--------+
+    >>> df.select(sf.to_time(df.str)).show()
+    +------------+
+    |to_time(str)|
+    +------------+
+    |    10:30:00|
+    +------------+
 
     Example 2: Convert string to a time with a format
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["str", "format"])
-    >>> df.select(sf.to_time(df.str, df.format).alias("time")).show()
-    +--------+
-    |    time|
-    +--------+
-    |10:30:00|
-    +--------+
+    >>> df.select(sf.to_time(df.str, df.format)).show()
+    +--------------------+
+    |to_time(str, format)|
+    +--------------------+
+    |            10:30:00|
+    +--------------------+
     """
     if format is None:
         return _invoke_function_over_columns("to_time", str)
@@ -11954,9 +11960,9 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t).alias('dt')).show()
+    >>> df.select(sf.try_to_timestamp(df.t)).show()
     +-------------------+
-    |                 dt|
+    |try_to_timestamp(t)|
     +-------------------+
     |1997-02-28 10:30:00|
     +-------------------+
@@ -11965,12 +11971,12 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss')).alias('dt')).show()
-    +-------------------+
-    |                 dt|
-    +-------------------+
-    |1997-02-28 10:30:00|
-    +-------------------+
+    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss'))).show()
+    +----------------------------------------+
+    |try_to_timestamp(t, yyyy-MM-dd HH:mm:ss)|
+    +----------------------------------------+
+    |                     1997-02-28 10:30:00|
+    +----------------------------------------+
 
     Example 3: Converion failure results in NULL when ANSI mode is on
 
@@ -12218,6 +12224,7 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.date_trunc`
+    :meth:`pyspark.sql.functions.time_trunc`
 
     Examples
     --------
@@ -12271,6 +12278,7 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.time_trunc`
 
     Examples
     --------
@@ -12724,6 +12732,7 @@ def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.trunc`
     :meth:`pyspark.sql.functions.date_trunc`
 
     Examples
@@ -24762,6 +24771,7 @@ def make_timestamp(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24858,6 +24868,7 @@ def try_make_timestamp(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24969,6 +24980,7 @@ def make_timestamp_ltz(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -25065,6 +25077,7 @@ def try_make_timestamp_ltz(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -25172,6 +25185,7 @@ def make_timestamp_ntz(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -25243,6 +25257,7 @@ def try_make_timestamp_ntz(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -27047,32 +27062,7 @@ def udf(
     # The following table shows most of Python data and SQL type conversions in normal UDFs that
     # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
     # future. The table might have to be eventually documented externally.
-    # Please see SPARK-28131's PR to see the codes in order to generate the table below.
-    #
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|         a(str)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|bytearray(b'ABC')(bytearray)|  1(Decimal)|{'a': 1}(dict)|Row(kwargs=1)(Row)|Row(namedtuple=1)(Row)|  # noqa
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    # |                      boolean|          None|      True|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                      tinyint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                     smallint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                          int|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       bigint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       string|          None|    'true'|   '1'|            'a'|'java.util.Gregor...|         'java.util.Gregor...|     '1.0'|         '[I@66cbb73a'|    '[1]'|'[Ljava.lang.Obje...|               '[B@5a51eb1a'|         '1'|       '{a=1}'|                 X|                     X|  # noqa
-    # |                         date|          None|         X|     X|              X|datetime.date(197...|         datetime.date(197...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
-    # |                    timestamp|          None|         X|     X|              X|                   X|         datetime.datetime...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
-    # |                        float|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       double|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                   array<int>|          None|      None|  None|           None|                None|                         None|      None|                   [1]|      [1]|                 [1]|                [65, 66, 67]|        None|          None|                 X|                     X|  # noqa
-    # |                       binary|          None|      None|  None|bytearray(b'a')|                None|                         None|      None|                  None|     None|                None|           bytearray(b'ABC')|        None|          None|                 X|                     X|  # noqa
-    # |                decimal(10,0)|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|Decimal('1')|          None|                 X|                     X|  # noqa
-    # |              map<string,int>|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|      {'a': 1}|                 X|                     X|  # noqa
-    # |               struct<_1:int>|          None|         X|     X|              X|                   X|                            X|         X|                     X|Row(_1=1)|           Row(_1=1)|                           X|           X|  Row(_1=None)|         Row(_1=1)|             Row(_1=1)|  # noqa
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    #
-    # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
-    #       used in `returnType`.
-    # Note: The values inside of the table are generated by `repr`.
-    # Note: 'X' means it throws an exception during the conversion.
+    # Please see python/pyspark/sql/tests/udf_type_tests for type tests and golden files
 
     # decorator @udf, @udf(), @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):

@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
@@ -189,14 +189,20 @@ case class InlineCTE(
 
       case ref: CTERelationRef =>
         val refInfo = cteMap(ref.cteId)
+
+        val cteBody = if (ref.isUnlimitedRecursion) {
+          setUnlimitedRecursion(refInfo.cteDef.child, ref.cteId)
+        } else {
+          refInfo.cteDef.child
+        }
         if (refInfo.shouldInline) {
           if (ref.outputSet == refInfo.cteDef.outputSet) {
-            refInfo.cteDef.child
+            cteBody
           } else {
             val ctePlan = DeduplicateRelations(
               Join(
-                refInfo.cteDef.child,
-                refInfo.cteDef.child,
+                cteBody,
+                cteBody,
                 Inner,
                 None,
                 JoinHint(None, None)
@@ -224,6 +230,18 @@ case class InlineCTE(
           }
 
       case _ => plan
+    }
+  }
+
+  // Helper function to set unlimited recursion.
+  private def setUnlimitedRecursion(plan: LogicalPlan, id: Long): LogicalPlan = {
+    plan match {
+      case ul: UnionLoop if ul.id == id =>
+        // Since there is exactly one UnionLoop node with this id in the CTE body, we can stop the
+        // recursion here.
+        ul.copy(limit = Some(-1))
+      case other =>
+        other.withNewChildren(plan.children.map(child => setUnlimitedRecursion(child, id)))
     }
   }
 }

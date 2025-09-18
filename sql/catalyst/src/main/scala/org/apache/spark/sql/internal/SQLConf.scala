@@ -875,6 +875,21 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
 
+  val SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED =
+    buildConf("spark.sql.shuffle.orderIndependentChecksum.enabled")
+      .doc("Whether to calculate order independent checksum for the shuffle data or not. If " +
+        "enabled, Spark will calculate a checksum that is independent of the input row order for " +
+        "each mapper and returns the checksums from executors to driver. This is different from " +
+        "the checksum computed when spark.shuffle.checksum.enabled is enabled which is sensitive " +
+        "to shuffle data ordering to detect file corruption. While this checksum will be the " +
+        "same even if the shuffle row order changes and it is used to detect whether different " +
+        "task attempts of the same partition produce different output data or not (same set of " +
+        "keyValue pairs). In case the output data has changed across retries, Spark will need to " +
+        "retry all tasks of the consumer stages to avoid correctness issues.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
       .internal()
@@ -1833,6 +1848,14 @@ object SQLConf {
         "for DSv2 data sources in V2ScanRelationPushdown optimization rule.")
       .booleanConf
       .createWithDefault(false)
+
+  val DATA_SOURCE_V2_EXPR_FOLDING =
+    buildConf("spark.sql.optimizer.datasourceV2ExprFolding")
+      .internal()
+      .doc("When this config is set to true, do safe constant folding for the " +
+        "expressions before translation and pushdown.")
+      .booleanConf
+      .createWithDefault(true)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
@@ -3577,11 +3600,27 @@ object SQLConf {
 
   val SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
     buildConf("spark.sql.shuffleDependency.fileCleanup.enabled")
-      .doc("When enabled, shuffle files will be cleaned up at the end of Spark Connect " +
-        "SQL executions.")
+      .doc("(Deprecated since Spark 4.1, please set" +
+        " 'spark.sql.connect.shuffleDependency.fileCleanup.enabled'.)")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
+
+  val CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
+    buildConf("spark.sql.classic.shuffleDependency.fileCleanup.enabled")
+      .doc("When enabled, shuffle files will be cleaned up at the end of classic " +
+        "SQL executions. Note that this cleanup may cause stage retries and regenerate " +
+        "shuffle files if the same dataframe reference is executed again.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
+  val CONNECT_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
+    buildConf("spark.sql.connect.shuffleDependency.fileCleanup.enabled")
+      .doc("When enabled, shuffle files will be cleaned up at the end of Spark Connect " +
+        "SQL executions.")
+      .version("4.1.0")
+      .fallbackConf(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
@@ -3946,7 +3985,7 @@ object SQLConf {
         "and DataSource against the expected schema to ensure that they are compatible.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
@@ -4118,6 +4157,17 @@ object SQLConf {
         "feature flag. SQL Scripting enables users to write procedural SQL including control " +
         "flow and error handling.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED =
+    buildConf("spark.sql.scripting.continueHandlerEnabled")
+      .internal()
+      .doc("EXPERIMENTAL FEATURE/WORK IN PROGRESS: SQL Scripting CONTINUE HANDLER feature " +
+        "is under development and still not working as intended. This feature switch is intended " +
+        "to be used internally for development and testing, not by end users. " +
+        "YOU ARE ADVISED AGAINST USING THIS FEATURE AS ITS NOT FINISHED.")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -6192,6 +6242,16 @@ object SQLConf {
       .createWithDefault(2)
   }
 
+  val PIPELINES_EVENT_QUEUE_CAPACITY = {
+    buildConf("spark.sql.pipelines.event.queue.capacity")
+      .doc("Capacity of the event queue used in pipelined execution. When the queue is full, " +
+        "non-terminal FlowProgressEvents will be dropped.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(v => v > 0, "Event queue capacity must be positive.")
+      .createWithDefault(1000)
+  }
+
   val HADOOP_LINE_RECORD_READER_ENABLED =
     buildConf("spark.sql.execution.datasources.hadoopLineRecordReader.enabled")
       .internal()
@@ -6313,7 +6373,9 @@ object SQLConf {
       DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
         s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead."),
       DeprecatedConfig(ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key, "4.0", "Increase indexes by 1 " +
-        "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\".")
+        "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\"."),
+      DeprecatedConfig(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "4.1",
+        s"Use '${CONNECT_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key}' instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -6585,6 +6647,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       defaultNumShufflePartitions
     }
   }
+
+  def shuffleOrderIndependentChecksumEnabled: Boolean =
+    getConf(SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)
 
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 

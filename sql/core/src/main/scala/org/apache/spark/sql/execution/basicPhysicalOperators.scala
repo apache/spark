@@ -707,9 +707,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     // Create a map of attributes from the other children to the first child.
     val firstAttrs = children.head.output
     val attributesMap = children.tail.map(_.output).map { otherAttrs =>
-      otherAttrs.zip(firstAttrs).map { case (attr, firstAttr) =>
-        attr -> firstAttr
-      }.toMap
+      AttributeMap(otherAttrs.zip(firstAttrs))
     }
 
     val partitionings = children.map(_.outputPartitioning)
@@ -721,7 +719,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
       p match {
         case e: Expression =>
           e.transform {
-            case a: Attribute if attributeMap.contains(a) => attributeMap(a)
+            case a: Attribute if attributeMap.contains(a) =>
+              attributeMap(a)
           }.asInstanceOf[Partitioning]
         case _ => p
       }

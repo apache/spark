@@ -58,7 +58,6 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.ANSI_ENABLED.key, "true")
-      .set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   // Tests

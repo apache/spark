@@ -329,8 +329,10 @@ class PySparkPlotAccessor:
             Name of column to be used as the category labels for the pie plot.
         y : str, optional
             Name of the column to plot. If not provided, `subplots=True` must be passed at `kwargs`.
+        subplots : bool, default False, optional (passed via `kwargs`)
+            If True, create a separate subplot for each numeric column in the DataFrame.
         **kwargs
-            Additional keyword arguments.
+            Additional keyword arguments. See also `subplots` above.
 
         Returns
         -------
@@ -371,7 +373,8 @@ class PySparkPlotAccessor:
         ----------
         column: str or list of str, optional
             Column name or list of names to be used for creating the box plot.
-            If None (default), all numeric columns will be used.
+            If None (default), all numeric columns will be used. If no numeric columns exist,
+            behavior may depend on the plot backend.
         **kwargs
             Extra arguments to `precision`: refer to a float that is used by
             pyspark to compute approximate statistics for building a boxplot.
@@ -424,7 +427,8 @@ class PySparkPlotAccessor:
             See KernelDensity in PySpark for more information.
         column: str or list of str, optional
             Column name or list of names to be used for creating the kde plot.
-            If None (default), all numeric columns will be used.
+            If None (default), all numeric columns will be used. If no numeric columns exist,
+            behavior may depend on the plot backend.
         ind : List of float, NumPy array or integer, optional
             Evaluation points for the estimated PDF. If None (default),
             1000 equally spaced points are used. If `ind` is a NumPy array, the
@@ -463,8 +467,9 @@ class PySparkPlotAccessor:
         Parameters
         ----------
         column: str or list of str, optional
-            Column name or list of names to be used for creating the hostogram plot.
-            If None (default), all numeric columns will be used.
+            Column name or list of names to be used for creating the histogram plot.
+            If None (default), all numeric columns will be used. If no numeric columns exist,
+            behavior may depend on the plot backend.
         bins : integer, default 10
             Number of histogram bins to be used.
         **kwargs

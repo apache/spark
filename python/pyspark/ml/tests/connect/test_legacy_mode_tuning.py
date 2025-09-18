@@ -188,6 +188,7 @@ class CrossValidatorTestsMixin:
             )
 
     def test_crossvalidator_on_pipeline(self):
+        import torch
         from sklearn.datasets import load_breast_cancer
 
         sk_dataset = load_breast_cancer()
@@ -232,24 +233,31 @@ class CrossValidatorTestsMixin:
 
         # Test save / load
         with tempfile.TemporaryDirectory(prefix="test_crossvalidator_on_pipeline") as tmp_dir:
-            cv.saveToLocal(f"{tmp_dir}/cv")
-            loaded_cv = CrossValidator.loadFromLocal(f"{tmp_dir}/cv")
+            with torch.serialization.safe_globals(
+                [
+                    torch.nn.modules.container.Sequential,
+                    torch.nn.modules.linear.Linear,
+                    torch.nn.modules.activation.Softmax,
+                ]
+            ):
+                cv.saveToLocal(f"{tmp_dir}/cv")
+                loaded_cv = CrossValidator.loadFromLocal(f"{tmp_dir}/cv")
 
-            _verify_cv_saved_params(cv, loaded_cv)
+                _verify_cv_saved_params(cv, loaded_cv)
 
-            cv_model.saveToLocal(f"{tmp_dir}/cv_model")
-            loaded_cv_model = CrossValidatorModel.loadFromLocal(f"{tmp_dir}/cv_model")
+                cv_model.saveToLocal(f"{tmp_dir}/cv_model")
+                loaded_cv_model = CrossValidatorModel.loadFromLocal(f"{tmp_dir}/cv_model")
 
-            _verify_cv_saved_params(cv_model, loaded_cv_model)
+                _verify_cv_saved_params(cv_model, loaded_cv_model)
 
-            assert cv_model.uid == loaded_cv_model.uid
-            assert cv_model.bestModel.uid == loaded_cv_model.bestModel.uid
-            assert cv_model.bestModel.stages[0].uid == loaded_cv_model.bestModel.stages[0].uid
-            assert cv_model.bestModel.stages[1].uid == loaded_cv_model.bestModel.stages[1].uid
-            assert loaded_cv_model.bestModel.stages[1].getMaxIter() == 5
+                assert cv_model.uid == loaded_cv_model.uid
+                assert cv_model.bestModel.uid == loaded_cv_model.bestModel.uid
+                assert cv_model.bestModel.stages[0].uid == loaded_cv_model.bestModel.stages[0].uid
+                assert cv_model.bestModel.stages[1].uid == loaded_cv_model.bestModel.stages[1].uid
+                assert loaded_cv_model.bestModel.stages[1].getMaxIter() == 5
 
-            np.testing.assert_allclose(cv_model.avgMetrics, loaded_cv_model.avgMetrics)
-            np.testing.assert_allclose(cv_model.stdMetrics, loaded_cv_model.stdMetrics)
+                np.testing.assert_allclose(cv_model.avgMetrics, loaded_cv_model.avgMetrics)
+                np.testing.assert_allclose(cv_model.stdMetrics, loaded_cv_model.stdMetrics)
 
     @unittest.skipIf(
         sys.version_info > (3, 12), "SPARK-46078: Fails with dev torch with Python 3.12"

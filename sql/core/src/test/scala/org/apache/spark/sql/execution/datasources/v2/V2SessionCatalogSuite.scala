@@ -31,7 +31,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, TableSummary, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, TableSummary, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
@@ -48,8 +48,9 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   val testNs: Array[String] = Array("db")
   val defaultNs: Array[String] = Array("default")
   val testIdent: Identifier = Identifier.of(testNs, "test_table")
-  val testIdentQuoted: String = (testIdent.namespace :+ testIdent.name)
-    .map(part => quoteIdentifier(part)).mkString(".")
+  val catalogName: String = CatalogManager.SESSION_CATALOG_NAME
+  val testIdentQuoted: String = (catalogName +: testIdent.namespace :+ testIdent.name)
+    .map(quoteIdentifier).mkString(".")
 
   def newCatalog(): V2SessionCatalog = {
     val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)

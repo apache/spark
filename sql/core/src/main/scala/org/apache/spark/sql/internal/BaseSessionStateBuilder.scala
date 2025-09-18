@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveExecuteImmediate, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
@@ -244,6 +244,7 @@ abstract class BaseSessionStateBuilder(
         new EvalSubqueriesForTimeTravel +:
         new ResolveTranspose(session) +:
         new InvokeProcedures(session) +:
+        ResolveExecuteImmediate(session, this.catalogManager) +:
         ExtractSemiStructuredFields +:
         customResolutionRules
 
@@ -407,7 +408,8 @@ abstract class BaseSessionStateBuilder(
    */
   protected def createQueryExecution:
     (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
-      (plan, mode) => new QueryExecution(session, plan, mode = mode)
+      (plan, mode) => new QueryExecution(session, plan, mode = mode,
+        shuffleCleanupMode = QueryExecution.determineShuffleCleanupMode(session.sessionState.conf))
 
   /**
    * Interface to start and stop streaming queries.

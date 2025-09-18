@@ -362,7 +362,7 @@ jobs:
     - name: Install Python packages (Python 3.11)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect') || contains(matrix.modules, 'yarn')
       run: |
-        python3.11 -m pip install 'numpy>=1.22' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
+        python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
         python3.11 -m pip list
     # Run the tests.
     - name: Run tests
@@ -499,7 +499,8 @@ jobs:
     if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # TODO(SPARK-53605): Restore pyspark execution timeout to 2 hours after fixing test_pandas_transform_with_state
+    timeout-minutes: 150
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
     strategy:
@@ -947,7 +948,7 @@ jobs:
     - uses: actions/setup-java@v4
       with:
         distribution: zulu
-        java-version: 25-ea
+        java-version: 25
     - name: Build with Maven
       run: |
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
@@ -1323,9 +1324,9 @@ jobs:
           sudo apt update
           sudo apt-get install r-base
       - name: Start Minikube
-        uses: medyagh/setup-minikube@v0.0.19
+        uses: medyagh/setup-minikube@v0.0.20
         with:
-          kubernetes-version: "1.33.0"
+          kubernetes-version: "1.34.0"
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           cpus: 2
           memory: 6144m
@@ -1346,7 +1347,7 @@ jobs:
           elif [[ "${{ inputs.branch }}" == 'branch-4.0' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.11.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.12.1/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.12.2/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"

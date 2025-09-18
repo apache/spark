@@ -149,7 +149,7 @@ class ArrowWindowPythonEvaluatorFactory(
 
     private val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
     private val spillThreshold = conf.windowExecBufferSpillThreshold
-    private val spillSizeThreshold = conf.windowExecBufferSpillSizeThreshold
+    private val sizeInBytesSpillThreshold = conf.windowExecBufferSpillSizeThreshold
     private val sessionLocalTimeZone = conf.sessionLocalTimeZone
     private val largeVarTypes = conf.arrowUseLargeVarTypes
 
@@ -288,8 +288,13 @@ class ArrowWindowPythonEvaluatorFactory(
 
         // Manage the current partition.
         val buffer: ExternalAppendOnlyUnsafeRowArray =
-          new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold,
-            spillSizeThreshold)
+          new ExternalAppendOnlyUnsafeRowArray(
+            inMemoryThreshold,
+            // TODO: shall we have a new config to specify the max in-memory buffer size
+            //       of ExternalAppendOnlyUnsafeRowArray?
+            sizeInBytesSpillThreshold,
+            spillThreshold,
+            sizeInBytesSpillThreshold)
         var bufferIterator: Iterator[UnsafeRow] = _
 
         val indexRow =

@@ -67,7 +67,7 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   }
   private val arrowSchema = ArrowUtils.toArrowSchema(
     schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
-  private val allocator =
+  protected val allocator =
     ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
   protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
   protected var writer: ArrowStreamWriter = _

@@ -39,7 +39,13 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.getSizeInBytes"),
 
     // [SPARK-52221][SQL] Refactor SqlScriptingLocalVariableManager into more generic context manager
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager"),
+
+    // [SPARK-53391][CORE] Remove unused PrimitiveKeyOpenHashMap
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.collection.PrimitiveKeyOpenHashMap*"),
+
+    // [SPARK-54041][SQL] Enable Direct Passthrough Partitioning in the DataFrame API
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.repartitionById")
   )
 
   // Default exclude rules

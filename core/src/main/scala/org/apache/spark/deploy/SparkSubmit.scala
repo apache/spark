@@ -1022,11 +1022,20 @@ private[spark] class SparkSubmit extends Logging {
         e
     }
 
+    var exitCode: Int = 1
+    var cause: Throwable = null
     try {
       app.start(childArgs.toArray, sparkConf)
+      exitCode = 0
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        cause = findCause(t)
+        cause match {
+          case e: SparkUserAppException =>
+            exitCode = e.exitCode
+          case _ =>
+        }
+        throw cause
     } finally {
       if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
@@ -1036,6 +1045,12 @@ private[spark] class SparkSubmit extends Logging {
         } catch {
           case e: Throwable => logError("Failed to close SparkContext", e)
         }
+      }
+      if (sparkConf.get(SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT)) {
+        logInfo(
+          log"Calling System.exit() with exit code ${MDC(LogKeys.EXIT_CODE, exitCode)} " +
+          log"because ${MDC(LogKeys.CONFIG, SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key)}=true")
+        exitFn(exitCode, Option(cause))
       }
     }
   }
@@ -1129,7 +1144,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
           super.doSubmit(args)
         } catch {
           case e: SparkUserAppException =>
-            exitFn(e.exitCode)
+            exitFn(e.exitCode, Some(e))
         }
       }
 

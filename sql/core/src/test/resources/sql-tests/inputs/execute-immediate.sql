@@ -87,6 +87,10 @@ EXECUTE IMMEDIATE 'SELECT \'invalid_cast_error_expected\'' INTO res_id;
 -- require query when using INTO
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1;
 
+-- require query when using INTO with SET VAR command
+DECLARE OR REPLACE testvarA INT;
+EXECUTE IMMEDIATE 'SET VAR testVarA = 1' INTO testVarA;
+
 -- use column in using - should fail as we expect variable here
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id;
 
@@ -109,8 +113,10 @@ EXECUTE IMMEDIATE b;
 SET VAR sql_string = 'SELECT * from tbl_view where name = :first or id = :second';
 SET VAR a = 'na';
 
--- expressions not supported - feature not supported
+-- constant expressions are supported
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , "me1") as first;
+
+-- subquery in using not supported
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING (SELECT 42) as first, 'name2' as second;
 
 -- INTO variables not matching scalar types
@@ -140,10 +146,41 @@ EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p, 'p';
 EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id;
 
 -- nested execute immediate
-EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USING 10\'';
+EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ?\' USING 10';
 
 -- sqlString is null
 SET VAR sql_string = null;
 EXECUTE IMMEDIATE sql_string;
 
+-- sqlString is not a string
+SET VAR sql_string = 5;
+EXECUTE IMMEDIATE sql_string;
+
+-- sqlString is not a well formed SQL statement.
+SET VAR sql_string = 'hello';
+EXECUTE IMMEDIATE length(sql_string);
+
+-- mixed positional and named parameters in query
+EXECUTE IMMEDIATE 'SELECT 42 where ? = :first' USING 1, 2 as first;
+
+-- non-string variable as sqlString parameter
+DECLARE int_var INT;
+SET VAR int_var = 42;
+EXECUTE IMMEDIATE int_var;
+
+-- null string as sqlString parameter
+DECLARE null_var STRING;
+SET VAR null_var = null;
+EXECUTE IMMEDIATE null_var;
+
+-- unsupported expression for parameter (subquery)
+EXECUTE IMMEDIATE 'SELECT ?' USING (SELECT 1);
+
+-- named query with unnamed parameters
+EXECUTE IMMEDIATE 'SELECT :first' USING 2, 3;
+
+-- Query is not a constant
+EXECUTE IMMEDIATE (SELECT c FROM (VALUES(1)) AS T(c));
+
 DROP TABLE x;
+
