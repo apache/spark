@@ -6364,7 +6364,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
         ...
-        >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
+        >>> df.mapInPandas(filter_func, df.schema).show()
         +---+---+
         | id|age|
         +---+---+
@@ -6377,7 +6377,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf.groupby("id").mean().reset_index()
         ...
-        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()  # doctest: +SKIP
+        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()
         +---+----+
         | id| age|
         +---+----+
@@ -6393,7 +6393,7 @@ class DataFrame:
         ...         yield pdf
         ...
         >>> df.mapInPandas(
-        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()  # doctest: +SKIP
+        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()
         +---+---+----------+
         | id|age|double_age|
         +---+---+----------+
@@ -6405,7 +6405,7 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInPandas(filter_func, df.schema, barrier=True).collect()  # doctest: +SKIP
+        >>> df.mapInPandas(filter_func, df.schema, barrier=True).collect()
         [Row(id=1, age=21)]
 
         See Also
@@ -6457,13 +6457,13 @@ class DataFrame:
 
         Examples
         --------
-        >>> import pyarrow  # doctest: +SKIP
+        >>> import pyarrow as pa
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
         >>> def filter_func(iterator):
         ...     for batch in iterator:
         ...         pdf = batch.to_pandas()
-        ...         yield pyarrow.RecordBatch.from_pandas(pdf[pdf.id == 1])
-        >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKIP
+        ...         yield pa.RecordBatch.from_pandas(pdf[pdf.id == 1])
+        >>> df.mapInArrow(filter_func, df.schema).show()
         +---+---+
         | id|age|
         +---+---+
@@ -6474,7 +6474,7 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInArrow(filter_func, df.schema, barrier=True).collect()  # doctest: +SKIP
+        >>> df.mapInArrow(filter_func, df.schema, barrier=True).collect()
         [Row(id=1, age=21)]
 
         See Also
@@ -6503,13 +6503,13 @@ class DataFrame:
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df.toArrow()  # doctest: +SKIP
+        >>> df.coalesce(1).toArrow()
         pyarrow.Table
         age: int64
         name: string
         ----
-        age: [[2],[5]]
-        name: [["Alice"],["Bob"]]
+        age: [[2,5]]
+        name: [["Alice","Bob"]]
         """
         ...
 
@@ -6534,7 +6534,7 @@ class DataFrame:
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df.toPandas()  # doctest: +SKIP
+        >>> df.toPandas()
            age   name
         0    2  Alice
         1    5    Bob
