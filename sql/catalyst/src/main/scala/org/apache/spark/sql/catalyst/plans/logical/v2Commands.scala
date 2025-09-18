@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
@@ -969,8 +970,14 @@ object MergeIntoTable {
       case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
         Array(TableChange.updateColumnType(fieldPath, newType))
 
-      case _ =>
+      case (currentType, newType) if currentType == newType =>
+        // No change needed
         Array.empty[TableChange]
+
+      case _ =>
+        // Do not supporting changes between atomic and complex types for now
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+          originalTarget, originalSource, null)
     }
   }
 

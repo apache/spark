@@ -2633,7 +2633,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
             sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
             Seq(
               Row(1, Array(3000000000L, 4000000000L), "hr"),
-              Row(2, Array(4000L, 5000L, 6000L), "finance"),
+              Row(2, Array(4000, 5000, 6000), "finance"),
               Row(3, Array(5000000000L, 6000000000L), "engineering")
             ))
 
@@ -2645,8 +2645,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           val exception = intercept[Exception] {
             sql(mergeStmt)
           }
-          assert(exception.getMessage.contains(" Fail to assign a value of \"BIGINT\" type " +
-            "to the \"INT\" type column or variable `scores`.`element` due to an overflow"))
+          assert(exception.getMessage.contains("Fail to assign a value of \"BIGINT\" type " +
+            "to the \"INT\" type column or variable `scores`.`element`" +
+            " due to an overflow"))
         }
         sql(s"DROP TABLE IF EXISTS $tableNameAsString")
       }
@@ -2711,8 +2712,142 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
             sql(mergeStmt)
           }
           assert(exception.getMessage.contains("Fail to assign a value of \"BIGINT\" type " +
-            "to the \"INT\" type column or variable `metrics`.`value` due to an overflow"))
+            "to the \"INT\" type column or variable `metrics`.`value`" +
+            " due to an overflow"))
         }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge into schema evolution type widening two types and adding two columns") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |score INT,
+             |rating SHORT,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "score": 100, "rating": 45, "dep": "premium" }
+            |{ "pk": 2, "score": 85, "rating": 38, "dep": "standard" }
+            |""".stripMargin)
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType),
+          StructField("score", LongType),           // Widened from INT to LONG
+          StructField("rating", IntegerType),       // Widened from SHORT to INT
+          StructField("dep", StringType),
+          StructField("priority", StringType),      // New column 1
+          StructField("region", StringType)         // New column 2
+        ))
+
+        val data = Seq(
+          Row(1, 5000000000L, 485, "premium", "high", "west"),
+          Row(3, 7500000000L, 495, "enterprise", "critical", "east")
+        )
+
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED THEN
+                           | UPDATE SET *
+                           |WHEN NOT MATCHED THEN
+                           | INSERT *
+                           |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+            Seq(
+              Row(1, 5000000000L, 485, "premium", "high", "west"),
+              Row(2, 85L, 38, "standard", null, null),
+              Row(3, 7500000000L, 495, "enterprise", "critical", "east")
+            ))
+
+          val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+          val scoreField = tableSchema.find(_.name == "score").get
+          val ratingField = tableSchema.find(_.name == "rating").get
+          val priorityField = tableSchema.find(_.name == "priority")
+          val regionField = tableSchema.find(_.name == "region")
+
+          // Verify type widening
+          assert(scoreField.dataType == LongType)
+          assert(ratingField.dataType == IntegerType)
+
+          // Verify new columns added
+          assert(priorityField.isDefined)
+          assert(regionField.isDefined)
+          assert(priorityField.get.dataType == StringType)
+          assert(regionField.get.dataType == StringType)
+        } else {
+          val exception = intercept[Exception] {
+            sql(mergeStmt)
+          }
+          assert(exception.getMessage.contains("Fail to assign a value of \"BIGINT\" type " +
+            "to the \"INT\" type column or variable `score` due to an overflow."))
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge into schema evolution type promotion from int to struct not allowed") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |data INT,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "data": 100, "dep": "test" }
+            |{ "pk": 2, "data": 200, "dep": "sample" }
+            |""".stripMargin)
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType),
+          StructField("data", StructType(Seq(
+            StructField("value", IntegerType),
+            StructField("timestamp", LongType)
+          ))),
+          StructField("dep", StringType)
+        ))
+
+        val data = Seq(
+          Row(1, Row(150, 1634567890L), "test"),
+          Row(3, Row(300, 1634567900L), "new")
+        )
+
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED THEN
+                           | UPDATE SET *
+                           |WHEN NOT MATCHED THEN
+                           | INSERT *
+                           |""".stripMargin
+
+        // Even with schema evolution, int to struct promotion should not be allowed
+        val exception = intercept[Exception] {
+          sql(mergeStmt)
+        }
+
+        if (withSchemaEvolution) {
+          assert(exception.getMessage.contains("Failed to merge incompatible schemas"))
+        } else {
+          assert(exception.getMessage.contains(
+            """Cannot write incompatible data for the table ``""".stripMargin))
+        }
+
         sql(s"DROP TABLE IF EXISTS $tableNameAsString")
       }
     }
