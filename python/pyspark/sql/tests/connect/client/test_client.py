@@ -20,7 +20,6 @@ import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Union
 
-from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import eventually
 
@@ -39,6 +38,7 @@ if should_test_connect:
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.errors import PySparkRuntimeError
+    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
     import pyspark.sql.connect.proto as proto
 
     class TestPolicy(DefaultPolicy):
