@@ -104,6 +104,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Number of threads used to replay event logs.
   private val numReplayThreads = conf.get(History.NUM_REPLAY_THREADS)
+  // Number of threads used to compact rolling event logs.
   private val numCompactThreads = conf.get(History.NUM_COMPACT_THREADS)
 
   private val logDir = conf.get(History.HISTORY_LOG_DIR)
