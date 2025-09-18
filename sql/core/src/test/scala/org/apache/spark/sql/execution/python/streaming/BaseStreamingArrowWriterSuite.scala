@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.python.streaming
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
-import org.mockito.Mockito.{mock, never, times, verify}
+import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.arrow.ArrowWriter
 class BaseStreamingArrowWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
   // Setting the maximum number of records per batch to 2 to make test easier.
   val arrowMaxRecordsPerBatch = 2
+  val arrowMaxBytesPerBatch = Int.MaxValue
   var transformWithStateInPySparkWriter: BaseStreamingArrowWriter = _
   var arrowWriter: ArrowWriter = _
   var writer: ArrowStreamWriter = _
@@ -37,7 +38,7 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite with BeforeAndAfterEac
     writer = mock(classOf[ArrowStreamWriter])
     arrowWriter = mock(classOf[ArrowWriter])
     transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
-      root, writer, arrowMaxRecordsPerBatch, arrowWriter)
+      root, writer, arrowMaxRecordsPerBatch, arrowMaxBytesPerBatch, arrowWriter)
   }
 
   test("test writeRow") {
@@ -63,5 +64,26 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite with BeforeAndAfterEac
     verify(arrowWriter).finish()
     verify(writer).writeBatch()
     verify(arrowWriter).reset()
+  }
+
+  test("test maxBytesPerBatch can work") {
+    val root: VectorSchemaRoot = mock(classOf[VectorSchemaRoot])
+    when(arrowWriter.sizeInBytes()).thenReturn(2)
+    // Set arrowMaxBytesPerBatch to 1
+    transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
+      root, writer, arrowMaxRecordsPerBatch, 1, arrowWriter)
+    val dataRow = mock(classOf[InternalRow])
+    transformWithStateInPySparkWriter.writeRow(dataRow)
+    verify(arrowWriter).write(dataRow)
+    verify(writer, never()).writeBatch()
+    transformWithStateInPySparkWriter.writeRow(dataRow)
+    verify(arrowWriter, times(2)).write(dataRow)
+    // Write batch is called since we reach arrowMaxBytesPerBatch
+    verify(writer).writeBatch()
+    transformWithStateInPySparkWriter.finalizeCurrentArrowBatch()
+    verify(arrowWriter, times(2)).finish()
+    // The second record would be written
+    verify(writer, times(2)).writeBatch()
+    verify(arrowWriter, times(2)).reset()
   }
 }

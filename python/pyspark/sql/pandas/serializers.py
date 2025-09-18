@@ -20,7 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from decimal import Decimal
-from itertools import groupby
+from itertools import groupby, accumulate
 from typing import TYPE_CHECKING, Optional
 
 import pyspark
@@ -1582,6 +1582,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         safecheck,
         assign_cols_by_name,
         arrow_max_records_per_batch,
+        arrow_max_bytes_per_batch,
         int_to_decimal_coercion_enabled,
     ):
         super(TransformWithStateInPandasSerializer, self).__init__(
@@ -1592,6 +1593,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             arrow_cast=True,
         )
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.arrow_max_bytes_per_batch = arrow_max_bytes_per_batch
         self.key_offsets = None
 
     def load_stream(self, stream):
@@ -1607,6 +1609,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
         )
+        import sys
 
         def generate_data_batches(batches):
             """
@@ -1630,8 +1633,18 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                         yield (batch_key, row)
 
             for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
-                df = pd.DataFrame([row for _, row in group_rows])
-                yield (batch_key, df)
+                rows = []
+                accumulate_size = 0
+                for _, row in group_rows:
+                    rows.append(row)
+                    accumulate_size += sum(sys.getsizeof(x) for x in row)
+                    if (len(rows) >= self.arrow_max_records_per_batch or
+                            accumulate_size >= self.arrow_max_bytes_per_batch):
+                        yield (batch_key, pd.DataFrame(rows))
+                        rows = []
+                        accumulate_size = 0
+                if rows:
+                    yield (batch_key, pd.DataFrame(rows))
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
