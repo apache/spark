@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.python.streaming
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 
@@ -68,7 +69,15 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("test maxBytesPerBatch can work") {
     val root: VectorSchemaRoot = mock(classOf[VectorSchemaRoot])
-    when(arrowWriter.sizeInBytes()).thenReturn(2)
+
+    var sizeCounter = 0
+    when(arrowWriter.write(any[InternalRow])).thenAnswer { _ =>
+      sizeCounter += 1
+      ()
+    }
+
+    when(arrowWriter.sizeInBytes()).thenAnswer { _ => sizeCounter }
+
     // Set arrowMaxBytesPerBatch to 1
     transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
       root, writer, arrowMaxRecordsPerBatch, 1, arrowWriter)
