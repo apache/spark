@@ -25145,12 +25145,15 @@ def make_timestamp_ntz(
 
 @_try_remote_functions  # type: ignore[misc]
 def make_timestamp_ntz(
-    yearsOrDate: "ColumnOrName",
-    monthsOrTime: "ColumnOrName",
+    *,
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
     days: Optional["ColumnOrName"] = None,
     hours: Optional["ColumnOrName"] = None,
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
     Create local date-time from years, months, days, hours, mins, secs fields. Alternatively, try to
@@ -25164,37 +25167,41 @@ def make_timestamp_ntz(
 
     Parameters
     ----------
-    yearsOrDate : :class:`~pyspark.sql.Column` or column name
-        Either:
-
-        - The year to represent, from 1 to 9999;
-          for timestamp creation based on year, month, day, hour, minute and second.
-        - The date to represent, in valid DATE format;
-          for timestamp creation based on date and time.
-
-    monthsOrTime : :class:`~pyspark.sql.Column` or column name
-        Either:
-
-        - The month-of-year to represent, from 1 (January) to 12 (December);
-          for timestamp creation based on year, month, day, hour, minute and second.
-        - The time to represent, in valid TIME format;
-          for timestamp creation based on date and time.
-
+    years : :class:`~pyspark.sql.Column` or column name, optional
+        The year to represent, from 1 to 9999.
+        Required when creating timestamps from individual components.
+        Must be used with months, days, hours, mins, and secs.
+    months : :class:`~pyspark.sql.Column` or column name, optional
+        The month-of-year to represent, from 1 (January) to 12 (December).
+        Required when creating timestamps from individual components.
+        Must be used with years, days, hours, mins, and secs.
     days : :class:`~pyspark.sql.Column` or column name, optional
-        The day-of-month to represent, from 1 to 31;
-          only used for timestamp creation based on year, month, day, hour, minute and second.
+        The day-of-month to represent, from 1 to 31.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, hours, mins, and secs.
     hours : :class:`~pyspark.sql.Column` or column name, optional
-        The hour-of-day to represent, from 0 to 23;
-          only used for timestamp creation based on year, month, day, hour, minute and second.
+        The hour-of-day to represent, from 0 to 23.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, mins, and secs.
     mins : :class:`~pyspark.sql.Column` or column name, optional
-        The minute-of-hour to represent, from 0 to 59;
-          only used for timestamp creation based on year, month, day, hour, minute and second.
+        The minute-of-hour to represent, from 0 to 59.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and secs.
     secs : :class:`~pyspark.sql.Column` or column name, optional
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
-        The value can be either an integer like 13 , or a fraction like 13.123.
+        The value can be either an integer like 13, or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
-        to 0 and 1 minute is added to the final timestamp;
-        only used for timestamp creation based on year, month, day, hour, minute and second.
+        to 0 and 1 minute is added to the final timestamp.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and mins.
+    date : :class:`~pyspark.sql.Column` or column name, optional
+        The date to represent, in valid DATE format.
+        Required when creating timestamps from date and time components.
+        Must be used with time parameter only.
+    time : :class:`~pyspark.sql.Column` or column name, optional
+        The time to represent, in valid TIME format.
+        Required when creating timestamps from date and time components.
+        Must be used with date parameter only.
 
     Returns
     -------
@@ -25229,32 +25236,57 @@ def make_timestamp_ntz(
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    # Probe input arguments.
-    hasDays: bool = days is not None
-    hasHours: bool = hours is not None
-    hasMins: bool = mins is not None
-    hasSecs: bool = secs is not None
-    # Branch execution based on the number of input arguments.
-    if hasDays and hasHours and hasMins and hasSecs:
-        # Overload with inputs: years, months, days, hours, mins, secs.
+    # Check for 6-parameter usage: years, months, days, hours, mins, secs
+    if years is not None and months is not None:
+        if date is not None or time is not None:
+            raise PySparkValueError(
+                errorClass="INVALID_NUM_ARGS",
+                messageParameters={
+                    "arg_name": "make_timestamp_ntz",
+                    "num_args": "Cannot mix years/months with date/time arguments",
+                },
+            )
+        
+        # Validate all 6 parameters are provided for timestamp creation
+        if days is None or hours is None or mins is None or secs is None:
+            raise PySparkValueError(
+                errorClass="INVALID_NUM_ARGS",
+                messageParameters={
+                    "arg_name": "make_timestamp_ntz",
+                    "num_args": "When using years/months, must provide all: years, months, days, hours, mins, secs",
+                },
+            )
+        
         return _invoke_function_over_columns(
             "make_timestamp_ntz",
-            yearsOrDate,
-            monthsOrTime,
-            days,  # type: ignore[arg-type]
-            hours,  # type: ignore[arg-type]
-            mins,  # type: ignore[arg-type]
-            secs,  # type: ignore[arg-type]
+            years,
+            months,
+            days,
+            hours,
+            mins,
+            secs,
         )
-    elif not hasDays and not hasHours and not hasMins and not hasSecs:
-        # Overload with inputs: date, time.
-        return _invoke_function_over_columns("make_timestamp_ntz", yearsOrDate, monthsOrTime)
+    
+    # Check for 2-parameter usage: date, time
+    elif date is not None and time is not None:
+        if years is not None or months is not None or days is not None or hours is not None or mins is not None or secs is not None:
+            raise PySparkValueError(
+                errorClass="INVALID_NUM_ARGS",
+                messageParameters={
+                    "arg_name": "make_timestamp_ntz",
+                    "num_args": "Cannot mix date/time with years/months/days/hours/mins/secs arguments",
+                },
+            )
+        
+        return _invoke_function_over_columns("make_timestamp_ntz", date, time)
+    
+    # Invalid usage
     else:
         raise PySparkValueError(
             errorClass="INVALID_NUM_ARGS",
             messageParameters={
                 "arg_name": "make_timestamp_ntz",
-                "num_args": "2 or 6",
+                "num_args": "Must provide either (years, months, days, hours, mins, secs) or (date, time)",
             },
         )
 

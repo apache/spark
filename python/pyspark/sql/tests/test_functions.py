@@ -690,21 +690,45 @@ class FunctionsTestsMixin:
         self.assertEqual(row_from_name[0], result)
 
     def test_make_timestamp_ntz(self):
-        # Tests with arguments: year, month, day, hour, minute, second.
+        # Tests with keyword arguments: years, months, days, hours, mins, secs.
         data = [(2024, 5, 22, 10, 30, 0)]
         result = datetime.datetime(2024, 5, 22, 10, 30)
         df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
         actual = df.select(
-            F.make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
+            F.make_timestamp_ntz(
+                years=df.year, months=df.month, days=df.day, 
+                hours=df.hour, mins=df.minute, secs=df.second
+            )
         )
         assertDataFrameEqual(actual, [Row(result)])
 
-        # Tests with arguments: date, time.
+        # Tests with keyword arguments: date, time.
         df = self.spark.range(1).select(
             F.lit(datetime.date(2024, 5, 22)).alias("date"),
             F.lit(datetime.time(10, 30, 0)).alias("time"),
         )
-        actual = df.select(F.make_timestamp_ntz(df.date, df.time))
+        actual = df.select(F.make_timestamp_ntz(date=df.date, time=df.time))
+        assertDataFrameEqual(actual, [Row(result)])
+
+    def test_make_timestamp_ntz_with_keywords(self):
+        # Test with keyword arguments: years, months, days, hours, mins, secs
+        data = [(2024, 5, 22, 10, 30, 45.123)]
+        result = datetime.datetime(2024, 5, 22, 10, 30, 45, 123000)
+        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        actual = df.select(
+            F.make_timestamp_ntz(
+                years=df.year, months=df.month, days=df.day, 
+                hours=df.hour, mins=df.minute, secs=df.second
+            )
+        )
+        assertDataFrameEqual(actual, [Row(result)])
+
+        # Test with keyword arguments: date, time
+        df2 = self.spark.range(1).select(
+            F.lit(datetime.date(2024, 5, 22)).alias("date"),
+            F.lit(datetime.time(10, 30, 45, 123000)).alias("time"),
+        )
+        actual = df2.select(F.make_timestamp_ntz(date=df2.date, time=df2.time))
         assertDataFrameEqual(actual, [Row(result)])
 
     def test_make_date(self):
