@@ -236,13 +236,16 @@ class StatefulProcessorCompositeTypeFactory(StatefulProcessorFactory):
     def row(self):
         return RowStatefulProcessorCompositeType()
 
+
 class ChunkCountProcessorFactory(StatefulProcessorFactory):
     def pandas(self):
         return PandasChunkCountProcessor()
 
+
 class ChunkCountProcessorWithInitialStateFactory(StatefulProcessorFactory):
     def pandas(self):
         return PandasChunkCountWithInitialStateProcessor()
+
 
 # StatefulProcessor implementations
 
@@ -1830,6 +1833,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
     def close(self) -> None:
         pass
 
+
 class PandasChunkCountProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         pass
@@ -1838,11 +1842,11 @@ class PandasChunkCountProcessor(StatefulProcessor):
         chunk_count = 0
         for _ in rows:
             chunk_count += 1
-        yield pd.DataFrame({'id': [key[0]], 'chunkCount': [chunk_count]})
-
+        yield pd.DataFrame({"id": [key[0]], "chunkCount": [chunk_count]})
 
     def close(self) -> None:
         pass
+
 
 class PandasChunkCountWithInitialStateProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
@@ -1853,7 +1857,7 @@ class PandasChunkCountWithInitialStateProcessor(StatefulProcessor):
         chunk_count = 0
         for _ in rows:
             chunk_count += 1
-        yield pd.DataFrame({'id': [key[0]], 'chunkCount': [chunk_count]})
+        yield pd.DataFrame({"id": [key[0]], "chunkCount": [chunk_count]})
 
     def handleInitialState(self, key, initialState, timerValues) -> None:
         init_val = initialState.at[0, "initVal"]

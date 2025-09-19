@@ -71,7 +71,7 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     MinEventTimeStatefulProcessorFactory,
     StatefulProcessorCompositeTypeFactory,
     ChunkCountProcessorFactory,
-    ChunkCountProcessorWithInitialStateFactory
+    ChunkCountProcessorWithInitialStateFactory,
 )
 
 
@@ -1877,6 +1877,7 @@ class TransformWithStateTestsMixin:
                     assert set(batch_df.sort("id").collect()) == expected_per_batch[0]
                 else:
                     assert set(batch_df.sort("id").collect()) == expected_per_batch[1]
+
             return check_results
 
         result_with_small_limit = [
@@ -1887,7 +1888,7 @@ class TransformWithStateTestsMixin:
             {
                 Row(id="0", chunkCount=3),
                 Row(id="1", chunkCount=2),
-            }
+            },
         ]
 
         result_with_large_limit = [
@@ -1898,57 +1899,66 @@ class TransformWithStateTestsMixin:
             {
                 Row(id="0", chunkCount=1),
                 Row(id="1", chunkCount=1),
-            }
+            },
         ]
 
         data = [("0", 789), ("3", 987)]
         initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
 
         with self.sql_conf(
-                # Set it to a very small number so that every row would be a separate pandas df
-                {"spark.sql.execution.arrow.maxBytesPerBatch": "2"}
+            # Set it to a very small number so that every row would be a separate pandas df
+            {"spark.sql.execution.arrow.maxBytesPerBatch": "2"}
         ):
             self._test_transform_with_state_basic(
                 ChunkCountProcessorFactory(),
                 make_check_results(result_with_small_limit),
-                output_schema=StructType([
-                    StructField("id", StringType(), True),
-                    StructField("chunkCount", IntegerType(), True)
-                ])
+                output_schema=StructType(
+                    [
+                        StructField("id", StringType(), True),
+                        StructField("chunkCount", IntegerType(), True),
+                    ]
+                ),
             )
 
             self._test_transform_with_state_basic(
                 ChunkCountProcessorWithInitialStateFactory(),
                 make_check_results(result_with_small_limit),
                 initial_state=initial_state,
-                output_schema=StructType([
-                    StructField("id", StringType(), True),
-                    StructField("chunkCount", IntegerType(), True)
-                ])
+                output_schema=StructType(
+                    [
+                        StructField("id", StringType(), True),
+                        StructField("chunkCount", IntegerType(), True),
+                    ]
+                ),
             )
 
         with self.sql_conf(
-                # Set it to a very large number so that every row would be in the same pandas df
-                {"spark.sql.execution.arrow.maxBytesPerBatch": "100000"}
+            # Set it to a very large number so that every row would be in the same pandas df
+            {"spark.sql.execution.arrow.maxBytesPerBatch": "100000"}
         ):
             self._test_transform_with_state_basic(
                 ChunkCountProcessorFactory(),
                 make_check_results(result_with_large_limit),
-                output_schema=StructType([
-                    StructField("id", StringType(), True),
-                    StructField("chunkCount", IntegerType(), True)
-                ])
+                output_schema=StructType(
+                    [
+                        StructField("id", StringType(), True),
+                        StructField("chunkCount", IntegerType(), True),
+                    ]
+                ),
             )
 
             self._test_transform_with_state_basic(
                 ChunkCountProcessorWithInitialStateFactory(),
                 make_check_results(result_with_large_limit),
                 initial_state=initial_state,
-                output_schema=StructType([
-                    StructField("id", StringType(), True),
-                    StructField("chunkCount", IntegerType(), True)
-                ])
+                output_schema=StructType(
+                    [
+                        StructField("id", StringType(), True),
+                        StructField("chunkCount", IntegerType(), True),
+                    ]
+                ),
             )
+
 
 @unittest.skipIf(
     not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",

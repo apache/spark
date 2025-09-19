@@ -1639,10 +1639,12 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                     rows.append(row)
                     # Short circuit batch size calculation if the batch size is
                     # unlimited as computing batch size is computationally expensive.
-                    if self.arrow_max_bytes_per_batch != 2**31-1:
+                    if self.arrow_max_bytes_per_batch != 2**31 - 1:
                         accumulate_size += sum(sys.getsizeof(x) for x in row)
-                    if (len(rows) >= self.arrow_max_records_per_batch or
-                            accumulate_size >= self.arrow_max_bytes_per_batch):
+                    if (
+                        len(rows) >= self.arrow_max_records_per_batch
+                        or accumulate_size >= self.arrow_max_bytes_per_batch
+                    ):
                         yield (batch_key, pd.DataFrame(rows))
                         rows = []
                         accumulate_size = 0
