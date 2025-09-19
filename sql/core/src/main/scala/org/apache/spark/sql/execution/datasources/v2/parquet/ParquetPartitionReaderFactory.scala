@@ -136,7 +136,8 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[InternalRow] {
         private var hasNext = true
         private lazy val row: InternalRow = {
-          val (_, _, footer) = openFileAndReadFooter(file)
+          val (inputFileOpt, inputStreamOpt, footer) = openFileAndReadFooter(file)
+          assert(inputFileOpt.isEmpty && inputStreamOpt.isEmpty)
 
           if (footer != null && footer.getBlocks.size > 0) {
             ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
@@ -181,7 +182,9 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[ColumnarBatch] {
         private var hasNext = true
         private val batch: ColumnarBatch = {
-          val (_, _, footer) = openFileAndReadFooter(file)
+          val (inputFileOpt, inputStreamOpt, footer) = openFileAndReadFooter(file)
+          assert(inputFileOpt.isEmpty && inputStreamOpt.isEmpty)
+
           if (footer != null && footer.getBlocks.size > 0) {
             val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
               dataSchema, partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
@@ -219,6 +222,12 @@ case class ParquetPartitionReaderFactory(
 
     val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
     val (inputFileOpt, inputStreamOpt, fileFooter) = openFileAndReadFooter(file)
+    if (aggregation.isEmpty && enableVectorizedReader) {
+      assert(inputFileOpt.isDefined && inputStreamOpt.isDefined)
+    } else {
+      assert(inputFileOpt.isEmpty && inputStreamOpt.isEmpty)
+    }
+
     // Before transferring the ownership of inputStream to the vectorizedReader,
     // we must take responsibility to close the inputStream if something goes wrong
     // to avoid resource leak.
@@ -254,7 +263,7 @@ case class ParquetPartitionReaderFactory(
       // have different writers.
       // Define isCreatedByParquetMr as function to avoid unnecessary parquet footer reads.
       def isCreatedByParquetMr: Boolean =
-        footerFileMetaData.getCreatedBy().startsWith("parquet-mr")
+        footerFileMetaData.getCreatedBy.startsWith("parquet-mr")
 
       val convertTz =
         if (timestampConversion && !isCreatedByParquetMr) {
@@ -268,8 +277,8 @@ case class ParquetPartitionReaderFactory(
 
       // Try to push down filters when filter push-down is enabled.
       // Notice: This push-down is RowGroups level, not individual records.
-      if (pushed.isDefined) {
-        ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
+      pushed.foreach {
+        ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, _)
       }
       val int96RebaseSpec = DataSourceUtils.int96RebaseSpec(
         footerFileMetaData.getKeyValueMetaData.get,
@@ -285,10 +294,10 @@ case class ParquetPartitionReaderFactory(
         ) { reader =>
           reader match {
             case vectorizedReader: VectorizedParquetRecordReader =>
-              // We don't need to take care the close of inputStream because this transfers
-              // the ownership of inputStream to the vectorizedReader
               vectorizedReader.initialize(
                 split, hadoopAttemptContext, inputFileOpt, inputStreamOpt, Some(fileFooter))
+              // We don't need to take care of the close of inputStream after calling `initialize`
+              // because the ownership of inputStream has been transferred to the vectorizedReader
               shouldCloseInputStream = false
             case _ =>
               reader.initialize(split, hadoopAttemptContext)

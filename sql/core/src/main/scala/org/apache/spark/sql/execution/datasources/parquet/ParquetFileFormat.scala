@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.Closeable
+import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Try}
@@ -27,10 +31,12 @@ import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
-import org.apache.parquet.filter2.predicate.FilterApi
+import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.metadata.ParquetMetadata
 import org.apache.parquet.hadoop.util.HadoopInputFile
+import org.apache.parquet.io.SeekableInputStream
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
@@ -41,11 +47,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
+import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils, Utils}
@@ -109,28 +116,11 @@ class ParquetFileFormat
     true
   }
 
-  /**
-   * Build the reader.
-   *
-   * @note It is required to pass FileFormat.OPTION_RETURNING_BATCH in options, to indicate whether
-   *       the reader should return row or columnar output.
-   *       If the caller can handle both, pass
-   *       FileFormat.OPTION_RETURNING_BATCH ->
-   *         supportBatch(sparkSession,
-   *           StructType(requiredSchema.fields ++ partitionSchema.fields))
-   *       as the option.
-   *       It should be set to "true" only if this reader can support it.
-   */
-  override def buildReaderWithPartitionValues(
-      sparkSession: SparkSession,
-      dataSchema: StructType,
-      partitionSchema: StructType,
-      requiredSchema: StructType,
-      filters: Seq[Filter],
-      options: Map[String, String],
-      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    val sqlConf = getSqlConf(sparkSession)
-    hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
+  private def setupHadoopConf(
+     hadoopConf: Configuration, sqlConf: SQLConf, requiredSchema: StructType): Unit = {
+    hadoopConf.set(
+      ParquetInputFormat.READ_SUPPORT_CLASS,
+      classOf[ParquetReadSupport].getName)
     hadoopConf.set(
       ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
       requiredSchema.json)
@@ -160,7 +150,30 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       sqlConf.legacyParquetNanosAsLong)
+  }
 
+  /**
+   * Build the reader.
+   *
+   * @note It is required to pass FileFormat.OPTION_RETURNING_BATCH in options, to indicate whether
+   *       the reader should return row or columnar output.
+   *       If the caller can handle both, pass
+   *       FileFormat.OPTION_RETURNING_BATCH ->
+   *         supportBatch(sparkSession,
+   *           StructType(requiredSchema.fields ++ partitionSchema.fields))
+   *       as the option.
+   *       It should be set to "true" only if this reader can support it.
+   */
+  override def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    val sqlConf = getSqlConf(sparkSession)
+    setupHadoopConf(hadoopConf, sqlConf, requiredSchema)
 
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
@@ -192,7 +205,7 @@ class ParquetFileFormat
       options.getOrElse(FileFormat.OPTION_RETURNING_BATCH,
         throw new IllegalArgumentException(
           "OPTION_RETURNING_BATCH should always be set for ParquetFileFormat. " +
-            "To workaround this issue, set spark.sql.parquet.enableVectorizedReader=false."))
+            s"To workaround this issue, set ${PARQUET_VECTORIZED_READER_ENABLED.key}=false."))
         .equals("true")
     if (returningBatch) {
       // If the passed option said that we are to return batches, we need to also be able to
@@ -212,11 +225,16 @@ class ParquetFileFormat
       //    according to filters that require push down
       val (inputFileOpt, inputStreamOpt, fileFooter) =
         ParquetFooterReader.openFileAndReadFooter(sharedConf, file, enableVectorizedReader)
+      if (enableVectorizedReader) {
+        assert(inputFileOpt.isDefined && inputStreamOpt.isDefined)
+      } else {
+        assert(inputFileOpt.isEmpty && inputStreamOpt.isEmpty)
+      }
 
       // Before transferring the ownership of inputStream to the vectorizedReader,
       // we must take responsibility to close the inputStream if something goes wrong
       // to avoid resource leak.
-      var shouldCloseInputStream = inputStreamOpt.isDefined
+      val shouldCloseInputStream = new AtomicBoolean(inputStreamOpt.isDefined)
       try {
         val footerFileMetaData = fileFooter.getFileMetaData
         val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
@@ -262,99 +280,137 @@ class ParquetFileFormat
             None
           }
 
-
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val hadoopAttemptContext =
           new TaskAttemptContextImpl(broadcastedHadoopConf.value.value, attemptId)
 
         // Try to push down filters when filter push-down is enabled.
         // Notice: This push-down is RowGroups level, not individual records.
-        if (pushed.isDefined) {
-          ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
+        pushed.foreach {
+          ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, _)
         }
-        val taskContext = Option(TaskContext.get())
         if (enableVectorizedReader) {
-          val vectorizedReader = new VectorizedParquetRecordReader(
-            convertTz.orNull,
-            datetimeRebaseSpec.mode.toString,
-            datetimeRebaseSpec.timeZone,
-            int96RebaseSpec.mode.toString,
-            int96RebaseSpec.timeZone,
-            enableOffHeapColumnVector && taskContext.isDefined,
-            capacity)
-          // SPARK-37089: We cannot register a task completion listener to close this iterator
-          // here because downstream exec nodes have already registered their listeners. Since
-          // listeners are executed in reverse order of registration, a listener registered
-          // here would close the iterator while downstream exec nodes are still running. When
-          // off-heap column vectors are enabled, this can cause a use-after-free bug leading to
-          // a segfault.
-          //
-          // Instead, we use FileScanRDD's task completion listener to close this iterator.
-          val iter = new RecordReaderIterator(vectorizedReader)
-          try {
-            // We don't need to take care the close of inputStream because this transfers
-            // the ownership of inputStream to the vectorizedReader
-            vectorizedReader.initialize(
-              split, hadoopAttemptContext, inputFileOpt, inputStreamOpt, Some(fileFooter))
-            shouldCloseInputStream = false
-            logDebug(s"Appending $partitionSchema ${file.partitionValues}")
-            vectorizedReader.initBatch(partitionSchema, file.partitionValues)
-            if (returningBatch) {
-              vectorizedReader.enableReturningBatches()
-            }
-
-            // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
-            iter.asInstanceOf[Iterator[InternalRow]]
-          } catch {
-            case e: Throwable =>
-              // SPARK-23457: In case there is an exception in initialization, close the iterator
-              // to avoid leaking resources.
-              iter.close()
-              throw e
-          }
+          buildVectorizedIterator(
+            hadoopAttemptContext, split, file.partitionValues, partitionSchema, convertTz,
+            datetimeRebaseSpec, int96RebaseSpec, enableOffHeapColumnVector, returningBatch,
+            capacity, fileFooter, inputFileOpt.get, inputStreamOpt.get, shouldCloseInputStream)
         } else {
           logDebug(s"Falling back to parquet-mr")
-          // ParquetRecordReader returns InternalRow
-          val readSupport = new ParquetReadSupport(
-            convertTz,
-            enableVectorizedReader = false,
-            datetimeRebaseSpec,
-            int96RebaseSpec)
-          val reader = if (pushed.isDefined && enableRecordFilter) {
-            val parquetFilter = FilterCompat.get(pushed.get, null)
-            new ParquetRecordReader[InternalRow](readSupport, parquetFilter)
-          } else {
-            new ParquetRecordReader[InternalRow](readSupport)
-          }
-          val readerWithRowIndexes = ParquetRowIndexUtil.addRowIndexToRecordReaderIfNeeded(reader,
-            requiredSchema)
-          val iter = new RecordReaderIterator[InternalRow](readerWithRowIndexes)
-          try {
-            readerWithRowIndexes.initialize(split, hadoopAttemptContext)
-
-            val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
-            val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-
-            if (partitionSchema.length == 0) {
-              // There is no partition columns
-              iter.map(unsafeProjection)
-            } else {
-              val joinedRow = new JoinedRow()
-              iter.map(d => unsafeProjection(joinedRow(d, file.partitionValues)))
-            }
-          } catch {
-            case e: Throwable =>
-              // SPARK-23457: In case there is an exception in initialization, close the iterator
-              // to avoid leaking resources.
-              iter.close()
-              throw e
-          }
+          buildRowBasedIterator(
+            hadoopAttemptContext, split, file.partitionValues, partitionSchema, convertTz,
+            datetimeRebaseSpec, int96RebaseSpec, requiredSchema, pushed, enableRecordFilter)
         }
       } finally {
-        if (shouldCloseInputStream) {
+        if (shouldCloseInputStream.get) {
           inputStreamOpt.foreach(Utils.closeQuietly)
         }
       }
+    }
+  }
+
+  // scalastyle:off argcount
+  private def buildVectorizedIterator(
+      hadoopAttemptContext: TaskAttemptContextImpl,
+      split: FileSplit,
+      partitionValues: InternalRow,
+      partitionSchema: StructType,
+      convertTz: Option[ZoneId],
+      datetimeRebaseSpec: RebaseDateTime.RebaseSpec,
+      int96RebaseSpec: RebaseDateTime.RebaseSpec,
+      enableOffHeapColumnVector: Boolean,
+      returningBatch: Boolean,
+      batchSize: Int,
+      footer: ParquetMetadata,
+      inputFile: HadoopInputFile,
+      inputStream: SeekableInputStream,
+      shouldCloseInputStream: AtomicBoolean): Iterator[InternalRow] = {
+    // scalastyle:on argcount
+    val vectorizedReader = new VectorizedParquetRecordReader(
+      convertTz.orNull,
+      datetimeRebaseSpec.mode.toString,
+      datetimeRebaseSpec.timeZone,
+      int96RebaseSpec.mode.toString,
+      int96RebaseSpec.timeZone,
+      enableOffHeapColumnVector && TaskContext.get() != null,
+      batchSize)
+    // SPARK-37089: We cannot register a task completion listener to close this iterator
+    // here because downstream exec nodes have already registered their listeners. Since
+    // listeners are executed in reverse order of registration, a listener registered
+    // here would close the iterator while downstream exec nodes are still running. When
+    // off-heap column vectors are enabled, this can cause a use-after-free bug leading to
+    // a segfault.
+    //
+    // Instead, we use FileScanRDD's task completion listener to close this iterator.
+    val iter = new RecordReaderIterator(vectorizedReader)
+    try {
+      vectorizedReader.initialize(
+        split, hadoopAttemptContext, Some(inputFile), Some(inputStream), Some(footer))
+      // The caller don't need to take care of the close of inputStream after calling
+      // `initialize` because the ownership of inputStream has been transferred to the
+      // vectorizedReader
+      shouldCloseInputStream.set(false)
+      logDebug(s"Appending $partitionSchema $partitionValues")
+      vectorizedReader.initBatch(partitionSchema, partitionValues)
+      if (returningBatch) {
+        vectorizedReader.enableReturningBatches()
+      }
+
+      // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
+      iter.asInstanceOf[Iterator[InternalRow]]
+    } catch {
+      case e: Throwable =>
+        // SPARK-23457: In case there is an exception in initialization, close the iterator
+        // to avoid leaking resources.
+        iter.close()
+        throw e
+    }
+  }
+
+  private def buildRowBasedIterator(
+      hadoopAttemptContext: TaskAttemptContextImpl,
+      split: FileSplit,
+      partitionValues: InternalRow,
+      partitionSchema: StructType,
+      convertTz: Option[ZoneId],
+      datetimeRebaseSpec: RebaseDateTime.RebaseSpec,
+      int96RebaseSpec: RebaseDateTime.RebaseSpec,
+      requiredSchema: StructType,
+      pushed: Option[FilterPredicate],
+      enableRecordFilter: Boolean): Iterator[InternalRow] with Closeable = {
+    // ParquetRecordReader returns InternalRow
+    val readSupport = new ParquetReadSupport(
+      convertTz,
+      enableVectorizedReader = false,
+      datetimeRebaseSpec,
+      int96RebaseSpec)
+    val reader = if (pushed.isDefined && enableRecordFilter) {
+      val parquetFilter = FilterCompat.get(pushed.get, null)
+      new ParquetRecordReader[InternalRow](readSupport, parquetFilter)
+    } else {
+      new ParquetRecordReader[InternalRow](readSupport)
+    }
+    val readerWithRowIndexes = ParquetRowIndexUtil.addRowIndexToRecordReaderIfNeeded(reader,
+      requiredSchema)
+    val iter = new RecordReaderIterator[InternalRow](readerWithRowIndexes)
+    try {
+      readerWithRowIndexes.initialize(split, hadoopAttemptContext)
+
+      val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
+      val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+
+      if (partitionSchema.length == 0) {
+        // There is no partition columns
+        iter.map(unsafeProjection)
+      } else {
+        val joinedRow = new JoinedRow()
+        iter.map(d => unsafeProjection(joinedRow(d, partitionValues)))
+      }
+    } catch {
+      case e: Throwable =>
+        // SPARK-23457: In case there is an exception in initialization, close the iterator
+        // to avoid leaking resources.
+        iter.close()
+        throw e
     }
   }
 
