@@ -52,7 +52,7 @@ class ApplyInPandasWithStateWriter(
     writer: ArrowStreamWriter,
     arrowMaxRecordsPerBatch: Int,
     arrowMaxBytesPerBatch: Long)
-  extends BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch, arrowMaxRecordsPerBatch) {
+  extends BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch, arrowMaxBytesPerBatch) {
 
   import ApplyInPandasWithStateWriter._
 
@@ -145,7 +145,7 @@ class ApplyInPandasWithStateWriter(
 
     // If it exceeds the condition of batch (number of records) once the all data is received for
     // same group, finalize and construct a new batch.
-    if (totalNumRowsForBatch >= arrowMaxRecordsPerBatch) {
+    if (isBatchSizeLimitReached) {
       finalizeCurrentArrowBatch()
     }
   }
