@@ -233,27 +233,10 @@ class TestGraphRegistrationContext(
       }
     )
 
-    val flowWritesToView = getViews()
-        .filter(_.isInstanceOf[TemporaryView])
-        .exists(_.identifier == viewIdentifier)
-
-
-    val flowIdentifier = {
-      // If the flow is created implicitly as part of defining a view, then we do not
-      // qualify the flow identifier and the flow destination. This is because views are
-      // not permitted to have multipart
-      if (flowWritesToView) viewIdentifier
-      else GraphIdentifierManager.parseAndQualifyFlowIdentifier(
-        rawFlowIdentifier = viewIdentifier,
-        currentCatalog = Some(defaultCatalog),
-        currentDatabase = Some(defaultDatabase))
-        .identifier
-    }
-
     registerFlow(
       new UnresolvedFlow(
-        identifier = flowIdentifier,
-        destinationIdentifier = flowIdentifier,
+        identifier = viewIdentifier,
+        destinationIdentifier = viewIdentifier,
         func = query,
         queryContext = QueryContext(
           currentCatalog = catalog.orElse(Some(defaultCatalog)),
