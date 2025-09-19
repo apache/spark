@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connect.pipelines
 
 import scala.jdk.CollectionConverters._
+import scala.util.Using
 
-import com.google.protobuf.{Timestamp => ProtoTimestamp}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -237,77 +237,47 @@ private[connect] object PipelinesHandler extends Logging {
       sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
     val tableFiltersResult = createTableFilters(cmd, graphElementRegistry, sessionHolder)
 
-    // We will use this variable to store the run failure event if it occurs. This will be set
-    // by the event callback.
-    @volatile var runFailureEvent = Option.empty[PipelineEvent]
-    // Define a callback which will stream logs back to the SparkConnect client when an internal
-    // pipeline event is emitted during pipeline execution. We choose to pass a callback rather the
-    // responseObserver to the pipelines execution code so that the pipelines module does not need
-    // to take a dependency on SparkConnect.
-    val eventCallback = { event: PipelineEvent =>
-      val message = if (event.error.nonEmpty) {
-        // Returns the message associated with a Throwable and all its causes
-        def getExceptionMessages(throwable: Throwable): Seq[String] = {
-          throwable.getMessage +:
-            Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
+    // Use the PipelineEventSender to send events back to the client asynchronously.
+    Using.resource(new PipelineEventSender(responseObserver, sessionHolder)) { eventSender =>
+      // We will use this variable to store the run failure event if it occurs. This will be set
+      // by the event callback.
+      @volatile var runFailureEvent = Option.empty[PipelineEvent]
+      // Define a callback which will stream logs back to the SparkConnect client when an internal
+      // pipeline event is emitted during pipeline execution. We choose to pass a callback rather
+      // the responseObserver to the pipelines execution code so that the pipelines module does not
+      // need to take a dependency on SparkConnect.
+      val eventCallback = { event: PipelineEvent =>
+        event.details match {
+          // Failed runs are recorded in the event log. We do not pass these to the SparkConnect
+          // client since the failed run will already result in an unhandled exception that is
+          // propagated to the SparkConnect client. This special handling ensures that the client
+          // does not see the same error twice for a failed run.
+          case RunProgress(state) if state == FAILED => runFailureEvent = Some(event)
+          case RunProgress(state) if state == CANCELED =>
+            throw new RuntimeException("Pipeline run was canceled.")
+          case _ =>
+            eventSender.sendEvent(event)
         }
-        val errorMessages = getExceptionMessages(event.error.get)
-        s"""${event.message}
-           |Error: ${errorMessages.mkString("\n")}""".stripMargin
-      } else {
-        event.message
       }
-      event.details match {
-        // Failed runs are recorded in the event log. We do not pass these to the SparkConnect
-        // client since the failed run will already result in an unhandled exception that is
-        // propagated to the SparkConnect client. This special handling ensures that the client
-        // does not see the same error twice for a failed run.
-        case RunProgress(state) if state == FAILED => runFailureEvent = Some(event)
-        case RunProgress(state) if state == CANCELED =>
-          throw new RuntimeException("Pipeline run was canceled.")
-        case _ =>
-          responseObserver.onNext(
-            proto.ExecutePlanResponse
-              .newBuilder()
-              .setSessionId(sessionHolder.sessionId)
-              .setServerSideSessionId(sessionHolder.serverSessionId)
-              .setPipelineEventResult(
-                proto.PipelineEventResult.newBuilder
-                  .setEvent(
-                    proto.PipelineEvent
-                      .newBuilder()
-                      .setTimestamp(
-                        ProtoTimestamp
-                          .newBuilder()
-                          // java.sql.Timestamp normalizes its internal fields: getTime() returns
-                          // the full timestamp in milliseconds, while getNanos() returns the
-                          // fractional seconds (0-999,999,999 ns). This ensures no precision is
-                          // lost or double-counted.
-                          .setSeconds(event.timestamp.getTime / 1000)
-                          .setNanos(event.timestamp.getNanos)
-                          .build())
-                      .setMessage(message)
-                      .build())
-                  .build())
-              .build())
-      }
-    }
-    val pipelineUpdateContext = new PipelineUpdateContextImpl(
-      graphElementRegistry.toDataflowGraph,
-      eventCallback,
-      tableFiltersResult.refresh,
-      tableFiltersResult.fullRefresh)
-    sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
-    if (cmd.getDry) {
-      pipelineUpdateContext.pipelineExecution.dryRunPipeline()
-    } else {
-      pipelineUpdateContext.pipelineExecution.runPipeline()
-    }
 
-    // Rethrow any exceptions that caused the pipeline run to fail so that the exception is
-    // propagated back to the SC client / CLI.
-    runFailureEvent.foreach { event =>
-      throw event.error.get
+      val pipelineUpdateContext = new PipelineUpdateContextImpl(
+        graphElementRegistry.toDataflowGraph,
+        eventCallback,
+        tableFiltersResult.refresh,
+        tableFiltersResult.fullRefresh)
+      sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
+
+      if (cmd.getDry) {
+        pipelineUpdateContext.pipelineExecution.dryRunPipeline()
+      } else {
+        pipelineUpdateContext.pipelineExecution.runPipeline()
+      }
+
+      // Rethrow any exceptions that caused the pipeline run to fail so that the exception is
+      // propagated back to the SC client / CLI.
+      runFailureEvent.foreach { event =>
+        throw event.error.get
+      }
     }
   }
 

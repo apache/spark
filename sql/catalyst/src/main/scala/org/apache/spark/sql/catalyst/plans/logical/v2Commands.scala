@@ -883,21 +883,16 @@ case class MergeIntoTable(
     }
   }
 
-  def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
+  lazy val duplicateResolved: Boolean =
+    targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
-  def skipSchemaResolution: Boolean = targetTable match {
+  lazy val skipSchemaResolution: Boolean = targetTable match {
     case r: NamedRelation => r.skipSchemaResolution
     case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
     case _ => false
   }
 
-  override def left: LogicalPlan = targetTable
-  override def right: LogicalPlan = sourceTable
-  override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
-    copy(targetTable = newLeft, sourceTable = newRight)
-
-  def needSchemaEvolution: Boolean =
+  lazy val needSchemaEvolution: Boolean =
     schemaEvolutionEnabled &&
       MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
 
@@ -907,6 +902,12 @@ case class MergeIntoTable(
       case _ => false
     }
   }
+
+  override def left: LogicalPlan = targetTable
+  override def right: LogicalPlan = sourceTable
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
+    copy(targetTable = newLeft, sourceTable = newRight)
 }
 
 object MergeIntoTable {

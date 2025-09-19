@@ -2561,20 +2561,26 @@ case class ArrayPosition(left: Expression, right: Expression)
   """,
   since = "3.4.0",
   group = "array_funcs")
-case class Get(
-    left: Expression,
-    right: Expression,
-    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
+case class Get(left: Expression, right: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
-  def this(left: Expression, right: Expression) =
-    this(left, right, GetArrayItem(left, right, failOnError = false))
+  override def inputTypes: Seq[AbstractDataType] = left.dataType match {
+    case _: ArrayType => Seq(ArrayType, IntegerType)
+    // Do not apply implicit cast if the first arguement is not array type.
+    case _ => Nil
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    ExpectsInputTypes.checkInputDataTypes(Seq(left, right), Seq(ArrayType, IntegerType))
+  }
+
+  override lazy val replacement: Expression = GetArrayItem(left, right, failOnError = false)
 
   override def prettyName: String = "get"
 
-  override def parameters: Seq[Expression] = Seq(left, right)
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    this.copy(replacement = newChild)
+  override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
 }
 
 /**

@@ -5522,12 +5522,14 @@ class DataFrame:
 
         Examples
         --------
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(1, 11), (1, 11), (3, 10), (4, 8), (4, 8)], ["c1", "c2"])
-        >>> df.freqItems(["c1", "c2"]).show()  # doctest: +SKIP
+        >>> df = df.freqItems(["c1", "c2"])
+        >>> df.select([sf.sort_array(c).alias(c) for c in df.columns]).show()
         +------------+------------+
         |c1_freqItems|c2_freqItems|
         +------------+------------+
-        |   [4, 1, 3]| [8, 11, 10]|
+        |   [1, 3, 4]| [8, 10, 11]|
         +------------+------------+
         """
         ...
@@ -6293,7 +6295,7 @@ class DataFrame:
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
 
-        >>> df.pandas_api()  # doctest: +SKIP
+        >>> df.pandas_api()
            age   name
         0   14    Tom
         1   23  Alice
@@ -6301,7 +6303,7 @@ class DataFrame:
 
         We can specify the index columns.
 
-        >>> df.pandas_api(index_col="age")  # doctest: +SKIP
+        >>> df.pandas_api(index_col="age")
               name
         age
         14     Tom
@@ -6364,7 +6366,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
         ...
-        >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
+        >>> df.mapInPandas(filter_func, df.schema).show()
         +---+---+
         | id|age|
         +---+---+
@@ -6377,7 +6379,7 @@ class DataFrame:
         ...     for pdf in iterator:
         ...         yield pdf.groupby("id").mean().reset_index()
         ...
-        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()  # doctest: +SKIP
+        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()
         +---+----+
         | id| age|
         +---+----+
@@ -6393,7 +6395,7 @@ class DataFrame:
         ...         yield pdf
         ...
         >>> df.mapInPandas(
-        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()  # doctest: +SKIP
+        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()
         +---+---+----------+
         | id|age|double_age|
         +---+---+----------+
@@ -6405,12 +6407,8 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInPandas(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
-        +---+---+
-        | id|age|
-        +---+---+
-        |  1| 21|
-        +---+---+
+        >>> df.mapInPandas(filter_func, df.schema, barrier=True).collect()
+        [Row(id=1, age=21)]
 
         See Also
         --------
@@ -6461,13 +6459,13 @@ class DataFrame:
 
         Examples
         --------
-        >>> import pyarrow  # doctest: +SKIP
+        >>> import pyarrow as pa
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
         >>> def filter_func(iterator):
         ...     for batch in iterator:
         ...         pdf = batch.to_pandas()
-        ...         yield pyarrow.RecordBatch.from_pandas(pdf[pdf.id == 1])
-        >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKIP
+        ...         yield pa.RecordBatch.from_pandas(pdf[pdf.id == 1])
+        >>> df.mapInArrow(filter_func, df.schema).show()
         +---+---+
         | id|age|
         +---+---+
@@ -6478,12 +6476,8 @@ class DataFrame:
         barrier mode, it ensures all Python workers in the stage will be
         launched concurrently.
 
-        >>> df.mapInArrow(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
-        +---+---+
-        | id|age|
-        +---+---+
-        |  1| 21|
-        +---+---+
+        >>> df.mapInArrow(filter_func, df.schema, barrier=True).collect()
+        [Row(id=1, age=21)]
 
         See Also
         --------
@@ -6510,7 +6504,8 @@ class DataFrame:
 
         Examples
         --------
-        >>> df.toArrow()  # doctest: +SKIP
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df.coalesce(1).toArrow()
         pyarrow.Table
         age: int64
         name: string
@@ -6540,7 +6535,8 @@ class DataFrame:
 
         Examples
         --------
-        >>> df.toPandas()  # doctest: +SKIP
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df.toPandas()
            age   name
         0    2  Alice
         1    5    Bob

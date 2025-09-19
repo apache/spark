@@ -46,11 +46,13 @@ from pyspark.sql.types import (
     YearMonthIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -525,14 +527,13 @@ class ScalarArrowUDFTestsMixin:
             pa.field("value", pa.binary(), nullable=False),
             pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
         ]
-        variant_type = pa.struct(fields)
 
         @arrow_udf("variant")
         def scalar_f(v: pa.Array) -> pa.Array:
             assert isinstance(v, pa.Array)
             v = pa.array([bytes([12, i.as_py()]) for i in v], pa.binary())
             m = pa.array([bytes([1, 0, 0]) for i in v], pa.binary())
-            return pa.StructArray.from_arrays([v, m], type=variant_type)
+            return pa.StructArray.from_arrays([v, m], fields=fields)
 
         @arrow_udf("variant")
         def iter_f(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
@@ -540,7 +541,7 @@ class ScalarArrowUDFTestsMixin:
                 assert isinstance(v, pa.Array)
                 v = pa.array([bytes([12, i.as_py()]) for i in v])
                 m = pa.array([bytes([1, 0, 0]) for i in v])
-                yield pa.StructArray.from_arrays([v, m], type=variant_type)
+                yield pa.StructArray.from_arrays([v, m], fields=fields)
 
         df = self.spark.range(0, 10)
         expected = [Row(l=i) for i in range(10)]
@@ -814,6 +815,7 @@ class ScalarArrowUDFTestsMixin:
         [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
         self.assertEqual(row[0], 7)
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_nondeterministic_arrow_udf(self):
         import pyarrow as pa
 
@@ -836,6 +838,7 @@ class ScalarArrowUDFTestsMixin:
             self.assertEqual(random_udf.deterministic, False)
             self.assertTrue(result1["plus_ten(rand)"].equals(result1["rand"] + 10))
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_nondeterministic_arrow_udf_in_aggregate(self):
         with self.quiet():
             df = self.spark.range(10)

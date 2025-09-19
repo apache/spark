@@ -35,7 +35,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.matchers.should._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{Dataset, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
@@ -2070,6 +2070,44 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     val topic = topicPrefix + "-suffix"
     testFromGlobalTimestampWithNoMatchingStartingOffset(topic,
       "subscribePattern" -> s"$topicPrefix-.*")
+  }
+
+  test("SPARK-53560: no crash looping during uncommitted batch retry in AvailableNow trigger") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, (1 to 7).map(_.toString).toArray, Some(0))
+    def udfFailOn7(x: Int): Int = {
+      if (x == 7) throw new RuntimeException("error for 7")
+      x
+    }
+    val kafka =
+      spark.readStream.format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", topic)
+        .option("startingOffsets", "earliest")
+        .load()
+        .select(expr("CAST(CAST(value AS STRING) AS INT)").as("value"))
+        .as[Int]
+        .map(udfFailOn7)
+
+    withTempDir { dir =>
+      testStream(kafka)(
+        StartStream(Trigger.AvailableNow, checkpointLocation = dir.getAbsolutePath),
+        ExpectFailure[SparkException] { e =>
+          assert(e.getMessage.contains("error for 7"))
+        },
+        AssertOnQuery { q =>
+          testUtils.addPartitions(topic, 2)
+          !q.isActive
+        },
+        StartStream(Trigger.AvailableNow, checkpointLocation = dir.getAbsolutePath),
+        // Getting this error means the query has passed the planning stage, so
+        // verifyEndOffsetForTriggerAvailableNow succeeds.
+        ExpectFailure[SparkException] { e =>
+          assert(e.getMessage.contains("error for 7"))
+        }
+      )
+    }
   }
 
   private def testFromSpecificTimestampsWithNoMatchingStartingOffset(

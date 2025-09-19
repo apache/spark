@@ -1201,6 +1201,14 @@ package object config {
     .checkValue(v => v >= 0, "The value should be a non-negative time value.")
     .createWithDefaultString("0min")
 
+  private[spark] val DRIVER_METRICS_POLLING_INTERVAL =
+    ConfigBuilder("spark.driver.metrics.pollingInterval")
+      .doc("How often to collect driver metrics (in milliseconds). " +
+        "If unset, the polling is done at the executor heartbeat interval. " +
+        "If set, the polling is done at this interval.")
+      .version("4.1.0")
+      .fallbackConf(EXECUTOR_HEARTBEAT_INTERVAL)
+
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
     .version("2.1.0")
@@ -1599,9 +1607,9 @@ package object config {
       .createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD =
-    ConfigBuilder("spark.shuffle.spill.maxRecordsSizeForSpillThreshold")
+    ConfigBuilder("spark.shuffle.spill.maxSizeInBytesForSpillThreshold")
       .internal()
-      .doc("The maximum size in memory before forcing the shuffle sorter to spill. " +
+      .doc("The maximum in memory size in bytes before forcing the shuffle sorter to spill. " +
         "By default it is Long.MAX_VALUE, which means we never force the sorter to spill, " +
         "until we reach some limitations, like the max page size limitation for the pointer " +
         "array in the sorter.")

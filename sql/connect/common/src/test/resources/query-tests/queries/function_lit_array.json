@@ -14,7 +14,9 @@
     "expressions": [{
       "literal": {
         "array": {
-          "dataType": {
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "double": {
               }
@@ -47,43 +49,24 @@
             "array": {
               "elements": [{
                 "integer": 1
-              }],
-              "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
               "elements": [{
                 "integer": 2
-              }],
-              "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
               "elements": [{
                 "integer": 3
-              }],
-              "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "array": {
                 "elementType": {
@@ -123,28 +106,9 @@
                 "array": {
                   "elements": [{
                     "integer": 1
-                  }],
-                  "dataType": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
+                  }]
                 }
-              }],
-              "dataType": {
-                "elementType": {
-                  "array": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
@@ -152,28 +116,9 @@
                 "array": {
                   "elements": [{
                     "integer": 2
-                  }],
-                  "dataType": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
+                  }]
                 }
-              }],
-              "dataType": {
-                "elementType": {
-                  "array": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
@@ -181,31 +126,14 @@
                 "array": {
                   "elements": [{
                     "integer": 3
-                  }],
-                  "dataType": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
+                  }]
                 }
-              }],
-              "dataType": {
-                "elementType": {
-                  "array": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "array": {
                 "elementType": {
@@ -248,8 +176,10 @@
             "boolean": true
           }, {
             "boolean": false
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "boolean": {
               }
@@ -305,8 +235,10 @@
             "short": 9873
           }, {
             "short": 9874
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "short": {
               }
@@ -341,8 +273,10 @@
             "integer": 8726532
           }, {
             "integer": -8726533
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "integer": {
               }
@@ -377,8 +311,10 @@
             "long": "7834609328726532"
           }, {
             "long": "7834609328726533"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "long": {
               }
@@ -413,8 +349,10 @@
             "double": 1.0
           }, {
             "double": 2.0
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "double": {
               }
@@ -449,8 +387,10 @@
             "float": -0.7
           }, {
             "float": -0.9
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "float": {
               }
@@ -491,8 +431,10 @@
               "precision": 7,
               "scale": 5
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "decimal": {
                 "scale": 18,
@@ -535,8 +477,10 @@
               "precision": 12,
               "scale": 7
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "decimal": {
                 "scale": 18,
@@ -571,8 +515,10 @@
             "string": "connect!"
           }, {
             "string": "disconnect!"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "string": {
                 "collation": "UTF8_BINARY"
@@ -627,8 +573,10 @@
             "string": "ABCDEFGHIJ"
           }, {
             "string": "BCDEFGHIJK"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "string": {
                 "collation": "UTF8_BINARY"
@@ -662,8 +610,10 @@
             "date": 18545
           }, {
             "date": 18546
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "date": {
               }
@@ -696,8 +646,10 @@
             "timestamp": "1677155519808000"
           }, {
             "timestamp": "1677155519809000"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "timestamp": {
               }
@@ -730,8 +682,10 @@
             "timestamp": "12345000"
           }, {
             "timestamp": "23456000"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "timestamp": {
               }
@@ -764,8 +718,10 @@
             "timestampNtz": "1677184560000000"
           }, {
             "timestampNtz": "1677188160000000"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "timestampNtz": {
               }
@@ -798,8 +754,10 @@
             "date": 19411
           }, {
             "date": 19417
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "date": {
               }
@@ -832,8 +790,10 @@
             "dayTimeInterval": "100000000"
           }, {
             "dayTimeInterval": "200000000"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "dayTimeInterval": {
                 "startField": 0,
@@ -868,8 +828,10 @@
             "yearMonthInterval": 0
           }, {
             "yearMonthInterval": 0
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "yearMonthInterval": {
                 "startField": 0,
@@ -912,8 +874,10 @@
               "days": 21,
               "microseconds": "200"
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "calendarInterval": {
               }

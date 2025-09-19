@@ -1544,6 +1544,12 @@ class Dataset[T] private[sql](
     }
   }
 
+  /** @inheritdoc */
+  def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T] = {
+    val directShufflePartitionIdCol = Column(DirectShufflePartitionID(partitionIdExpr.expr))
+    repartitionByExpression(Some(numPartitions), Seq(directShufflePartitionIdCol))
+  }
+
   protected def repartitionByRange(
       numPartitions: Option[Int],
       partitionExprs: Seq[Column]): Dataset[T] = {

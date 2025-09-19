@@ -22,11 +22,13 @@ from pyspark.util import PythonEvalType
 from pyspark.sql import functions as sf
 from pyspark.sql.window import Window
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -384,6 +386,7 @@ class WindowArrowUDFTestsMixin:
 
         self.assertEqual(expected1.collect(), result1.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -427,6 +430,7 @@ class WindowArrowUDFTestsMixin:
                             ).collect(),
                         )
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments_negative(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -717,6 +721,42 @@ class WindowArrowUDFTestsMixin:
             # pyarrow.lib.ArrowInvalid:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_return_numpy_scalar(self):
+        import numpy as np
+        import pyarrow as pa
+
+        df = self.spark.range(10).withColumn("v", sf.lit(1))
+        w = Window.partitionBy("id").orderBy("v")
+
+        @arrow_udf("long")
+        def np_max_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.max(v)
+
+        @arrow_udf("long")
+        def np_min_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.min(v)
+
+        @arrow_udf("double")
+        def np_avg_udf(v: pa.Array) -> np.float64:
+            assert isinstance(v, pa.Array)
+            return np.mean(v)
+
+        expected = df.select(
+            sf.max("id").over(w).alias("max"),
+            sf.min("id").over(w).alias("min"),
+            sf.avg("id").over(w).alias("avg"),
+        )
+
+        result = df.select(
+            np_max_udf("id").over(w).alias("max"),
+            np_min_udf("id").over(w).alias("min"),
+            np_avg_udf("id").over(w).alias("avg"),
+        )
+        self.assertEqual(expected.collect(), result.collect())
 
 
 class WindowArrowUDFTests(WindowArrowUDFTestsMixin, ReusedSQLTestCase):

@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Par
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.{JoinStateManagerStoreGenerator, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.{JoinStateManagerStoreGenerator, SnapshotOptions, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{BooleanType, StructType}
@@ -76,21 +76,40 @@ class StreamStreamJoinStatePartitionReader(
     partition.sourceOptions.stateCheckpointLocation.toString,
     partition.sourceOptions.operatorId)
 
-  private val stateStoreCheckpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
-    partition.partition,
-    partition.sourceOptions.operatorStateUniqueIds,
-    usesVirtualColumnFamilies)
+  private val startStateStoreCheckpointIds =
+    SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+      partition.partition,
+      partition.sourceOptions.startOperatorStateUniqueIds,
+      usesVirtualColumnFamilies)
 
-  private val keyToNumValuesStateStoreCkptId = if (joinSide == LeftSide) {
-    stateStoreCheckpointIds.left.keyToNumValues
+  private val endStateStoreCheckpointIds =
+    SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+      partition.partition,
+      partition.sourceOptions.endOperatorStateUniqueIds,
+      usesVirtualColumnFamilies)
+
+  private val startKeyToNumValuesStateStoreCkptId = if (joinSide == LeftSide) {
+    startStateStoreCheckpointIds.left.keyToNumValues
   } else {
-    stateStoreCheckpointIds.right.keyToNumValues
+    startStateStoreCheckpointIds.right.keyToNumValues
   }
 
-  private val keyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
-    stateStoreCheckpointIds.left.keyWithIndexToValue
+  private val startKeyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
+    startStateStoreCheckpointIds.left.keyWithIndexToValue
   } else {
-    stateStoreCheckpointIds.right.keyWithIndexToValue
+    startStateStoreCheckpointIds.right.keyWithIndexToValue
+  }
+
+  private val endKeyToNumValuesStateStoreCkptId = if (joinSide == LeftSide) {
+    endStateStoreCheckpointIds.left.keyToNumValues
+  } else {
+    endStateStoreCheckpointIds.right.keyToNumValues
+  }
+
+  private val endKeyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
+    endStateStoreCheckpointIds.left.keyWithIndexToValue
+  } else {
+    endStateStoreCheckpointIds.right.keyWithIndexToValue
   }
 
   /*
@@ -149,13 +168,19 @@ class StreamStreamJoinStatePartitionReader(
         storeConf = storeConf,
         hadoopConf = hadoopConf.value,
         partitionId = partition.partition,
-        keyToNumValuesStateStoreCkptId = keyToNumValuesStateStoreCkptId,
-        keyWithIndexToValueStateStoreCkptId = keyWithIndexToValueStateStoreCkptId,
+        keyToNumValuesStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
+        keyWithIndexToValueStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
         formatVersion,
         skippedNullValueCount = None,
         useStateStoreCoordinator = false,
-        snapshotStartVersion =
-          partition.sourceOptions.fromSnapshotOptions.map(_.snapshotStartBatchId + 1),
+        snapshotOptions =
+          partition.sourceOptions.fromSnapshotOptions.map(opts => SnapshotOptions(
+            snapshotVersion = opts.snapshotStartBatchId + 1,
+            endVersion = partition.sourceOptions.batchId + 1,
+            startKeyToNumValuesStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
+            startKeyWithIndexToValueStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
+            endKeyToNumValuesStateStoreCkptId = endKeyToNumValuesStateStoreCkptId,
+            endKeyWithIndexToValueStateStoreCkptId = endKeyWithIndexToValueStateStoreCkptId)),
         joinStoreGenerator = new JoinStateManagerStoreGenerator()
       )
     }

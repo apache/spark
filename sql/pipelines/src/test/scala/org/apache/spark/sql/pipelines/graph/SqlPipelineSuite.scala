@@ -18,6 +18,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -264,6 +265,47 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
         .partitionCols
         .contains(Seq("id1", "id2"))
     )
+  }
+
+  test("MV/ST with partition columns works") {
+    withTable("mv", "st") {
+      val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+        sqlText =
+          """
+            |CREATE MATERIALIZED VIEW mv
+            |PARTITIONED BY (id_mod)
+            |AS
+            |SELECT
+            |  id,
+            |  id % 2 AS id_mod
+            |FROM range(3);
+            |
+            |CREATE STREAMING TABLE st
+            |PARTITIONED BY (id_mod)
+            |AS
+            |SELECT * FROM STREAM(mv);
+            |""".stripMargin
+      )
+      startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
+      val expected = Seq(
+        Row(0, 0),
+        Row(1, 1),
+        Row(2, 0)
+      )
+      val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+
+      Seq("mv", "st").foreach { tableName =>
+        // check table partition columns
+        val table = catalog.loadTable(Identifier.of(Array("test_db"), tableName))
+        assert(table.partitioning().map(_.references().head.fieldNames().head) === Array("id_mod"))
+
+        // check table data
+        checkAnswer(
+          spark.sql(s"SELECT * FROM ${fullyQualifiedIdentifier(tableName)}"),
+          expected
+        )
+      }
+    }
   }
 
   test("Exception is thrown when non-identity partition columns are used") {
