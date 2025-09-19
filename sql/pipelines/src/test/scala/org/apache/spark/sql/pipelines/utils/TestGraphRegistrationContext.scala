@@ -237,10 +237,11 @@ class TestGraphRegistrationContext(
         .filter(_.isInstanceOf[TemporaryView])
         .exists(_.identifier == viewIdentifier)
 
-    // If the flow is created implicitly as part of defining a view, then we do not
-    // qualify the flow identifier and the flow destination. This is because views are
-    // not permitted to have multipart
+
     val flowIdentifier = {
+      // If the flow is created implicitly as part of defining a view, then we do not
+      // qualify the flow identifier and the flow destination. This is because views are
+      // not permitted to have multipart
       if (flowWritesToView) viewIdentifier
       else GraphIdentifierManager.parseAndQualifyFlowIdentifier(
         rawFlowIdentifier = viewIdentifier,
