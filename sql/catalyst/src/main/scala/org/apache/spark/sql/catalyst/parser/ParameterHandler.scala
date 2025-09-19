@@ -62,6 +62,7 @@ import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
  */
 class ParameterHandler {
 
+
   // Thread-local storage for position mapper to ensure thread safety
   private val positionMapperStorage = new ThreadLocal[Option[PositionMapper]]() {
     override def initialValue(): Option[PositionMapper] = None
@@ -170,6 +171,9 @@ class ParameterHandler {
               case literal: org.apache.spark.sql.catalyst.expressions.Literal =>
                 // Already a Literal from ResolveExecuteImmediate - use it directly
                 literal.asInstanceOf[Expression]
+              case expr: org.apache.spark.sql.catalyst.expressions.Expression =>
+                // Expression from Column object - use it directly
+                expr
               case value =>
                 // Raw value - create new Literal
                 Literal(value).asInstanceOf[Expression]
@@ -181,14 +185,8 @@ class ParameterHandler {
 
         if (hasPositional && !hasNamed) {
           // Query uses only positional parameters
-          val positionalParams = args.map {
-            case literal: org.apache.spark.sql.catalyst.expressions.Literal =>
-              // Already a Literal from ResolveExecuteImmediate - use it directly
-              literal.asInstanceOf[Expression]
-            case value =>
-              // Raw value - create new Literal
-              Literal(value).asInstanceOf[Expression]
-          }.toSeq
+          // All arguments are already expressions at this point
+          val positionalParams = args.map(_.asInstanceOf[Expression]).toSeq
           performSubstitution(sqlText, rule,
             positionalParams = positionalParams.map(expr =>
               LiteralToSqlConverter.convert(expr)).toList)
@@ -199,6 +197,10 @@ class ParameterHandler {
                 if name.nonEmpty =>
               // Already a Literal from ResolveExecuteImmediate - use it directly
               name -> literal.asInstanceOf[Expression]
+            case (name, expr: org.apache.spark.sql.catalyst.expressions.Expression)
+                if name.nonEmpty =>
+              // Expression from Column object - use it directly
+              name -> expr
             case (name, value) if name.nonEmpty =>
               // Raw value - create new Literal
               name -> Literal(value).asInstanceOf[Expression]

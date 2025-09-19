@@ -132,7 +132,7 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
 
     // Test with null values
     val nullLit = Literal.create(null, StringType)
-    assert(LiteralToSqlConverter.convert(nullLit) === "NULL")
+    assert(LiteralToSqlConverter.convert(nullLit) === "CAST(NULL AS STRING)")
   }
 
   test("LiteralToSqlConverter - handles foldable expressions") {

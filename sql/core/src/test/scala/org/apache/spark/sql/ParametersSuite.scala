@@ -572,11 +572,21 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
             lit(Array("a")),
             array(map_from_arrays(lit(Array(1)), lit(Array(2))))))),
       Row(2))
-    // `str_to_map` is now supported with enhanced parameter substitution
-    checkAnswer(
-      spark.sql("SELECT :m['a']",
-        Map("m" -> str_to_map(lit("a:1,b:2,c:3")))),
-      Row("1"))
+    // `str_to_map` is not supported in parameter substitution
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("SELECT :m['a'][1]",
+          Map("m" ->
+            map_from_arrays(
+              lit(Array("a")),
+              array(str_to_map(lit("a:1,b:2,c:3"))))))
+      },
+      condition = "UNSUPPORTED_EXPR_FOR_PARAMETER",
+      parameters = Map("invalidExprSql" -> "\"str_to_map(a:1,b:2,c:3)\""),
+      context = ExpectedContext(
+        fragment = "str_to_map",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("SPARK-46481: Test variable folding") {

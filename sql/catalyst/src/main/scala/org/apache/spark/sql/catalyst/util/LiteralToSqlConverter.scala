@@ -17,7 +17,9 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -80,8 +82,34 @@ object LiteralToSqlConverter {
    */
   def convert(expr: Expression): String = expr match {
     case lit: Literal => convertLiteral(lit)
+
+    // Special handling for UnresolvedFunction expressions that don't naturally evaluate
+    // Only handle functions that are whitelisted in legacy mode but don't eval() naturally
+    case UnresolvedFunction(name, children, _, _, _, _, _) =>
+      val functionName = name.mkString(".")
+      functionName.toLowerCase(java.util.Locale.ROOT) match {
+        case "array" | "map" | "struct" | "map_from_arrays" | "map_from_entries" =>
+          // Convert whitelisted functions to SQL function call syntax
+          // Note: array, map, struct are naturally foldable but reach here as UnresolvedFunction
+          // map_from_arrays and map_from_entries are not naturally foldable
+          val childrenSql = children.map(convert).mkString(", ")
+          s"${functionName.toUpperCase(java.util.Locale.ROOT)}($childrenSql)"
+        case _ =>
+          // Non-whitelisted function - not supported in parameter substitution
+          // Modern parameter substitution supports: legacy whitelist + foldable expressions
+          // Functions like str_to_map are intentionally not supported
+          throw QueryCompilationErrors.unsupportedParameterExpression(expr)
+      }
+
     case _ =>
-      // For non-literal expressions, try to evaluate them and convert the result
+      // For non-literal expressions, they should be resolved before reaching this converter
+      // If we get an unresolved expression, it indicates a problem in the calling code
+      if (!expr.resolved) {
+        throw SparkException.internalError(
+          s"LiteralToSqlConverter received unresolved expression: " +
+          s"${expr.getClass.getSimpleName}. All expressions should be resolved before " +
+          s"parameter conversion.")
+      }
       if (expr.foldable) {
         val value = expr.eval()
         val dataType = expr.dataType

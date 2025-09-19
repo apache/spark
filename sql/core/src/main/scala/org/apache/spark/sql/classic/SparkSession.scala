@@ -609,6 +609,7 @@ class SparkSession private(
     sql(sqlText, args, paramNames, new QueryPlanningTracker)
   }
 
+
   /**
    * Internal implementation of unified parameter API with tracker.
    */
@@ -620,19 +621,19 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = if (args.nonEmpty) {
-          // For EXECUTE IMMEDIATE, handle parameter arguments appropriately
-          // Pass Literal objects directly, evaluate expressions for local variables
-          val evaluatedArgs = args.map { arg =>
+          // For EXECUTE IMMEDIATE, handle parameter arguments following the original pattern
+          // Convert all arguments to expressions (not evaluated values)
+          val paramExpressions = args.map { arg =>
             arg match {
               case literal: org.apache.spark.sql.catalyst.expressions.Literal =>
-                // Already a Literal from ResolveExecuteImmediate - pass it through
+                // Already a Literal expression from ResolveExecuteImmediate - use it directly
                 literal
               case _ =>
-                // Raw value - convert to expression and evaluate (for local variables)
-                lit(arg).expr.eval()
+                // Raw value or Column - convert to expression using lit()
+                lit(arg).expr
             }
           }
-          val paramContext = HybridParameterContext(evaluatedArgs, paramNames)
+          val paramContext = HybridParameterContext(paramExpressions, paramNames)
 
           ThreadLocalParameterContext.withContext(paramContext) {
             val parsed = sessionState.sqlParser.parsePlan(sqlText)
