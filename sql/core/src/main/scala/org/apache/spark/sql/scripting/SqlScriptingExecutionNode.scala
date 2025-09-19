@@ -697,6 +697,12 @@ class SimpleCaseStatementExec(
     conditionBodyTupleIterator
   }
 
+  protected[scripting] def skipSimpleCaseStatement(): Unit = {
+    // Force variables to output false on the next hasNext
+    this.state = CaseState.Body
+    this.bodyExec = None
+  }
+
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = state match {
@@ -1024,6 +1030,12 @@ class ForStatementExec(
    * Whether this iteration of the FOR loop is the first one.
    */
   private var firstIteration: Boolean = true
+
+  protected[scripting] def skipForStatement(): Unit = {
+    // Force variables to output false on the next hasNext
+    this.state = ForState.Body
+    this.bodyWithVariables = None
+  }
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
