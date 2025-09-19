@@ -134,8 +134,8 @@ class TestGraphRegistrationContext(
           .parseAndQualifyTableIdentifier(
             rawTableIdentifier = GraphIdentifierManager
               .parseTableIdentifier(name, spark),
-            currentCatalog = Some(defaultCatalog),
-            currentDatabase = Some(defaultDatabase))
+            currentCatalog = catalog.orElse(Some(defaultCatalog)),
+            currentDatabase = database.orElse(Some(defaultDatabase)))
           .identifier
     registerTable(
       Table(
@@ -205,8 +205,8 @@ class TestGraphRegistrationContext(
     val persistedViewIdentifier = GraphIdentifierManager
       .parseAndValidatePersistedViewIdentifier(
         rawViewIdentifier = TableIdentifier(name),
-        currentCatalog = Some(defaultCatalog),
-        currentDatabase = Some(defaultDatabase)
+        currentCatalog = catalog.orElse(Some(defaultCatalog)),
+        currentDatabase = database.orElse(Some(defaultDatabase))
       )
 
     val viewIdentifier: TableIdentifier = viewType match {
@@ -278,8 +278,8 @@ class TestGraphRegistrationContext(
           GraphIdentifierManager
             .parseAndQualifyFlowIdentifier(
               rawFlowIdentifier = rawIdentifier,
-              currentCatalog = Some(defaultCatalog),
-              currentDatabase = Some(defaultDatabase))
+              currentCatalog = catalog.orElse(Some(defaultCatalog)),
+              currentDatabase = database.orElse(Some(defaultDatabase)))
             .identifier
         }
       }
