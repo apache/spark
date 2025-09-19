@@ -341,13 +341,13 @@ Arrow UDTFs support ``TABLE(...) PARTITION BY ... ORDER BY ...``. Think of it as
 “process rows group by group, and in a specific order within each group”.
 
 Semantics:
+
 - PARTITION BY groups rows by the given keys; your UDTF runs for each group independently.
 - ORDER BY controls the row order within each group as seen by ``eval``.
-- ``eval`` may be called multiple times per group; accumulate state and typically emit the
-  group’s result in ``terminate``.
+- ``eval`` may be called multiple times per group; accumulate state and typically emit the group's result in ``terminate``.
 
 Example: Aggregation per key with terminate
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 PARTITION BY is especially useful for per-group aggregation. ``eval`` may be called
 multiple times for the same group as rows arrive in batches, so keep running totals in
