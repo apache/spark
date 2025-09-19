@@ -30,7 +30,8 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.pipelines.graph.DataflowGraph
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 
 /**
@@ -432,6 +433,99 @@ class PythonPipelineSuite
       graph
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+  }
+
+  test("groupby and rollup works with internal datasets, referencing with (col, str)") {
+    val graph = buildGraph("""
+      from pyspark.sql.functions import col, sum, count
+
+      @dp.materialized_view
+      def src():
+        return spark.range(3)
+
+      @dp.materialized_view
+      def groupby_with_col_result():
+        return spark.read.table("src").groupBy(col("id")).agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+
+      @dp.materialized_view
+      def groupby_with_str_result():
+        return spark.read.table("src").groupBy("id").agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+
+      @dp.materialized_view
+      def rollup_with_col_result():
+        return spark.read.table("src").rollup(col("id")).agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+
+      @dp.materialized_view
+      def rollup_with_str_result():
+        return spark.read.table("src").rollup("id").agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+    """)
+
+    val updateContext = new PipelineUpdateContextImpl(graph, _ => ())
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+
+    val groupbyDfs =
+      Seq(spark.table("groupby_with_col_result"), spark.table("groupby_with_str_result"))
+
+    val rollupDfs =
+      Seq(spark.table("rollup_with_col_result"), spark.table("rollup_with_str_result"))
+
+    // groupBy: each variant should have exactly one row per id [0,1,2]
+    groupbyDfs.foreach { df =>
+      assert(df.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
+    }
+
+    // rollup: each variant should have groupBy rows + one total row
+    rollupDfs.foreach { df =>
+      assert(df.count() == 3 + 1) // 3 ids + 1 total
+      val totalRow = df.filter("id IS NULL").collect().head
+      assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
+    }
+  }
+
+  test("MV/ST with partition columns works") {
+    withTable("mv", "st") {
+      val graph = buildGraph("""
+             |from pyspark.sql.functions import col
+             |
+             |@dp.materialized_view(partition_cols = ["id_mod"])
+             |def mv():
+             |  return spark.range(5).withColumn("id_mod", col("id") % 2)
+             |
+             |@dp.table(partition_cols = ["id_mod"])
+             |def st():
+             |  return spark.readStream.table("mv")
+             |""".stripMargin)
+
+      val updateContext = new PipelineUpdateContextImpl(graph, eventCallback = _ => ())
+      updateContext.pipelineExecution.runPipeline()
+      updateContext.pipelineExecution.awaitCompletion()
+
+      // check table is created with correct partitioning
+      val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+
+      Seq("mv", "st").foreach { tableName =>
+        val table = catalog.loadTable(Identifier.of(Array("default"), tableName))
+        assert(
+          table.partitioning().map(_.references().head.fieldNames().head) === Array("id_mod"))
+
+        val rows = spark.table(tableName).collect().map(r => (r.getLong(0), r.getLong(1))).toSet
+        val expected = (0 until 5).map(id => (id.toLong, (id % 2).toLong)).toSet
+        assert(rows == expected)
+      }
+    }
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {

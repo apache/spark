@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ExprId
 }
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -171,7 +171,7 @@ class Resolver(
 
     planLogger.logPlanResolutionEvent(planAfterSubstitution, "Main resolution")
 
-    planAfterSubstitution.setTagValue(Resolver.TOP_LEVEL_OPERATOR, ())
+    planAfterSubstitution.setTagValue(ResolverTag.TOP_LEVEL_OPERATOR, ())
 
     resolve(planAfterSubstitution)
   }
@@ -784,11 +784,6 @@ class Resolver(
 }
 
 object Resolver {
-
-  /**
-   * Marks the operator as the top-most operator in a query or a view.
-   */
-  val TOP_LEVEL_OPERATOR = TreeNodeTag[Unit]("top_level_operator")
 
   /**
    * Create a new instance of the [[RelationResolution]].

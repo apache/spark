@@ -18,6 +18,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -264,6 +265,47 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
         .partitionCols
         .contains(Seq("id1", "id2"))
     )
+  }
+
+  test("MV/ST with partition columns works") {
+    withTable("mv", "st") {
+      val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+        sqlText =
+          """
+            |CREATE MATERIALIZED VIEW mv
+            |PARTITIONED BY (id_mod)
+            |AS
+            |SELECT
+            |  id,
+            |  id % 2 AS id_mod
+            |FROM range(3);
+            |
+            |CREATE STREAMING TABLE st
+            |PARTITIONED BY (id_mod)
+            |AS
+            |SELECT * FROM STREAM(mv);
+            |""".stripMargin
+      )
+      startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
+      val expected = Seq(
+        Row(0, 0),
+        Row(1, 1),
+        Row(2, 0)
+      )
+      val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+
+      Seq("mv", "st").foreach { tableName =>
+        // check table partition columns
+        val table = catalog.loadTable(Identifier.of(Array("test_db"), tableName))
+        assert(table.partitioning().map(_.references().head.fieldNames().head) === Array("id_mod"))
+
+        // check table data
+        checkAnswer(
+          spark.sql(s"SELECT * FROM ${fullyQualifiedIdentifier(tableName)}"),
+          expected
+        )
+      }
+    }
   }
 
   test("Exception is thrown when non-identity partition columns are used") {
@@ -741,6 +783,41 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       spark.sql(s"SELECT * FROM ${fullyQualifiedIdentifier("st")}"),
       Seq(Row(0), Row(1), Row(2))
     )
+  }
+
+  test("groupby and rollup works with internal datasets") {
+    val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE MATERIALIZED VIEW src AS
+                   |    SELECT id
+                   |    FROM range(3);
+                   |
+                   |CREATE MATERIALIZED VIEW groupby_result AS
+                   |    SELECT id, SUM(id) AS sum_id, COUNT(*) AS cnt
+                   |    FROM src
+                   |    GROUP BY id;
+                   |
+                   |CREATE MATERIALIZED VIEW rollup_result AS
+                   |    SELECT id, SUM(id) AS sum_id, COUNT(*) AS cnt
+                   |    FROM src
+                   |    GROUP BY ROLLUP(id);
+                   |""".stripMargin
+    )
+
+    startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
+
+    val groupbyDf = spark.table(fullyQualifiedIdentifier("groupby_result"))
+    val rollupDf = spark.table(fullyQualifiedIdentifier("rollup_result"))
+
+    // groupBy should have exactly one row per id [0,1,2]
+    assert(groupbyDf.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
+
+    // rollup should have all groupBy rows + one extra (the total row)
+    assert(rollupDf.count() == groupbyDf.count() + 1)
+
+    // verify the rollup total row: id IS NULL, sum_id=3, cnt=3
+    val totalRow = rollupDf.filter("id IS NULL").collect().head
+    assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
   }
 
   test("Empty streaming table definition is disallowed") {

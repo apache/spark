@@ -594,6 +594,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.plot.test_frame_plot",
         "pyspark.sql.tests.plot.test_frame_plot_plotly",
         "pyspark.sql.tests.test_connect_compatibility",
+        "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
+        "pyspark.sql.tests.udf_type_tests.test_udf_return_types",
     ],
 )
 

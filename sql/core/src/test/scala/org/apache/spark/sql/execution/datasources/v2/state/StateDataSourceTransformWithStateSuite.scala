@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{Encoders, Row}
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBFileManager, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.functions.{col, explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
@@ -1077,23 +1077,44 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
       // Read the changelog for one of the partitions at version 3 and
       // ensure that we have two entries
       // For this test - keys 9 and 12 are written at version 3 for partition 4
-      val changelogReader = fileManager.getChangelogReader(3)
+      val commitLog = new StreamingQueryCheckpointMetadata(spark, tmpDir.getCanonicalPath).commitLog
+      val commitMetadata = commitLog.get(3 - 1) // batchId = version - 1
+      val operatorId = 0
+      val operatorStateUniqueIds = if (commitMetadata.get.stateUniqueIds.isDefined) {
+        Some(commitMetadata.get.stateUniqueIds.get(operatorId))
+      } else {
+        None
+      }
+      val checkpointUniqueId = operatorStateUniqueIds.map(_(4).head)
+
+      val changelogReader = fileManager.getChangelogReader(3, checkpointUniqueId)
       val entries = changelogReader.toSeq
       assert(entries.size == 2)
       val retainEntry = entries.head
 
+      // Retain the lineage for the changelog file
+      val lineage = if (checkpointUniqueId.isDefined) {
+        Some(changelogReader.lineage)
+      } else {
+        None
+      }
+
       // Retain one of the entries and delete the changelog file
-      val changelogFilePath = dfsRootDir.getAbsolutePath + "/3.changelog"
+      val changelogFilePath = if (checkpointUniqueId.isDefined) {
+        dfsRootDir.getAbsolutePath + s"/3_${checkpointUniqueId.get}.changelog"
+      } else {
+        dfsRootDir.getAbsolutePath + "/3.changelog"
+      }
       Utils.deleteRecursively(new File(changelogFilePath))
 
       // Write the retained entry back to the changelog
-      val changelogWriter = fileManager.getChangeLogWriter(3)
+      val changelogWriter = fileManager.getChangeLogWriter(3, false, checkpointUniqueId, lineage)
       changelogWriter.put(retainEntry._2, retainEntry._3)
       changelogWriter.commit()
 
       // Ensure that we have only one entry in the changelog for version 3
       // For this test - key 9 is retained and key 12 is deleted
-      val changelogReader1 = fileManager.getChangelogReader(3)
+      val changelogReader1 = fileManager.getChangelogReader(3, checkpointUniqueId)
       val entries1 = changelogReader1.toSeq
       assert(entries1.size == 1)
 
@@ -1148,5 +1169,14 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
       }
     }
+  }
+}
+
+class StateDataSourceTransformWithStateSuiteCheckpointV2 extends
+  StateDataSourceTransformWithStateSuite {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
   }
 }

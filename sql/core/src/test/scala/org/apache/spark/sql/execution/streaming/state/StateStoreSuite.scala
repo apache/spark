@@ -1400,7 +1400,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val hadoopConf = new Configuration()
     hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
 
-    val e = intercept[AssertionError] {
+    val e = intercept[StateStoreCheckpointIdsNotSupported] {
       provider.init(
         StateStoreId(newDir(), Random.nextInt(), 0),
         keySchema,
@@ -1411,7 +1411,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         hadoopConf)
     }
     assert(e.getMessage.contains(
-      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2"))
+      "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1"))
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {

@@ -268,7 +268,7 @@ object InterpretedUnsafeProjection {
             writer.setNull2Bytes(i)
           }
         }
-      case IntegerType | DateType | FloatType =>
+      case IntegerType | DateType | FloatType | _: YearMonthIntervalType =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)

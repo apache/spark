@@ -447,6 +447,7 @@ abstract class StateStoreChangelogReader(
     Serialization.read[Array[LineageItem]](lineageStr)
   }
 
+  // The array contains lineage information from [mostRecentSnapShotVersion, version - 1] inclusive
   lazy val lineage: Array[LineageItem] = readLineage()
 
   def version: Short
@@ -632,27 +633,41 @@ abstract class StateStoreChangeDataReader(
    * Iterator that iterates over the changelog files in the state store.
    */
   private class ChangeLogFileIterator extends Iterator[Path] {
+    val versionsAndUniqueIds: Iterator[(Long, Option[String])] =
+      StateStoreChangeDataReader.this.versionsAndUniqueIds.iterator
 
     private var currentVersion = StateStoreChangeDataReader.this.startVersion - 1
+    private var currentUniqueId: Option[String] = None
 
     /** returns the version of the changelog returned by the latest [[next]] function call */
     def getVersion: Long = currentVersion
 
-    override def hasNext: Boolean = currentVersion < StateStoreChangeDataReader.this.endVersion
+    override def hasNext: Boolean = versionsAndUniqueIds.hasNext
 
     override def next(): Path = {
-      currentVersion += 1
-      getChangelogPath(currentVersion)
+      val nextTuple = versionsAndUniqueIds.next()
+      currentVersion = nextTuple._1
+      currentUniqueId = nextTuple._2
+      getChangelogPath(currentVersion, currentUniqueId)
     }
 
-    private def getChangelogPath(version: Long): Path =
-      new Path(
-        StateStoreChangeDataReader.this.stateLocation,
-        s"$version.${StateStoreChangeDataReader.this.changelogSuffix}")
+    private def getChangelogPath(version: Long, checkpointUniqueId: Option[String]): Path =
+      if (checkpointUniqueId.isDefined) {
+        new Path(
+          StateStoreChangeDataReader.this.stateLocation,
+          s"${version}_${checkpointUniqueId.get}." +
+            s"${StateStoreChangeDataReader.this.changelogSuffix}")
+      } else {
+        new Path(
+          StateStoreChangeDataReader.this.stateLocation,
+          s"$version.${StateStoreChangeDataReader.this.changelogSuffix}")
+      }
   }
 
   /** file format of the changelog files */
-  protected var changelogSuffix: String
+  protected val changelogSuffix: String
+  protected val versionsAndUniqueIds: Array[(Long, Option[String])] =
+    (startVersion to endVersion).map((_, None)).toArray
   private lazy val fileIterator = new ChangeLogFileIterator
   private var changelogReader: StateStoreChangelogReader = null
 
@@ -671,11 +686,10 @@ abstract class StateStoreChangeDataReader(
         return null
       }
 
-      changelogReader = if (colFamilyNameOpt.isDefined) {
-        new StateStoreChangelogReaderV2(fm, fileIterator.next(), compressionCodec)
-      } else {
-        new StateStoreChangelogReaderV1(fm, fileIterator.next(), compressionCodec)
-      }
+      val changelogFile = fileIterator.next()
+      changelogReader =
+        new StateStoreChangelogReaderFactory(fm, changelogFile, compressionCodec)
+          .constructChangelogReader()
     }
     changelogReader
   }

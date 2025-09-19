@@ -614,7 +614,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeater = new Heartbeater(
       () => SparkContext.this.reportHeartBeat(_executorMetricsSource),
       "driver-heartbeater",
-      conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
+      conf.get(DRIVER_METRICS_POLLING_INTERVAL))
     _heartbeater.start()
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
@@ -2934,8 +2934,14 @@ class SparkContext(config: SparkConf) extends Logging {
     _driverLogger.foreach(_.startSync(_hadoopConfiguration))
   }
 
-  /** Post the application end event */
+  /** Post the application end event and report the final heartbeat */
   private def postApplicationEnd(exitCode: Int): Unit = {
+    try {
+      _heartbeater.doReportHeartbeat()
+    } catch {
+      case t: Throwable =>
+        logInfo("Unable to report driver heartbeat metrics when stopping spark context", t);
+    }
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis, Some(exitCode)))
   }
 

@@ -475,6 +475,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
    * }}}
    */
   case class TestPythonUDF(name: String, returnType: Option[DataType] = None,
+      pythonEvalType: Int = PythonEvalType.SQL_BATCHED_UDF,
       deterministic: Boolean = true) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
@@ -487,7 +488,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
         accumulator = null),
       dataType = StringType,
-      pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+      pythonEvalType = pythonEvalType,
       udfDeterministic = deterministic) {
 
       override def builder(e: Seq[Expression]): Expression = {
