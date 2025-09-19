@@ -975,7 +975,7 @@ object MergeIntoTable {
         Array.empty[TableChange]
 
       case _ =>
-        // Do not supporting changes between atomic and complex types for now
+        // Do not support change between atomic and complex types for now
         throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
           originalTarget, originalSource, null)
     }

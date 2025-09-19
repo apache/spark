@@ -28,7 +28,7 @@ import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EvalMode, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -930,15 +930,6 @@ private class BufferedRowsReader(
     ArrayBasedMapData(convertedKeys, convertedValues)
   }
 
-  private def castElement(elem: Any, toType: DataType, fromType: DataType): Any = {
-    try {
-      val castExpr = Cast(Literal(elem, fromType), toType)
-      castExpr.eval(null)
-    } catch {
-      case _: Exception => elem
-    }
-  }
-
   private def extractCollection(
       elements: Array[Any],
       readType: DataType,
@@ -983,6 +974,9 @@ private class BufferedRowsReader(
       case (_, _) => elements
     }
   }
+
+  private def castElement(elem: Any, toType: DataType, fromType: DataType): Any =
+    Cast(Literal(elem, fromType), toType, None, EvalMode.TRY).eval(null)
 }
 
 private class BufferedRowsWriterFactory(schema: StructType)
