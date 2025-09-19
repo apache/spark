@@ -11129,8 +11129,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._result_aggregated(column_labels, applied)
 
-    # TODO(SPARK-46166): axis, skipna and **kwargs should be implemented.
-    def any(self, axis: Axis = 0, bool_only: Optional[bool] = None) -> "Series":
+    # TODO(SPARK-46166): axis and **kwargs should be implemented.
+    def any(
+        self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
+    ) -> "Series":
         """
         Return whether any element is True.
 
@@ -11148,6 +11150,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
             then use only boolean data.
+
+        skipna : bool, default True
+            Exclude NA/null values. If the entire row/column is NA and skipna is True,
+            then the result will be False, as for an empty row/column. If skipna is False,
+            then NA are treated as True, because these are not equal to zero.
 
         Returns
         -------
@@ -11201,8 +11208,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         applied: List[PySparkColumn] = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
-            any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
-            applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
+            if skipna:
+                # When skipna=True, nulls count as False
+                any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
+                applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
+            else:
+                # When skipna=False, nulls count as True
+                any_col = F.max(scol.cast("boolean"))
+                applied.append(F.when(any_col.isNull(), True).otherwise(any_col))
 
         return self._result_aggregated(column_labels, applied)
 
