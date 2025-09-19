@@ -333,12 +333,11 @@ class ParquetFileFormat
       int96RebaseSpec.timeZone,
       enableOffHeapColumnVector && TaskContext.get() != null,
       batchSize)
-    // SPARK-37089: We cannot register a task completion listener to close this iterator
-    // here because downstream exec nodes have already registered their listeners. Since
-    // listeners are executed in reverse order of registration, a listener registered
-    // here would close the iterator while downstream exec nodes are still running. When
-    // off-heap column vectors are enabled, this can cause a use-after-free bug leading to
-    // a segfault.
+    // SPARK-37089: We cannot register a task completion listener to close this iterator here
+    // because downstream exec nodes have already registered their listeners. Since listeners
+    // are executed in reverse order of registration, a listener registered here would close the
+    // iterator while downstream exec nodes are still running. When off-heap column vectors are
+    // enabled, this can cause a use-after-free bug leading to a segfault.
     //
     // Instead, we use FileScanRDD's task completion listener to close this iterator.
     val iter = new RecordReaderIterator(vectorizedReader)
@@ -359,8 +358,8 @@ class ParquetFileFormat
       iter.asInstanceOf[Iterator[InternalRow]]
     } catch {
       case e: Throwable =>
-        // SPARK-23457: In case there is an exception in initialization, close the iterator
-        // to avoid leaking resources.
+        // SPARK-23457: In case there is an exception in initialization, close the iterator to
+        // avoid leaking resources.
         iter.close()
         throw e
     }
@@ -407,8 +406,8 @@ class ParquetFileFormat
       }
     } catch {
       case e: Throwable =>
-        // SPARK-23457: In case there is an exception in initialization, close the iterator
-        // to avoid leaking resources.
+        // SPARK-23457: In case there is an exception in initialization, close the iterator to
+        // avoid leaking resources.
         iter.close()
         throw e
     }
