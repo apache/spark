@@ -25,9 +25,9 @@ Spark SQL uses this extra information to perform extra optimizations. There are 
 interact with Spark SQL including SQL and the Dataset API. When computing a result,
 the same execution engine is used, independent of which API/language you are using to express the
 computation. This unification means that developers can easily switch back and forth between
-different APIs based on which provides the most natural way to express a given transformation.
+different APIs, depending on which provides the most natural way to express a given transformation.
 
-All of the examples on this page use sample data included in the Spark distribution and can be run in
+All examples on this page use sample data included in the Spark distribution and can be run in
 the `spark-shell`, `pyspark` shell, or `sparkR` shell.
 
 ## SQL
@@ -42,17 +42,17 @@ or over [JDBC/ODBC](sql-distributed-sql-engine.html#running-the-thrift-jdbcodbc-
 ## Datasets and DataFrames
 
 A Dataset is a distributed collection of data.
-Dataset is a new interface added in Spark 1.6 that provides the benefits of RDDs (strong
+A Dataset is a new interface added in Spark 1.6 that provides the benefits of RDDs (strong
 typing, ability to use powerful lambda functions) with the benefits of Spark SQL's optimized
 execution engine. A Dataset can be [constructed](sql-getting-started.html#creating-datasets) from JVM objects and then
 manipulated using functional transformations (`map`, `flatMap`, `filter`, etc.).
 The Dataset API is available in [Scala][scala-datasets] and
-[Java][java-datasets]. Python does not have the support for the Dataset API. But due to Python's dynamic nature,
-many of the benefits of the Dataset API are already available (i.e. you can access the field of a row by name naturally
+[Java][java-datasets]. Python does not support the Dataset API. However, due to Python's dynamic nature,
+many of the benefits of the Dataset API are already available (i.e., you can access the field of a row by name naturally, e.g., \
 `row.columnName`). The case for R is similar.
 
 A DataFrame is a *Dataset* organized into named columns. It is conceptually
-equivalent to a table in a relational database or a data frame in R/Python, but with richer
+equivalent to a table in a relational database or a DataFrame in R/Python, but with richer
 optimizations under the hood. DataFrames can be constructed from a wide array of [sources](sql-data-sources.html) such
 as: structured data files, tables in Hive, external databases, or existing RDDs.
 The DataFrame API is available in
@@ -60,7 +60,7 @@ The DataFrame API is available in
 Java and [R](api/R/index.html).
 In Scala and Java, a DataFrame is represented by a Dataset of `Row`s.
 In [the Scala API][scala-datasets], `DataFrame` is simply a type alias of `Dataset[Row]`.
-While, in [Java API][java-datasets], users need to use `Dataset<Row>` to represent a `DataFrame`.
+In [Java API][java-datasets], users need to use `Dataset<Row>` to represent a `DataFrame`.
 
 [scala-datasets]: api/scala/org/apache/spark/sql/Dataset.html
 [java-datasets]: api/java/index.html?org/apache/spark/sql/Dataset.html
