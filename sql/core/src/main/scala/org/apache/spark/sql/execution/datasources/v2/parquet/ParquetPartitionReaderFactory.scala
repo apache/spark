@@ -222,7 +222,9 @@ case class ParquetPartitionReaderFactory(
 
     val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
     val openedFooter = openFileAndReadFooter(file)
-    assert(openedFooter.inputStreamOpt.isDefined == aggregation.isEmpty && enableVectorizedReader)
+    assert {
+      openedFooter.inputStreamOpt.isDefined == (aggregation.isEmpty && enableVectorizedReader)
+    }
 
     // Before transferring the ownership of inputStream to the vectorizedReader,
     // we must take responsibility to close the inputStream if something goes wrong
