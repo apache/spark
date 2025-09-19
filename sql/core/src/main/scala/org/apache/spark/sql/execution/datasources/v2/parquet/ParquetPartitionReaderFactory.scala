@@ -24,9 +24,8 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
 import org.apache.parquet.hadoop._
-import org.apache.parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.metadata.FileMetaData
 import org.apache.parquet.hadoop.util.HadoopInputFile
-import org.apache.parquet.io.SeekableInputStream
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -88,15 +87,15 @@ case class ParquetPartitionReaderFactory(
 
   private val parquetReaderCallback = new ParquetReaderCallback()
 
-  private def openFileAndReadFooter(file: PartitionedFile):
-      (Option[HadoopInputFile], Option[SeekableInputStream], ParquetMetadata) = {
+  private def openFileAndReadFooter(file: PartitionedFile): OpenedParquetFooter = {
     val hadoopConf = broadcastedConf.value.value
     if (aggregation.isDefined) {
+      val inputFile = HadoopInputFile.fromPath(file.toPath, hadoopConf)
       // When there are aggregates to push down, we get max/min/count from footer statistics.
       val footer = ParquetFooterReader.readFooter(
-        HadoopInputFile.fromPath(file.toPath, hadoopConf),
+        inputFile,
         ParquetFooterReader.buildFilter(hadoopConf, file, skipRowGroup = false))
-      (None, None, footer)
+      OpenedParquetFooter(footer, inputFile, None)
     } else {
       // When there are vectorized reads, we can avoid
       // 1. opening the file twice by transfering the SeekableInputStream
@@ -136,14 +135,14 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[InternalRow] {
         private var hasNext = true
         private lazy val row: InternalRow = {
-          val (inputFileOpt, inputStreamOpt, footer) = openFileAndReadFooter(file)
-          assert(inputFileOpt.isEmpty && inputStreamOpt.isEmpty)
+          val openedFooter = openFileAndReadFooter(file)
+          assert(openedFooter.inputStreamOpt.isEmpty)
 
-          if (footer != null && footer.getBlocks.size > 0) {
-            ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
-              dataSchema,
-              partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
-              getDatetimeRebaseSpec(footer.getFileMetaData))
+          if (openedFooter.footer != null && openedFooter.footer.getBlocks.size > 0) {
+            ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
+              file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
+              readDataSchema, file.partitionValues,
+              getDatetimeRebaseSpec(openedFooter.footer.getFileMetaData))
           } else {
             null
           }
@@ -182,13 +181,14 @@ case class ParquetPartitionReaderFactory(
       new PartitionReader[ColumnarBatch] {
         private var hasNext = true
         private val batch: ColumnarBatch = {
-          val (inputFileOpt, inputStreamOpt, footer) = openFileAndReadFooter(file)
-          assert(inputFileOpt.isEmpty && inputStreamOpt.isEmpty)
+          val openedFooter = openFileAndReadFooter(file)
+          assert(openedFooter.inputStreamOpt.isEmpty)
 
-          if (footer != null && footer.getBlocks.size > 0) {
-            val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.urlEncodedPath,
-              dataSchema, partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
-              getDatetimeRebaseSpec(footer.getFileMetaData))
+          if (openedFooter.footer != null && openedFooter.footer.getBlocks.size > 0) {
+            val row = ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
+              file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
+              readDataSchema, file.partitionValues,
+              getDatetimeRebaseSpec(openedFooter.footer.getFileMetaData))
             AggregatePushDownUtils.convertAggregatesRowToBatch(
               row, readDataSchema, enableOffHeapColumnVector && Option(TaskContext.get()).isDefined)
           } else {
@@ -221,19 +221,15 @@ case class ParquetPartitionReaderFactory(
     val conf = broadcastedConf.value.value
 
     val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
-    val (inputFileOpt, inputStreamOpt, fileFooter) = openFileAndReadFooter(file)
-    if (aggregation.isEmpty && enableVectorizedReader) {
-      assert(inputFileOpt.isDefined && inputStreamOpt.isDefined)
-    } else {
-      assert(inputFileOpt.isEmpty && inputStreamOpt.isEmpty)
-    }
+    val openedFooter = openFileAndReadFooter(file)
+    assert(openedFooter.inputStreamOpt.isDefined == aggregation.isEmpty && enableVectorizedReader)
 
     // Before transferring the ownership of inputStream to the vectorizedReader,
     // we must take responsibility to close the inputStream if something goes wrong
     // to avoid resource leak.
-    var shouldCloseInputStream = inputStreamOpt.isDefined
+    var shouldCloseInputStream = openedFooter.inputStreamOpt.isDefined
     try {
-      val footerFileMetaData = fileFooter.getFileMetaData
+      val footerFileMetaData = openedFooter.footer.getFileMetaData
       val datetimeRebaseSpec = getDatetimeRebaseSpec(footerFileMetaData)
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
@@ -295,7 +291,8 @@ case class ParquetPartitionReaderFactory(
           reader match {
             case vectorizedReader: VectorizedParquetRecordReader =>
               vectorizedReader.initialize(
-                split, hadoopAttemptContext, inputFileOpt, inputStreamOpt, Some(fileFooter))
+                split, hadoopAttemptContext, Some(openedFooter.inputFile),
+                Some(openedFooter.inputStream), Some(openedFooter.footer))
               // We don't need to take care of the close of inputStream after calling `initialize`
               // because the ownership of inputStream has been transferred to the vectorizedReader
               shouldCloseInputStream = false
@@ -307,7 +304,7 @@ case class ParquetPartitionReaderFactory(
       }
     } finally {
       if (shouldCloseInputStream) {
-        inputStreamOpt.foreach(Utils.closeQuietly)
+        openedFooter.inputStreamOpt.foreach(Utils.closeQuietly)
       }
     }
   }

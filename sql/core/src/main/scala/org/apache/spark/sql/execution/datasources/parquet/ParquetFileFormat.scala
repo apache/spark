@@ -34,9 +34,7 @@ import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop._
-import org.apache.parquet.hadoop.metadata.ParquetMetadata
 import org.apache.parquet.hadoop.util.HadoopInputFile
-import org.apache.parquet.io.SeekableInputStream
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
@@ -223,20 +221,16 @@ class ParquetFileFormat
       // 1. opening the file twice by transfering the SeekableInputStream
       // 2. reading the footer twice by reading all row groups in advance and filter row groups
       //    according to filters that require push down
-      val (inputFileOpt, inputStreamOpt, fileFooter) =
+      val openedFooter =
         ParquetFooterReader.openFileAndReadFooter(sharedConf, file, enableVectorizedReader)
-      if (enableVectorizedReader) {
-        assert(inputFileOpt.isDefined && inputStreamOpt.isDefined)
-      } else {
-        assert(inputFileOpt.isEmpty && inputStreamOpt.isEmpty)
-      }
+      assert(openedFooter.inputStreamOpt.isDefined == enableVectorizedReader)
 
       // Before transferring the ownership of inputStream to the vectorizedReader,
       // we must take responsibility to close the inputStream if something goes wrong
       // to avoid resource leak.
-      val shouldCloseInputStream = new AtomicBoolean(inputStreamOpt.isDefined)
+      val shouldCloseInputStream = new AtomicBoolean(openedFooter.inputStreamOpt.isDefined)
       try {
-        val footerFileMetaData = fileFooter.getFileMetaData
+        val footerFileMetaData = openedFooter.footer.getFileMetaData
         val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
           footerFileMetaData.getKeyValueMetaData.get,
           datetimeRebaseModeInRead)
@@ -293,7 +287,7 @@ class ParquetFileFormat
           buildVectorizedIterator(
             hadoopAttemptContext, split, file.partitionValues, partitionSchema, convertTz,
             datetimeRebaseSpec, int96RebaseSpec, enableOffHeapColumnVector, returningBatch,
-            capacity, fileFooter, inputFileOpt.get, inputStreamOpt.get, shouldCloseInputStream)
+            capacity, openedFooter, shouldCloseInputStream)
         } else {
           logDebug(s"Falling back to parquet-mr")
           buildRowBasedIterator(
@@ -302,7 +296,7 @@ class ParquetFileFormat
         }
       } finally {
         if (shouldCloseInputStream.get) {
-          inputStreamOpt.foreach(Utils.closeQuietly)
+          openedFooter.inputStreamOpt.foreach(Utils.closeQuietly)
         }
       }
     }
@@ -320,11 +314,10 @@ class ParquetFileFormat
       enableOffHeapColumnVector: Boolean,
       returningBatch: Boolean,
       batchSize: Int,
-      footer: ParquetMetadata,
-      inputFile: HadoopInputFile,
-      inputStream: SeekableInputStream,
+      openedFooter: OpenedParquetFooter,
       shouldCloseInputStream: AtomicBoolean): Iterator[InternalRow] = {
     // scalastyle:on argcount
+    assert(openedFooter.inputStreamOpt.isDefined)
     val vectorizedReader = new VectorizedParquetRecordReader(
       convertTz.orNull,
       datetimeRebaseSpec.mode.toString,
@@ -343,7 +336,8 @@ class ParquetFileFormat
     val iter = new RecordReaderIterator(vectorizedReader)
     try {
       vectorizedReader.initialize(
-        split, hadoopAttemptContext, Some(inputFile), Some(inputStream), Some(footer))
+        split, hadoopAttemptContext, Some(openedFooter.inputFile),
+        Some(openedFooter.inputStream), Some(openedFooter.footer))
       // The caller don't need to take care of the close of inputStream after calling
       // `initialize` because the ownership of inputStream has been transferred to the
       // vectorizedReader

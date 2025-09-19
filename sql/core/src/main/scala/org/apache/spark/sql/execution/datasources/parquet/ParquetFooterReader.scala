@@ -28,6 +28,14 @@ import org.apache.parquet.io.SeekableInputStream
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.util.Utils
 
+case class OpenedParquetFooter(
+    footer: ParquetMetadata,
+    inputFile: HadoopInputFile,
+    inputStreamOpt: Option[SeekableInputStream]) {
+
+  def inputStream: SeekableInputStream = inputStreamOpt.get
+}
+
 object ParquetFooterReader {
 
   /**
@@ -69,34 +77,32 @@ object ParquetFooterReader {
    *  2. read and decode the row groups/column chunks.
    *
    * It's possible to avoid opening the file twice by resuing the SeekableInputStream.
-   * When detachFileInputStream is true, the caller takes responsibility to close the
+   * When keepInputStreamOpen is true, the caller takes responsibility to close the
    * SeekableInputStream. Currently, this is only supported by parquet vectorized reader.
    *
    * @param hadoopConf hadoop configuration of file
    * @param file       a part (i.e. "block") of a single file that should be read
-   * @param detachFileInputStream when true, keep the SeekableInputStream of file opened
-   * @return if detachFileInputStream is true, return
-   *         (Some(HadoopInputFile), Soem(SeekableInputStream), ParquetMetadata),
-   *         otherwise, return (None, None, ParquetMetadata).
+   * @param keepInputStreamOpen when true, keep the SeekableInputStream of file being open
+   * @return if keepInputStreamOpen is true, the returned OpenedParquetFooter carrys
+   *         Some(SeekableInputStream), otherwise None.
    */
   def openFileAndReadFooter(
       hadoopConf: Configuration,
       file: PartitionedFile,
-      detachFileInputStream: Boolean):
-  (Option[HadoopInputFile], Option[SeekableInputStream], ParquetMetadata) = {
+      keepInputStreamOpen: Boolean): OpenedParquetFooter = {
     val readOptions = HadoopReadOptions.builder(hadoopConf, file.toPath)
-      .withMetadataFilter(buildFilter(hadoopConf, file, !detachFileInputStream))
+      .withMetadataFilter(buildFilter(hadoopConf, file, !keepInputStreamOpen))
       .build()
     val inputFile = HadoopInputFile.fromPath(file.toPath, hadoopConf)
     val inputStream = inputFile.newStream()
     Utils.tryWithResource(
       ParquetFileReader.open(inputFile, readOptions, inputStream)) { fileReader =>
       val footer = fileReader.getFooter
-      if (detachFileInputStream) {
+      if (keepInputStreamOpen) {
         fileReader.detachFileInputStream()
-        (Some(inputFile), Some(inputStream), footer)
+        OpenedParquetFooter(footer, inputFile, Some(inputStream))
       } else {
-        (None, None, footer)
+        OpenedParquetFooter(footer, inputFile, None)
       }
     }
   }
