@@ -1386,13 +1386,6 @@ private[spark] class DAGScheduler(
     logInfo(log"Final stage: ${MDC(STAGE, finalStage)} " +
       log"(${MDC(STAGE_NAME, finalStage.name)})")
     logInfo(log"Parents of final stage: ${MDC(STAGES, finalStage.parents)}")
-    try {
-      val missingParents = getMissingParentStages(finalStage)
-      logInfo(log"Missing parents: ${MDC(MISSING_PARENT_STAGES, missingParents)}")
-    } catch {
-      case e: RpcTimeoutException =>
-        logWarning("Getting missing parent stages failed due to rpc timeout. Ignoring.", e)
-    }
 
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
@@ -1435,13 +1428,6 @@ private[spark] class DAGScheduler(
     logInfo(log"Final stage: ${MDC(STAGE_ID, finalStage)} " +
       log"(${MDC(STAGE_NAME, finalStage.name)})")
     logInfo(log"Parents of final stage: ${MDC(PARENT_STAGES, finalStage.parents.toString)}")
-    try {
-      val missingParents = getMissingParentStages(finalStage)
-      logInfo(log"Missing parents: ${MDC(MISSING_PARENT_STAGES, missingParents)}")
-    } catch {
-      case e: RpcTimeoutException =>
-        logWarning("Getting missing parent stages failed due to rpc timeout. Ignoring.", e)
-    }
 
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
@@ -1484,7 +1470,7 @@ private[spark] class DAGScheduler(
               abortStage(stage, reason, Some(e))
               return
           }
-          logDebug("missing: " + missing)
+          logInfo(log"Missing parents found for ${MDC(STAGE, stage)}: ${MDC(MISSING_PARENT_STAGES, missing)}")
           if (missing.isEmpty) {
             logInfo(log"Submitting ${MDC(STAGE, stage)} (${MDC(RDD_ID, stage.rdd)}), " +
                     log"which has no missing parents")
