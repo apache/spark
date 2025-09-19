@@ -19,19 +19,13 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.checkpointing.{HDFSMetadataLog => ActualHDFSMetadataLog}
 import org.apache.spark.sql.execution.streaming.runtime.{SerializedOffset => ActualSerializedOffset}
 
 @deprecated("use org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog")
-class HDFSMetadataLog[T <: AnyRef: ClassTag](conf: Configuration, path: String)
-  extends ActualHDFSMetadataLog[T](conf, path) {
-  def this(spark: SparkSession, path: String) = {
-    this(spark.sessionState.newHadoopConf(), path)
-  }
-}
+class HDFSMetadataLog[T <: AnyRef: ClassTag](sparkSession: SparkSession, path: String)
+  extends ActualHDFSMetadataLog[T](sparkSession, path)
 
 @deprecated("use org.apache.spark.sql.execution.streaming.runtime.SerializedOffset")
 object SerializedOffset {
