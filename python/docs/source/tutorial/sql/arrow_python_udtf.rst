@@ -515,7 +515,7 @@ Best Practices
   memory bounded and shortens feedback loops; reserve :py:meth:`terminate` for true per-partition
   operations.
 - Keep per-partition state tiny and reset it promptly. If you only need the first *N* rows, raise
-  :pyclass:`~pyspark.sql.functions.SkipRestOfInputTableException` after collecting them so Spark
+  :py:class:`~pyspark.sql.functions.SkipRestOfInputTableException` after collecting them so Spark
   skips the rest of the partition.
 - Guard external calls with short timeouts and operate on the current batch instead of deferring to
   ``terminate``; this avoids giant buffers and keeps retries narrow.
