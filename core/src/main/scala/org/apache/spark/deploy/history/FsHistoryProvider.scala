@@ -34,7 +34,6 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, SafeModeAction}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.security.AccessControlException
-import org.apache.hadoop.util.BlockingThreadPoolExecutorService
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -212,8 +211,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private val replayExecutor: ExecutorService = {
     if (!Utils.isTesting) {
-      BlockingThreadPoolExecutorService.newInstance(
-        numReplayThreads, 1024, 60L, TimeUnit.SECONDS, "log-replay-executor")
+      ThreadUtils.newDaemonBlockingThreadPoolExecutorService(
+        numReplayThreads, 1024, "log-replay-executor")
     } else {
       ThreadUtils.sameThreadExecutorService()
     }
@@ -224,8 +223,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private val compactExecutor: ExecutorService = {
     if (!Utils.isTesting) {
-      BlockingThreadPoolExecutorService.newInstance(
-        numCompactThreads, 1024, 60L, TimeUnit.SECONDS, "log-compact-executor")
+      ThreadUtils.newDaemonBlockingThreadPoolExecutorService(
+        numCompactThreads, 1024, "log-compact-executor")
     } else {
       ThreadUtils.sameThreadExecutorService()
     }
