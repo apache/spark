@@ -189,6 +189,23 @@ private[spark] object ThreadUtils {
   }
 
   /**
+   * Simliar to newDaemonFixedThreadPool, but with a bound workQueue, task submission will
+   * be blocked when queue is full.
+   *
+   * @param nThreads the number of threads in the pool
+   * @param workQueueSize the capacity of the queue to use for holding tasks before they are
+   *                      executed. Task submission will be blocked when queue is full.
+   * @param prefix thread names are formatted as prefix-ID, where ID is a unique, sequentially
+   *               assigned integer.
+   * @return BlockingThreadPoolExecutorService
+   */
+  def newDaemonBlockingThreadPoolExecutorService(
+      nThreads: Int, workQueueSize: Int, prefix: String): ExecutorService = {
+    val threadFactory = namedThreadFactory(prefix)
+    new BlockingThreadPoolExecutorService(nThreads, workQueueSize, threadFactory)
+  }
+
+  /**
    * Wrapper over ScheduledThreadPoolExecutor the pool with daemon threads.
    */
   def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
