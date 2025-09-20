@@ -42,7 +42,7 @@ import org.apache.spark.util.ThreadUtils
  * Assumptions:
  * 1. Each output will have at-least 1 flow to it.
  * 2. Each flow may or may not have a destination table. If a flow does not have a destination
- *    table, the destination is a temporary view.
+ *    table, the destination is a view.
  *
  * The way graph is structured is that flows, tables and sinks all are graph elements or nodes.
  * While we expose transformation functions for each of these entities, we also expose a way to

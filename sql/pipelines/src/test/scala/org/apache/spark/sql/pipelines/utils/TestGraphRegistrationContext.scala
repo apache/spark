@@ -189,7 +189,8 @@ class TestGraphRegistrationContext(
       origin: QueryOrigin = QueryOrigin.empty,
       viewType: ViewType = LocalTempView,
       catalog: Option[String] = None,
-      database: Option[String] = None
+      database: Option[String] = None,
+      sqlText: Option[String] = None
   ): Unit = {
 
     val viewIdentifier = GraphIdentifierManager
@@ -202,14 +203,16 @@ class TestGraphRegistrationContext(
             identifier = viewIdentifier,
             comment = comment,
             origin = origin,
-            properties = Map.empty
+            properties = Map.empty,
+            sqlText = sqlText
           )
         case _ =>
           PersistedView(
             identifier = viewIdentifier,
             comment = comment,
             origin = origin,
-            properties = Map.empty
+            properties = Map.empty,
+            sqlText = sqlText
           )
       }
     )

@@ -225,34 +225,31 @@ trait View extends GraphElement {
   /** Properties of this view */
   val properties: Map[String, String]
 
+  /** (SQL-specific) The raw query that defines the [[View]]. */
+  val sqlText: Option[String]
+
   /** User-specified comment that can be placed on the [[View]]. */
   val comment: Option[String]
 }
 
 /**
  * Representing a temporary [[View]] in a [[DataflowGraph]].
- *
- * @param identifier The identifier of this view within the graph.
- * @param properties Properties of the view
- * @param comment when defining a view
  */
 case class TemporaryView(
     identifier: TableIdentifier,
     properties: Map[String, String],
+    sqlText: Option[String],
     comment: Option[String],
     origin: QueryOrigin
 ) extends View {}
 
 /**
  * Representing a persisted [[View]] in a [[DataflowGraph]].
- *
- * @param identifier The identifier of this view within the graph.
- * @param properties Properties of the view
- * @param comment when defining a view
  */
 case class PersistedView(
     identifier: TableIdentifier,
     properties: Map[String, String],
+    sqlText: Option[String],
     comment: Option[String],
     origin: QueryOrigin
 ) extends View {}
