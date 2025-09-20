@@ -3144,6 +3144,7 @@ object SparkContext extends Logging {
   private[spark] val SPARK_SCHEDULER_POOL = "spark.scheduler.pool"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
+  private[spark] val SQL_SCRIPT_ID = "spark.execution.scriptId"
 
   /**
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was
