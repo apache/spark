@@ -49,6 +49,7 @@ import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.resource.{ResourceProfile, TaskResourceProfile}
 import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
+import org.apache.spark.rpc.RpcTimeoutException
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
@@ -1385,7 +1386,6 @@ private[spark] class DAGScheduler(
     logInfo(log"Final stage: ${MDC(STAGE, finalStage)} " +
       log"(${MDC(STAGE_NAME, finalStage.name)})")
     logInfo(log"Parents of final stage: ${MDC(STAGES, finalStage.parents)}")
-    logInfo(log"Missing parents: ${MDC(MISSING_PARENT_STAGES, getMissingParentStages(finalStage))}")
 
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
@@ -1428,7 +1428,6 @@ private[spark] class DAGScheduler(
     logInfo(log"Final stage: ${MDC(STAGE_ID, finalStage)} " +
       log"(${MDC(STAGE_NAME, finalStage.name)})")
     logInfo(log"Parents of final stage: ${MDC(PARENT_STAGES, finalStage.parents.toString)}")
-    logInfo(log"Missing parents: ${MDC(MISSING_PARENT_STAGES, getMissingParentStages(finalStage))}")
 
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
@@ -1462,17 +1461,27 @@ private[spark] class DAGScheduler(
             s"`${config.STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}`."
           abortStage(stage, reason, None)
         } else {
-          val missing = getMissingParentStages(stage).sortBy(_.id)
-          logDebug("missing: " + missing)
+          val missing = try {
+            getMissingParentStages(stage).sortBy(_.id)
+          } catch {
+            case e: RpcTimeoutException =>
+              val reason = s"failed to get missing parent stages for $stage " +
+                s"(name=${stage.name}) due to rpc timeout."
+              abortStage(stage, reason, Some(e))
+              return
+          }
+          logInfo(log"Missing parents found for ${MDC(STAGE, stage)}: ${MDC(MISSING_PARENT_STAGES, missing)}")
           if (missing.isEmpty) {
             logInfo(log"Submitting ${MDC(STAGE, stage)} (${MDC(RDD_ID, stage.rdd)}), " +
                     log"which has no missing parents")
             submitMissingTasks(stage, jobId.get)
           } else {
+            // Add to waiting list before submitting missing parents so that the state can be
+            // cleaned up if any of the parents is aborted.
+            waitingStages += stage
             for (parent <- missing) {
               submitStage(parent)
             }
-            waitingStages += stage
           }
         }
       }
@@ -2762,7 +2771,7 @@ private[spark] class DAGScheduler(
         hostToUnregisterOutputs.foreach(
           host => blockManagerMaster.removeShufflePushMergerLocation(host))
       }
-      blockManagerMaster.removeExecutor(execId)
+      blockManagerMaster.removeExecutorAsync(execId)
       clearCacheLocs()
     }
     if (fileLost) {
