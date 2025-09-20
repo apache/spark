@@ -27,8 +27,8 @@ import com.google.common.util.concurrent.Futures
  * This thread pool executor throttles the submission of new tasks by using a semaphore.
  * Task submissions require permits, task completions release permits.
  * <p>
- * NOTE: you should either use the [[BlockingThreadPoolExecutorService.submit(Callable)]]
- * methods or the [[BlockingThreadPoolExecutorService.execute(Runnable)]] method.
+ * NOTE: [[invoke*]] methods are not supported, you should either use the [[submit]] methods
+ * or the [[execute]] method.
  * <p>
  * This is inspired by
  * <a href="https://github.com/apache/incubator-retired-s4/blob/0.6.0-Final/subprojects/s4-comm/src/main/java/org/apache/s4/comm/staging/BlockingThreadPoolExecutorService.java">
@@ -94,19 +94,19 @@ private[spark] class BlockingThreadPoolExecutorService(
 
   override def invokeAll[T](
       tasks: util.Collection[_ <: Callable[T]]): util.List[Future[T]] =
-    throw new RuntimeException("Not implemented")
+    throw new UnsupportedOperationException("Not implemented")
 
   override def invokeAll[T](
       tasks: util.Collection[_ <: Callable[T]],
       timeout: Long, unit: TimeUnit): util.List[Future[T]] =
-    throw new RuntimeException("Not implemented")
+    throw new UnsupportedOperationException("Not implemented")
 
   override def invokeAny[T](tasks: util.Collection[_ <: Callable[T]]): T =
-    throw new RuntimeException("Not implemented")
+    throw new UnsupportedOperationException("Not implemented")
 
   override def invokeAny[T](
       tasks: util.Collection[_ <: Callable[T]], timeout: Long, unit: TimeUnit): T =
-    throw new RuntimeException("Not implemented")
+    throw new UnsupportedOperationException("Not implemented")
 
   /**
    * Releases a permit after the task is executed.
