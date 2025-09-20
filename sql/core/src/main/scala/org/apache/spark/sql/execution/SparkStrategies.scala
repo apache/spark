@@ -1078,7 +1078,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
         exchange.ShuffleExchangeExec(
           r.partitioning, planLater(r.child),
-          shuffleOrigin, r.optAdvisoryPartitionSize) :: Nil
+          shuffleOrigin, r.optAdvisoryPartitionSize, addedByRebalance = Some(true)) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering,
