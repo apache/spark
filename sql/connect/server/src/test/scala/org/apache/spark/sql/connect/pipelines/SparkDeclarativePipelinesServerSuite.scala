@@ -558,7 +558,7 @@ class SparkDeclarativePipelinesServerSuite
       assert(res !== PipelineCommandResult.getDefaultInstance)
       assert(res.hasDefineDatasetResult)
       val graphResult = res.getDefineDatasetResult
-      assert(graphResult.getResolvedDataName == testCase.expectedResolvedName)
+      assert(graphResult.getResolvedDatasetName == testCase.expectedResolvedName)
     }
   }
 
@@ -591,7 +591,7 @@ class SparkDeclarativePipelinesServerSuite
       assert(res !== PipelineCommandResult.getDefaultInstance)
       assert(res.hasDefineDatasetResult)
       val graphResult = res.getDefineDatasetResult
-      assert(graphResult.getResolvedDataName == testCase.expectedResolvedName)
+      assert(graphResult.getResolvedDatasetName == testCase.expectedResolvedName)
     }
   }
 

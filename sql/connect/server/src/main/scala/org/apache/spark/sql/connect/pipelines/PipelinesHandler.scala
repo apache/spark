@@ -81,14 +81,14 @@ private[connect] object PipelinesHandler extends Logging {
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
         logInfo(s"Define pipelines dataset cmd received: $cmd")
-        val resolvedDataName =
+        val resolvedDatasetName =
           defineDataset(cmd.getDefineDataset, sessionHolder).quotedString
         PipelineCommandResult
           .newBuilder()
           .setDefineDatasetResult(
             PipelineCommandResult.DefineDatasetResult
               .newBuilder()
-              .setResolvedDataName(resolvedDataName)
+              .setResolvedDatasetName(resolvedDatasetName)
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>

@@ -756,36 +756,38 @@ class PipelineCommandResult(google.protobuf.message.Message):
     class DefineDatasetResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        RESOLVED_DATA_NAME_FIELD_NUMBER: builtins.int
-        resolved_data_name: builtins.str
+        RESOLVED_DATASET_NAME_FIELD_NUMBER: builtins.int
+        resolved_dataset_name: builtins.str
         """Resolved name of the dataset"""
         def __init__(
             self,
             *,
-            resolved_data_name: builtins.str | None = ...,
+            resolved_dataset_name: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_resolved_data_name",
-                b"_resolved_data_name",
-                "resolved_data_name",
-                b"resolved_data_name",
+                "_resolved_dataset_name",
+                b"_resolved_dataset_name",
+                "resolved_dataset_name",
+                b"resolved_dataset_name",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_resolved_data_name",
-                b"_resolved_data_name",
-                "resolved_data_name",
-                b"resolved_data_name",
+                "_resolved_dataset_name",
+                b"_resolved_dataset_name",
+                "resolved_dataset_name",
+                b"resolved_dataset_name",
             ],
         ) -> None: ...
         def WhichOneof(
             self,
-            oneof_group: typing_extensions.Literal["_resolved_data_name", b"_resolved_data_name"],
-        ) -> typing_extensions.Literal["resolved_data_name"] | None: ...
+            oneof_group: typing_extensions.Literal[
+                "_resolved_dataset_name", b"_resolved_dataset_name"
+            ],
+        ) -> typing_extensions.Literal["resolved_dataset_name"] | None: ...
 
     class DefineFlowResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

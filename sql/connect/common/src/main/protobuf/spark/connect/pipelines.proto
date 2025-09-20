@@ -150,7 +150,7 @@ message PipelineCommandResult {
   }
   message DefineDatasetResult {
     // Resolved name of the dataset
-    optional string resolved_data_name = 1;
+    optional string resolved_dataset_name = 1;
   }
   message DefineFlowResult {
     // Resolved name of the flow
