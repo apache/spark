@@ -676,7 +676,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with Expressio
 
     val mapResultRow = convertBackToInternalRow(mapRow, fields4)
     val mapExpectedRow = mapRow
-    checkResult(mapExpectedRow, mapResultRow,
+    checkResult(mapResultRow, mapExpectedRow,
       exprDataType = StructType(fields4.zipWithIndex.map(f => StructField(s"c${f._2}", f._1))),
       exprNullable = false)
 
