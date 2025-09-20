@@ -52,6 +52,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
     this
   }
 
+  def name(sourceName: String): this.type =
+    this
+
   /** @inheritdoc */
   override def schema(schemaString: String): this.type = {
     sourceBuilder.setSchema(schemaString)

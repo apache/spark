@@ -27,6 +27,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
 import org.apache.spark.sql.execution.datasources.xml.XmlUtils.checkXmlSchema
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq
 import org.apache.spark.sql.streaming
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -43,6 +44,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   /** @inheritdoc */
   def format(source: String): this.type = {
     this.source = source
+    this
+  }
+
+  /** @inheritdoc */
+  override def name(sourceName: String): this.type = {
+    OffsetSeq.validateSourceName(sourceName)
+    this.userSpecifiedName = Some(sourceName)
     this
   }
 
@@ -76,7 +84,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
       userSpecifiedSchema,
       extraOptions,
       isStreaming = true,
-      path.toSeq
+      path.toSeq,
+      userSpecifiedName
     )
     Dataset.ofRows(sparkSession, unresolved)
   }
@@ -159,6 +168,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   private var source: String = sparkSession.sessionState.conf.defaultDataSourceName
 
   private var userSpecifiedSchema: Option[StructType] = None
+
+  private var userSpecifiedName: Option[String] = None
 
   private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 }
