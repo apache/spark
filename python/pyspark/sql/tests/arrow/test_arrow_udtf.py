@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import unittest
-from typing import Iterator
+from typing import Iterator, Optional
 
 from pyspark.errors import PySparkAttributeError
 from pyspark.errors import PythonException
@@ -996,35 +996,96 @@ class ArrowUDTFTestsMixin:
         assertDataFrameEqual(result_df, expected_df)
 
     def test_arrow_udtf_partition_by_all_columns(self):
-        @arrow_udtf(returnType="rows int")
-        class CountRowsUDTF:
+        from pyspark.sql.functions import SkipRestOfInputTableException
+
+        @arrow_udtf(returnType="product_id int, review_id int, rating int, review string")
+        class TopReviewsPerProduct:
+            TOP_K = 3
+
             def __init__(self):
-                self._rows = 0
+                self._product = None
+                self._seen = 0
+                self._batches: list[pa.Table] = []
+                self._top_table: Optional[pa.Table] = None
 
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
+                import pyarrow.compute as pc
+
                 table = pa.table(table_data)
-                self._rows += table.num_rows
+                if table.num_rows == 0:
+                    return iter(())
+
+                products = pc.unique(table["product_id"]).to_pylist()
+                assert len(products) == 1, f"Expected one product, saw {products}"
+                product = products[0]
+
+                if self._product is None:
+                    self._product = product
+                else:
+                    assert (
+                        self._product == product
+                    ), f"Mixed products {self._product} and {product} in partition"
+
+                self._batches.append(table)
+                self._seen += table.num_rows
+
+                if self._seen >= self.TOP_K and self._top_table is None:
+                    combined = pa.concat_tables(self._batches)
+                    self._top_table = combined.slice(0, self.TOP_K)
+                    raise SkipRestOfInputTableException(
+                        f"Top {self.TOP_K} reviews ready for product {self._product}"
+                    )
+
                 return iter(())
 
             def terminate(self) -> Iterator["pa.Table"]:
-                result_table = pa.table({"rows": pa.array([self._rows], type=pa.int32())})
-                yield result_table
+                if self._product is None:
+                    return iter(())
 
-        df = self.spark.createDataFrame([(1, 10), (1, 20), (2, 30)], "partition_key int, value int")
-        self.spark.udtf.register("count_rows_udtf", CountRowsUDTF)
-        df.createOrReplaceTempView("partition_all_columns")
+                if self._top_table is None:
+                    combined = pa.concat_tables(self._batches) if self._batches else pa.table({})
+                    limit = min(self.TOP_K, self._seen)
+                    self._top_table = combined.slice(0, limit)
+
+                yield self._top_table
+
+        review_data = [
+            (101, 1, 5, "Amazing battery life"),
+            (101, 2, 5, "Still great after a month"),
+            (101, 3, 4, "Solid build"),
+            (101, 4, 3, "Average sound"),
+            (202, 5, 5, "My go-to lens"),
+            (202, 6, 4, "Sharp and bright"),
+            (202, 7, 4, "Great value"),
+        ]
+        df = self.spark.createDataFrame(
+            review_data, "product_id int, review_id int, rating int, review string"
+        )
+        self.spark.udtf.register("top_reviews_udtf", TopReviewsPerProduct)
+        df.createOrReplaceTempView("product_reviews")
 
         result_df = self.spark.sql(
             """
-            SELECT * FROM count_rows_udtf(
-                TABLE(partition_all_columns)
-                PARTITION BY (partition_key, value)
+            SELECT * FROM top_reviews_udtf(
+                TABLE(product_reviews)
+                PARTITION BY (product_id)
+                ORDER BY (rating DESC, review_id)
             )
-            ORDER BY rows
+            ORDER BY product_id, rating DESC, review_id
             """
         )
 
-        expected_df = self.spark.createDataFrame([(1,), (1,), (1,)], "rows int")
+        expected_df = self.spark.createDataFrame(
+            [
+                (101, 1, 5, "Amazing battery life"),
+                (101, 2, 5, "Still great after a month"),
+                (101, 3, 4, "Solid build"),
+                (202, 5, 5, "My go-to lens"),
+                (202, 6, 4, "Sharp and bright"),
+                (202, 7, 4, "Great value"),
+            ],
+            "product_id int, review_id int, rating int, review string",
+        )
         assertDataFrameEqual(result_df, expected_df)
 
     def test_arrow_udtf_partition_by_single_partition_multiple_input_partitions(self):
