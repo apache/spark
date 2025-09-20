@@ -350,11 +350,12 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         This has performance penalties.
     """
 
-    def __init__(self, timezone, safecheck, int_to_decimal_coercion_enabled):
+    def __init__(self, timezone, safecheck, int_to_decimal_coercion_enabled, binary_as_bytes=None):
         super(ArrowStreamPandasSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
+        self._binary_as_bytes = binary_as_bytes
         self._converter_cache = {}
 
     @staticmethod
@@ -583,9 +584,10 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         arrow_cast=False,
         input_types=None,
         int_to_decimal_coercion_enabled=False,
+        binary_as_bytes=None,
     ):
         super(ArrowStreamPandasUDFSerializer, self).__init__(
-            timezone, safecheck, int_to_decimal_coercion_enabled
+            timezone, safecheck, int_to_decimal_coercion_enabled, binary_as_bytes
         )
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
@@ -782,12 +784,14 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         safecheck,
         assign_cols_by_name,
         arrow_cast,
+        binary_as_bytes=None,
     ):
         super(ArrowStreamArrowUDFSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
         self._arrow_cast = arrow_cast
+        self._binary_as_bytes = binary_as_bytes
 
     def _create_array(self, arr, arrow_type, arrow_cast):
         import pyarrow as pa
@@ -862,12 +866,14 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         safecheck,
         input_types,
         int_to_decimal_coercion_enabled=False,
+        binary_as_bytes=None,
     ):
         super().__init__(
             timezone=timezone,
             safecheck=safecheck,
             assign_cols_by_name=False,
             arrow_cast=True,
+            binary_as_bytes=binary_as_bytes,
         )
         self._input_types = input_types
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
@@ -887,7 +893,9 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
             List of columns containing list of Python values.
         """
         converters = [
-            ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True)
+            ArrowTableToRowsConversion._create_converter(
+                dt, none_on_identity=True, binary_as_bytes=self._binary_as_bytes
+            )
             for dt in self._input_types
         ]
 
@@ -949,7 +957,14 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
     """
 
-    def __init__(self, timezone, safecheck, input_types, int_to_decimal_coercion_enabled):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        input_types,
+        int_to_decimal_coercion_enabled,
+        binary_as_bytes=None,
+    ):
         super(ArrowStreamPandasUDTFSerializer, self).__init__(
             timezone=timezone,
             safecheck=safecheck,
@@ -972,6 +987,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             input_types=input_types,
             # Enable additional coercions for UDTF serialization
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            binary_as_bytes=binary_as_bytes,
         )
         self._converter_map = dict()
 

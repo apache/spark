@@ -3913,6 +3913,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYSPARK_USE_BYTES_FOR_BINARY_ENABLED =
+    buildConf("spark.sql.execution.pyspark.binaryAsBytes.enabled")
+      .doc("When true, BINARY type values are returned as bytes objects in PySpark. " +
+        "When false, BINARY type values are returned as bytearray objects. ")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PYTHON_UDF_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.python.udf.maxRecordsPerBatch")
       .doc("When using Python UDFs, limit the maximum number of records that can be batched " +
@@ -7100,6 +7108,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowLocalRelationThreshold: Long = getConf(ARROW_LOCAL_RELATION_THRESHOLD)
 
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
+
+  def PySparkUseBytesForBinaryEnabled: Boolean = getConf(PYSPARK_USE_BYTES_FOR_BINARY_ENABLED)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
