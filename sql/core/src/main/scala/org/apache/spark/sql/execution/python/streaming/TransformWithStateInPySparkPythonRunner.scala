@@ -75,7 +75,12 @@ class TransformWithStateInPySparkPythonRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[InType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new BaseStreamingArrowWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch
+      )
     }
 
     // If we don't have data left for the current group, move to the next group.
@@ -145,7 +150,12 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[GroupedInType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new BaseStreamingArrowWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch
+      )
     }
 
     if (inputIterator.hasNext) {
@@ -200,9 +210,11 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
+  protected val arrowMaxBytesPerBatch = sqlConf.arrowMaxBytesPerBatch
 
   override protected val workerConf: Map[String, String] = initialWorkerConf +
-    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
+    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString) +
+    (SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
   // constructor.
