@@ -3120,4 +3120,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def thetaInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def thetaInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_LG_NOM_ENTRIES",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "min" -> toSQLValue(min, IntegerType),
+        "max" -> toSQLValue(max, IntegerType),
+        "value" -> toSQLValue(value, IntegerType)))
+  }
 }
