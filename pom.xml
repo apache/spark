@@ -99,6 +99,7 @@
     <module>sql/pipelines</module>
     <module>sql/connect/server</module>
     <module>sql/connect/common</module>
+    <module>sql/connect/client/jdbc</module>
     <module>sql/connect/client/jvm</module>
     <module>assembly</module>
     <module>examples</module>
