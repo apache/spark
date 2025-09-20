@@ -148,6 +148,29 @@ class FrameAnyAllMixin:
         ):
             psdf.any(axis=1)
 
+        # Test skipna parameter
+        pdf = pd.DataFrame({"A": [True, False], "B": [1, np.nan], "C": [True, None]})
+        psdf = ps.from_pandas(pdf)
+
+        # bools and np.nan
+        self.assert_eq(psdf[["A", "B"]].any(skipna=False), pdf[["A", "B"]].any(skipna=False))
+        # bools and None
+        self.assert_eq(psdf[["A", "C"]].any(skipna=False), pdf[["A", "C"]].any(skipna=False))
+        # bools, np.nan, and None
+        self.assert_eq(psdf[["B", "C"]].any(skipna=False), pdf[["B", "C"]].any(skipna=False))
+
+        self.assert_eq(
+            ps.DataFrame([np.nan]).any(skipna=False),
+            pd.DataFrame([np.nan]).any(skipna=False),
+            almost=True,
+        )
+
+        self.assert_eq(
+            ps.DataFrame([None]).any(skipna=True),
+            pd.DataFrame([None]).any(skipna=True),
+            almost=True,
+        )
+
 
 class FrameAnyAllTests(
     FrameAnyAllMixin,
