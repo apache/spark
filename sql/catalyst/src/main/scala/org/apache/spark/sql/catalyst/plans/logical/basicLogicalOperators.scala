@@ -635,6 +635,74 @@ case class Union(
     copy(children = newChildren)
 }
 
+/**
+ * Sequential Union processes children sequentially rather than concurrently.
+ * Each child must complete before the next child begins execution.
+ *
+ * Unlike Union which processes all children in parallel, SequentialUnion is designed
+ * for streaming scenarios where you want to process bounded data first (e.g., historical files)
+ * followed by unbounded data (e.g., live streams).
+ *
+ * Schema validation and resolution follow the same rules as Union.
+ */
+case class SequentialUnion(
+    children: Seq[LogicalPlan],
+    byName: Boolean = false,
+    allowMissingCol: Boolean = false) extends UnionBase {
+
+  require(children.length >= 2, "SequentialUnion requires at least two children")
+  assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
+
+  override def maxRows: Option[Long] = {
+    // Sequential execution means sum of all children's rows
+    var sum = BigInt(0)
+    children.foreach { child =>
+      if (child.maxRows.isDefined) {
+        sum += child.maxRows.get
+        if (!sum.isValidLong) {
+          return None
+        }
+      } else {
+        return None
+      }
+    }
+    Some(sum.toLong)
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
+
+  override def maxRowsPerPartition: Option[Long] = {
+    // For sequential execution, only one child is active at a time,
+    // so maxRowsPerPartition is the maximum among all children
+    val childMaxRows = children.flatMap(_.maxRowsPerPartition)
+    if (childMaxRows.length == children.length) {
+      Some(childMaxRows.max)
+    } else {
+      None
+    }
+  }
+
+  private def duplicatesResolvedPerBranch: Boolean =
+    children.forall(child => child.outputSet.size == child.output.size)
+
+  def duplicatesResolvedBetweenBranches: Boolean = {
+    children.map(_.outputSet.size).sum ==
+      AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
+  }
+
+  override lazy val resolved: Boolean = {
+    children.length > 1 &&
+    !(byName || allowMissingCol) &&
+    childrenResolved &&
+    allChildrenCompatible &&
+    (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || duplicatesResolvedPerBranch)
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): SequentialUnion =
+    copy(children = newChildren)
+}
+
 object Join {
   def computeOutput(
     joinType: JoinType,

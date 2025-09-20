@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys.BATCH_ID
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, LeafNode, LocalRelation, LogicalPlan, Project, SequentialUnion, StreamSourceAwareLogicalPlan, Union}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, On
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeq, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
+import org.apache.spark.sql.execution.streaming.runtime.SequentialUnionManager
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaBroadcast, StateStoreErrors}
@@ -96,6 +97,9 @@ class MicroBatchExecution(
   protected[sql] val errorNotifier = new ErrorNotifier()
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
+
+  // Manager for tracking sequential union execution
+  private val sequentialUnionManager = new SequentialUnionManager()
 
   @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
 
@@ -227,6 +231,23 @@ class MicroBatchExecution(
       case s: StreamingExecutionRelation => s.source
       // v2 source
       case r: StreamingDataSourceV2ScanRelation => r.stream
+    }
+
+    // Register any sequential unions found in the logical plan
+    _logicalPlan.collect {
+      case seqUnion: SequentialUnion =>
+        val unionSources = seqUnion.children.collect {
+          case s: StreamingExecutionRelation => s.source
+          case r: StreamingDataSourceV2ScanRelation => r.stream
+          case p: Project => p.child match {
+            case s: StreamingExecutionRelation => s.source
+            case r: StreamingDataSourceV2ScanRelation => r.stream
+          }
+        }
+        if (unionSources.nonEmpty) {
+          sequentialUnionManager.registerSequentialUnion(seqUnion, unionSources)
+          logInfo(s"Registered sequential union with ${unionSources.length} sources")
+        }
     }
 
     // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
@@ -651,31 +672,51 @@ class MicroBatchExecution(
     // Generate a map from each unique source to the next available offset.
     val (nextOffsets, recentOffsets) = uniqueSources.toSeq.map {
       case (s: AvailableNowDataStreamWrapper, limit) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
         val originalSource = s.delegate
-        execCtx.reportTimeTaken("latestOffset") {
-          val next = s.latestOffset(getStartOffset(execCtx, originalSource), limit)
-          val latest = s.reportLatestOffset()
-          ((originalSource, Option(next)), (originalSource, Option(latest)))
+        if (sequentialUnionManager.isSourceActive(originalSource)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("latestOffset") {
+            val next = s.latestOffset(getStartOffset(execCtx, originalSource), limit)
+            val latest = s.reportLatestOffset()
+            ((originalSource, Option(next)), (originalSource, Option(latest)))
+          }
+        } else {
+          logError(s"### Skipping inactive AvailableNowDataStreamWrapper source: $originalSource")
+          ((originalSource, None), (originalSource, None))
         }
       case (s: SupportsAdmissionControl, limit) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
-        execCtx.reportTimeTaken("latestOffset") {
-          val next = s.latestOffset(getStartOffset(execCtx, s), limit)
-          val latest = s.reportLatestOffset()
-          ((s, Option(next)), (s, Option(latest)))
+        if (sequentialUnionManager.isSourceActive(s)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("latestOffset") {
+            val next = s.latestOffset(getStartOffset(execCtx, s), limit)
+            val latest = s.reportLatestOffset()
+            ((s, Option(next)), (s, Option(latest)))
+          }
+        } else {
+          logError(s"### Skipping inactive source: $s")
+          ((s, None), (s, None))
         }
       case (s: Source, _) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
-        execCtx.reportTimeTaken("getOffset") {
-          val offset = s.getOffset
-          ((s, offset), (s, offset))
+        if (sequentialUnionManager.isSourceActive(s)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("getOffset") {
+            val offset = s.getOffset
+            ((s, offset), (s, offset))
+          }
+        } else {
+          logError(s"### Skipping inactive source: $s")
+          ((s, None), (s, None))
         }
       case (s: MicroBatchStream, _) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
-        execCtx.reportTimeTaken("latestOffset") {
-          val latest = s.latestOffset()
-          ((s, Option(latest)), (s, Option(latest)))
+        if (sequentialUnionManager.isSourceActive(s)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("latestOffset") {
+            val latest = s.latestOffset()
+            ((s, Option(latest)), (s, Option(latest)))
+          }
+        } else {
+          logError(s"### Skipping inactive source: $s")
+          ((s, None), (s, None))
         }
       case (s, _) =>
         // for some reason, the compiler is unhappy and thinks the match is not exhaustive
@@ -792,7 +833,69 @@ class MicroBatchExecution(
     }
 
     // Replace sources in the logical plan with data that has arrived since the last batch.
-    val newBatchesPlan = logicalPlan transform {
+    val newBatchesPlan = logicalPlan.transform {
+      // Handle SequentialUnion by replacing inactive sources with empty relations
+      case seqUnion @ SequentialUnion(children, byName, allowMissingCol) =>
+        logError(s"### Processing SequentialUnion with ${children.length} children")
+        val transformedChildren = children.zipWithIndex.map { case (child, index) =>
+          child match {
+            case relation: StreamingExecutionRelation =>
+              val isActive = sequentialUnionManager.isSourceActive(relation.source)
+              logError(s"### Child $index (StreamingExecution): " +
+                s"${relation.source.getClass.getSimpleName} - Active: $isActive")
+              if (isActive) {
+                // Active source - keep as is, will be transformed below
+                relation
+              } else {
+                // Inactive source - check if it has data in current batch
+                val sourceHasDataInBatch = availableOffsets.get(relation.source).exists { offset =>
+                  committedOffsets.get(relation.source).forall(_ != offset)
+                }
+                if (sourceHasDataInBatch) {
+                  logError(s"### Inactive source ${relation.source.getClass.getSimpleName}" +
+                    s" has data in this batch - preserving")
+                  // Preserve the relation to process its final data
+                  relation
+                } else {
+                  logError(s"### Inactive source ${relation.source.getClass.getSimpleName}" +
+                    s" has no data - replacing with empty")
+                  // Replace with empty relation
+                  LocalRelation(relation.output, data = Seq.empty, isStreaming = true)
+                }
+              }
+            case relation: StreamingDataSourceV2ScanRelation =>
+              val isActive = sequentialUnionManager.isSourceActive(relation.stream)
+              logError(s"### Child $index (StreamingDataSourceV2): " +
+                s"${relation.stream.getClass.getSimpleName} - Active: $isActive")
+              if (isActive) {
+                // Active source - keep as is, will be transformed below
+                relation
+              } else {
+                // Inactive source - check if it has data in current batch
+                val sourceHasDataInBatch = availableOffsets.get(relation.stream).exists { offset =>
+                  committedOffsets.get(relation.stream).forall(_ != offset)
+                }
+                if (sourceHasDataInBatch) {
+                  logError(s"### Inactive source ${relation.stream.getClass.getSimpleName}" +
+                    s" has data in this batch - preserving")
+                  // Preserve the relation to process its final data
+                  relation
+                } else {
+                  logError(s"### Inactive source ${relation.stream.getClass.getSimpleName}" +
+                    s" has no data - replacing with empty")
+                  // Replace with empty relation
+                  LocalRelation(relation.output, data = Seq.empty, isStreaming = true)
+                }
+              }
+            case other =>
+              logError(s"### Child $index: Other type ${other.getClass.getSimpleName}")
+              other
+          }
+        }
+        logError(s"### SequentialUnionManager debug info: ${sequentialUnionManager.getDebugInfo}")
+        // Return regular Union with the transformed children
+        Union(transformedChildren, byName, allowMissingCol)
+    }.transform {
       // For v1 sources.
       case StreamingExecutionRelation(source, output, catalogTable) =>
         mutableNewData.get(source).map { dataPlan =>
