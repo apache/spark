@@ -299,6 +299,7 @@ Date and Timestamp Functions
     timestamp_micros
     timestamp_millis
     timestamp_seconds
+    time_diff
     time_trunc
     to_date
     to_time

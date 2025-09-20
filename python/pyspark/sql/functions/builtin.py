@@ -12711,6 +12711,60 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    """
+    Returns the difference between two times, measured in specified units.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : :class:`~pyspark.sql.Column` or column name
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    start : :class:`~pyspark.sql.Column` or column name
+        A starting time.
+    end : :class:`~pyspark.sql.Column` or column name
+        An ending time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The difference between two times, in the specified units.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.timestamp_diff`
+
+    Examples
+    --------
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("HOUR", "13:08:15", "21:30:28")], ['unit', 'start', 'end']) \
+    ...     .withColumn("start", sf.col("start").cast("time")) \
+    ...     .withColumn("end", sf.col("end").cast("time"))
+    >>> df.select('*', sf.time_diff('unit', 'start', 'end')).show()
+    +----+--------+--------+---------------------------+
+    |unit|   start|     end|time_diff(HOUR, start, end)|
+    +----+--------+--------+---------------------------+
+    |HOUR|20:30:29|21:30:28|                          0|
+    +----+--------+--------+---------------------------+
+    >>> df.select('*', sf.time_diff('unit', 'start', 'end')).show()
+    +----+--------+--------+-----------------------------+
+    |unit|   start|     end|time_diff(MINUTE, start, end)|
+    +----+--------+--------+-----------------------------+
+    |HOUR|20:30:29|21:30:28|                           59|
+    +----+--------+--------+-----------------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "time_diff", _to_java_column(unit), _to_java_column(start), _to_java_column(end)
+    )
+
+
+@_try_remote_functions
 def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     """
     Returns `time` truncated to the `unit`.
