@@ -189,8 +189,8 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Simliar to newFixedThreadPool, but with a bound workQueue, task submission will be blocked
-   * when queue is full.
+   * Simliar to newDaemonFixedThreadPool, but with a bound workQueue, task submission will
+   * be blocked when queue is full.
    *
    * @param nThreads the number of threads in the pool
    * @param workQueueSize the capacity of the queue to use for holding tasks before they are
