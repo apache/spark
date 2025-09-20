@@ -341,6 +341,20 @@ class ExecuteEventsManagerSuite
     }
   }
 
+  test("SPARK-53339: Try transition to started status") {
+    val events1 = setupEvents(ExecuteStatus.Pending)
+    events1.postCanceled()
+    assert(events1.status == ExecuteStatus.Canceled)
+    events1.tryPostStarted()
+    assert(events1.status == ExecuteStatus.Canceled)
+
+    val events2 = setupEvents(ExecuteStatus.Pending)
+    events2.tryPostStarted()
+    assert(events2.status == ExecuteStatus.Started)
+    events2.postCanceled()
+    assert(events2.status == ExecuteStatus.Canceled)
+  }
+
   def setupEvents(
       executeStatus: ExecuteStatus,
       sessionStatus: SessionStatus = SessionStatus.Started): ExecuteEventsManager = {
