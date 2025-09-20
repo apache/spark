@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import platform
 import datetime
 import unittest
 
@@ -409,6 +410,9 @@ class DataFrameCollectionTestsMixin:
         )
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class DataFrameCollectionTests(
     DataFrameCollectionTestsMixin,
     ReusedSQLTestCase,
