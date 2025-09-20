@@ -1175,6 +1175,40 @@ class SparkSession:
         assert dt is not None
         return dt
 
+    def cloneSession(self, new_session_id: Optional[str] = None) -> "SparkSession":
+        """
+        Create a clone of this Spark Connect session on the server side. The server-side session
+        is cloned with all its current state (SQL configurations, temporary views, registered
+        functions, catalog state) copied over to a new independent session. The returned cloned
+        session is isolated from this session - any subsequent changes to either session's
+        server-side state will not be reflected in the other.
+
+        Parameters
+        ----------
+        new_session_id : str, optional
+            Custom session ID to use for the cloned session (must be a valid UUID).
+            If not provided, a new UUID will be generated.
+
+        Returns
+        -------
+        SparkSession
+            A new SparkSession instance with the cloned session.
+
+        Notes
+        -----
+        This creates a new server-side session with the specified or generated session ID
+        while preserving the current session's configuration and state.
+
+        .. note::
+            This is a developer API.
+        """
+        cloned_client = self._client.clone(new_session_id)
+        # Create a new SparkSession with the cloned client directly
+        new_session = object.__new__(SparkSession)
+        new_session._client = cloned_client
+        new_session._session_id = cloned_client._session_id
+        return new_session
+
 
 SparkSession.__doc__ = PySparkSession.__doc__
 
