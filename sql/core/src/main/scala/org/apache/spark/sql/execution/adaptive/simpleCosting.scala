@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.execution.exchange.{SHUFFLE_CONSOLIDATION, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 
 /**
@@ -42,7 +42,7 @@ case class SimpleCost(value: Long) extends Cost {
 case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean) extends CostEvaluator {
   override def evaluateCost(plan: SparkPlan): Cost = {
     val numShuffles = plan.collect {
-      case s: ShuffleExchangeLike => s
+      case s: ShuffleExchangeLike if (s.shuffleOrigin != SHUFFLE_CONSOLIDATION) => s
     }.size
 
     if (forceOptimizeSkewedJoin) {

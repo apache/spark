@@ -42,14 +42,14 @@ case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
 
       def reuse(plan: SparkPlan): SparkPlan = {
         plan.transformUpWithPruning(_.containsAnyPattern(EXCHANGE, PLAN_EXPRESSION)) {
-          case exchange: Exchange if conf.exchangeReuseEnabled =>
+          case exchange: Exchange if conf.exchangeReuseEnabled &&
+            !conf.shuffleConsolidationEnabled =>
             val cachedExchange = exchanges.getOrElseUpdate(exchange.canonicalized, exchange)
             if (cachedExchange.ne(exchange)) {
               ReusedExchangeExec(exchange.output, cachedExchange)
             } else {
               cachedExchange
             }
-
           case other =>
             other.transformExpressionsUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
               case sub: ExecSubqueryExpression =>

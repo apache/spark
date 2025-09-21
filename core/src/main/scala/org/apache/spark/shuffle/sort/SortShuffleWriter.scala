@@ -24,6 +24,7 @@ import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.shuffle.checksum.RowBasedChecksum
+import org.apache.spark.storage.RemoteShuffleStorage
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
@@ -84,8 +85,11 @@ private[spark] class SortShuffleWriter[K, V, C](
       dep.shuffleId, mapId, dep.partitioner.numPartitions)
     sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter, writeMetrics)
     partitionLengths = mapOutputWriter.commitAllPartitions(sorter.getChecksums).getPartitionLengths
+    val blockManagerId = if (dep.useRemoteShuffleStorage) RemoteShuffleStorage.BLOCK_MANAGER_ID
+      else blockManager.shuffleServerId
     mapStatus =
-      MapStatus(blockManager.shuffleServerId, partitionLengths, mapId, getAggregatedChecksumValue)
+    MapStatus(blockManagerId, partitionLengths, mapId, getAggregatedChecksumValue)
+    mapStatus = MapStatus(blockManagerId, partitionLengths, mapId)
   }
 
   /** Close this writer, passing along whether the map completed */

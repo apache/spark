@@ -1755,7 +1755,12 @@ private[spark] class DAGScheduler(
         log"${MDC(STAGE, stage)} (${MDC(RDD_ID, stage.rdd)}) (first 15 tasks are " +
         log"for partitions ${MDC(PARTITION_IDS, tasks.take(15).map(_.partitionId))})")
       val shuffleId = stage match {
-        case s: ShuffleMapStage => Some(s.shuffleDep.shuffleId)
+        case s: ShuffleMapStage =>
+          // hack to prioritize remote shuffle writes
+          if (properties != null) {
+            properties.setProperty("remote", s.shuffleDep.useRemoteShuffleStorage.toString)
+          }
+          Some(s.shuffleDep.shuffleId)
         case _: ResultStage => None
       }
 
