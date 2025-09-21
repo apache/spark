@@ -15,16 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.shuffle.sort.remote
 
-/**
- *  "FAIR" and "FIFO" determines which policy is used
- *    to order tasks amongst a Schedulable's sub-queues
- *  "WEIGHTED_FIFO" is similar to FIFO but uses weight-based comparison in addition.
- *  "NONE" is used when the a Schedulable has no sub-queues.
- */
-object SchedulingMode extends Enumeration {
+import java.util.Collections
 
-  type SchedulingMode = Value
-  val FAIR, FIFO, WEIGHTED_FIFO, NONE = Value
+import org.apache.spark.shuffle.api.ShuffleDriverComponents
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDriverComponents
+
+class HybridShuffleDriverComponents(
+       localDiskShuffleDriverComponents: LocalDiskShuffleDriverComponents)
+  extends ShuffleDriverComponents {
+
+  override def initializeApplication(): java.util.Map[String, String] = {
+    localDiskShuffleDriverComponents.initializeApplication()
+    Collections.emptyMap()
+  }
+
+  override def cleanupApplication(): Unit = {
+    localDiskShuffleDriverComponents.cleanupApplication()
+  }
+
+  override def removeShuffle(shuffleId: Int, blocking: Boolean): Unit = {
+    localDiskShuffleDriverComponents.removeShuffle(shuffleId, blocking)
+  }
 }

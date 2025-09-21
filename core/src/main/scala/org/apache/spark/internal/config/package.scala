@@ -626,6 +626,13 @@ package object config {
       .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
       .createOptional
 
+  private[spark] val SHUFFLE_REMOTE_STORAGE_CLEANUP =
+    ConfigBuilder("spark.shuffle.remote.storage.cleanUp")
+      .doc("If true, Spark cleans up its fallback storage data during shutting down.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE =
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxDiskSize")
       .doc("Maximum disk space to use to store shuffle blocks before rejecting remote " +
@@ -2905,4 +2912,32 @@ package object config {
       .checkValue(v => v.forall(Set("stdout", "stderr").contains),
         "The value only can be one or more of 'stdout, stderr'.")
       .createWithDefault(Seq("stdout", "stderr"))
+
+  private[spark] val SHUFFLE_REMOTE_STORAGE_PATH =
+  ConfigBuilder("spark.shuffle.remote.storage.path")
+      .doc("The location for storing shuffle blocks on remote storage.")
+      .version("4.1.0")
+      .stringConf
+      .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
+      .createOptional
+
+  private[spark] val REMOTE_SHUFFLE_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.remote.buffer.size")
+      .version("4.1.0")
+      .stringConf
+      .createWithDefault("64M")
+
+  private[spark] val START_REDUCERS_IN_PARALLEL_TO_MAPPER =
+    ConfigBuilder("spark.shuffle.consolidation.enabled")
+      .doc("starts reducers in parallel to mappers")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EAGERNESS_THRESHOLD_PERCENTAGE =
+    ConfigBuilder("spark.shuffle.remote.eagerness.percentage")
+      .doc("Percentage of mapper complet tasks before starting reducers ")
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(20)
 }

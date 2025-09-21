@@ -182,6 +182,11 @@ case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 // change it.
 case object REQUIRED_BY_STATEFUL_OPERATOR extends ShuffleOrigin
 
+// Indicates that the shuffle operator was added by the consolidation shuffle optimization to
+// consolidate shuffle data from earlier stages and upload it to remote storage.
+case object SHUFFLE_CONSOLIDATION extends ShuffleOrigin
+
+
 /**
  * Performs a shuffle that will result in the desired partitioning.
  */
@@ -201,7 +206,13 @@ case class ShuffleExchangeExec(
     "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
   ) ++ readMetrics ++ writeMetrics
 
-  override def nodeName: String = "Exchange"
+  override def nodeName: String = {
+    if (outputPartitioning.isInstanceOf[PassThroughPartitioning]) {
+      "Consolidation exchange"
+    } else {
+      "Exchange"
+    }
+  }
 
   private lazy val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
@@ -258,6 +269,7 @@ case class ShuffleExchangeExec(
     // The ShuffleRowRDD will be cached in SparkPlan.executeRDD and reused if this plan is used by
     // multiple plans.
     new ShuffledRowRDD(shuffleDependency, readMetrics)
+
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ShuffleExchangeExec =
@@ -370,6 +382,7 @@ object ShuffleExchangeExec {
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
+      case part: PassThroughPartitioning => new PartitionIdPassthrough(part.numPartitions)
       case k @ KeyGroupedPartitioning(expressions, n, _, _) =>
         val valueMap = k.uniquePartitionValues.zipWithIndex.map {
           case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
@@ -401,6 +414,9 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
+      case _: PassThroughPartitioning =>
+        lazy val partitionId: Int = TaskContext.getPartitionId()
+        _ => partitionId
       case KeyGroupedPartitioning(expressions, _, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case s: ShufflePartitionIdPassThrough =>
@@ -495,7 +511,8 @@ object ShuffleExchangeExec {
         serializer,
         shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
         rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
-        checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled)
+        checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled,
+        useRemoteShuffleStorage = newPartitioning.isInstanceOf[PassThroughPartitioning])
 
     dependency
   }

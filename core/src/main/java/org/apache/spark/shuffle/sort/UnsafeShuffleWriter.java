@@ -26,6 +26,8 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
 
+import org.apache.spark.storage.BlockManagerId;
+import org.apache.spark.storage.RemoteShuffleStorage;
 import scala.Option;
 import scala.Product2;
 import scala.jdk.javaapi.CollectionConverters;
@@ -89,6 +91,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final boolean transferToEnabled;
   private final int initialSortBufferSize;
   private final int mergeBufferSizeInBytes;
+  private final boolean remoteWrites;
 
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
@@ -135,6 +138,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.shuffleId = dep.shuffleId();
     this.serializer = dep.serializer().newInstance();
     this.partitioner = dep.partitioner();
+    this.remoteWrites = dep.useRemoteShuffleStorage();
     this.writeMetrics = writeMetrics;
     this.shuffleExecutorComponents = shuffleExecutorComponents;
     this.taskContext = taskContext;
@@ -247,8 +251,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
+    BlockManagerId blockManagerId = remoteWrites ?
+            RemoteShuffleStorage.BLOCK_MANAGER_ID() : blockManager.shuffleServerId();
     mapStatus = MapStatus$.MODULE$.apply(
-      blockManager.shuffleServerId(), partitionLengths, mapId, getAggregatedChecksumValue());
+      blockManagerId, partitionLengths, mapId, getAggregatedChecksumValue());
   }
 
   @VisibleForTesting

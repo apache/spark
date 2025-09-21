@@ -108,7 +108,8 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.getConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED)) {
+    if (!conf.getConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED) ||
+      conf.getConf(SQLConf.ENABLE_SHUFFLE_CONSOLIDATION)) {
       return plan
     }
 
