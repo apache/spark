@@ -27,7 +27,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.sql.{Encoder, SQLContext}
+import org.apache.spark.sql.{Encoder, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
@@ -44,8 +44,11 @@ import org.apache.spark.util.RpcUtils
  *    ContinuousMemoryStreamInputPartitionReader instances to poll. It returns the record at
  *    the specified offset within the list, or null if that offset doesn't yet have a record.
  */
-class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPartitions: Int = 2)
-  extends MemoryStreamBase[A](sqlContext) with ContinuousStream {
+class ContinuousMemoryStream[A : Encoder](
+    id: Int,
+    sparkSession: SparkSession,
+    numPartitions: Int = 2)
+  extends MemoryStreamBase[A](sparkSession) with ContinuousStream {
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
@@ -112,11 +115,11 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
 object ContinuousMemoryStream {
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
-    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+  def apply[A : Encoder](implicit sparkSession: SparkSession): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
 
-  def singlePartition[A : Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
-    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext, 1)
+  def singlePartition[A : Encoder](implicit sparkSession: SparkSession): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, 1)
 }
 
 /**

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -423,6 +423,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     import session.implicits._
 
     val p = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       val mem = MemoryStream[Int]
       mem.addData(1)
       registerPersistedView("a", query = dfFlowFunc(mem.toDF()))
@@ -466,6 +467,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     import session.implicits._
 
     val graph = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       registerMaterializedView("a", query = dfFlowFunc(MemoryStream[Int].toDF()))
     }.resolveToDataflowGraph()
 
@@ -489,6 +491,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
     val graph = new TestGraphRegistrationContext(spark) {
       registerTable("a")
+      implicit val sparkSession: SparkSession = spark
       registerFlow(
         destinationName = "a",
         name = "once_flow",

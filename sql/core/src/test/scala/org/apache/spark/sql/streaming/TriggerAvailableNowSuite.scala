@@ -98,7 +98,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
   }
 
   class TestMicroBatchStream extends TestDataFrameProvider {
-    private lazy val memoryStream = MemoryStream[Long](0, spark.sqlContext)
+    private lazy val memoryStream = MemoryStream[Long](0, spark)
 
     override def toDF: DataFrame = memoryStream.toDF()
 

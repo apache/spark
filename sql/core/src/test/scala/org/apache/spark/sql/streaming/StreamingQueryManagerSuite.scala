@@ -273,8 +273,8 @@ class StreamingQueryManagerSuite extends StreamTest {
   testQuietly("can start a streaming query with the same name in a different session") {
     val session2 = spark.cloneSession()
 
-    val ds1 = MemoryStream(Encoders.INT, spark.sqlContext).toDS()
-    val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+    val ds1 = MemoryStream(Encoders.INT, spark).toDS()
+    val ds2 = MemoryStream(Encoders.INT, session2).toDS()
     val queryName = "abc"
 
     val query1 = ds1.writeStream.format("noop").queryName(queryName).start()
@@ -347,8 +347,8 @@ class StreamingQueryManagerSuite extends StreamTest {
       withTempDir { dir =>
         val session2 = spark.cloneSession()
 
-        val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
-        val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+        val ms1 = MemoryStream(Encoders.INT, spark)
+        val ds2 = MemoryStream(Encoders.INT, session2).toDS()
         val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
         val dataLocation = new File(dir, "data").getCanonicalPath
 
@@ -376,8 +376,8 @@ class StreamingQueryManagerSuite extends StreamTest {
         withTempDir { dir =>
           val session2 = spark.cloneSession()
 
-          val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
-          val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+          val ms1 = MemoryStream(Encoders.INT, spark)
+          val ds2 = MemoryStream(Encoders.INT, session2).toDS()
           val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
           val dataLocation = new File(dir, "data").getCanonicalPath
 
