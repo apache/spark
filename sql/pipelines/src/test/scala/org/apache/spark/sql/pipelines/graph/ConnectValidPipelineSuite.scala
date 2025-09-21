@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.Union
@@ -155,6 +156,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Union of streaming and batch Dataframes") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
@@ -196,6 +198,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Union of two streaming Dataframes") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
@@ -356,6 +359,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Default query and named query") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
@@ -399,6 +403,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Correct types of flows after connection") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     val graph = new TestGraphRegistrationContext(spark) {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -148,6 +148,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Missing attribute in the schema") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
@@ -185,6 +186,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Writing to one table by unioning flows with different schemas") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
@@ -348,6 +350,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("view-table conf conflict") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     val p = new TestGraphRegistrationContext(spark) {
@@ -401,6 +404,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("reading a complete view incrementally") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     val p = new TestGraphRegistrationContext(spark) {
@@ -420,6 +424,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("reading an incremental view completely") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     val p = new TestGraphRegistrationContext(spark) {
@@ -463,6 +468,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Materialized view backed by streaming relation fails validation") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     val graph = new TestGraphRegistrationContext(spark) {
@@ -485,6 +491,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Once flow backed by streaming relation fails validation") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     val graph = new TestGraphRegistrationContext(spark) {

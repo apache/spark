@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.sql.{functions, Row}
+import org.apache.spark.sql.{functions, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
@@ -179,6 +179,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
   test("three hop pipeline") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     // Construct pipeline
@@ -255,6 +256,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
   test("all events are emitted even if there is no data") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     // Construct pipeline
@@ -298,6 +300,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
   test("stream failure causes its downstream to be skipped") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     spark.sql("CREATE TABLE src USING PARQUET AS SELECT * FROM RANGE(10)")
@@ -536,6 +539,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
   test("stopping a pipeline mid-execution") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
 
     // A UDF which adds a delay
