@@ -80,7 +80,7 @@ DEPENDENCIES
   ffi (~> 1.15)
   jekyll (~> 4.4)
   jekyll-redirect-from (~> 0.16)
-  rexml (~> 3.4.2)
+  rexml (~> 3.4.4)
 
 RUBY VERSION
    ruby 3.3.7p123
