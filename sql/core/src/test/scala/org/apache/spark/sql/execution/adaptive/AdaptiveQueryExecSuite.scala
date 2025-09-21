@@ -71,6 +71,8 @@ class AdaptiveQueryExecSuite
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
+    // Tests depend on intermediate results that would otherwise be cleaned up when
+    // shuffle clean up is enabled, causing test failures.
     sqlConf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
   }
 
