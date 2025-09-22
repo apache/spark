@@ -79,6 +79,8 @@ jobs:
         env:
           SPARK_TESTING: 1
           SPARK_CONNECT_TESTING_REMOTE: sc://localhost
+          # Increase socket timeout for CI environment reliability
+          SPARK_AUTH_SOCKET_TIMEOUT: 60
         run: |
           # Make less noisy
           cp conf/log4j2.properties.template conf/log4j2.properties

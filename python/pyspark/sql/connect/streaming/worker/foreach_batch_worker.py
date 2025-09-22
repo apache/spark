@@ -55,6 +55,28 @@ def main(infile: IO, outfile: IO) -> None:
             f"{log_name} Completed batch {batch_id} with DF id {df_id} and session id {session_id}"
         )
 
+    def create_spark_session_with_retry(connect_url, session_id, max_retries=3):
+        """Create Spark Connect session with retry logic for better reliability in CI environments."""
+        import time
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"{log_name} Attempting to connect (attempt {attempt + 1}/{max_retries})")
+                spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
+                assert spark_connect_session.session_id == session_id
+                print(f"{log_name} Successfully connected to Spark Connect server")
+                return spark_connect_session
+            except Exception as e:
+                print(f"{log_name} Connection attempt {attempt + 1} failed: {str(e)}")
+                if attempt < max_retries - 1:
+                    # Exponential backoff: 1s, 2s, 4s
+                    wait_time = 2 ** attempt
+                    print(f"{log_name} Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"{log_name} All connection attempts failed")
+                    raise
+
     try:
         check_python_version(infile)
 
@@ -68,8 +90,9 @@ def main(infile: IO, outfile: IO) -> None:
 
         # To attach to the existing SparkSession, we're setting the session_id in the URL.
         connect_url = connect_url + ";session_id=" + session_id
-        spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
-        assert spark_connect_session.session_id == session_id
+        
+        # Use retry logic for better reliability in CI environments
+        spark_connect_session = create_spark_session_with_retry(connect_url, session_id)
         spark = spark_connect_session
 
         func = worker.read_command(pickle_ser, infile)
