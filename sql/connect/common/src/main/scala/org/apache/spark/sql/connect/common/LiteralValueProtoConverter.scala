@@ -163,6 +163,14 @@ object LiteralValueProtoConverter {
     }
 
     (literal, dataType) match {
+      case (v: Option[_], _: DataType) =>
+        if (v.isDefined) {
+          toLiteralProtoBuilder(v.get)
+        } else {
+          builder.setNull(toConnectProtoType(dataType))
+        }
+      case (null, _) =>
+        builder.setNull(toConnectProtoType(dataType))
       case (v: mutable.ArraySeq[_], ArrayType(_, _)) =>
         toLiteralProtoBuilder(v.array, dataType)
       case (v: immutable.ArraySeq[_], ArrayType(_, _)) =>
@@ -175,12 +183,6 @@ object LiteralValueProtoConverter {
         builder.setMap(mapBuilder(v, keyType, valueType))
       case (v, structType: StructType) =>
         builder.setStruct(structBuilder(v, structType))
-      case (v: Option[_], _: DataType) =>
-        if (v.isDefined) {
-          toLiteralProtoBuilder(v.get)
-        } else {
-          builder.setNull(toConnectProtoType(dataType))
-        }
       case _ => toLiteralProtoBuilder(literal)
     }
   }
@@ -297,7 +299,7 @@ object LiteralValueProtoConverter {
   }
 
   private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
-    if (dataType.hasShort) { v =>
+    val converter: proto.Expression.Literal => Any = if (dataType.hasShort) { v =>
       v.getShort.toShort
     } else if (dataType.hasInteger) { v =>
       v.getInteger
@@ -339,6 +341,7 @@ object LiteralValueProtoConverter {
     } else {
       throw InvalidPlanInput(s"Unsupported Literal Type: $dataType)")
     }
+    v => if (v.hasNull) null else converter(v)
   }
 
   def toCatalystArray(array: proto.Expression.Literal.Array): Array[_] = {

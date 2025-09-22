@@ -77,7 +77,8 @@
     }, {
       "literal": {
         "null": {
-          "null": {
+          "string": {
+            "collation": "UTF8_BINARY"
           }
         }
       },
@@ -822,6 +823,43 @@
             }
           },
           "elements": [{
+            "null": {
+              "integer": {
+              }
+            }
+          }, {
+            "null": {
+              "integer": {
+              }
+            }
+          }]
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elementType": {
+            "integer": {
+            }
+          },
+          "elements": [{
             "integer": 1
           }, {
             "integer": 2
@@ -868,6 +906,53 @@
             "integer": 1
           }, {
             "integer": 2
+          }]
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "map": {
+          "keyType": {
+            "string": {
+              "collation": "UTF8_BINARY"
+            }
+          },
+          "valueType": {
+            "integer": {
+            }
+          },
+          "keys": [{
+            "string": "a"
+          }, {
+            "string": "b"
+          }],
+          "values": [{
+            "null": {
+              "integer": {
+              }
+            }
+          }, {
+            "null": {
+              "integer": {
+              }
+            }
           }]
         }
       },
