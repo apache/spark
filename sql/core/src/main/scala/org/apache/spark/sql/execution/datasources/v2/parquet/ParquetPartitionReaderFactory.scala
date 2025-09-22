@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
 import java.time.ZoneId
+import java.util.Optional
 
 import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapreduce._
@@ -94,8 +95,8 @@ case class ParquetPartitionReaderFactory(
       // When there are aggregates to push down, we get max/min/count from footer statistics.
       val footer = ParquetFooterReader.readFooter(
         inputFile,
-        ParquetFooterReader.buildFilter(hadoopConf, file, skipRowGroup = false))
-      OpenedParquetFooter(footer, inputFile, None)
+        ParquetFooterReader.buildFilter(hadoopConf, file, false))
+      new OpenedParquetFooter(footer, inputFile, Optional.empty)
     } else {
       // When there are vectorized reads, we can avoid
       // 1. opening the file twice by transfering the SeekableInputStream
@@ -223,13 +224,13 @@ case class ParquetPartitionReaderFactory(
     val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
     val openedFooter = openFileAndReadFooter(file)
     assert {
-      openedFooter.inputStreamOpt.isDefined == (aggregation.isEmpty && enableVectorizedReader)
+      openedFooter.inputStreamOpt.isPresent == (aggregation.isEmpty && enableVectorizedReader)
     }
 
     // Before transferring the ownership of inputStream to the vectorizedReader,
     // we must take responsibility to close the inputStream if something goes wrong
     // to avoid resource leak.
-    var shouldCloseInputStream = openedFooter.inputStreamOpt.isDefined
+    var shouldCloseInputStream = openedFooter.inputStreamOpt.isPresent
     try {
       val footerFileMetaData = openedFooter.footer.getFileMetaData
       val datetimeRebaseSpec = getDatetimeRebaseSpec(footerFileMetaData)
@@ -306,7 +307,7 @@ case class ParquetPartitionReaderFactory(
       }
     } finally {
       if (shouldCloseInputStream) {
-        openedFooter.inputStreamOpt.foreach(Utils.closeQuietly)
+        openedFooter.inputStreamOpt.ifPresent(Utils.closeQuietly)
       }
     }
   }

@@ -223,12 +223,12 @@ class ParquetFileFormat
       //    according to filters that require push down
       val openedFooter =
         ParquetFooterReader.openFileAndReadFooter(sharedConf, file, enableVectorizedReader)
-      assert(openedFooter.inputStreamOpt.isDefined == enableVectorizedReader)
+      assert(openedFooter.inputStreamOpt.isPresent == enableVectorizedReader)
 
       // Before transferring the ownership of inputStream to the vectorizedReader,
       // we must take responsibility to close the inputStream if something goes wrong
       // to avoid resource leak.
-      val shouldCloseInputStream = new AtomicBoolean(openedFooter.inputStreamOpt.isDefined)
+      val shouldCloseInputStream = new AtomicBoolean(openedFooter.inputStreamOpt.isPresent)
       try {
         val footerFileMetaData = openedFooter.footer.getFileMetaData
         val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
@@ -296,7 +296,7 @@ class ParquetFileFormat
         }
       } finally {
         if (shouldCloseInputStream.get) {
-          openedFooter.inputStreamOpt.foreach(Utils.closeQuietly)
+          openedFooter.inputStreamOpt.ifPresent(Utils.closeQuietly)
         }
       }
     }
@@ -317,7 +317,7 @@ class ParquetFileFormat
       openedFooter: OpenedParquetFooter,
       shouldCloseInputStream: AtomicBoolean): Iterator[InternalRow] = {
     // scalastyle:on argcount
-    assert(openedFooter.inputStreamOpt.isDefined)
+    assert(openedFooter.inputStreamOpt.isPresent)
     val vectorizedReader = new VectorizedParquetRecordReader(
       convertTz.orNull,
       datetimeRebaseSpec.mode.toString,
