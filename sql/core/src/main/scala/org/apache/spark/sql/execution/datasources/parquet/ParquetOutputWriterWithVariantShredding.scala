@@ -71,7 +71,7 @@ class ParquetOutputWriterWithVariantShredding(
   // As a side effect, updates `bufferedSize` on the assumption that if we return false, the row
   // will be added to the list of buffered rows.
   private def stopBuffering(row: UnsafeRow): Boolean = {
-    // Buffer the first N rows to match Photon.
+    // Buffer the first `maxBufferRows` rows.
     // Use +1 to account for the current row, which will be added by the caller if we return true
     // here.
     if (rows.size + 1 >= maxBufferRows) {

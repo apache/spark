@@ -497,9 +497,6 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
           s"infer shredding with partitions: $numRows $sortStr rows, " +
           s"$maxRecordsPerFile per file") { dir =>
         withSQLConf(SQLConf.MAX_RECORDS_PER_FILE.key -> maxRecordsPerFile.toString) {
-          // With no sort, we insert a PhotonClustering node, which emits each partition key in a
-          // separate batch. With sort, multiple partitions may be emitted in the same batch, which
-          // exercises code paths for determining multiple shredding schemas within a single batch.
           val sortClause = if (useSort) "sort by p, v:a::string" else ""
           val df = spark.sql(
             s"""
