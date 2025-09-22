@@ -483,7 +483,7 @@ class IfElseStatementExec(
 class WhileStatementExec(
     condition: SingleStatementExec,
     body: CompoundBodyExec,
-    label: Option[String],
+    val label: Option[String],
     session: SparkSession) extends NonLeafStatementExec {
 
   private object WhileState extends Enumeration {
@@ -675,6 +675,8 @@ class SimpleCaseStatementExec(
   private var conditionBodyTupleIterator: Iterator[(SingleStatementExec, CompoundBodyExec)] = _
   private var caseVariableLiteral: Literal = _
 
+  private var interrupted: Boolean = false
+
   private var isCacheValid = false
   private def validateCache(): Unit = {
     if (!isCacheValid) {
@@ -697,7 +699,8 @@ class SimpleCaseStatementExec(
     conditionBodyTupleIterator
   }
 
-  protected[scripting] def skipSimpleCaseStatement(): Unit = {
+  //
+  protected[scripting] def interruptFromContinueHandler(): Unit = {
     // Force variables to output false on the next hasNext
     this.state = CaseState.Body
     this.bodyExec = None
@@ -707,14 +710,16 @@ class SimpleCaseStatementExec(
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = state match {
         case CaseState.Condition =>
-          // Equivalent to the "iteration hasn't started yet" - to avoid computing cache
-          //   before the first actual iteration.
-          curr.isEmpty ||
-          // Special case when condition computation throws an exception.
-          curr.exists(_.isInstanceOf[LeaveStatementExec]) ||
-          // Regular conditions.
-          cachedConditionBodyIterator.hasNext ||
-          elseBody.isDefined
+          // If SimpleCaseStatement got interrupted, stop executing statements
+          !interrupted && (
+            // Equivalent to the "iteration hasn't started yet" - to avoid computing cache
+            //   before the first actual iteration.
+            curr.isEmpty ||
+            // Special case when condition computation throws an exception.
+            curr.exists(_.isInstanceOf[LeaveStatementExec]) ||
+            // Regular conditions.
+            cachedConditionBodyIterator.hasNext ||
+            elseBody.isDefined)
         case CaseState.Body => bodyExec.exists(_.getTreeIterator.hasNext)
       }
 
@@ -1030,12 +1035,6 @@ class ForStatementExec(
    * Whether this iteration of the FOR loop is the first one.
    */
   private var firstIteration: Boolean = true
-
-  protected[scripting] def skipForStatement(): Unit = {
-    // Force variables to output false on the next hasNext
-    this.state = ForState.Body
-    this.bodyWithVariables = None
-  }
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {

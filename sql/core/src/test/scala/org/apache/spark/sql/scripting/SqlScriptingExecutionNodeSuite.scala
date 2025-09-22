@@ -136,7 +136,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   case class TestWhile(
       condition: TestLoopCondition,
       body: TestCompoundBody,
-      label: Option[String] = None)
+      override val label: Option[String] = None)
     extends WhileStatementExec(condition, body, label, spark) {
 
     private val evaluator = new LoopBooleanConditionEvaluator(condition)

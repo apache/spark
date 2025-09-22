@@ -98,17 +98,18 @@ class SqlScriptingExecution(
       currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
     }
 
+    // For each statement containing a conditional, we need force the statement to be skipped
     currExecPlan match {
       case exec: IfElseStatementExec =>
         exec.curr = None
       case exec: SimpleCaseStatementExec =>
-        exec.skipSimpleCaseStatement()
+        exec.interruptFromContinueHandler()
       case exec: SearchedCaseStatementExec =>
         exec.curr = None
       case exec: WhileStatementExec =>
         exec.curr = None
       case exec: ForStatementExec =>
-        exec.skipForStatement()
+        exec.curr = Some(new LeaveStatementExec(exec.label.get))
       case _ =>
     }
   }
