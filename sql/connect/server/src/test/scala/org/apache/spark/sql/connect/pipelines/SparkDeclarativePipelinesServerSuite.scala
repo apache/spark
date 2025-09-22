@@ -616,7 +616,8 @@ class SparkDeclarativePipelinesServerSuite
       flowName: String,
       defaultCatalog: String,
       defaultDatabase: String,
-      expectedResolvedName: String)
+      expectedResolvedCatalog: String,
+      expectedResolvedDatabase: String)
 
   private val defineFlowDefaultTests = Seq(
     DefineFlowTestCase(
@@ -625,14 +626,16 @@ class SparkDeclarativePipelinesServerSuite
       flowName = "mv",
       defaultCatalog = "spark_catalog",
       defaultDatabase = "default",
-      expectedResolvedName = "`spark_catalog`.`default`.`mv`"),
+      expectedResolvedCatalog = "spark_catalog",
+      expectedResolvedDatabase = "default"),
     DefineFlowTestCase(
       name = "TV",
       datasetType = DatasetType.TEMPORARY_VIEW,
       flowName = "tv",
       defaultCatalog = "spark_catalog",
       defaultDatabase = "default",
-      expectedResolvedName = "`tv`")).map(tc => tc.name -> tc).toMap
+      expectedResolvedCatalog = "",
+      expectedResolvedDatabase = "")).map(tc => tc.name -> tc).toMap
 
   private val defineFlowCustomTests = Seq(
     DefineFlowTestCase(
@@ -641,14 +644,16 @@ class SparkDeclarativePipelinesServerSuite
       flowName = "mv",
       defaultCatalog = "custom_catalog",
       defaultDatabase = "custom_db",
-      expectedResolvedName = "`custom_catalog`.`custom_db`.`mv`"),
+      expectedResolvedCatalog = "custom_catalog",
+      expectedResolvedDatabase = "custom_db"),
     DefineFlowTestCase(
       name = "TV custom",
       datasetType = DatasetType.TEMPORARY_VIEW,
       flowName = "tv",
       defaultCatalog = "custom_catalog",
       defaultDatabase = "custom_db",
-      expectedResolvedName = "`tv`")).map(tc => tc.name -> tc).toMap
+      expectedResolvedCatalog = "",
+      expectedResolvedDatabase = "")).map(tc => tc.name -> tc).toMap
 
   namedGridTest("DefineFlow returns resolved data name for default catalog/schema")(
     defineFlowDefaultTests) { testCase =>
@@ -700,7 +705,11 @@ class SparkDeclarativePipelinesServerSuite
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
       assert(res.hasDefineFlowResult)
       val graphResult = res.getDefineFlowResult
-      assert(graphResult.getResolvedFlowName == testCase.expectedResolvedName)
+      val identifier = graphResult.getResolvedIdentifier
+
+      assert(identifier.getCatalog == testCase.expectedResolvedCatalog)
+      assert(identifier.getDatabase == testCase.expectedResolvedDatabase)
+      assert(identifier.getName == testCase.flowName)
     }
   }
 
@@ -760,7 +769,11 @@ class SparkDeclarativePipelinesServerSuite
       val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
       assert(res.hasDefineFlowResult)
       val graphResult = res.getDefineFlowResult
-      assert(graphResult.getResolvedFlowName == testCase.expectedResolvedName)
+      val identifier = graphResult.getResolvedIdentifier
+
+      assert(identifier.getCatalog == testCase.expectedResolvedCatalog)
+      assert(identifier.getDatabase == testCase.expectedResolvedDatabase)
+      assert(identifier.getName == testCase.flowName)
     }
   }
 }

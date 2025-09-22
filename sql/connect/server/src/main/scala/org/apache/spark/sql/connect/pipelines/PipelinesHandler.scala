@@ -98,14 +98,19 @@ private[connect] object PipelinesHandler extends Logging {
           .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
-        val resolvedFlowName =
-          defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder).quotedString
+        val resolvedFlow =
+          defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
+        val identifierBuilder = PipelineCommandResult.CatalogIdentifier.newBuilder()
+        resolvedFlow.resolvedCatalog.foreach(identifierBuilder.setCatalog)
+        resolvedFlow.resolvedDb.foreach(identifierBuilder.setDatabase)
+        identifierBuilder.setName(resolvedFlow.resolvedId)
+        val identifier = identifierBuilder.build()
         PipelineCommandResult
           .newBuilder()
           .setDefineFlowResult(
             PipelineCommandResult.DefineFlowResult
               .newBuilder()
-              .setResolvedFlowName(resolvedFlowName)
+              .setResolvedIdentifier(identifierBuilder)
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>

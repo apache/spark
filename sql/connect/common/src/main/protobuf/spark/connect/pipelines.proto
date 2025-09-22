@@ -159,7 +159,7 @@ message PipelineCommandResult {
   }
   message DefineFlowResult {
     // Resolved name of the flow
-    optional string resolved_flow_name = 1;
+    optional CatalogIdentifier resolved_identifier = 1;
   }
 }
 
