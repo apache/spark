@@ -99,16 +99,8 @@ class SqlScriptingExecution(
     }
 
     currExecPlan match {
-      case exec: IfElseStatementExec =>
-        exec.curr = None
-      case exec: SimpleCaseStatementExec =>
-        exec.skipSimpleCaseStatement()
-      case exec: SearchedCaseStatementExec =>
-        exec.curr = None
-      case exec: WhileStatementExec =>
-        exec.curr = None
-      case exec: ForStatementExec =>
-        exec.skipForStatement()
+      case exec: InterruptableStatement =>
+        exec.interrupt(ExceptionHandlerType.CONTINUE)
       case _ =>
     }
   }

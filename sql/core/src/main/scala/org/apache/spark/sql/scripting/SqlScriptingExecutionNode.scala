@@ -19,13 +19,12 @@ package org.apache.spark.sql.scripting
 
 import java.util
 import java.util.{Locale, UUID}
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, EqualTo, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, ExceptionHandlerType, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
@@ -103,6 +102,23 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       }
     case _ =>
       throw SparkException.internalError("Boolean condition must be SingleStatementExec")
+  }
+}
+
+trait InterruptableStatement {
+  private var _interrupted: Boolean = false
+  private var _interruptSource: ExceptionHandlerType = _
+
+  protected[scripting] def interrupted: Boolean = _interrupted
+  protected[scripting] def interruptSource: ExceptionHandlerType = _interruptSource
+
+  protected[scripting] def interrupt(interruptSource: ExceptionHandlerType): Unit = {
+    _interrupted = true
+    _interruptSource = interruptSource
+  }
+
+  protected[scripting] def resetInterrupt(): Unit = {
+    _interrupted = false
   }
 }
 
@@ -401,7 +417,7 @@ class IfElseStatementExec(
     conditions: Seq[SingleStatementExec],
     conditionalBodies: Seq[CompoundBodyExec],
     elseBody: Option[CompoundBodyExec],
-    session: SparkSession) extends NonLeafStatementExec {
+    session: SparkSession) extends NonLeafStatementExec with InterruptableStatement {
   private object IfElseState extends Enumeration {
     val Condition, Body = Value
   }
@@ -415,7 +431,7 @@ class IfElseStatementExec(
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
-      override def hasNext: Boolean = curr.nonEmpty
+      override def hasNext: Boolean = !interrupted && curr.nonEmpty
 
       override def next(): CompoundStatementExec = {
         if (curr.exists(_.isInstanceOf[LeaveStatementExec])) {
@@ -467,6 +483,7 @@ class IfElseStatementExec(
     state = IfElseState.Condition
     curr = Some(conditions.head)
     clauseIdx = 0
+    resetInterrupt()
     conditions.foreach(c => c.reset())
     conditionalBodies.foreach(b => b.reset())
     elseBody.foreach(b => b.reset())
@@ -484,7 +501,7 @@ class WhileStatementExec(
     condition: SingleStatementExec,
     body: CompoundBodyExec,
     label: Option[String],
-    session: SparkSession) extends NonLeafStatementExec {
+    session: SparkSession) extends NonLeafStatementExec with InterruptableStatement {
 
   private object WhileState extends Enumeration {
     val Condition, Body = Value
@@ -495,7 +512,7 @@ class WhileStatementExec(
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
-      override def hasNext: Boolean = curr.nonEmpty
+      override def hasNext: Boolean = !interrupted && curr.nonEmpty
 
       override def next(): CompoundStatementExec = state match {
           case WhileState.Condition =>
@@ -551,6 +568,7 @@ class WhileStatementExec(
   override def reset(): Unit = {
     state = WhileState.Condition
     curr = Some(condition)
+    resetInterrupt()
     condition.reset()
     body.reset()
   }
@@ -575,7 +593,7 @@ class SearchedCaseStatementExec(
     conditions: Seq[SingleStatementExec],
     conditionalBodies: Seq[CompoundBodyExec],
     elseBody: Option[CompoundBodyExec],
-    session: SparkSession) extends NonLeafStatementExec {
+    session: SparkSession) extends NonLeafStatementExec with InterruptableStatement {
   private object CaseState extends Enumeration {
     val Condition, Body = Value
   }
@@ -588,7 +606,7 @@ class SearchedCaseStatementExec(
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
-      override def hasNext: Boolean = curr.nonEmpty
+      override def hasNext: Boolean = !interrupted && curr.nonEmpty
 
       override def next(): CompoundStatementExec = {
         if (curr.exists(_.isInstanceOf[LeaveStatementExec])) {
@@ -640,6 +658,7 @@ class SearchedCaseStatementExec(
     state = CaseState.Condition
     curr = Some(conditions.head)
     clauseIdx = 0
+    resetInterrupt()
     conditions.foreach(c => c.reset())
     conditionalBodies.foreach(b => b.reset())
     elseBody.foreach(b => b.reset())
@@ -662,7 +681,8 @@ class SimpleCaseStatementExec(
     conditionalBodies: Seq[CompoundBodyExec],
     elseBody: Option[CompoundBodyExec],
     session: SparkSession,
-    context: SqlScriptingExecutionContext) extends NonLeafStatementExec {
+    context: SqlScriptingExecutionContext)
+      extends NonLeafStatementExec with InterruptableStatement {
   private object CaseState extends Enumeration {
     val Condition, Body = Value
   }
@@ -697,15 +717,9 @@ class SimpleCaseStatementExec(
     conditionBodyTupleIterator
   }
 
-  protected[scripting] def skipSimpleCaseStatement(): Unit = {
-    // Force variables to output false on the next hasNext
-    this.state = CaseState.Body
-    this.bodyExec = None
-  }
-
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
-      override def hasNext: Boolean = state match {
+      override def hasNext: Boolean = !interrupted && (state match {
         case CaseState.Condition =>
           // Equivalent to the "iteration hasn't started yet" - to avoid computing cache
           //   before the first actual iteration.
@@ -716,7 +730,7 @@ class SimpleCaseStatementExec(
           cachedConditionBodyIterator.hasNext ||
           elseBody.isDefined
         case CaseState.Body => bodyExec.exists(_.getTreeIterator.hasNext)
-      }
+      })
 
       override def next(): CompoundStatementExec = state match {
         case CaseState.Condition =>
@@ -785,6 +799,7 @@ class SimpleCaseStatementExec(
     bodyExec = None
     curr = None
     isCacheValid = false
+    resetInterrupt()
     caseVariableExec.reset()
     conditionalBodies.foreach(b => b.reset())
     elseBody.foreach(b => b.reset())
@@ -995,7 +1010,8 @@ class ForStatementExec(
     statements: Seq[CompoundStatementExec],
     val label: Option[String],
     session: SparkSession,
-    context: SqlScriptingExecutionContext) extends NonLeafStatementExec {
+    context: SqlScriptingExecutionContext)
+      extends NonLeafStatementExec with InterruptableStatement {
 
   private object ForState extends Enumeration {
     val VariableAssignment, Body = Value
@@ -1022,20 +1038,9 @@ class ForStatementExec(
   private var bodyWithVariables: Option[CompoundBodyExec] = None
 
   /**
-   * For can be interrupted by LeaveStatementExec
-   */
-  private var interrupted: Boolean = false
-
-  /**
    * Whether this iteration of the FOR loop is the first one.
    */
   private var firstIteration: Boolean = true
-
-  protected[scripting] def skipForStatement(): Unit = {
-    // Force variables to output false on the next hasNext
-    this.state = ForState.Body
-    this.bodyWithVariables = None
-  }
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
@@ -1147,7 +1152,7 @@ class ForStatementExec(
       if (label.contains(leaveStatement.label)) {
         leaveStatement.hasBeenMatched = true
       }
-      interrupted = true
+      interrupt(ExceptionHandlerType.EXIT)
       // If this for statement encounters LEAVE, we need to exit the scope, as
       // we will not reach the point where we usually exit it.
       bodyWithVariables.foreach(_.exitScope())
@@ -1213,7 +1218,7 @@ class ForStatementExec(
   override def reset(): Unit = {
     state = ForState.VariableAssignment
     isResultCacheValid = false
-    interrupted = false
+    resetInterrupt()
     curr = None
     bodyWithVariables = None
     firstIteration = true
