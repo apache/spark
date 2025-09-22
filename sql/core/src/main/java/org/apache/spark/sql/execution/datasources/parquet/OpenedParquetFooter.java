@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.util.Optional;
+
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.io.SeekableInputStream;
-
-import java.util.Optional;
 
 public record OpenedParquetFooter(
     ParquetMetadata footer,
