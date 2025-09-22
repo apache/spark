@@ -61,7 +61,8 @@ public class ParquetFooterReader {
   public static ParquetMetadata readFooter(
       HadoopInputFile inputFile,
       ParquetMetadataConverter.MetadataFilter filter) throws IOException {
-    ParquetReadOptions readOptions = HadoopReadOptions.builder(inputFile.getConfiguration(), inputFile.getPath())
+    ParquetReadOptions readOptions = HadoopReadOptions
+        .builder(inputFile.getConfiguration(), inputFile.getPath())
         .withMetadataFilter(filter).build();
     try (var fileReader = ParquetFileReader.open(inputFile, readOptions)) {
       return fileReader.getFooter();
@@ -72,7 +73,7 @@ public class ParquetFooterReader {
    * Decoding Parquet files generally involves two steps:
    *  1. read and resolve the metadata (footer),
    *  2. read and decode the row groups/column chunks.
-   *
+   * <p>
    * It's possible to avoid opening the file twice by resuing the SeekableInputStream.
    * When keepInputStreamOpen is true, the caller takes responsibility to close the
    * SeekableInputStream. Currently, this is only supported by parquet vectorized reader.
