@@ -22,10 +22,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class UnifiedUDFParityTests(UnifiedUDFTestsMixin, ReusedConnectTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedConnectTestCase.setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
+    pass
 
 
 if __name__ == "__main__":
