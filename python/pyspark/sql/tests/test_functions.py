@@ -702,7 +702,7 @@ class FunctionsTestsMixin:
             F.make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
         )
         assertDataFrameEqual(actual, [Row(result)])
-        
+
         # Test 2: make_timestamp_ntz(years=y, months=mon, days=d, hours=h, mins=min, secs=s)
         actual = df.select(
             F.make_timestamp_ntz(years=df.year, months=df.month, days=df.day,

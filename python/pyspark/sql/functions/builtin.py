@@ -25259,7 +25259,7 @@ def make_timestamp_ntz(
             args[0], args[1], args[2], args[3], args[4], args[5]
         )
     elif num_positional_args == 0 and num_timestamp_kwargs == 6 and num_datetime_kwargs == 0:
-        # make_timestamp_ntz(years=y, months=mon, days=d, hours=h, mins=min, secs=s) => old code path
+        # make_timestamp_ntz(years=y, months=mon, days=d, hours=h, mins=min, secs=s)
         return _invoke_function_over_columns(
             "make_timestamp_ntz",
             years, months, days, hours, mins, secs
@@ -25288,16 +25288,16 @@ def make_timestamp_ntz(
                 combined_args[0], combined_args[1], combined_args[2],
                 combined_args[3], combined_args[4], combined_args[5]
             )
-    
+
     # date/time patterns
     elif num_positional_args == 2 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 0:
-        # make_timestamp_ntz(d, t) => new code path
+        # make_timestamp_ntz(d, t)
         return _invoke_function_over_columns("make_timestamp_ntz", args[0], args[1])
     elif num_positional_args == 0 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 2:
-        # make_timestamp_ntz(date=d, time=t) => new code path
+        # make_timestamp_ntz(date=d, time=t)
         return _invoke_function_over_columns("make_timestamp_ntz", date, time)
     elif num_positional_args == 1 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 1:
-        # make_timestamp_ntz(d, time=t) => new code path
+        # make_timestamp_ntz(d, time=t)
         if time is not None:
             return _invoke_function_over_columns("make_timestamp_ntz", args[0], time)
         elif date is not None:
@@ -25314,7 +25314,7 @@ def make_timestamp_ntz(
                 "f_arg_num": "6 timestamp arguments OR 2 date/time arguments",
             },
         )
-    
+
     # Default error for invalid combinations
     from pyspark.errors import PySparkValueError
     raise PySparkValueError(
