@@ -1785,6 +1785,13 @@ class ClientE2ETestSuite
     assert(observation.get.contains("map"))
     assert(observation.get("map") === Map("count" -> 10))
   }
+
+  test("SPARK-53553: null value handling in literals") {
+    val df = spark.sql("select 1").select(typedlit(Array[Integer](1, null)).as("arr_col"))
+    val result = df.collect()
+    assert(result.length === 1)
+    assert(result(0).getAs[Array[Integer]]("arr_col") === Array(1, null))
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)

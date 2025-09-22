@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 from inspect import Signature
-from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING, get_type_hints
+from inspect import getfullargspec, signature
 
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.errors import PySparkNotImplementedError, PySparkValueError
@@ -275,6 +276,29 @@ def infer_eval_type(
         )
 
     return eval_type
+
+
+def infer_eval_type_from_func(  # type: ignore[no-untyped-def]
+    f,
+) -> Optional[
+    Union[
+        "PandasScalarUDFType",
+        "PandasScalarIterUDFType",
+        "PandasGroupedAggUDFType",
+        "ArrowScalarUDFType",
+        "ArrowScalarIterUDFType",
+        "ArrowGroupedAggUDFType",
+    ]
+]:
+    argspec = getfullargspec(f)
+    if len(argspec.annotations) > 0:
+        try:
+            type_hints = get_type_hints(f)
+        except NameError:
+            type_hints = {}
+        return infer_eval_type(signature(f), type_hints)
+    else:
+        return None
 
 
 def check_tuple_annotation(

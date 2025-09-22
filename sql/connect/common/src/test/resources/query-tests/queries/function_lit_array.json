@@ -14,7 +14,9 @@
     "expressions": [{
       "literal": {
         "array": {
-          "dataType": {
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "double": {
               }
@@ -47,10 +49,7 @@
             "array": {
               "elements": [{
                 "integer": 1
-              }],
-              "dataType": {
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
@@ -64,8 +63,19 @@
                 "integer": 3
               }]
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "array": {
+                "elementType": {
+                  "integer": {
+                  }
+                },
+                "containsNull": true
+              }
+            },
             "containsNull": true
           }
         }
@@ -96,15 +106,9 @@
                 "array": {
                   "elements": [{
                     "integer": 1
-                  }],
-                  "dataType": {
-                    "containsNull": true
-                  }
+                  }]
                 }
-              }],
-              "dataType": {
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
@@ -126,8 +130,24 @@
                 }
               }]
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "array": {
+                "elementType": {
+                  "array": {
+                    "elementType": {
+                      "integer": {
+                      }
+                    },
+                    "containsNull": true
+                  }
+                },
+                "containsNull": true
+              }
+            },
             "containsNull": true
           }
         }
@@ -156,8 +176,14 @@
             "boolean": true
           }, {
             "boolean": false
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "boolean": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -209,8 +235,14 @@
             "short": 9873
           }, {
             "short": 9874
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "short": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -241,8 +273,14 @@
             "integer": 8726532
           }, {
             "integer": -8726533
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "integer": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -273,8 +311,14 @@
             "long": "7834609328726532"
           }, {
             "long": "7834609328726533"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "long": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -305,8 +349,14 @@
             "double": 1.0
           }, {
             "double": 2.0
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "double": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -337,8 +387,14 @@
             "float": -0.7
           }, {
             "float": -0.9
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "float": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -375,8 +431,10 @@
               "precision": 7,
               "scale": 5
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "decimal": {
                 "scale": 18,
@@ -419,8 +477,10 @@
               "precision": 12,
               "scale": 7
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "decimal": {
                 "scale": 18,
@@ -455,8 +515,10 @@
             "string": "connect!"
           }, {
             "string": "disconnect!"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "string": {
                 "collation": "UTF8_BINARY"
@@ -511,8 +573,10 @@
             "string": "ABCDEFGHIJ"
           }, {
             "string": "BCDEFGHIJK"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "string": {
                 "collation": "UTF8_BINARY"
@@ -546,8 +610,14 @@
             "date": 18545
           }, {
             "date": 18546
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "date": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -576,8 +646,14 @@
             "timestamp": "1677155519808000"
           }, {
             "timestamp": "1677155519809000"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "timestamp": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -606,8 +682,14 @@
             "timestamp": "12345000"
           }, {
             "timestamp": "23456000"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "timestamp": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -636,8 +718,14 @@
             "timestampNtz": "1677184560000000"
           }, {
             "timestampNtz": "1677188160000000"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "timestampNtz": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -666,8 +754,14 @@
             "date": 19411
           }, {
             "date": 19417
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "date": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -696,8 +790,10 @@
             "dayTimeInterval": "100000000"
           }, {
             "dayTimeInterval": "200000000"
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "dayTimeInterval": {
                 "startField": 0,
@@ -732,8 +828,10 @@
             "yearMonthInterval": 0
           }, {
             "yearMonthInterval": 0
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
             "elementType": {
               "yearMonthInterval": {
                 "startField": 0,
@@ -776,8 +874,14 @@
               "days": 21,
               "microseconds": "200"
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "calendarInterval": {
+              }
+            },
             "containsNull": true
           }
         }

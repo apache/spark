@@ -384,6 +384,11 @@
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
     ]
   },
+  "INVALID_ARROW_UDTF_TABLE_ARGUMENT": {
+    "message": [
+      "Arrow UDTFs with PARTITION BY must have a TABLE argument that results in a PyArrow RecordBatch, but got <actual_type>."
+    ]
+  },
   "INVALID_ARROW_UDTF_WITH_ANALYZE": {
     "message": [
       "The arrow UDTF '<name>' is invalid. Arrow UDTFs do not support the 'analyze' method. Please remove the 'analyze' method from '<name>' and specify a returnType instead."
