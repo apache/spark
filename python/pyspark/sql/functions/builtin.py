@@ -13617,10 +13617,12 @@ def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
     |7478f235-f8bc-4112-8e59-a28f50e46890|
     +------------------------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if seed is None:
         return _invoke_function("uuid")
     else:
-        return _invoke_function_over_columns("uuid", lit(seed))
+        return _invoke_function("uuid", _to_java_column(lit(seed)))
 
 
 @_try_remote_functions
