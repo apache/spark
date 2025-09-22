@@ -772,7 +772,14 @@ private[spark] class DAGScheduler(
     def visit(rdd: RDD[_]): Unit = {
       if (!visited(rdd)) {
         visited += rdd
-        val rddHasUncachedPartitions = getCacheLocs(rdd).contains(Nil)
+        val rddHasUncachedPartitions = try {
+          getCacheLocs(rdd).contains(Nil)
+        } catch {
+          case e: RpcTimeoutException =>
+            logWarning(log"Failed to get cache locations for RDD ${MDC(RDD_ID, rdd.id)} due " +
+              log"to RpcTimeout, assuming not fully cached.", e)
+            true
+        }
         if (rddHasUncachedPartitions) {
           for (dep <- rdd.dependencies) {
             dep match {
@@ -1461,27 +1468,17 @@ private[spark] class DAGScheduler(
             s"`${config.STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}`."
           abortStage(stage, reason, None)
         } else {
-          val missing = try {
-            getMissingParentStages(stage).sortBy(_.id)
-          } catch {
-            case e: RpcTimeoutException =>
-              val reason = s"failed to get missing parent stages for $stage " +
-                s"(name=${stage.name}) due to rpc timeout."
-              abortStage(stage, reason, Some(e))
-              return
-          }
+          val missing = getMissingParentStages(stage).sortBy(_.id)
           logInfo(log"Missing parents found for ${MDC(STAGE, stage)}: ${MDC(MISSING_PARENT_STAGES, missing)}")
           if (missing.isEmpty) {
             logInfo(log"Submitting ${MDC(STAGE, stage)} (${MDC(RDD_ID, stage.rdd)}), " +
                     log"which has no missing parents")
             submitMissingTasks(stage, jobId.get)
           } else {
-            // Add to waiting list before submitting missing parents so that the state can be
-            // cleaned up if any of the parents is aborted.
-            waitingStages += stage
             for (parent <- missing) {
               submitStage(parent)
             }
+            waitingStages += stage
           }
         }
       }
