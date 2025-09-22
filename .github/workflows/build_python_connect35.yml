@@ -22,6 +22,8 @@ name: Build / Python-only, Connect-only (master-server, branch-3.5-client, Pytho
 on:
   schedule:
     - cron: '0 21 * * *'
+  pull_request:
+    branches: [ master, main ]
   workflow_dispatch:
 
 jobs:
