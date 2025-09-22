@@ -1416,37 +1416,38 @@ class ArrowUDTFTestsMixin:
         class PartitionSumUDTF:
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
                 table = pa.table(table_data)
-                
+
                 # Each partition will have records with the same category
                 if table.num_rows > 0:
                     category = table.column("category")[0].as_py()
                     total = pa.compute.sum(table.column("value")).as_py()
-                    
-                    result_table = pa.table({
-                        "partition_key": pa.array([category], type=pa.string()),
-                        "total_value": pa.array([total], type=pa.int64())
-                    })
+
+                    result_table = pa.table(
+                        {
+                            "partition_key": pa.array([category], type=pa.string()),
+                            "total_value": pa.array([total], type=pa.int64()),
+                        }
+                    )
                     yield result_table
 
         self.spark.udtf.register("partition_sum_udtf", PartitionSumUDTF)
-        
+
         # Create test data with categories
-        test_data = [
-            ("A", 10), ("A", 20), ("B", 30), ("B", 40), ("C", 50)
-        ]
+        test_data = [("A", 10), ("A", 20), ("B", 30), ("B", 40), ("C", 50)]
         test_df = self.spark.createDataFrame(test_data, "category string, value int")
         test_df.createOrReplaceTempView("partition_test_data")
 
-
-        result_df = self.spark.sql("""
+        result_df = self.spark.sql(
+            """
             SELECT * FROM partition_sum_udtf(
                 TABLE(partition_test_data) PARTITION BY category
             ) ORDER BY partition_key
-        """)
-        
-        expected_df = self.spark.createDataFrame([
-            ("A", 30), ("B", 70), ("C", 50)
-        ], "partition_key string, total_value bigint")
+        """
+        )
+
+        expected_df = self.spark.createDataFrame(
+            [("A", 30), ("B", 70), ("C", 50)], "partition_key string, total_value bigint"
+        )
         assertDataFrameEqual(result_df, expected_df)
 
     @unittest.skip("SPARK-53387: Support PARTIITON BY with Arrow UDTF")
@@ -1455,44 +1456,61 @@ class ArrowUDTFTestsMixin:
         class DeptStatusCountUDTF:
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
                 table = pa.table(table_data)
-                
+
                 if table.num_rows > 0:
                     dept = table.column("department")[0].as_py()
                     status = table.column("status")[0].as_py()
                     count = table.num_rows
-                    
-                    result_table = pa.table({
-                        "dept": pa.array([dept], type=pa.string()),
-                        "status": pa.array([status], type=pa.string()),
-                        "count_employees": pa.array([count], type=pa.int64())
-                    })
+
+                    result_table = pa.table(
+                        {
+                            "dept": pa.array([dept], type=pa.string()),
+                            "status": pa.array([status], type=pa.string()),
+                            "count_employees": pa.array([count], type=pa.int64()),
+                        }
+                    )
                     yield result_table
 
         self.spark.udtf.register("dept_status_count_udtf", DeptStatusCountUDTF)
-        
+
         test_data = [
-            ("IT", "active"), ("IT", "active"), ("IT", "inactive"),
-            ("HR", "active"), ("HR", "inactive"), ("Finance", "active")
+            ("IT", "active"),
+            ("IT", "active"),
+            ("IT", "inactive"),
+            ("HR", "active"),
+            ("HR", "inactive"),
+            ("Finance", "active"),
         ]
         test_df = self.spark.createDataFrame(test_data, "department string, status string")
         test_df.createOrReplaceTempView("employee_data")
-        
-        result_df = self.spark.sql("""
+
+        result_df = self.spark.sql(
+            """
             SELECT * FROM dept_status_count_udtf(
                 TABLE(SELECT * FROM employee_data) 
                 PARTITION BY department, status
             ) ORDER BY dept, status
-        """)
-        
-        expected_df = self.spark.createDataFrame([
-            ("Finance", "active", 1), ("HR", "active", 1), ("HR", "inactive", 1), ("IT", "active", 2), ("IT", "inactive", 1)
-        ], "dept string, status string, count_employees bigint")
+        """
+        )
+
+        expected_df = self.spark.createDataFrame(
+            [
+                ("Finance", "active", 1),
+                ("HR", "active", 1),
+                ("HR", "inactive", 1),
+                ("IT", "active", 2),
+                ("IT", "inactive", 1),
+            ],
+            "dept string, status string, count_employees bigint",
+        )
         assertDataFrameEqual(result_df, expected_df)
 
     def test_arrow_udtf_with_scalar_first_table_second(self):
         @arrow_udtf(returnType="filtered_id bigint")
         class ScalarFirstTableSecondUDTF:
-            def eval(self, threshold: "pa.Array", table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
+            def eval(
+                self, threshold: "pa.Array", table_data: "pa.RecordBatch"
+            ) -> Iterator["pa.Table"]:
                 assert isinstance(
                     threshold, pa.Array
                 ), f"Expected pa.Array for threshold, got {type(threshold)}"
@@ -1529,13 +1547,14 @@ class ArrowUDTFTestsMixin:
 
     def test_arrow_udtf_with_table_argument_in_middle(self):
         """Test Arrow UDTF with table argument in the middle of multiple scalar arguments."""
+
         @arrow_udtf(returnType="filtered_id bigint")
         class TableInMiddleUDTF:
             def eval(
-                self, 
-                min_threshold: "pa.Array", 
-                table_data: "pa.RecordBatch", 
-                max_threshold: "pa.Array"
+                self,
+                min_threshold: "pa.Array",
+                table_data: "pa.RecordBatch",
+                max_threshold: "pa.Array",
             ) -> Iterator["pa.Table"]:
                 assert isinstance(
                     min_threshold, pa.Array
@@ -1553,11 +1572,11 @@ class ArrowUDTFTestsMixin:
                 # Convert record batch to table
                 table = pa.table(table_data)
                 id_column = table.column("id")
-                
+
                 # Filter rows where min_val < id < max_val
                 mask = pa.compute.and_(
                     pa.compute.greater(id_column, pa.scalar(min_val)),
-                    pa.compute.less(id_column, pa.scalar(max_val))
+                    pa.compute.less(id_column, pa.scalar(max_val)),
                 )
                 filtered_table = table.filter(mask)
 
@@ -1584,9 +1603,7 @@ class ArrowUDTFTestsMixin:
         @arrow_udtf(returnType="result_id bigint, multiplier_used int")
         class NamedArgsUDTF:
             def eval(
-                self, 
-                table_data: "pa.RecordBatch", 
-                multiplier: "pa.Array"
+                self, table_data: "pa.RecordBatch", multiplier: "pa.Array"
             ) -> Iterator["pa.Table"]:
                 assert isinstance(
                     table_data, pa.RecordBatch
@@ -1600,14 +1617,18 @@ class ArrowUDTFTestsMixin:
                 # Convert record batch to table
                 table = pa.table(table_data)
                 id_column = table.column("id")
-                
+
                 # Multiply each id by the multiplier
                 multiplied_ids = pa.compute.multiply(id_column, pa.scalar(multiplier_val))
-                
-                result_table = pa.table({
-                    "result_id": multiplied_ids,
-                    "multiplier_used": pa.array([multiplier_val] * table.num_rows, type=pa.int32())
-                })
+
+                result_table = pa.table(
+                    {
+                        "result_id": multiplied_ids,
+                        "multiplier_used": pa.array(
+                            [multiplier_val] * table.num_rows, type=pa.int32()
+                        ),
+                    }
+                )
                 yield result_table
 
         # Test with DataFrame API using named arguments
@@ -1615,8 +1636,7 @@ class ArrowUDTFTestsMixin:
         # input_df = self.spark.range(3)  # [0, 1, 2]
         # result_df = NamedArgsUDTF(table_data=input_df.asTable(), multiplier=lit(5))
         expected_df = self.spark.createDataFrame(
-            [(0, 5), (5, 5), (10, 5)], 
-            "result_id bigint, multiplier_used int"
+            [(0, 5), (5, 5), (10, 5)], "result_id bigint, multiplier_used int"
         )
         # assertDataFrameEqual(result_df, expected_df)
 
@@ -1624,29 +1644,33 @@ class ArrowUDTFTestsMixin:
         # TODO(SPARK-53426): Support named table argument with DataFrame API
         # result_df2 = NamedArgsUDTF(multiplier=lit(3), table_data=input_df.asTable())
         expected_df2 = self.spark.createDataFrame(
-            [(0, 3), (3, 3), (6, 3)], 
-            "result_id bigint, multiplier_used int"
+            [(0, 3), (3, 3), (6, 3)], "result_id bigint, multiplier_used int"
         )
         # assertDataFrameEqual(result_df2, expected_df2)
 
         # Test SQL registration and usage with named arguments
         self.spark.udtf.register("test_named_args_udtf", NamedArgsUDTF)
-        
-        sql_result_df = self.spark.sql("""
+
+        sql_result_df = self.spark.sql(
+            """
             SELECT * FROM test_named_args_udtf(
                 table_data => TABLE(SELECT id FROM range(0, 3))
                 multiplier => 5
             )
-        """)
+        """
+        )
         assertDataFrameEqual(sql_result_df, expected_df)
 
-        sql_result_df2 = self.spark.sql("""
+        sql_result_df2 = self.spark.sql(
+            """
             SELECT * FROM test_named_args_udtf(
                 multiplier => 3,
                 table_data => TABLE(SELECT id FROM range(0, 3))
             )
-        """)
+        """
+        )
         assertDataFrameEqual(sql_result_df2, expected_df2)
+
 
 class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
     pass
