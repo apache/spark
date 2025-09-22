@@ -777,7 +777,7 @@ private[spark] class DAGScheduler(
         } catch {
           case e: RpcTimeoutException =>
             logWarning(log"Failed to get cache locations for RDD ${MDC(RDD_ID, rdd.id)} due " +
-              log"to RpcTimeout, assuming not fully cached.", e)
+              log"to rpc timeout, assuming not fully cached.", e)
             true
         }
         if (rddHasUncachedPartitions) {
@@ -1393,6 +1393,7 @@ private[spark] class DAGScheduler(
     logInfo(log"Final stage: ${MDC(STAGE, finalStage)} " +
       log"(${MDC(STAGE_NAME, finalStage.name)})")
     logInfo(log"Parents of final stage: ${MDC(STAGES, finalStage.parents)}")
+    logInfo(log"Missing parents: ${MDC(MISSING_PARENT_STAGES, getMissingParentStages(finalStage))}")
 
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
@@ -1435,6 +1436,7 @@ private[spark] class DAGScheduler(
     logInfo(log"Final stage: ${MDC(STAGE_ID, finalStage)} " +
       log"(${MDC(STAGE_NAME, finalStage.name)})")
     logInfo(log"Parents of final stage: ${MDC(PARENT_STAGES, finalStage.parents.toString)}")
+    logInfo(log"Missing parents: ${MDC(MISSING_PARENT_STAGES, getMissingParentStages(finalStage))}")
 
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job

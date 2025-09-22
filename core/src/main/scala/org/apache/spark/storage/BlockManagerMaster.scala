@@ -171,8 +171,8 @@ class BlockManagerMaster(
    * @param host
    */
   def removeShufflePushMergerLocation(host: String): Unit = {
+    logInfo(log"Request to remove shuffle push merger location ${MDC(HOST, host)}")
     driverEndpoint.ask[Unit](RemoveShufflePushMergerLocation(host))
-    logInfo(log"Removal of shuffle push merger location ${MDC(HOST, host)} requested")
   }
 
   def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
