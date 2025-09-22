@@ -22,7 +22,6 @@ from pyspark.errors.exceptions.base import (
     PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
-from pyspark.sql.connect.expressions import DirectShufflePartitionID
 from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.utils import check_dependencies
 
@@ -83,6 +82,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    DirectShufflePartitionID,
     SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
