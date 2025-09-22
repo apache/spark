@@ -3582,8 +3582,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-53575: retry all the succeeding stages when the map stage has checksum mismatches") {
-    // Disable the stage resubmit that triggered by `DAGScheduler.messageScheduler`,
-    // so that the stage resubmit won't happen earlier than `scheduler.resubmitFailedStages()`
     conf.set(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key, "true")
 
     val (shuffleId1, shuffleId2) = constructChecksumMismatchStageFetchFailed()
