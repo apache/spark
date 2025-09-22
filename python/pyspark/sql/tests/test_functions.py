@@ -705,15 +705,22 @@ class FunctionsTestsMixin:
 
         # Test 2: make_timestamp_ntz(years=y, months=mon, days=d, hours=h, mins=min, secs=s)
         actual = df.select(
-            F.make_timestamp_ntz(years=df.year, months=df.month, days=df.day,
-                                 hours=df.hour, mins=df.minute, secs=df.second)
+            F.make_timestamp_ntz(
+                years=df.year,
+                months=df.month,
+                days=df.day,
+                hours=df.hour,
+                mins=df.minute,
+                secs=df.second,
+            )
         )
         assertDataFrameEqual(actual, [Row(result)])
 
         # Test 3: make_timestamp_ntz(y, mon, days=d, hours=h, mins=min, secs=s)
         actual = df.select(
-            F.make_timestamp_ntz(df.year, df.month, days=df.day,
-                                 hours=df.hour, mins=df.minute, secs=df.second)
+            F.make_timestamp_ntz(
+                df.year, df.month, days=df.day, hours=df.hour, mins=df.minute, secs=df.second
+            )
         )
         assertDataFrameEqual(actual, [Row(result)])
 
@@ -738,8 +745,9 @@ class FunctionsTestsMixin:
         # ERROR CASE TEST
         # Test 7: make_timestamp_ntz(years=y, date=d, time=t), should fail
         with self.assertRaises(Exception):
-            df_dt.select(F.make_timestamp_ntz(years=df.year, date=df_dt.date,
-                                              time=df_dt.time)).collect()
+            df_dt.select(
+                F.make_timestamp_ntz(years=df.year, date=df_dt.date, time=df_dt.time)
+            ).collect()
 
     def test_make_timestamp_ntz_with_keywords(self):
         # Test with fractional seconds
@@ -751,15 +759,22 @@ class FunctionsTestsMixin:
 
         # All 6 keyword arguments
         actual = df.select(
-            F.make_timestamp_ntz(years=df.year, months=df.month, days=df.day,
-                                 hours=df.hour, mins=df.minute, secs=df.second)
+            F.make_timestamp_ntz(
+                years=df.year,
+                months=df.month,
+                days=df.day,
+                hours=df.hour,
+                mins=df.minute,
+                secs=df.second,
+            )
         )
         assertDataFrameEqual(actual, [Row(result)])
 
         # Mixed positional and keyword arguments
         actual = df.select(
-            F.make_timestamp_ntz(df.year, df.month, df.day, hours=df.hour,
-                                 mins=df.minute, secs=df.second)
+            F.make_timestamp_ntz(
+                df.year, df.month, df.day, hours=df.hour, mins=df.minute, secs=df.second
+            )
         )
         assertDataFrameEqual(actual, [Row(result)])
 

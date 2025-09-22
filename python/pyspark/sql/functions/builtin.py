@@ -25245,24 +25245,22 @@ def make_timestamp_ntz(
 
     # Count keyword arguments for timestamp components
     timestamp_kwargs = [years, months, days, hours, mins, secs]
-    num_timestamp_kwargs = __builtins__['sum'](1 for arg in timestamp_kwargs if arg is not None)
+    num_timestamp_kwargs = __builtins__["sum"](1 for arg in timestamp_kwargs if arg is not None)
 
     # Count keyword arguments for date/time
     datetime_kwargs = [date, time]
-    num_datetime_kwargs = __builtins__['sum'](1 for arg in datetime_kwargs if arg is not None)
+    num_datetime_kwargs = __builtins__["sum"](1 for arg in datetime_kwargs if arg is not None)
 
     # 6-argument patterns (years, months, days, hours, mins, secs)
     if num_positional_args == 6 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 0:
         # make_timestamp_ntz(y, mon, d, h, min, s) => old code path
         return _invoke_function_over_columns(
-            "make_timestamp_ntz",
-            args[0], args[1], args[2], args[3], args[4], args[5]
+            "make_timestamp_ntz", args[0], args[1], args[2], args[3], args[4], args[5]
         )
     elif num_positional_args == 0 and num_timestamp_kwargs == 6 and num_datetime_kwargs == 0:
         # make_timestamp_ntz(years=y, months=mon, days=d, hours=h, mins=min, secs=s)
         return _invoke_function_over_columns(
-            "make_timestamp_ntz",
-            years, months, days, hours, mins, secs
+            "make_timestamp_ntz", years, months, days, hours, mins, secs
         )
     elif num_positional_args > 0 and num_timestamp_kwargs > 0 and num_datetime_kwargs == 0:
         # make_timestamp_ntz(y, mon, days=d, hours=h, mins=min, secs=s) => old code path
@@ -25282,11 +25280,15 @@ def make_timestamp_ntz(
             combined_args[5] = secs
 
         # Check if we have exactly 6 arguments total
-        if __builtins__['sum'](1 for arg in combined_args if arg is not None) == 6:
+        if __builtins__["sum"](1 for arg in combined_args if arg is not None) == 6:
             return _invoke_function_over_columns(
                 "make_timestamp_ntz",
-                combined_args[0], combined_args[1], combined_args[2],
-                combined_args[3], combined_args[4], combined_args[5]
+                combined_args[0],
+                combined_args[1],
+                combined_args[2],
+                combined_args[3],
+                combined_args[4],
+                combined_args[5],
             )
 
     # date/time patterns
@@ -25307,6 +25309,7 @@ def make_timestamp_ntz(
     elif num_timestamp_kwargs > 0 and num_datetime_kwargs > 0:
         # e.g., make_timestamp_ntz(years=y, date=d, time=t) => should fail
         from pyspark.errors import PySparkValueError
+
         raise PySparkValueError(
             errorClass="WRONG_NUM_ARGS",
             messageParameters={
@@ -25317,6 +25320,7 @@ def make_timestamp_ntz(
 
     # Default error for invalid combinations
     from pyspark.errors import PySparkValueError
+
     raise PySparkValueError(
         errorClass="WRONG_NUM_ARGS",
         messageParameters={
