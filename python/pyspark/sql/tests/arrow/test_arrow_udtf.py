@@ -1410,7 +1410,6 @@ class ArrowUDTFTestsMixin:
             assert row.table_is_batch is True
             assert row.struct_is_array is True
 
-    @unittest.skip("SPARK-53387: Support PARTIITON BY with Arrow UDTF")
     def test_arrow_udtf_table_partition_by_single_column(self):
         @arrow_udtf(returnType="partition_key string, total_value bigint")
         class PartitionSumUDTF:
@@ -1450,7 +1449,6 @@ class ArrowUDTFTestsMixin:
         )
         assertDataFrameEqual(result_df, expected_df)
 
-    @unittest.skip("SPARK-53387: Support PARTIITON BY with Arrow UDTF")
     def test_arrow_udtf_table_partition_by_multiple_columns(self):
         @arrow_udtf(returnType="dept string, status string, count_employees bigint")
         class DeptStatusCountUDTF:
@@ -1488,7 +1486,7 @@ class ArrowUDTFTestsMixin:
             """
             SELECT * FROM dept_status_count_udtf(
                 TABLE(SELECT * FROM employee_data) 
-                PARTITION BY department, status
+                PARTITION BY (department, status)
             ) ORDER BY dept, status
         """
         )
@@ -1632,21 +1630,19 @@ class ArrowUDTFTestsMixin:
                 yield result_table
 
         # Test with DataFrame API using named arguments
-        # TODO(SPARK-53426): Support named table argument with DataFrame API
-        # input_df = self.spark.range(3)  # [0, 1, 2]
-        # result_df = NamedArgsUDTF(table_data=input_df.asTable(), multiplier=lit(5))
+        input_df = self.spark.range(3)  # [0, 1, 2]
+        result_df = NamedArgsUDTF(table_data=input_df.asTable(), multiplier=lit(5))
         expected_df = self.spark.createDataFrame(
             [(0, 5), (5, 5), (10, 5)], "result_id bigint, multiplier_used int"
         )
-        # assertDataFrameEqual(result_df, expected_df)
+        assertDataFrameEqual(result_df, expected_df)
 
         # Test with DataFrame API using different named argument order
-        # TODO(SPARK-53426): Support named table argument with DataFrame API
-        # result_df2 = NamedArgsUDTF(multiplier=lit(3), table_data=input_df.asTable())
+        result_df2 = NamedArgsUDTF(multiplier=lit(3), table_data=input_df.asTable())
         expected_df2 = self.spark.createDataFrame(
             [(0, 3), (3, 3), (6, 3)], "result_id bigint, multiplier_used int"
         )
-        # assertDataFrameEqual(result_df2, expected_df2)
+        assertDataFrameEqual(result_df2, expected_df2)
 
         # Test SQL registration and usage with named arguments
         self.spark.udtf.register("test_named_args_udtf", NamedArgsUDTF)
@@ -1654,7 +1650,7 @@ class ArrowUDTFTestsMixin:
         sql_result_df = self.spark.sql(
             """
             SELECT * FROM test_named_args_udtf(
-                table_data => TABLE(SELECT id FROM range(0, 3))
+                table_data => TABLE(SELECT id FROM range(0, 3)),
                 multiplier => 5
             )
         """
