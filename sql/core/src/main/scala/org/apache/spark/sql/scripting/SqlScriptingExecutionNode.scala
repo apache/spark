@@ -61,6 +61,9 @@ trait NonLeafStatementExec extends CompoundStatementExec {
   /** Pointer to the current statement - i.e. the statement that should be iterated next. */
   protected[scripting] var curr: Option[CompoundStatementExec]
 
+  /** Stores the information has the statement has been interrupted by a continue handler. */
+  protected[scripting] var interrupted: Boolean = false
+
   /**
    * Construct the iterator to traverse the tree rooted at this node in an in-order traversal.
    * @return
@@ -415,7 +418,7 @@ class IfElseStatementExec(
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
-      override def hasNext: Boolean = curr.nonEmpty
+      override def hasNext: Boolean = !interrupted && curr.nonEmpty
 
       override def next(): CompoundStatementExec = {
         if (curr.exists(_.isInstanceOf[LeaveStatementExec])) {
@@ -495,7 +498,7 @@ class WhileStatementExec(
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
-      override def hasNext: Boolean = curr.nonEmpty
+      override def hasNext: Boolean = !interrupted && curr.nonEmpty
 
       override def next(): CompoundStatementExec = state match {
           case WhileState.Condition =>
@@ -588,7 +591,7 @@ class SearchedCaseStatementExec(
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
-      override def hasNext: Boolean = curr.nonEmpty
+      override def hasNext: Boolean = !interrupted && curr.nonEmpty
 
       override def next(): CompoundStatementExec = {
         if (curr.exists(_.isInstanceOf[LeaveStatementExec])) {
@@ -705,7 +708,7 @@ class SimpleCaseStatementExec(
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
-      override def hasNext: Boolean = state match {
+      override def hasNext: Boolean = !interrupted && (state match {
         case CaseState.Condition =>
           // Equivalent to the "iteration hasn't started yet" - to avoid computing cache
           //   before the first actual iteration.
@@ -716,7 +719,7 @@ class SimpleCaseStatementExec(
           cachedConditionBodyIterator.hasNext ||
           elseBody.isDefined
         case CaseState.Body => bodyExec.exists(_.getTreeIterator.hasNext)
-      }
+      })
 
       override def next(): CompoundStatementExec = state match {
         case CaseState.Condition =>
@@ -933,11 +936,6 @@ class LoopStatementExec(
   protected[scripting] var curr: Option[CompoundStatementExec] = Some(body)
 
   /**
-   * Loop can be interrupted by LeaveStatementExec
-   */
-  private var interrupted: Boolean = false
-
-  /**
    * Loop can be iterated by IterateStatementExec
    */
   private var iterated: Boolean = false
@@ -1022,20 +1020,9 @@ class ForStatementExec(
   private var bodyWithVariables: Option[CompoundBodyExec] = None
 
   /**
-   * For can be interrupted by LeaveStatementExec
-   */
-  private var interrupted: Boolean = false
-
-  /**
    * Whether this iteration of the FOR loop is the first one.
    */
   private var firstIteration: Boolean = true
-
-  protected[scripting] def skipForStatement(): Unit = {
-    // Force variables to output false on the next hasNext
-    this.state = ForState.Body
-    this.bodyWithVariables = None
-  }
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {

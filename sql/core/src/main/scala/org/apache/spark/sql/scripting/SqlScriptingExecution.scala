@@ -98,19 +98,7 @@ class SqlScriptingExecution(
       currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
     }
 
-    currExecPlan match {
-      case exec: IfElseStatementExec =>
-        exec.curr = None
-      case exec: SimpleCaseStatementExec =>
-        exec.skipSimpleCaseStatement()
-      case exec: SearchedCaseStatementExec =>
-        exec.curr = None
-      case exec: WhileStatementExec =>
-        exec.curr = None
-      case exec: ForStatementExec =>
-        exec.skipForStatement()
-      case _ =>
-    }
+    currExecPlan.interrupted = true
   }
 
   /** Helper method to iterate get next statements from the first available frame. */
