@@ -927,76 +927,96 @@ class SparkConnectServiceSuite
     }
   }
 
-  test("Test observe response") {
-    withTable("test") {
-      spark.sql("""
-                  | CREATE TABLE test (col1 INT, col2 STRING)
-                  | USING parquet
-                  |""".stripMargin)
+  Seq(true, false).foreach { acceptLiteralDataTypeField =>
+    test(s"Test observe response - acceptLiteralDataTypeField = $acceptLiteralDataTypeField") {
+      withTable("test") {
+        spark.sql("""
+                    | CREATE TABLE test (col1 INT, col2 STRING)
+                    | USING parquet
+                    |""".stripMargin)
 
-      val instance = new SparkConnectService(false)
+        val instance = new SparkConnectService(false)
 
-      val connect = new MockRemoteSession()
-      val context = proto.UserContext
-        .newBuilder()
-        .setUserId("c1")
-        .build()
-      val collectMetrics = proto.Relation
-        .newBuilder()
-        .setCollectMetrics(
-          proto.CollectMetrics
-            .newBuilder()
-            .setInput(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
-            .setName("my_metric")
-            .addAllMetrics(Seq(
-              proto_min("id".protoAttr).as("min_val"),
-              proto_max("id".protoAttr).as("max_val")).asJava))
-        .build()
-      val plan = proto.Plan
-        .newBuilder()
-        .setRoot(collectMetrics)
-        .build()
-      val request = proto.ExecutePlanRequest
-        .newBuilder()
-        .setPlan(plan)
-        .setUserContext(context)
-        .setSessionId(UUID.randomUUID.toString())
-        .build()
+        val connect = new MockRemoteSession()
+        val context = proto.UserContext
+          .newBuilder()
+          .setUserId("c1")
+          .build()
+        val collectMetrics = proto.Relation
+          .newBuilder()
+          .setCollectMetrics(
+            proto.CollectMetrics
+              .newBuilder()
+              .setInput(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
+              .setName("my_metric")
+              .addAllMetrics(Seq(
+                proto_struct(proto_min("id".protoAttr).as("min_val")),
+                proto_struct(proto_max("id".protoAttr).as("max_val"))).asJava))
+          .build()
+        val plan = proto.Plan
+          .newBuilder()
+          .setRoot(collectMetrics)
+          .build()
+        val request = proto.ExecutePlanRequest
+          .newBuilder()
+          .setPlan(plan)
+          .setUserContext(context)
+          .setSessionId(UUID.randomUUID.toString())
+          .addRequestOptions(
+            proto.ExecutePlanRequest.RequestOption
+              .newBuilder()
+              .setAcceptResponseOptions(proto.AcceptResponseOptions
+                .newBuilder()
+                .setAcceptLiteralDataTypeField(acceptLiteralDataTypeField)
+                .build())
+              .build())
+          .build()
 
-      // Execute plan.
-      @volatile var done = false
-      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
-      instance.executePlan(
-        request,
-        new StreamObserver[proto.ExecutePlanResponse] {
-          override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
+        // Execute plan.
+        @volatile var done = false
+        val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+        instance.executePlan(
+          request,
+          new StreamObserver[proto.ExecutePlanResponse] {
+            override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
 
-          override def onError(throwable: Throwable): Unit = throw throwable
+            override def onError(throwable: Throwable): Unit = throw throwable
 
-          override def onCompleted(): Unit = done = true
-        })
+            override def onCompleted(): Unit = done = true
+          })
 
-      // The current implementation is expected to be blocking. This is here to make sure it is.
-      assert(done)
+        // The current implementation is expected to be blocking. This is here to make sure it is.
+        assert(done)
 
-      val filteredResponses = responses.filter(!_.hasExecutionProgress)
-      assert(filteredResponses.size == 7)
+        val filteredResponses = responses.filter(!_.hasExecutionProgress)
+        assert(filteredResponses.size == 7)
 
-      // Make sure the first response is schema only
-      val head = filteredResponses.head
-      assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
+        // Make sure the first response is schema only
+        val head = filteredResponses.head
+        assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
-      // Make sure the last response is observed metrics only
-      val last = filteredResponses.last
-      assert(last.getObservedMetricsCount == 1 && !last.hasSchema && !last.hasArrowBatch)
+        // Make sure the last response is observed metrics only
+        val last = filteredResponses.last
+        assert(last.getObservedMetricsCount == 1 && !last.hasSchema && !last.hasArrowBatch)
 
-      val observedMetricsList = last.getObservedMetricsList.asScala
-      val observedMetric = observedMetricsList.head
-      assert(observedMetric.getName == "my_metric")
-      assert(observedMetric.getValuesCount == 2)
-      val valuesList = observedMetric.getValuesList.asScala
-      assert(valuesList.head.hasLong && valuesList.head.getLong == 0)
-      assert(valuesList.last.hasLong && valuesList.last.getLong == 99)
+        val observedMetricsList = last.getObservedMetricsList.asScala
+        val observedMetric = observedMetricsList.head
+        assert(observedMetric.getName == "my_metric")
+        assert(observedMetric.getValuesCount == 2)
+        val valuesList = observedMetric.getValuesList.asScala
+        def checkStruct(literal: proto.Expression.Literal, expectedValue: Long): Unit = {
+          val struct = literal.getStruct
+          assert(struct.getElementsCount == 1)
+          assert(struct.getElements(0).hasLong && struct.getElements(0).getLong == expectedValue)
+          if (acceptLiteralDataTypeField) {
+            assert(literal.getDataType.hasStruct && !struct.hasStructType)
+          } else {
+            assert(!literal.hasDataType && struct.getStructType.hasStruct)
+          }
+        }
+        checkStruct(valuesList(0), 0)
+        checkStruct(valuesList(1), 99)
+      }
     }
   }
 

@@ -138,6 +138,7 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .addAllTags(tags.get.toSeq.asJava)
+      .addRequestOptions(SparkConnectClient.ACCEPT_RESPONSE_OPTIONS)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     operationId.foreach { opId =>
       require(
@@ -424,6 +425,12 @@ object SparkConnectClient {
 
   private val AUTH_TOKEN_META_DATA_KEY: Metadata.Key[String] =
     Metadata.Key.of("Authentication", Metadata.ASCII_STRING_MARSHALLER)
+
+  private val ACCEPT_RESPONSE_OPTIONS = proto.ExecutePlanRequest.RequestOption
+    .newBuilder()
+    .setAcceptResponseOptions(
+      proto.AcceptResponseOptions.newBuilder().setAcceptLiteralDataTypeField(true).build())
+    .build()
 
   // for internal tests
   private[sql] def apply(channel: ManagedChannel): SparkConnectClient = {
