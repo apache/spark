@@ -50,6 +50,19 @@ sealed trait CatalystIdentifier {
     }
   }
 
+  def resolvedId: String = {
+    val replacedId = quoteIdentifier(identifier)
+    return s"$replacedId"
+  }
+
+  def resolvedDb: Option[String] = {
+    database.map(quoteIdentifier)
+  }
+
+  def resolvedCatalog: Option[String] = {
+    catalog.map(quoteIdentifier)
+  }
+
   def unquotedString: String = {
     if (catalog.isDefined && database.isDefined) {
       s"${catalog.get}.${database.get}.$identifier"

@@ -493,24 +493,28 @@ class SparkDeclarativePipelinesServerSuite
       datasetName: String,
       defaultCatalog: String = "",
       defaultDatabase: String = "",
-      expectedResolvedName: String)
+      expectedResolvedCatalog: String,
+      expectedResolvedDatabase: String)
 
   private val defineDatasetDefaultTests = Seq(
     DefineDatasetTestCase(
       name = "TEMPORARY_VIEW",
       datasetType = DatasetType.TEMPORARY_VIEW,
       datasetName = "tv",
-      expectedResolvedName = "`tv`"),
+      expectedResolvedCatalog = "",
+      expectedResolvedDatabase = ""),
     DefineDatasetTestCase(
       name = "TABLE",
       datasetType = DatasetType.TABLE,
       datasetName = "tb",
-      expectedResolvedName = "`spark_catalog`.`default`.`tb`"),
+      expectedResolvedCatalog = "spark_catalog",
+      expectedResolvedDatabase = "default"),
     DefineDatasetTestCase(
       name = "MV",
       datasetType = DatasetType.MATERIALIZED_VIEW,
       datasetName = "mv",
-      expectedResolvedName = "`spark_catalog`.`default`.`mv`")).map(tc => tc.name -> tc).toMap
+      expectedResolvedCatalog = "spark_catalog",
+      expectedResolvedDatabase = "default")).map(tc => tc.name -> tc).toMap
 
   private val defineDatasetCustomTests = Seq(
     DefineDatasetTestCase(
@@ -519,21 +523,24 @@ class SparkDeclarativePipelinesServerSuite
       datasetName = "tv",
       defaultCatalog = "custom_catalog",
       defaultDatabase = "custom_db",
-      expectedResolvedName = "`tv`"),
+      expectedResolvedCatalog = "",
+      expectedResolvedDatabase = ""),
     DefineDatasetTestCase(
       name = "TABLE",
       datasetType = DatasetType.TABLE,
       datasetName = "tb",
       defaultCatalog = "my_catalog",
       defaultDatabase = "my_db",
-      expectedResolvedName = "`my_catalog`.`my_db`.`tb`"),
+      expectedResolvedCatalog = "my_catalog",
+      expectedResolvedDatabase = "my_db"),
     DefineDatasetTestCase(
       name = "MV",
       datasetType = DatasetType.MATERIALIZED_VIEW,
       datasetName = "mv",
       defaultCatalog = "another_catalog",
       defaultDatabase = "another_db",
-      expectedResolvedName = "`another_catalog`.`another_db`.`mv`"))
+      expectedResolvedCatalog = "another_catalog",
+      expectedResolvedDatabase = "another_db"))
     .map(tc => tc.name -> tc)
     .toMap
 
@@ -558,7 +565,11 @@ class SparkDeclarativePipelinesServerSuite
       assert(res !== PipelineCommandResult.getDefaultInstance)
       assert(res.hasDefineDatasetResult)
       val graphResult = res.getDefineDatasetResult
-      assert(graphResult.getResolvedDatasetName == testCase.expectedResolvedName)
+      val identifier = graphResult.getResolvedIdentifier
+
+      assert(identifier.getCatalog == testCase.expectedResolvedCatalog)
+      assert(identifier.getDatabase == testCase.expectedResolvedDatabase)
+      assert(identifier.getName == testCase.datasetName)
     }
   }
 
@@ -591,7 +602,11 @@ class SparkDeclarativePipelinesServerSuite
       assert(res !== PipelineCommandResult.getDefaultInstance)
       assert(res.hasDefineDatasetResult)
       val graphResult = res.getDefineDatasetResult
-      assert(graphResult.getResolvedDatasetName == testCase.expectedResolvedName)
+      val identifier = graphResult.getResolvedIdentifier
+
+      assert(identifier.getCatalog == testCase.expectedResolvedCatalog)
+      assert(identifier.getDatabase == testCase.expectedResolvedDatabase)
+      assert(identifier.getName == testCase.datasetName)
     }
   }
 

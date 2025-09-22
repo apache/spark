@@ -144,13 +144,18 @@ message PipelineCommandResult {
     DefineDatasetResult define_dataset_result = 2;
     DefineFlowResult define_flow_result = 3;
   }
+  message CatalogIdentifier {
+    optional string catalog = 1;
+    optional string database = 2;
+    optional string name = 3;
+  }
   message CreateDataflowGraphResult {
     // The ID of the created graph.
     optional string dataflow_graph_id = 1;
   }
   message DefineDatasetResult {
     // Resolved name of the dataset
-    optional string resolved_dataset_name = 1;
+    optional CatalogIdentifier resolved_identifier = 1;
   }
   message DefineFlowResult {
     // Resolved name of the flow
