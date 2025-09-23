@@ -2140,7 +2140,7 @@ class SparkConnectClient(object):
             session_id=self._session_id,
             client_type="python",
         )
-        
+
         if new_session_id is not None:
             request.new_session_id = new_session_id
 
@@ -2160,7 +2160,7 @@ class SparkConnectClient(object):
         # Create a new client with the cloned session ID
         new_connection = copy.deepcopy(self._builder)
         new_connection._session_id = response.new_session_id
-        
+
         # Create new client and explicitly set the session ID
         new_client = SparkConnectClient(
             connection=new_connection,
