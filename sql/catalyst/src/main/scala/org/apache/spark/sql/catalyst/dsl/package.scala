@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -566,6 +566,17 @@ package object dsl extends SQLConfHelper {
       }
 
       def deduplicate(colNames: Attribute*): LogicalPlan = Deduplicate(colNames, logicalPlan)
+
+      def watermark(expr: Expression, delayThreshold: CalendarInterval): LogicalPlan = {
+        val namedExpression = expr match {
+          case e: NamedExpression => e
+          case e: Expression => UnresolvedAlias(e)
+        }
+        val proj = Project(Seq(namedExpression, UnresolvedStar(None)), logicalPlan)
+        val attrRef = proj.projectList.head.toAttribute
+
+        EventTimeWatermark(java.util.UUID.randomUUID(), attrRef, delayThreshold, proj)
+      }
     }
   }
 }

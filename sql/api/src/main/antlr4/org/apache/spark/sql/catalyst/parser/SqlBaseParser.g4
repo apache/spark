@@ -382,8 +382,10 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier optionsClause? tableAlias                             #streamTableName
-    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN optionsClause? tableAlias     #streamTableName
+    : STREAM multipartIdentifier optionsClause? watermarkClause?
+      tableAlias                                                       #streamTableName
+    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
+      optionsClause? watermarkClause? tableAlias                       #streamTableName
     ;
 
 setResetStatement
@@ -927,6 +929,10 @@ lateralView
     : LATERAL VIEW (OUTER)? qualifiedName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tblName=identifier (AS? colName+=identifier (COMMA colName+=identifier)*)?
     ;
 
+watermarkClause
+    : WATERMARK colName=namedExpression DELAY OF delay=interval
+    ;
+
 setQuantifier
     : DISTINCT
     | ALL
@@ -1001,9 +1007,11 @@ identifierComment
 relationPrimary
     : streamRelationPrimary                                 #streamRelation
     | identifierReference temporalClause?
-      optionsClause? sample? tableAlias                     #tableName
-    | LEFT_PAREN query RIGHT_PAREN sample? tableAlias       #aliasedQuery
-    | LEFT_PAREN relation RIGHT_PAREN sample? tableAlias    #aliasedRelation
+      optionsClause? sample? watermarkClause? tableAlias    #tableName
+    | LEFT_PAREN query RIGHT_PAREN sample? watermarkClause?
+      tableAlias                                            #aliasedQuery
+    | LEFT_PAREN relation RIGHT_PAREN sample?
+       watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
     | functionTable                                         #tableValuedFunction
     ;
@@ -1012,6 +1020,8 @@ optionsClause
     : WITH options=propertyList
     ;
 
+// Unlike all other types of expression for relation, we do not support watermarkClause for
+// inlineTable.
 inlineTable
     : VALUES expression (COMMA expression)* tableAlias
     ;
@@ -1048,10 +1058,13 @@ functionTableArgument
     | functionArgument
     ;
 
+// This is only used in relationPrimary where having watermarkClause makes sense. If this becomes
+// referred by other clause, please check wheter watermarkClause makes sense to the clause.
+// If not, consider separate this rule.
 functionTable
     : funcName=functionName LEFT_PAREN
       (functionTableArgument (COMMA functionTableArgument)*)?
-      RIGHT_PAREN tableAlias
+      RIGHT_PAREN watermarkClause? tableAlias
     ;
 
 tableAlias
@@ -2188,6 +2201,7 @@ nonReserved
     | DEFAULT
     | DEFINED
     | DEFINER
+    | DELAY
     | DELETE
     | DELIMITED
     | DESC
@@ -2469,6 +2483,7 @@ nonReserved
     | VIEW
     | VIEWS
     | VOID
+    | WATERMARK
     | WEEK
     | WEEKS
     | WHILE
