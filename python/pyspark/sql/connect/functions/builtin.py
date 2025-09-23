@@ -4079,8 +4079,16 @@ def make_timestamp_ntz(  # type: ignore[misc]
         and date is None
         and time is None
     ):
+        from typing import cast
+
         return _invoke_function_over_columns(
-            "make_timestamp_ntz", years, months, days, hours, mins, secs
+            "make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
         )
 
     # 2 keyword arguments: date, time
@@ -4090,7 +4098,11 @@ def make_timestamp_ntz(  # type: ignore[misc]
         and date is not None
         and time is not None
     ):
-        return _invoke_function_over_columns("make_timestamp_ntz", date, time)
+        from typing import cast
+
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
     # Error for invalid combinations
     # Build specific description of what user provided
@@ -4190,8 +4202,16 @@ def try_make_timestamp_ntz(  # type: ignore[misc]
         and date is None
         and time is None
     ):
+        from typing import cast
+
         return _invoke_function_over_columns(
-            "try_make_timestamp_ntz", years, months, days, hours, mins, secs
+            "try_make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
         )
 
     # 2 keyword arguments: date, time
@@ -4201,7 +4221,11 @@ def try_make_timestamp_ntz(  # type: ignore[misc]
         and date is not None
         and time is not None
     ):
-        return _invoke_function_over_columns("try_make_timestamp_ntz", date, time)
+        from typing import cast
+
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
     # Invalid argument combinations - return NULL for try_ functions
     # For try_ functions, invalid inputs should return NULL
