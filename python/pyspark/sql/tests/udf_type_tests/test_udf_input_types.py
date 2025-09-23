@@ -43,19 +43,27 @@ from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
+    have_numpy,
     pyarrow_requirement_message,
     pandas_requirement_message,
+    numpy_requirement_message,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from .type_table_utils import generate_table_diff, format_type_table
 
-if have_pyarrow:
-    import pyarrow as pa
+if have_numpy:
+    import numpy as np
 
 
 @unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message,
+    not have_pandas
+    or not have_pyarrow
+    or not have_numpy
+    or LooseVersion(np.__version__) <= LooseVersion("2.0.0"),
+    pandas_requirement_message
+    or pyarrow_requirement_message
+    or numpy_requirement_message
+    or "Test depends on newer versions",
 )
 class UDFInputTypeTests(ReusedSQLTestCase):
     @classmethod
@@ -76,9 +84,6 @@ class UDFInputTypeTests(ReusedSQLTestCase):
             test_name="UDF input types - Arrow disabled",
         )
 
-    @unittest.skipIf(
-        LooseVersion(pa.__version__) <= LooseVersion("17.0.0"), "Test depends on newer versions"
-    )
     def test_udf_input_types_arrow_legacy_pandas(self):
         golden_file = os.path.join(
             os.path.dirname(__file__), "golden_udf_input_types_arrow_legacy_pandas.txt"
