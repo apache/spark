@@ -1638,8 +1638,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             self.sparkSession,
         )
 
-    def withColumn(self, colName: str, col: Column) -> ParentDataFrame:
-        if not isinstance(col, Column):
+    def withColumn(self, colName: str, col: "ColumnOrName") -> ParentDataFrame:
+        if isinstance(col, str):
+            col = F.col(col)
+        elif not isinstance(col, Column):
             raise PySparkTypeError(
                 errorClass="NOT_COLUMN",
                 messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
