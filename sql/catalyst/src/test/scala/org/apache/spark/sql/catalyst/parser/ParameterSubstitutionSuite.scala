@@ -99,8 +99,8 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
   }
 
   test("LiteralToSqlConverter - string escaping") {
-    assert(LiteralToSqlConverter.convert(Literal("it's")) === "'it\'s'")
-    assert(LiteralToSqlConverter.convert(Literal("'quoted'")) === "'\'quoted\''")
+    assert(LiteralToSqlConverter.convert(Literal("it's")) === "'it\\'s'")
+    assert(LiteralToSqlConverter.convert(Literal("'quoted'")) === "'\\'quoted\\''")
   }
 
   test("LiteralToSqlConverter - array literals") {
