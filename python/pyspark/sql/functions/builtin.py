@@ -25253,9 +25253,7 @@ def make_timestamp_ntz(
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    # Simplified logic: support only the most common patterns
-
-    # Pattern 1: 6 positional arguments (years, months, days, hours, mins, secs)
+    # 6 positional arguments: years, months, days, hours, mins, secs
     if len(args) == 6 and all(
         kw is None for kw in [years, months, days, hours, mins, secs, date, time]
     ):
@@ -25263,7 +25261,7 @@ def make_timestamp_ntz(
             "make_timestamp_ntz", args[0], args[1], args[2], args[3], args[4], args[5]
         )
 
-    # Pattern 2: 6 keyword arguments (years, months, days, hours, mins, secs)
+    # 6 keyword arguments: years, months, days, hours, mins, secs
     elif (
         len(args) == 0
         and all(kw is not None for kw in [years, months, days, hours, mins, secs])
@@ -25274,7 +25272,7 @@ def make_timestamp_ntz(
             "make_timestamp_ntz", years, months, days, hours, mins, secs
         )
 
-    # Pattern 3: 2 keyword arguments (date, time) - keyword-only to avoid ambiguity
+    # 2 keyword arguments: date, time
     elif (
         len(args) == 0
         and all(kw is None for kw in [years, months, days, hours, mins, secs])
@@ -25463,9 +25461,7 @@ def try_make_timestamp_ntz(
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    # Simplified logic: support only the most common patterns
-
-    # Pattern 1: 6 positional arguments (years, months, days, hours, mins, secs)
+    # 6 positional arguments: years, months, days, hours, mins, secs
     if len(args) == 6 and all(
         kw is None for kw in [years, months, days, hours, mins, secs, date, time]
     ):
@@ -25473,7 +25469,7 @@ def try_make_timestamp_ntz(
             "try_make_timestamp_ntz", args[0], args[1], args[2], args[3], args[4], args[5]
         )
 
-    # Pattern 2: 6 keyword arguments (years, months, days, hours, mins, secs)
+    # 6 keyword arguments: years, months, days, hours, mins, secs
     elif (
         len(args) == 0
         and all(kw is not None for kw in [years, months, days, hours, mins, secs])
@@ -25484,7 +25480,7 @@ def try_make_timestamp_ntz(
             "try_make_timestamp_ntz", years, months, days, hours, mins, secs
         )
 
-    # Pattern 3: 2 keyword arguments (date, time) - keyword-only to avoid ambiguity
+    # 2 keyword arguments: date, time
     elif (
         len(args) == 0
         and all(kw is None for kw in [years, months, days, hours, mins, secs])
