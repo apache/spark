@@ -4054,7 +4054,7 @@ def make_timestamp_ntz(
 
 
 def make_timestamp_ntz(  # type: ignore[misc]
-    *args: "ColumnOrName",
+    *,
     years: Optional["ColumnOrName"] = None,
     months: Optional["ColumnOrName"] = None,
     days: Optional["ColumnOrName"] = None,
