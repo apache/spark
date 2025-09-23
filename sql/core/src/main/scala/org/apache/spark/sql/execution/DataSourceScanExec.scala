@@ -640,7 +640,7 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
     override def toPartitionArray: Array[PartitionedFile] = {
       partitionDirectories.flatMap { p =>
         p.files.map { f =>
-          PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values, 0, f.getLen)
+          PartitionedFileUtil.getPartitionedFile(f, p.values, 0, f.getLen)
         }
       }
     }
@@ -876,7 +876,6 @@ case class FileSourceScanExec(
               relation.sparkSession, relation.options, filePath)
           PartitionedFileUtil.splitFiles(
             file = file,
-            filePath = filePath,
             isSplitable = isSplitable,
             maxSplitBytes = maxSplitBytes,
             partitionValues = partitionVals
