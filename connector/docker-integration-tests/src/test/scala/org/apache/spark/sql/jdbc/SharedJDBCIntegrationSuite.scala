@@ -60,12 +60,15 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
         .option("url", jdbcUrl)
         .option("query", "THIS IS NOT VALID SQL").load()
     }
+
+    // Exception should be detected in analysis phase first when we resolve a schema from
+    // through JDBC by sending SELECT * FROM (<subquery>) [LIMIT 1][WHERE 1=0] query.
     checkErrorMatchPVals(
       ex,
       condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
       parameters = Map(
-        "jdbcQuery" -> "SELECT * FROM \\(.*",
-        "externalEngineError" -> ".*"
+        "jdbcQuery" -> "SELECT \\* FROM \\(.*",
+        "externalEngineError" -> "[\\s\\S]*"
       )
     )
   }
