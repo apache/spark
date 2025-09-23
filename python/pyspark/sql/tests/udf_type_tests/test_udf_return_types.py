@@ -43,23 +43,28 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
+    have_numpy,
     pyarrow_requirement_message,
     pandas_requirement_message,
+    numpy_requirement_message,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from .type_table_utils import generate_table_diff, format_type_table
+
+if have_numpy:
+    import numpy as np
 
 
 @unittest.skipIf(
     not have_pandas
     or not have_pyarrow
-    or os.environ.get("ENV_NAME", "?") in ["PYTHON_MINIMUM", "PYTHON_PS_MINIMUM"],
-    pandas_requirement_message
-    or pyarrow_requirement_message
-    or "Skip due to unsupported environment",
+    or not have_numpy
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
+    pandas_requirement_message or pyarrow_requirement_message or numpy_requirement_message,
 )
 class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod

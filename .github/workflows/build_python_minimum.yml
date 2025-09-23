@@ -38,8 +38,7 @@ jobs:
       envs: >-
         {
           "PYSPARK_IMAGE_TO_TEST": "python-minimum",
-          "PYTHON_TO_TEST": "python3.10",
-          "ENV_NAME": "PYTHON_MINIMUM"
+          "PYTHON_TO_TEST": "python3.10"
         }
       jobs: >-
         {
