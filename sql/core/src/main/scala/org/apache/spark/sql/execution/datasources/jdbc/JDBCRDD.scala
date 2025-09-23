@@ -340,7 +340,7 @@ class JDBCRDD(
             errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
             messageParameters = Map(
               "jdbcQuery" -> sqlText,
-              "externalEngineQuery" -> e.getMessage.replaceAll("\\.+$", "")
+              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
             ),
             cause = e)
       }

@@ -65,7 +65,7 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
       condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
       parameters = Map(
         "jdbcQuery" -> "SELECT * FROM \\(.*",
-        "externalEngineQuery" -> ".*"
+        "externalEngineError" -> ".*"
       )
     )
   }
