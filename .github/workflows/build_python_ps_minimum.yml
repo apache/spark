@@ -39,7 +39,7 @@ jobs:
         {
           "PYSPARK_IMAGE_TO_TEST": "python-ps-minimum",
           "PYTHON_TO_TEST": "python3.10",
-          "PYTHON_PS_MINIMUM": "true"
+          "ENV_NAME": "PYTHON_PS_MINIMUM"
         }
       jobs: >-
         {
