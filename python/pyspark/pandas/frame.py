@@ -11214,7 +11214,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
             else:
                 # When skipna=False, nulls count as True
-                any_col = F.max(scol.cast("boolean"))
+                any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(True)))
                 applied.append(F.when(any_col.isNull(), True).otherwise(any_col))
 
         return self._result_aggregated(column_labels, applied)
