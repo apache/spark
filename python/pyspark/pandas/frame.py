@@ -11210,11 +11210,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             scol = self._internal.spark_column_for(label)
             if skipna:
                 # When skipna=True, nulls count as False
-                any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
+                any_col = F.max(scol.cast("boolean"))
                 applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
             else:
                 # When skipna=False, nulls count as True
-                any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(True)))
+                any_col = F.max(scol.cast("boolean"))
                 applied.append(F.when(any_col.isNull(), True).otherwise(any_col))
 
         return self._result_aggregated(column_labels, applied)
