@@ -41,7 +41,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -967,12 +967,15 @@ object MergeIntoTable {
           schemaChanges(currentElementType, updateElementType,
             originalTarget, originalSource, fieldPath ++ Seq("value"))
 
+      case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
+        Array(TableChange.updateColumnType(fieldPath, newType))
+
       case (currentType, newType) if currentType == newType =>
         // No change needed
         Array.empty[TableChange]
 
       case _ =>
-        // For now do not support type widening
+        // Do not support change between atomic and complex types for now
         throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
           originalTarget, originalSource, null)
     }
