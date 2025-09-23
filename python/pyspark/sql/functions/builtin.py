@@ -25245,11 +25245,11 @@ def make_timestamp_ntz(
 
     # Count keyword arguments for timestamp components
     timestamp_kwargs = [years, months, days, hours, mins, secs]
-    num_timestamp_kwargs = sum(1 for arg in timestamp_kwargs if arg is not None)
+    num_timestamp_kwargs = len([arg for arg in timestamp_kwargs if arg is not None])
 
     # Count keyword arguments for date/time
     datetime_kwargs = [date, time]
-    num_datetime_kwargs = sum(1 for arg in datetime_kwargs if arg is not None)
+    num_datetime_kwargs = len([arg for arg in datetime_kwargs if arg is not None])
 
     # 6-argument patterns (years, months, days, hours, mins, secs)
     if num_positional_args == 6 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 0:
@@ -25259,11 +25259,14 @@ def make_timestamp_ntz(
         )
     elif num_positional_args == 0 and num_timestamp_kwargs == 6 and num_datetime_kwargs == 0:
         # make_timestamp_ntz(years=y, months=mon, days=d, hours=h, mins=min, secs=s)
+        # All timestamp kwargs are guaranteed to be non-None since num_timestamp_kwargs == 6
+        assert years is not None and months is not None and days is not None
+        assert hours is not None and mins is not None and secs is not None
         return _invoke_function_over_columns(
             "make_timestamp_ntz", years, months, days, hours, mins, secs
         )
     elif num_positional_args > 0 and num_timestamp_kwargs > 0 and num_datetime_kwargs == 0:
-        # make_timestamp_ntz(y, mon, days=d, hours=h, mins=min, secs=s) => old code path
+        # make_timestamp_ntz(y, mon, days=d, hours=h, mins=min, secs=s)
         # Combine positional and keyword args for 6-parameter pattern
         combined_args = list(args) + [None] * (6 - len(args))
         if years is not None:
@@ -25280,15 +25283,19 @@ def make_timestamp_ntz(
             combined_args[5] = secs
 
         # Check if we have exactly 6 arguments total
-        if sum(1 for arg in combined_args if arg is not None) == 6:
+        if all(arg is not None for arg in combined_args):
+            # All arguments are guaranteed to be non-None, but MyPy can't infer this
+            # Use cast to inform MyPy about the type narrowing
+            from typing import cast
+
             return _invoke_function_over_columns(
                 "make_timestamp_ntz",
-                combined_args[0],
-                combined_args[1],
-                combined_args[2],
-                combined_args[3],
-                combined_args[4],
-                combined_args[5],
+                cast("ColumnOrName", combined_args[0]),
+                cast("ColumnOrName", combined_args[1]),
+                cast("ColumnOrName", combined_args[2]),
+                cast("ColumnOrName", combined_args[3]),
+                cast("ColumnOrName", combined_args[4]),
+                cast("ColumnOrName", combined_args[5]),
             )
 
     # date/time patterns
@@ -25297,6 +25304,8 @@ def make_timestamp_ntz(
         return _invoke_function_over_columns("make_timestamp_ntz", args[0], args[1])
     elif num_positional_args == 0 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 2:
         # make_timestamp_ntz(date=d, time=t)
+        # Both date and time are guaranteed to be non-None since num_datetime_kwargs == 2
+        assert date is not None and time is not None
         return _invoke_function_over_columns("make_timestamp_ntz", date, time)
     elif num_positional_args == 1 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 1:
         # make_timestamp_ntz(d, time=t)
@@ -25347,14 +25356,32 @@ def try_make_timestamp_ntz(
     ...
 
 
+@overload
+def try_make_timestamp_ntz(
+    *args: "ColumnOrName",
+    years: Optional["ColumnOrName"] = ...,
+    months: Optional["ColumnOrName"] = ...,
+    days: Optional["ColumnOrName"] = ...,
+    hours: Optional["ColumnOrName"] = ...,
+    mins: Optional["ColumnOrName"] = ...,
+    secs: Optional["ColumnOrName"] = ...,
+    date: Optional["ColumnOrName"] = ...,
+    time: Optional["ColumnOrName"] = ...,
+) -> Column:
+    ...
+
+
 @_try_remote_functions  # type: ignore[misc]
 def try_make_timestamp_ntz(
-    yearsOrDate: "ColumnOrName",
-    monthsOrTime: "ColumnOrName",
+    *args: "ColumnOrName",
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
     days: Optional["ColumnOrName"] = None,
     hours: Optional["ColumnOrName"] = None,
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
     Try to create local date-time from years, months, days, hours, mins, secs fields. Alternatively,
@@ -25368,36 +25395,41 @@ def try_make_timestamp_ntz(
 
     Parameters
     ----------
-    yearsOrDate : :class:`~pyspark.sql.Column` or column name
-        Either:
-
-        - The year to represent, from 1 to 9999;
-          for timestamp creation based on year, month, day, hour, minute and second.
-        - The date to represent, in valid DATE format;
-          for timestamp creation based on date and time.
-
-    monthsOrTime : :class:`~pyspark.sql.Column` or column name
-        Either:
-
-        - The month-of-year to represent, from 1 (January) to 12 (December);
-          for timestamp creation based on year, month, day, hour, minute and second.
-        - The time to represent, in valid TIME format;
-          for timestamp creation based on date and time.
+    years : :class:`~pyspark.sql.Column` or column name, optional
+        The year to represent, from 1 to 9999.
+        Required when creating timestamps from individual components.
+        Must be used with months, days, hours, mins, and secs.
+    months : :class:`~pyspark.sql.Column` or column name, optional
+        The month-of-year to represent, from 1 (January) to 12 (December).
+        Required when creating timestamps from individual components.
+        Must be used with years, days, hours, mins, and secs.
     days : :class:`~pyspark.sql.Column` or column name, optional
-        The day-of-month to represent, from 1 to 31;
-          only used for timestamp creation based on year, month, day, hour, minute and second.
+        The day-of-month to represent, from 1 to 31.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, hours, mins, and secs.
     hours : :class:`~pyspark.sql.Column` or column name, optional
-        The hour-of-day to represent, from 0 to 23;
-          only used for timestamp creation based on year, month, day, hour, minute and second.
+        The hour-of-day to represent, from 0 to 23.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, mins, and secs.
     mins : :class:`~pyspark.sql.Column` or column name, optional
-        The minute-of-hour to represent, from 0 to 59;
-          only used for timestamp creation based on year, month, day, hour, minute and second.
+        The minute-of-hour to represent, from 0 to 59.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and secs.
     secs : :class:`~pyspark.sql.Column` or column name, optional
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
-        The value can be either an integer like 13 , or a fraction like 13.123.
+        The value can be either an integer like 13, or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
-        to 0 and 1 minute is added to the final timestamp;
-        only used for timestamp creation based on year, month, day, hour, minute and second.
+        to 0 and 1 minute is added to the final timestamp.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and mins.
+    date : :class:`~pyspark.sql.Column` or column name, optional
+        The date to represent, in valid DATE format.
+        Required when creating timestamps from date and time components.
+        Must be used with time parameter only.
+    time : :class:`~pyspark.sql.Column` or column name, optional
+        The time to represent, in valid TIME format.
+        Required when creating timestamps from date and time components.
+        Must be used with date parameter only.
 
     Returns
     -------
@@ -25448,34 +25480,86 @@ def try_make_timestamp_ntz(
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    # Probe input arguments.
-    hasDays: bool = days is not None
-    hasHours: bool = hours is not None
-    hasMins: bool = mins is not None
-    hasSecs: bool = secs is not None
-    # Branch execution based on the number of input arguments.
-    if hasDays and hasHours and hasMins and hasSecs:
-        # Overload with inputs: years, months, days, hours, mins, secs.
+    # Count positional arguments
+    num_positional_args = len(args)
+
+    # Count keyword arguments for timestamp components
+    timestamp_kwargs = [years, months, days, hours, mins, secs]
+    num_timestamp_kwargs = len([arg for arg in timestamp_kwargs if arg is not None])
+
+    # Count keyword arguments for date/time
+    datetime_kwargs = [date, time]
+    num_datetime_kwargs = len([arg for arg in datetime_kwargs if arg is not None])
+
+    # 6-argument patterns (years, months, days, hours, mins, secs)
+    if num_positional_args == 6 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 0:
+        # try_make_timestamp_ntz(y, mon, d, h, min, s) => old code path
         return _invoke_function_over_columns(
-            "try_make_timestamp_ntz",
-            yearsOrDate,
-            monthsOrTime,
-            days,  # type: ignore[arg-type]
-            hours,  # type: ignore[arg-type]
-            mins,  # type: ignore[arg-type]
-            secs,  # type: ignore[arg-type]
+            "try_make_timestamp_ntz", args[0], args[1], args[2], args[3], args[4], args[5]
         )
-    elif not hasDays and not hasHours and not hasMins and not hasSecs:
-        # Overload with inputs: date, time.
-        return _invoke_function_over_columns("try_make_timestamp_ntz", yearsOrDate, monthsOrTime)
-    else:
-        raise PySparkValueError(
-            errorClass="INVALID_NUM_ARGS",
-            messageParameters={
-                "arg_name": "try_make_timestamp_ntz",
-                "num_args": "2 or 6",
-            },
+    elif num_positional_args == 0 and num_timestamp_kwargs == 6 and num_datetime_kwargs == 0:
+        # try_make_timestamp_ntz(years=y, months=mon, days=d, hours=h, mins=min, secs=s)
+        # All timestamp kwargs are guaranteed to be non-None since num_timestamp_kwargs == 6
+        assert years is not None and months is not None and days is not None
+        assert hours is not None and mins is not None and secs is not None
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz", years, months, days, hours, mins, secs
         )
+    elif num_positional_args > 0 and num_timestamp_kwargs > 0 and num_datetime_kwargs == 0:
+        # try_make_timestamp_ntz(y, mon, days=d, hours=h, mins=min, secs=s) => old code path
+        # Combine positional and keyword args for 6-parameter pattern
+        combined_args = list(args) + [None] * (6 - len(args))
+        if years is not None:
+            combined_args[0] = years
+        if months is not None:
+            combined_args[1] = months
+        if days is not None:
+            combined_args[2] = days
+        if hours is not None:
+            combined_args[3] = hours
+        if mins is not None:
+            combined_args[4] = mins
+        if secs is not None:
+            combined_args[5] = secs
+
+        # Check if we have exactly 6 arguments total
+        if all(arg is not None for arg in combined_args):
+            # All arguments are guaranteed to be non-None, but MyPy can't infer this
+            # Use cast to inform MyPy about the type narrowing
+            from typing import cast
+
+            return _invoke_function_over_columns(
+                "try_make_timestamp_ntz",
+                cast("ColumnOrName", combined_args[0]),
+                cast("ColumnOrName", combined_args[1]),
+                cast("ColumnOrName", combined_args[2]),
+                cast("ColumnOrName", combined_args[3]),
+                cast("ColumnOrName", combined_args[4]),
+                cast("ColumnOrName", combined_args[5]),
+            )
+        else:
+            # Incomplete arguments - return NULL for try function
+            return lit(None)
+
+    # date/time patterns
+    elif num_positional_args == 2 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 0:
+        # try_make_timestamp_ntz(d, t)
+        return _invoke_function_over_columns("try_make_timestamp_ntz", args[0], args[1])
+    elif num_positional_args == 0 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 2:
+        # try_make_timestamp_ntz(date=d, time=t)
+        # Both date and time are guaranteed to be non-None since num_datetime_kwargs == 2
+        assert date is not None and time is not None
+        return _invoke_function_over_columns("try_make_timestamp_ntz", date, time)
+    elif num_positional_args == 1 and num_timestamp_kwargs == 0 and num_datetime_kwargs == 1:
+        # try_make_timestamp_ntz(d, time=t)
+        if time is not None:
+            return _invoke_function_over_columns("try_make_timestamp_ntz", args[0], time)
+        elif date is not None:
+            return _invoke_function_over_columns("try_make_timestamp_ntz", date, args[0])
+
+    # Invalid argument combinations - return NULL for try_ functions
+    # For try_ functions, invalid inputs should return NULL, not raise exceptions
+    return lit(None)
 
 
 @_try_remote_functions
