@@ -56,7 +56,6 @@ from .type_table_utils import generate_table_diff, format_type_table
 @unittest.skipIf(
     not have_pandas
     or not have_pyarrow
-    or os.environ.get("PYTHON_MINIMUM", "false") == "true"
     or os.environ.get("ENV_NAME", "?") in ["PYTHON_MINIMUM", "PYTHON_PS_MINIMUM"],
     pandas_requirement_message
     or pyarrow_requirement_message
