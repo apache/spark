@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.{AliasAwareOutputExpression, AliasAwareQueryOutputOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
 
@@ -71,4 +71,15 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
 }
 
 trait OrderPreservingUnaryExecNode
-  extends UnaryExecNode with AliasAwareQueryOutputOrdering[SparkPlan]
+  extends UnaryExecNode with AliasAwareQueryOutputOrdering[SparkPlan] {
+
+  override def outputExpressions: Seq[NamedExpression] = child match {
+    case o: OrderPreservingUnaryExecNode => o.outputExpressions
+    case _ => child.output
+  }
+
+  override def orderingExpressions: Seq[SortOrder] = child match {
+    case o: OrderPreservingUnaryExecNode => o.orderingExpressions
+    case _ => child.outputOrdering
+  }
+}

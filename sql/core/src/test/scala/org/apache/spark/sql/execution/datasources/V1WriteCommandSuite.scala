@@ -63,6 +63,18 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
       hasLogicalSort: Boolean,
       orderingMatched: Boolean,
       hasEmpty2Null: Boolean = false)(query: => Unit): Unit = {
+    executeAndCheckOrderingAndCustomValidate(
+      hasLogicalSort, orderingMatched, hasEmpty2Null)(query)(_ => ())
+  }
+
+  /**
+   * Execute a write query and check ordering of the plan, then do custom validation
+   */
+  protected def executeAndCheckOrderingAndCustomValidate(
+      hasLogicalSort: Boolean,
+      orderingMatched: Boolean,
+      hasEmpty2Null: Boolean = false)(query: => Unit)(
+      customValidate: LogicalPlan => Unit): Unit = {
     var optimizedPlan: LogicalPlan = null
 
     val listener = new QueryExecutionListener {
@@ -102,6 +114,8 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
     val empty2nullExpr = optimizedPlan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
     assert(empty2nullExpr == hasEmpty2Null,
       s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: $empty2nullExpr. Plan:\n$optimizedPlan")
+
+    customValidate(optimizedPlan)
 
     spark.listenerManager.unregister(listener)
   }
@@ -387,6 +401,32 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
               |SELECT SUM(i) AS i, SUM(j) AS j, k
               |FROM t0 WHERE i > 0 GROUP BY k
               |""".stripMargin)
+        }
+      }
+    }
+  }
+
+  test("v1 write with sort by literal column preserve custom order") {
+    withPlannedWrite { _ =>
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(i INT, j INT, k STRING) USING PARQUET
+            |PARTITIONED BY (k)
+            |""".stripMargin)
+        executeAndCheckOrderingAndCustomValidate(hasLogicalSort = true, orderingMatched = true) {
+          sql(
+            """
+              |INSERT OVERWRITE t
+              |SELECT i, j, '0' as k FROM t0 SORT BY k, i
+              |""".stripMargin)
+        } { optimizedPlan =>
+          assert {
+            optimizedPlan.outputOrdering.exists {
+              case SortOrder(attr: AttributeReference, _, _, _) => attr.name == "i"
+              case _ => false
+            }
+          }
         }
       }
     }

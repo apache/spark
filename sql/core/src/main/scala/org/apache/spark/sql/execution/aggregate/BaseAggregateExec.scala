@@ -91,7 +91,7 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
-  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
+  override def outputExpressions: Seq[NamedExpression] = resultExpressions
 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
