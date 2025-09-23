@@ -398,48 +398,44 @@ class PipelineCommand(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        MISSING_DEPENDENCY_FIELD_NUMBER: builtins.int
-        missing_dependency: builtins.str
-        """Identifier for a dataset within the graph that the query function needed to know the schema
-        of but which had not yet been analyzed itself.
-        """
+        UNRESOLVED_DEPENDENCY_PLAN_FIELD_NUMBER: builtins.int
+        @property
+        def unresolved_dependency_plan(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            """The logical plan that the query function needed to eagerly analyze in order to know
+            the schema / isStreaming / etc of the plan it produced, but could not because it has
+            unresolved dependencies.
+            """
         def __init__(
             self,
             *,
-            missing_dependency: builtins.str | None = ...,
+            unresolved_dependency_plan: pyspark.sql.connect.proto.relations_pb2.Relation
+            | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_missing_dependency",
-                b"_missing_dependency",
-                "missing_dependency",
-                b"missing_dependency",
+                "reason", b"reason", "unresolved_dependency_plan", b"unresolved_dependency_plan"
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_missing_dependency",
-                b"_missing_dependency",
-                "missing_dependency",
-                b"missing_dependency",
+                "reason", b"reason", "unresolved_dependency_plan", b"unresolved_dependency_plan"
             ],
         ) -> None: ...
         def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_missing_dependency", b"_missing_dependency"],
-        ) -> typing_extensions.Literal["missing_dependency"] | None: ...
+            self, oneof_group: typing_extensions.Literal["reason", b"reason"]
+        ) -> typing_extensions.Literal["unresolved_dependency_plan"] | None: ...
 
     class QueryFunctionResult(google.protobuf.message.Message):
         """The result of executing a user-defined query function."""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        PLAN_FIELD_NUMBER: builtins.int
+        ANALYZED_PLAN_FIELD_NUMBER: builtins.int
         FAILURE_FIELD_NUMBER: builtins.int
         @property
-        def plan(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        def analyzed_plan(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """If the query function executed successfully, the unresolved logical plan produced by it."""
         @property
         def failure(self) -> global___PipelineCommand.QueryFunctionFailure:
@@ -447,29 +443,29 @@ class PipelineCommand(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            plan: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+            analyzed_plan: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
             failure: global___PipelineCommand.QueryFunctionFailure | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "analyzed_plan",
+                b"analyzed_plan",
                 "failure",
                 b"failure",
                 "flow_function_evaluation_result",
                 b"flow_function_evaluation_result",
-                "plan",
-                b"plan",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "analyzed_plan",
+                b"analyzed_plan",
                 "failure",
                 b"failure",
                 "flow_function_evaluation_result",
                 b"flow_function_evaluation_result",
-                "plan",
-                b"plan",
             ],
         ) -> None: ...
         def WhichOneof(
@@ -477,7 +473,7 @@ class PipelineCommand(google.protobuf.message.Message):
             oneof_group: typing_extensions.Literal[
                 "flow_function_evaluation_result", b"flow_function_evaluation_result"
             ],
-        ) -> typing_extensions.Literal["plan", "failure"] | None: ...
+        ) -> typing_extensions.Literal["analyzed_plan", "failure"] | None: ...
 
     class DefineFlow(google.protobuf.message.Message):
         """Request to define a flow targeting a dataset."""

@@ -94,16 +94,19 @@ message PipelineCommand {
 
   // Metadata about why a query function failed to be executed successfully.
   message QueryFunctionFailure {
-    // Identifier for a dataset within the graph that the query function needed to know the schema
-    // of but which had not yet been analyzed itself.
-    optional string missing_dependency = 1;
+    oneof reason {
+      // The logical plan that the query function needed to eagerly analyze in order to know
+      // the schema / isStreaming / etc of the plan it produced, but could not because it has
+      // unresolved dependencies.
+      spark.connect.Relation unresolved_dependency_plan = 1;
+    }
   }
 
   // The result of executing a user-defined query function.
   message QueryFunctionResult {
     oneof flow_function_evaluation_result {
       // If the query function executed successfully, the unresolved logical plan produced by it.
-      spark.connect.Relation plan = 1;
+      spark.connect.Relation analyzed_plan = 1;
 
       // If the query function failed, metadata about the failure.
       QueryFunctionFailure failure = 2;
