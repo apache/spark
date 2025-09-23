@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect
 
-import java.util.concurrent.ForkJoinPool
+import java.util.concurrent.Executors
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -146,7 +146,7 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     // global ExecutionContext has only 2 threads in Apache Spark CI
     // create own thread pool for four Futures used in this test
     val numThreads = 4
-    val fpool = new ForkJoinPool(numThreads)
+    val fpool = Executors.newFixedThreadPool(numThreads)
     val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     val q1 = Future {
