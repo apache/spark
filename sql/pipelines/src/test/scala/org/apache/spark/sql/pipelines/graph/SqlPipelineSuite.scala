@@ -1006,4 +1006,57 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       parameters = Map.empty
     )
   }
+
+  test("Streaming Table with watermark clause") {
+    withTempDir { tmpDir =>
+      spark.sql("SELECT * FROM RANGE(3)").write.format("parquet").mode("append")
+        .save(tmpDir.getCanonicalPath)
+
+      val externalTableIdent = fullyQualifiedIdentifier("t")
+      spark.sql(s"CREATE TABLE $externalTableIdent (id string, eventTime timestamp)")
+
+      withTable(externalTableIdent.quotedString) {
+        spark.sql(s"INSERT INTO $externalTableIdent VALUES ('a', timestamp_seconds(1))")
+        spark.sql(s"INSERT INTO $externalTableIdent VALUES ('b', timestamp_seconds(2))")
+        spark.sql(s"INSERT INTO $externalTableIdent VALUES ('a', timestamp_seconds(3))")
+
+        val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+          sqlText =
+            s"""
+               |CREATE STREAMING TABLE b
+               |AS
+               |SELECT
+               |    CAST(window.start AS LONG) AS wStart,
+               |    CAST(window.end AS LONG) AS wEnd,
+               |    id,
+               |    count(*) as cnt
+               |FROM
+               |    STREAM $externalTableIdent WATERMARK eventTime DELAY OF INTERVAL 10 seconds
+               |GROUP BY window(eventTime, '5 seconds'), id
+               |""".stripMargin
+        )
+
+        val updateContext = new PipelineUpdateContextImpl(
+          unresolvedDataflowGraph, eventCallback = _ => ())
+        updateContext.pipelineExecution.runPipeline()
+        updateContext.pipelineExecution.awaitCompletion()
+
+        val datasetFullyQualifiedName = fullyQualifiedIdentifier("b").quotedString
+
+        assert(
+          spark.sql(s"SELECT * FROM $datasetFullyQualifiedName").collect().toSet == Set()
+        )
+
+        spark.sql(s"INSERT INTO $externalTableIdent VALUES ('a', timestamp_seconds(20))")
+
+        updateContext.pipelineExecution.runPipeline()
+        updateContext.pipelineExecution.awaitCompletion()
+
+        assert(
+          spark.sql(s"SELECT * FROM $datasetFullyQualifiedName ORDER BY wStart, wEnd, id")
+            .collect().toSeq == Seq(Row(0, 5, 'a', 2), Row(0, 5, 'b', 1))
+        )
+      }
+    }
+  }
 }
