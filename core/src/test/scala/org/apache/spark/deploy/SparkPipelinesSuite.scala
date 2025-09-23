@@ -120,15 +120,18 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
   test("spark.api.mode arg") {
     var args = Array("--conf", "spark.api.mode=classic")
     intercept[SparkUserAppException] {
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc")
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args)
     }
     args = Array("-c", "spark.api.mode=classic")
     intercept[SparkUserAppException] {
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc")
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args)
     }
     args = Array("--conf", "spark.api.mode=CONNECT")
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
         Seq(
           "--conf",
           "spark.api.mode=connect",
@@ -139,7 +142,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
     )
     args = Array("--conf", "spark.api.mode=CoNNect")
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
         Seq(
           "--conf",
           "spark.api.mode=connect",
@@ -150,7 +154,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
     )
     args = Array("--conf", "spark.api.mode=connect")
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
         Seq(
           "--conf",
           "spark.api.mode=connect",
@@ -161,7 +166,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
     )
     args = Array("--conf", "spark.api.mode= connect")
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
         Seq(
           "--conf",
           "spark.api.mode=connect",
@@ -172,7 +178,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
     )
     args = Array("-c", "spark.api.mode=connect")
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
         Seq(
           "--conf",
           "spark.api.mode=connect",
