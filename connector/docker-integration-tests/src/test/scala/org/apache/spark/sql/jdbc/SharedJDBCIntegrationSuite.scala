@@ -55,13 +55,19 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("SPARK-52184: Wrap external engine syntax error") {
-    val e = intercept[SparkException] {
-
+    val ex = intercept[SparkException] {
       spark.read.format("jdbc")
         .option("url", jdbcUrl)
         .option("query", "THIS IS NOT VALID SQL").load()
     }
-    assert(e.getCondition.startsWith("JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR"))
+    checkErrorMatchPVals(
+      ex,
+      condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+      parameters = Map(
+        "jdbcQuery" -> "SELECT * FROM \\(.*",
+        "externalEngineQuery" -> ".*"
+      )
+    )
   }
 
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {
