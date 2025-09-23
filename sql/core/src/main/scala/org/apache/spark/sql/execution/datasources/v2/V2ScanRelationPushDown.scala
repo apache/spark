@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
@@ -39,30 +38,7 @@ import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructTyp
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
 
-object PostV2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
-  import V2ScanRelationPushDown._
-
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
-      createScanBuilder,
-      pruneColumns)
-
-    pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
-      pushDownRule(newPlan)
-    }
-  }
-
-  private def createScanBuilder(plan: LogicalPlan) = plan.transform {
-    case r @ DataSourceV2ScanRelation(relation, _, _, _, _)
-        if relation.getTagValue(V2_SCAN_BUILDER_HOLDER).nonEmpty =>
-      val sHolder = relation.getTagValue(V2_SCAN_BUILDER_HOLDER).get
-      sHolder.cachedScanRelation = Some(r)
-      sHolder
-  }
-}
-
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
-  val V2_SCAN_BUILDER_HOLDER = TreeNodeTag[ScanBuilderHolder]("v2_scan_builder_holder")
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -129,7 +105,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def rewriteAggregate(agg: Aggregate): LogicalPlan = agg.child match {
     case PhysicalOperation(project, Nil, holder @ ScanBuilderHolder(_, _,
-        r: SupportsPushDownAggregates, _)) if CollapseProject.canCollapseExpressions(
+        r: SupportsPushDownAggregates)) if CollapseProject.canCollapseExpressions(
         agg.aggregateExpressions, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val actualResultExprs = agg.aggregateExpressions.map(replaceAliasButKeepName(_, aliasMap))
@@ -398,25 +374,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val wrappedScan = getWrappedScan(scan, sHolder)
 
-      def sameOutput(
-        cachedOutput: Seq[AttributeReference], newOutput: Seq[AttributeReference]): Boolean = {
-        cachedOutput.size == newOutput.size &&
-          cachedOutput.zip(newOutput).forall { case (cachedField, newField) =>
-            cachedField.canonicalized.semanticEquals(newField.canonicalized)
-          }
-      }
-
-      val scanRelation: DataSourceV2ScanRelation = if (sHolder.cachedScanRelation.isEmpty) {
-        val relation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
-        // reuse sHolder to support column pruning after optimization
-        sHolder.output = output
-        sHolder.relation.setTagValue(V2_SCAN_BUILDER_HOLDER, sHolder)
-        relation
-      } else if (sameOutput(sHolder.output, output)) {
-        sHolder.cachedScanRelation.get
-      } else {
-        sHolder.cachedScanRelation.get.copy(scan = wrappedScan, output = output)
-      }
+      val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
 
       val projectionOverSchema =
         ProjectionOverSchema(output.toStructType, AttributeSet(output))
@@ -601,8 +559,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 case class ScanBuilderHolder(
     var output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
-    builder: ScanBuilder,
-    var cachedScanRelation: Option[DataSourceV2ScanRelation] = None) extends LeafNode {
+    builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
 
   var pushedOffset: Option[Int] = None

@@ -411,6 +411,18 @@ abstract class Optimizer(catalogManager: CatalogManager)
         s.withNewPlan(
           if (needTopLevelProject) newPlan else newPlan.child
         )
+      case s: Exists =>
+        // Find all the references (columns / attributes) in the child plan that are needed
+        // by the EXISTS expression.
+        val selectedRefrences =
+          s.plan.output.filter(s.joinCond.flatMap(_.references).contains)
+        val projectOverChild = Project(selectedRefrences, s.plan)
+        val Subquery(newPlan, _) =
+          Optimizer.this.execute(Subquery.fromExpression(s.withNewPlan(projectOverChild)))
+        // At this point we have an optimized subquery plan that we are going to attach
+        // to this subquery expression. Here we can safely remove any top level sort
+        // in the plan as tuples produced by a subquery are un-ordered.
+        s.withNewPlan(removeTopLevelSort(newPlan))
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach

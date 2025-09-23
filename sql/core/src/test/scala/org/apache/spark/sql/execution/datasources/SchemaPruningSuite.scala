@@ -658,20 +658,12 @@ abstract class SchemaPruningSuite
             |where not exists (select null from employees e where e.name.first = c.name.first
             |  and e.employer.name = c.employer.company.name)
             |""".stripMargin)
-        // TODO: SPARK-51381: Fix the schema pruning for V1 nested columns
-        if (SQLConf.get.getConf(SQLConf.USE_V1_SOURCE_LIST).contains(dataSourceName)) {
-          checkScan(query,
-            "struct<name:struct<first:string,middle:string,last:string>," +
-              "employer:struct<id:int,company:struct<name:string,address:string>>>",
-            "struct<name:struct<first:string,middle:string,last:string>," +
-              "employer:struct<name:string,address:string>>")
-        } else {
-          checkScan(query,
-            "struct<name:struct<first:string>," +
-              "employer:struct<company:struct<name:string>>>",
-            "struct<name:struct<first:string>," +
-              "employer:struct<name:string>>")
-        }
+        // TODO: SPARK-51381: Fix the schema pruning for nested columns
+        checkScan(query,
+          "struct<name:struct<first:string,middle:string,last:string>," +
+            "employer:struct<id:int,company:struct<name:string,address:string>>>",
+          "struct<name:struct<first:string,middle:string,last:string>," +
+            "employer:struct<name:string,address:string>>")
         checkAnswer(query, Row(3))
       }
     }
