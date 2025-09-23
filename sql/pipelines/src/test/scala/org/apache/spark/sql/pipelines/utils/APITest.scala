@@ -95,17 +95,17 @@ trait APITest
   /* SQL Language Tests */
   test("SQL Pipeline with mv, st, and flows") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("mv.sql", "st.sql"))
+      TestPipelineSpec(include = Seq("transformations/mvs/**", "transformations/st.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "st.sql",
+        name = "transformations/st.sql",
         contents = s"""
                      |CREATE STREAMING TABLE st;
                      |CREATE FLOW f AS INSERT INTO st BY NAME SELECT * FROM STREAM mv WHERE id > 2;
                      |""".stripMargin),
       PipelineSourceFile(
-        name = "mv.sql",
+        name = "transformations/mvs/mv.sql",
         contents = s"""
                      |CREATE MATERIALIZED VIEW mv
                      |AS SELECT * FROM RANGE(5);
@@ -118,11 +118,11 @@ trait APITest
 
   test("SQL Pipeline with CTE") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("*.sql"))
+      TestPipelineSpec(include = Seq("transformations/**"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
                      |CREATE MATERIALIZED VIEW a AS SELECT 1;
                      |CREATE MATERIALIZED VIEW d AS
@@ -143,11 +143,11 @@ trait APITest
 
   test("SQL Pipeline with subquery") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("transformations/**"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
                      |CREATE MATERIALIZED VIEW a AS SELECT * FROM RANGE(5);
                      |CREATE MATERIALIZED VIEW b AS SELECT * FROM RANGE(5)
@@ -161,11 +161,11 @@ trait APITest
 
   test("SQL Pipeline with join") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("transformations/**"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
                   |CREATE TEMPORARY VIEW a AS SELECT id FROM range(1,3);
                   |CREATE TEMPORARY VIEW b AS SELECT id FROM range(1,3);
@@ -180,11 +180,11 @@ trait APITest
 
   test("SQL Pipeline with aggregation") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("transformations/**"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
          |CREATE MATERIALIZED VIEW a AS SELECT id AS value, (id % 2) AS isOdd FROM range(1,10);
          |CREATE MATERIALIZED VIEW b AS SELECT isOdd, max(value) AS
@@ -198,11 +198,11 @@ trait APITest
 
   test("SQL Pipeline with table properties") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("transformations/**"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
            |CREATE MATERIALIZED VIEW mv TBLPROPERTIES ('prop1'='foo1', 'prop2'='bar2')
            |AS SELECT 1;
@@ -226,11 +226,11 @@ trait APITest
 
   test("SQL Pipeline with schema") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("transformations/**"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
                |CREATE MATERIALIZED VIEW a (id LONG COMMENT 'comment') AS SELECT * FROM RANGE(5);
                |CREATE STREAMING TABLE b (id LONG COMMENT 'comment') AS SELECT * FROM STREAM a;
@@ -253,17 +253,17 @@ trait APITest
   /* Mixed Language Tests */
   test("Pipeline with Python and SQL") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("definition.sql", "definition.py"))
+      TestPipelineSpec(include = Seq("transformations/**"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
                      |CREATE STREAMING TABLE c;
                      |CREATE MATERIALIZED VIEW a AS SELECT * FROM RANGE(5);
                      |""".stripMargin),
       PipelineSourceFile(
-        name = "definition.py",
+        name = "transformations/definition.py",
         contents = """
                      |from pyspark import pipelines as dp
                      |from pyspark.sql import DataFrame, SparkSession
@@ -287,11 +287,12 @@ trait APITest
 
   test("Pipeline referencing internal datasets") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("mv.py", "st.py", "definition.sql"))
+      TestPipelineSpec(include =
+        Seq("transformations/mv.py", "transformations/st.py", "transformations/definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "mv.py",
+        name = "transformations/mv.py",
         contents = """
                      |from pyspark import pipelines as dp
                      |from pyspark.sql import DataFrame, SparkSession
@@ -303,7 +304,7 @@ trait APITest
                      |  return spark.range(5)
                      |""".stripMargin),
       PipelineSourceFile(
-        name = "st.py",
+        name = "transformations/st.py",
         contents = """
                      |from pyspark import pipelines as dp
                      |from pyspark.sql import DataFrame, SparkSession
@@ -319,7 +320,7 @@ trait APITest
                      |  return spark.readStream.table("src")
                      |""".stripMargin),
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
                      |CREATE STREAMING TABLE c;
                      |CREATE FLOW f AS INSERT INTO c BY NAME SELECT * FROM STREAM b WHERE id > 2;
@@ -334,14 +335,15 @@ trait APITest
 
   test("Pipeline referencing external datasets") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("definition.py", "definition.sql"))
+      TestPipelineSpec(include =
+        Seq("transformations/definition.py", "transformations/definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     spark.sql(
       s"CREATE TABLE src " +
         s"AS SELECT * FROM RANGE(5)")
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.py",
+        name = "transformations/definition.py",
         contents = """
                      |from pyspark import pipelines as dp
                      |from pyspark.sql import DataFrame, SparkSession
@@ -357,7 +359,7 @@ trait APITest
                      |  return spark.readStream.table("src")
                      |""".stripMargin),
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
                      |CREATE STREAMING TABLE c;
                      |CREATE FLOW f AS INSERT INTO c BY NAME SELECT * FROM STREAM b WHERE id > 2;
@@ -373,11 +375,11 @@ trait APITest
   /* Python Language Tests */
   test("Python Pipeline with materialized_view, create_streaming_table, and append_flow") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("st.py", "mv.py"))
+      TestPipelineSpec(include = Seq("transformations/**"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "st.py",
+        name = "transformations/st.py",
         contents = s"""
            |from pyspark import pipelines as dp
            |from pyspark.sql import DataFrame, SparkSession
@@ -395,7 +397,7 @@ trait APITest
            |  return spark.readStream.table("src")
            |""".stripMargin),
       PipelineSourceFile(
-        name = "mv.py",
+        name = "transformations/mv.py",
         contents = s"""
            |from pyspark import pipelines as dp
            |from pyspark.sql import DataFrame, SparkSession
@@ -418,14 +420,14 @@ trait APITest
 
   test("Python Pipeline with temporary_view") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("definition.py"))
+      TestPipelineSpec(include = Seq("transformations/definition.py"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     spark.sql(
       s"CREATE TABLE src " +
         s"AS SELECT * FROM RANGE(5)")
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.py",
+        name = "transformations/definition.py",
         contents = """
                      |from pyspark import pipelines as dp
                      |from pyspark.sql import DataFrame, SparkSession
@@ -454,11 +456,11 @@ trait APITest
 
   test("Python Pipeline with partition columns") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("*.py"))
+      TestPipelineSpec(include = Seq("transformations/**"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.py",
+        name = "transformations/definition.py",
         contents = """
                      |from pyspark import pipelines as dp
                      |from pyspark.sql import DataFrame, SparkSession
@@ -489,11 +491,11 @@ trait APITest
 
   test("Pipeline with dry run") {
     val pipelineSpec =
-      TestPipelineSpec(include = Seq("definition.sql"))
+      TestPipelineSpec(include = Seq("transformations/definition.sql"))
     val pipelineConfig = TestPipelineConfiguration(pipelineSpec, dryRun = true)
     val sources = Seq(
       PipelineSourceFile(
-        name = "definition.sql",
+        name = "transformations/definition.sql",
         contents = """
                      |CREATE MATERIALIZED VIEW a AS SELECT * FROM RANGE(5);
                      |CREATE MATERIALIZED VIEW b AS SELECT * FROM a WHERE id > 2;
@@ -548,7 +550,8 @@ trait APITest
 
   private def runSelectiveRefreshTest(tc: SelectiveRefreshTestCase): Unit = {
     test(tc.name) {
-      val pipelineSpec = TestPipelineSpec(include = Seq("st.sql", "mv.sql"))
+      val pipelineSpec = TestPipelineSpec(include =
+        Seq("transformations/st.sql", "transformations/mv.sql"))
       val externalTable = s"source_data"
       // create initial source table
       spark.sql(s"DROP TABLE IF EXISTS $externalTable")
@@ -556,13 +559,13 @@ trait APITest
 
       val sources = Seq(
         PipelineSourceFile(
-          name = "st.sql",
+          name = "transformations/st.sql",
           contents = s"""
                         |CREATE STREAMING TABLE a AS SELECT * FROM STREAM $externalTable;
                         |CREATE STREAMING TABLE b AS SELECT * FROM STREAM $externalTable;
                         |""".stripMargin),
         PipelineSourceFile(
-          name = "mv.sql",
+          name = "transformations/mv.sql",
           contents = """
                        |CREATE MATERIALIZED VIEW mv AS SELECT * FROM a;
                        |""".stripMargin))
