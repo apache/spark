@@ -89,6 +89,12 @@ public class ParquetFooterReader {
       PartitionedFile file,
       boolean keepInputStreamOpen) throws IOException {
     var readOptions = HadoopReadOptions.builder(hadoopConf, file.toPath())
+        // `keepInputStreamOpen` is true only when parquet vectorized reader is used
+        // on the caller side, in such a case, the footer will be resued later on
+        // reading row groups, so here must read row groups metadata ahead.
+        // when false, the caller uses parquet-mr to read the file, only file metadata
+        // is required on planning phase, and parquet-mr will read the footer again
+        // on reading row groups.
         .withMetadataFilter(buildFilter(hadoopConf, file, !keepInputStreamOpen))
         .build();
     var inputFile = HadoopInputFile.fromPath(file.toPath(), hadoopConf);
