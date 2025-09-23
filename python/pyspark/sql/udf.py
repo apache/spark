@@ -125,11 +125,11 @@ def _create_py_udf(
     eval_type: Optional[int] = None
     if useArrow is None:
         # If the user doesn't explicitly set useArrow
-        from pyspark.sql.pandas.typehints import infer_eval_type_from_func
+        from pyspark.sql.pandas.typehints import infer_eval_type_for_udf
 
         try:
             # Try to infer the eval type from type hints
-            eval_type = infer_eval_type_from_func(f)
+            eval_type = infer_eval_type_for_udf(f)
         except Exception:
             warnings.warn("Cannot infer the eval type from type hints. ", UserWarning)
 
