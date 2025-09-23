@@ -1413,18 +1413,26 @@ class ArrowUDTFTestsMixin:
     def test_arrow_udtf_table_partition_by_single_column(self):
         @arrow_udtf(returnType="partition_key string, total_value bigint")
         class PartitionSumUDTF:
+            def __init__(self):
+                self._category = None
+                self._total = 0
+
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
                 table = pa.table(table_data)
 
                 # Each partition will have records with the same category
                 if table.num_rows > 0:
-                    category = table.column("category")[0].as_py()
-                    total = pa.compute.sum(table.column("value")).as_py()
+                    self._category = table.column("category")[0].as_py()
+                    self._total += pa.compute.sum(table.column("value")).as_py()
+                # Don't yield here - accumulate and yield in terminate
+                return iter(())
 
+            def terminate(self) -> Iterator["pa.Table"]:
+                if self._category is not None:
                     result_table = pa.table(
                         {
-                            "partition_key": pa.array([category], type=pa.string()),
-                            "total_value": pa.array([total], type=pa.int64()),
+                            "partition_key": pa.array([self._category], type=pa.string()),
+                            "total_value": pa.array([self._total], type=pa.int64()),
                         }
                     )
                     yield result_table
@@ -1452,19 +1460,28 @@ class ArrowUDTFTestsMixin:
     def test_arrow_udtf_table_partition_by_multiple_columns(self):
         @arrow_udtf(returnType="dept string, status string, count_employees bigint")
         class DeptStatusCountUDTF:
+            def __init__(self):
+                self._dept = None
+                self._status = None
+                self._count = 0
+
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
                 table = pa.table(table_data)
 
                 if table.num_rows > 0:
-                    dept = table.column("department")[0].as_py()
-                    status = table.column("status")[0].as_py()
-                    count = table.num_rows
+                    self._dept = table.column("department")[0].as_py()
+                    self._status = table.column("status")[0].as_py()
+                    self._count += table.num_rows
+                # Don't yield here - accumulate and yield in terminate
+                return iter(())
 
+            def terminate(self) -> Iterator["pa.Table"]:
+                if self._dept is not None and self._status is not None:
                     result_table = pa.table(
                         {
-                            "dept": pa.array([dept], type=pa.string()),
-                            "status": pa.array([status], type=pa.string()),
-                            "count_employees": pa.array([count], type=pa.int64()),
+                            "dept": pa.array([self._dept], type=pa.string()),
+                            "status": pa.array([self._status], type=pa.string()),
+                            "count_employees": pa.array([self._count], type=pa.int64()),
                         }
                     )
                     yield result_table
