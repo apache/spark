@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait AliasAwareOutputExpression extends SQLConfHelper {
   protected val aliasCandidateLimit = conf.getConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT)
-  protected def outputExpressions: Seq[NamedExpression]
+  def outputExpressions: Seq[NamedExpression]
   /**
    * This method can be used to strip expression which does not affect the result, for example:
    * strip the expression which is ordering agnostic for output ordering.
@@ -88,7 +88,7 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
  */
 trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
   extends AliasAwareOutputExpression { self: QueryPlan[T] =>
-  protected def orderingExpressions: Seq[SortOrder]
+  def orderingExpressions: Seq[SortOrder]
 
   override protected def strip(expr: Expression): Expression = expr match {
     case e: Empty2Null => strip(e.child)
