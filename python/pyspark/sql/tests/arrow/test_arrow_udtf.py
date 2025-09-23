@@ -1502,7 +1502,7 @@ class ArrowUDTFTestsMixin:
         result_df = self.spark.sql(
             """
             SELECT * FROM dept_status_count_udtf(
-                TABLE(SELECT * FROM employee_data) 
+                TABLE(SELECT * FROM employee_data)
                 PARTITION BY (department, status)
             ) ORDER BY dept, status
         """
@@ -1556,7 +1556,8 @@ class ArrowUDTFTestsMixin:
         # Test SQL registration and usage
         self.spark.udtf.register("test_scalar_first_table_second_udtf", ScalarFirstTableSecondUDTF)
         sql_result_df = self.spark.sql(
-            "SELECT * FROM test_scalar_first_table_second_udtf(4, TABLE(SELECT id FROM range(0, 8)))"
+            "SELECT * FROM test_scalar_first_table_second_udtf("
+            "4, TABLE(SELECT id FROM range(0, 8)))"
         )
         assertDataFrameEqual(sql_result_df, expected_df)
 
