@@ -20,7 +20,6 @@ package org.apache.spark.shuffle.api;
 import java.io.File;
 import java.io.IOException;
 
-import org.apache.spark.annotation.Private;
 
 /**
  * Optional extension for partition writing that is optimized for transferring a single
