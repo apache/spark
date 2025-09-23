@@ -34,6 +34,7 @@ This example demonstrates how to set up a custom data source without using exter
 **Step 1: Define the data source**
 
 .. code-block:: python
+
     from typing import Iterator, Tuple
 
     from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
@@ -113,6 +114,7 @@ Method that needs to be implemented for a capability:
 +------------+----------------------+------------------+
 
 .. code-block:: python
+
     from typing import Union
 
     from pyspark.sql.datasource import (
@@ -156,6 +158,7 @@ Implement a Batch Reader
 Define the reader logic to generate synthetic data. Use the `faker` library to populate each field in the schema.
 
 .. code-block:: python
+
     from typing import Dict
 
     class FakeDataSourceReader(DataSourceReader):
@@ -271,6 +274,7 @@ If the data source has low throughput and doesn't require partitioning, you can 
 One of simpleStreamReader() and streamReader() must be implemented for a readable streaming data source. And simpleStreamReader() will only be invoked when streamReader() is not implemented.
 
 .. code-block:: python
+
     from pyspark.sql.datasource import SimpleDataSourceStreamReader
 
 
@@ -287,6 +291,7 @@ One of simpleStreamReader() and streamReader() must be implemented for a readabl
 This is the same dummy streaming reader that generate 2 rows every batch implemented with SimpleDataSourceStreamReader interface.
 
 .. code-block:: python
+
     from typing import Iterator, Tuple
 
     from pyspark.sql.datasource import SimpleDataSourceStreamReader
@@ -327,6 +332,7 @@ Implement a Streaming Writer
 This is a streaming data writer that write the metadata information of each microbatch to a local path.
 
 .. code-block:: python
+
     from typing import Iterator, List, Optional
 
     from pyspark.sql import Row
@@ -355,18 +361,18 @@ This is a streaming data writer that write the metadata information of each micr
                cnt += 1
            return SimpleCommitMessage(partition_id=partition_id, count=cnt)
 
-       def commit(self, messages: List[Optional[WriterCommitMessage]], batchId: int) -> None:
+       def commit(self, messages: List[Optional[SimpleCommitMessage]], batchId: int) -> None:
            """
-           Receives a sequence of :class:`WriterCommitMessage` when all write tasks succeed and decides what to do with it.
+           Receives a sequence of :class:`SimpleCommitMessage` when all write tasks succeed and decides what to do with it.
            In this FakeStreamWriter, we write the metadata of the microbatch(number of rows and partitions) into a json file inside commit().
            """
            status = dict(num_partitions=len(messages), rows=sum(m.count for m in messages))
            with open(os.path.join(self.path, f"{batchId}.json"), "a") as file:
                file.write(json.dumps(status) + "\n")
 
-       def abort(self, messages: List[Optional[WriterCommitMessage]], batchId: int) -> None:
+       def abort(self, messages: List[Optional[SimpleCommitMessage]], batchId: int) -> None:
            """
-           Receives a sequence of :class:`WriterCommitMessage` from successful tasks when some tasks fail and decides what to do with it.
+           Receives a sequence of :class:`SimpleCommitMessage` from successful tasks when some tasks fail and decides what to do with it.
            In this FakeStreamWriter, we write a failure message into a txt file inside abort().
            """
            with open(os.path.join(self.path, f"{batchId}.txt"), "w") as file:
