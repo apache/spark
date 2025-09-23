@@ -240,7 +240,7 @@ class CLIUtilityTests(unittest.TestCase):
             catalog=None,
             database=None,
             configuration={},
-            libraries=[LibrariesGlob(include="subdir1/*")],
+            libraries=[LibrariesGlob(include="subdir1/**")],
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             outer_dir = Path(temp_dir)
@@ -283,7 +283,7 @@ class CLIUtilityTests(unittest.TestCase):
             catalog=None,
             database=None,
             configuration={},
-            libraries=[LibrariesGlob(include="*")],
+            libraries=[LibrariesGlob(include="./**")],
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             outer_dir = Path(temp_dir)
@@ -301,7 +301,7 @@ class CLIUtilityTests(unittest.TestCase):
             catalog=None,
             database=None,
             configuration={},
-            libraries=[LibrariesGlob(include="*")],
+            libraries=[LibrariesGlob(include="./**")],
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             outer_dir = Path(temp_dir)
@@ -450,6 +450,70 @@ class CLIUtilityTests(unittest.TestCase):
 
         result = parse_table_list("table1, table2 , table3")
         self.assertEqual(result, ["table1", "table2", "table3"])
+
+    def test_valid_glob_patterns(self):
+        """Test that valid glob patterns are accepted."""
+        from pyspark.pipelines.cli import validate_patch_glob_pattern
+
+        cases = {
+            # Simple file paths
+            "src/main.py": "src/main.py",
+            "data/file.sql": "data/file.sql",
+            # Folder paths ending with /** (normalized)
+            "src/**": "src/**/*",
+            "transformations/**": "transformations/**/*",
+            "notebooks/production/**": "notebooks/production/**/*",
+        }
+
+        for pattern, expected in cases.items():
+            with self.subTest(pattern=pattern):
+                self.assertEqual(validate_patch_glob_pattern(pattern), expected)
+
+    def test_invalid_glob_patterns(self):
+        """Test that invalid glob patterns are rejected."""
+        from pyspark.pipelines.cli import validate_patch_glob_pattern
+
+        invalid_patterns = [
+            "transformations/**/*.py",
+            "src/**/utils/*.py",
+            "*/main.py",
+            "src/*/test/*.py",
+            "**/*.py",
+            "data/*/file.sql",
+        ]
+
+        for pattern in invalid_patterns:
+            with self.subTest(pattern=pattern):
+                with self.assertRaises(PySparkException) as context:
+                    validate_patch_glob_pattern(pattern)
+                self.assertEqual(
+                    context.exception.getCondition(), "PIPELINE_SPEC_INVALID_GLOB_PATTERN"
+                )
+                self.assertEqual(
+                    context.exception.getMessageParameters(), {"glob_pattern": pattern}
+                )
+
+    def test_pipeline_spec_with_invalid_glob_pattern(self):
+        """Test that pipeline spec with invalid glob pattern is rejected."""
+        with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
+            tmpfile.write(
+                """
+                {
+                    "name": "test_pipeline",
+                    "libraries": [
+                        {"glob": {"include": "transformations/**/*.py"}}
+                    ]
+                }
+                """
+            )
+            tmpfile.flush()
+            with self.assertRaises(PySparkException) as context:
+                load_pipeline_spec(Path(tmpfile.name))
+            self.assertEqual(context.exception.getCondition(), "PIPELINE_SPEC_INVALID_GLOB_PATTERN")
+            self.assertEqual(
+                context.exception.getMessageParameters(),
+                {"glob_pattern": "transformations/**/*.py"},
+            )
 
 
 if __name__ == "__main__":
