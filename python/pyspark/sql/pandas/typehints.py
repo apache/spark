@@ -309,7 +309,7 @@ def infer_eval_type_for_udf(  # type: ignore[no-untyped-def]
 def infer_group_arrow_eval_type(
     sig: Signature,
     type_hints: Dict[str, Any],
-) -> Union["ArrowGroupedMapUDFType", "ArrowGroupedMapIterUDFType"]:
+) -> Optional[Union["ArrowGroupedMapUDFType", "ArrowGroupedMapIterUDFType"]]:
     from pyspark.sql.pandas.functions import PythonEvalType
 
     require_minimum_pyarrow_version()
@@ -381,7 +381,7 @@ def infer_group_arrow_eval_type(
 
 def infer_group_arrow_eval_type_from_func(
     f: "ArrowGroupedMapFunction",
-) -> Union["ArrowGroupedMapUDFType", "ArrowGroupedMapIterUDFType"]:
+) -> Optional[Union["ArrowGroupedMapUDFType", "ArrowGroupedMapIterUDFType"]]:
     argspec = getfullargspec(f)
     if len(argspec.annotations) > 0:
         try:

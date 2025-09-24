@@ -2994,8 +2994,6 @@ def read_udfs(pickleSer, infile, eval_type):
     ):
         import pyarrow as pa
 
-        print("NUM UDFS", num_udfs)
-
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
