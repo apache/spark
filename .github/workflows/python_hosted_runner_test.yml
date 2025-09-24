@@ -82,13 +82,9 @@ jobs:
           - >-
             pyspark-pandas-slow
           - >-
-            pyspark-pandas-connect-part0
+            pyspark-pandas-connect
           - >-
-            pyspark-pandas-connect-part1
-          - >-
-            pyspark-pandas-connect-part2
-          - >-
-            pyspark-pandas-connect-part3
+            pyspark-pandas-connect-slow
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       PYTHON_TO_TEST: python${{inputs.python}}
