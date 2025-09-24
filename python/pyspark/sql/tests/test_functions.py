@@ -819,7 +819,6 @@ class FunctionsTestsMixin:
 
     def test_make_timestamp_ntz(self):
         """Comprehensive test cases for make_timestamp_ntz with various arguments and edge cases."""
-        from pyspark.errors import PySparkValueError, PySparkTypeError
 
         # Test 1: Basic 6 positional arguments
         data = [(2024, 5, 22, 10, 30, 0)]
