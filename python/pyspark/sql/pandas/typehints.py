@@ -278,7 +278,8 @@ def infer_eval_type(
     return eval_type
 
 
-def infer_eval_type_from_func(  # type: ignore[no-untyped-def]
+# infer the eval type for @udf
+def infer_eval_type_for_udf(  # type: ignore[no-untyped-def]
     f,
 ) -> Optional[
     Union[
@@ -291,7 +292,8 @@ def infer_eval_type_from_func(  # type: ignore[no-untyped-def]
     ]
 ]:
     argspec = getfullargspec(f)
-    if len(argspec.annotations) > 0:
+    # different from inference of @pandas_udf/@arrow_udf, 0-arg is not allowed here
+    if len(argspec.args) > 0 and len(argspec.annotations) > 0:
         try:
             type_hints = get_type_hints(f)
         except NameError:
