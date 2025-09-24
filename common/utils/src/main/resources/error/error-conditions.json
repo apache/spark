@@ -577,17 +577,17 @@
     ],
     "sqlState" : "42846"
   },
-  "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE" : {
-    "message" : [
-      "Multiple aliases are not supported in watermark clause."
-    ],
-    "sqlState": "42000"
-  },
   "CANNOT_USE_KRYO" : {
     "message" : [
       "Cannot load Kryo serialization codec. Kryo serialization cannot be used in the Spark Connect client. Use Java serialization, provide a custom Codec, or use Spark Classic instead."
     ],
     "sqlState" : "22KD3"
+  },
+  "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE" : {
+    "message" : [
+      "Multiple aliases are not supported in watermark clause."
+    ],
+    "sqlState": "42000"
   },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
