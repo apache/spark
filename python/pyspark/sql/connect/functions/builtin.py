@@ -4034,48 +4034,26 @@ def make_timestamp_ntz(
 @overload
 def make_timestamp_ntz(
     *,
-    years: "ColumnOrName",
-    months: "ColumnOrName",
-    days: "ColumnOrName",
-    hours: "ColumnOrName",
-    mins: "ColumnOrName",
-    secs: "ColumnOrName",
-) -> Column:
-    ...
-
-
-@overload
-def make_timestamp_ntz(
-    *,
     date: "ColumnOrName",
     time: "ColumnOrName",
 ) -> Column:
     ...
 
 
-def make_timestamp_ntz(  # type: ignore[misc]
-    *args: "ColumnOrName",
+def make_timestamp_ntz(
     years: Optional["ColumnOrName"] = None,
     months: Optional["ColumnOrName"] = None,
     days: Optional["ColumnOrName"] = None,
     hours: Optional["ColumnOrName"] = None,
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
+    *,
     date: Optional["ColumnOrName"] = None,
     time: Optional["ColumnOrName"] = None,
 ) -> Column:
-    # 6 positional arguments: years, months, days, hours, mins, secs
-    if len(args) == 6 and all(
-        kw is None for kw in [years, months, days, hours, mins, secs, date, time]
-    ):
-        return _invoke_function_over_columns(
-            "make_timestamp_ntz", args[0], args[1], args[2], args[3], args[4], args[5]
-        )
-
-    # 6 keyword arguments: years, months, days, hours, mins, secs
-    elif (
-        len(args) == 0
-        and all(kw is not None for kw in [years, months, days, hours, mins, secs])
+    # 6 positional/keyword arguments: years, months, days, hours, mins, secs
+    if (
+        all(kw is not None for kw in [years, months, days, hours, mins, secs])
         and date is None
         and time is None
     ):
@@ -4093,8 +4071,7 @@ def make_timestamp_ntz(  # type: ignore[misc]
 
     # 2 keyword arguments: date, time
     elif (
-        len(args) == 0
-        and all(kw is None for kw in [years, months, days, hours, mins, secs])
+        all(kw is None for kw in [years, months, days, hours, mins, secs])
         and date is not None
         and time is not None
     ):
@@ -4107,8 +4084,6 @@ def make_timestamp_ntz(  # type: ignore[misc]
     # Error for invalid combinations
     # Build specific description of what user provided
     provided_parts = []
-    if len(args) > 0:
-        provided_parts.append(f"{len(args)} positional parameter(s)")
 
     provided_kwargs = []
     for name, value in [
@@ -4157,48 +4132,26 @@ def try_make_timestamp_ntz(
 @overload
 def try_make_timestamp_ntz(
     *,
-    years: "ColumnOrName",
-    months: "ColumnOrName",
-    days: "ColumnOrName",
-    hours: "ColumnOrName",
-    mins: "ColumnOrName",
-    secs: "ColumnOrName",
-) -> Column:
-    ...
-
-
-@overload
-def try_make_timestamp_ntz(
-    *,
     date: "ColumnOrName",
     time: "ColumnOrName",
 ) -> Column:
     ...
 
 
-def try_make_timestamp_ntz(  # type: ignore[misc]
-    *args: "ColumnOrName",
+def try_make_timestamp_ntz(
     years: Optional["ColumnOrName"] = None,
     months: Optional["ColumnOrName"] = None,
     days: Optional["ColumnOrName"] = None,
     hours: Optional["ColumnOrName"] = None,
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
+    *,
     date: Optional["ColumnOrName"] = None,
     time: Optional["ColumnOrName"] = None,
 ) -> Column:
-    # 6 positional arguments: years, months, days, hours, mins, secs
-    if len(args) == 6 and all(
-        kw is None for kw in [years, months, days, hours, mins, secs, date, time]
-    ):
-        return _invoke_function_over_columns(
-            "try_make_timestamp_ntz", args[0], args[1], args[2], args[3], args[4], args[5]
-        )
-
-    # 6 keyword arguments: years, months, days, hours, mins, secs
-    elif (
-        len(args) == 0
-        and all(kw is not None for kw in [years, months, days, hours, mins, secs])
+    # 6 positional/keyword arguments: years, months, days, hours, mins, secs
+    if (
+        all(kw is not None for kw in [years, months, days, hours, mins, secs])
         and date is None
         and time is None
     ):
@@ -4216,8 +4169,7 @@ def try_make_timestamp_ntz(  # type: ignore[misc]
 
     # 2 keyword arguments: date, time
     elif (
-        len(args) == 0
-        and all(kw is None for kw in [years, months, days, hours, mins, secs])
+        all(kw is None for kw in [years, months, days, hours, mins, secs])
         and date is not None
         and time is not None
     ):

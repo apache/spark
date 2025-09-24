@@ -732,27 +732,7 @@ class FunctionsTestsMixin:
             [(2024, 5, 22, 10, 30, 0)], ["year", "month", "day", "hour", "minute", "second"]
         )
 
-        # Test 1: Mixed positional and keyword arguments
-        with self.assertRaises(PySparkValueError) as context:
-            df.select(
-                F.make_timestamp_ntz(
-                    df.year, df.month, days=df.day, hours=df.hour, mins=df.minute, secs=df.second
-                )
-            ).collect()
-        error_msg = str(context.exception)
-        self.assertIn("WRONG_NUM_ARGS", error_msg)
-        self.assertIn(
-            "2 positional parameter(s) and keyword parameter(s): days, hours, mins, secs", error_msg
-        )
-
-        # Test 2: Wrong number of positional arguments
-        with self.assertRaises(PySparkValueError) as context:
-            df.select(F.make_timestamp_ntz(df.year, df.month, df.day)).collect()
-        error_msg = str(context.exception)
-        self.assertIn("WRONG_NUM_ARGS", error_msg)
-        self.assertIn("3 positional parameter(s)", error_msg)
-
-        # Test 3: Mixing timestamp and date/time keyword arguments
+        # Test 1: Mixing timestamp and date/time keyword arguments
         df_dt = self.spark.range(1).select(
             F.lit(datetime.date(2024, 5, 22)).alias("date"),
             F.lit(datetime.time(10, 30, 0)).alias("time"),
@@ -765,26 +745,26 @@ class FunctionsTestsMixin:
         self.assertIn("WRONG_NUM_ARGS", error_msg)
         self.assertIn("keyword parameter(s): years, date, time", error_msg)
 
-        # Test 4: Incomplete keyword arguments
+        # Test 2: Incomplete keyword arguments
         with self.assertRaises(PySparkValueError) as context:
             df.select(F.make_timestamp_ntz(years=df.year, months=df.month, days=df.day)).collect()
         error_msg = str(context.exception)
         self.assertIn("WRONG_NUM_ARGS", error_msg)
         self.assertIn("keyword parameter(s): years, months, days", error_msg)
 
-        # Test 5: Only positional arguments (too few)
-        with self.assertRaises(PySparkValueError) as context:
-            df.select(F.make_timestamp_ntz(df.year, df.month)).collect()
-        error_msg = str(context.exception)
-        self.assertIn("WRONG_NUM_ARGS", error_msg)
-        self.assertIn("2 positional parameter(s)", error_msg)
-
-        # Test 6: Only one keyword argument
+        # Test 3: Only one keyword argument
         with self.assertRaises(PySparkValueError) as context:
             df.select(F.make_timestamp_ntz(years=df.year)).collect()
         error_msg = str(context.exception)
         self.assertIn("WRONG_NUM_ARGS", error_msg)
         self.assertIn("keyword parameter(s): years", error_msg)
+
+        # Test 4: Only date without time
+        with self.assertRaises(PySparkValueError) as context:
+            df_dt.select(F.make_timestamp_ntz(date=df_dt.date)).collect()
+        error_msg = str(context.exception)
+        self.assertIn("WRONG_NUM_ARGS", error_msg)
+        self.assertIn("keyword parameter(s): date", error_msg)
 
     def test_make_timestamp_ntz_with_keywords(self):
         # Test with fractional seconds
