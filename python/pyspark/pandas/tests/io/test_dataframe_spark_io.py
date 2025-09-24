@@ -21,7 +21,6 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.testing.utils import have_openpyxl, openpyxl_requirement_message
 
@@ -96,17 +95,9 @@ class DataFrameSparkIOTestsMixin:
             self.assert_eq(ps.read_parquet(path2, pandas_metadata=True), expected2)
 
             expected3 = expected2.set_index("index", append=True)
-            # There is a bug in `to_parquet` from pandas 1.5.0 when writing MultiIndex.
-            # See https://github.com/pandas-dev/pandas/issues/48848 for the reported issue.
-            if LooseVersion(pd.__version__) > LooseVersion("1.5.0"):
-                expected_psdf = ps.read_parquet(path2, pandas_metadata=True).set_index(
-                    "index", append=True
-                )
-            else:
-                path3 = "{}/file3.parquet".format(tmp)
-                expected3.to_parquet(path3)
-                expected_psdf = ps.read_parquet(path3, pandas_metadata=True)
-
+            expected_psdf = ps.read_parquet(path2, pandas_metadata=True).set_index(
+                "index", append=True
+            )
             self.assert_eq(expected_psdf, expected3)
 
     def test_parquet_write(self):

@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.scheduler.rate
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 
 /**
  * Implements a proportional-integral-derivative (PID) controller which acts on

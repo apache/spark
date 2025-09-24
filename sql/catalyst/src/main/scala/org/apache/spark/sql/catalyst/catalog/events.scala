@@ -126,6 +126,7 @@ case class RenameTableEvent(
 object AlterTableKind extends Enumeration {
   val TABLE = "table"
   val DATASCHEMA = "dataSchema"
+  val SCHEMA = "schema"
   val STATS = "stats"
 }
 

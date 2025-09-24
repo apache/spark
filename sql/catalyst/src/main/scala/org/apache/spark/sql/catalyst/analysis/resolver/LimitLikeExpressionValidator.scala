@@ -21,14 +21,14 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLType, toSQLValue}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.IntegerType
 
 /**
  * The [[LimitLikeExpressionValidator]] validates [[LocalLimit]], [[GlobalLimit]], [[Offset]] or
  * [[Tail]] integer expressions.
  */
-class LimitLikeExpressionValidator {
+class LimitLikeExpressionValidator extends QueryErrorsBase {
   def validateLimitLikeExpr(
       limitLikeExpression: Expression,
       partiallyResolvedLimitLike: LogicalPlan

@@ -23,6 +23,8 @@ abstract class DeltaBasedMergeIntoTableSuiteBase extends MergeIntoTableSuiteBase
 
   import testImplicits._
 
+  override protected def deltaMerge = true
+
   test("merge into schema pruning with WHEN MATCHED clause (update)") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, country STRING, dep STRING",

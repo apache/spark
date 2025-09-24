@@ -38,7 +38,7 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -120,7 +120,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
-    assertThrows[IndexOutOfBoundsException] {
+    assertThrows[InvalidPlanInput] {
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder
@@ -131,14 +131,20 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("InvalidInputs") {
     // No Relation Set
-    intercept[IndexOutOfBoundsException](
+    val notSetException = intercept[InvalidPlanInput](
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(proto.Relation.newBuilder().build()))
+    assert(
+      notSetException.getMessage.contains(
+        "This oneOf field in spark.connect.Relation is not set: RELTYPE_NOT_SET"))
 
-    intercept[InvalidPlanInput](
+    val notSupportedException = intercept[InvalidPlanInput](
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
+    assert(
+      notSupportedException.getMessage.contains(
+        "This oneOf field message in spark.connect.Relation is not supported: UNKNOWN(999)"))
   }
 
   test("Simple Read") {
@@ -195,7 +201,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val sort = proto.Sort.newBuilder
       .addAllOrder(Seq(proto.Expression.SortOrder.newBuilder().build()).asJava)
       .build()
-    intercept[IndexOutOfBoundsException](
+    intercept[InvalidPlanInput](
       transform(proto.Relation.newBuilder().setSort(sort).build()),
       "No Input set.")
 
@@ -243,7 +249,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val msg = intercept[InvalidPlanInput] {
       transform(union)
     }
-    assert(msg.getMessage.contains("Unsupported set operation"))
+    assert(
+      msg.getMessage.contains("This enum value of spark.connect.SetOperation.SetOpType " +
+        "is invalid: SET_OP_TYPE_UNSPECIFIED(0)"))
 
     val res = transform(
       proto.Relation.newBuilder
@@ -952,5 +960,113 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     assert(plan.aggregateExpressions.forall(aggregateExpression =>
       !aggregateExpression.containsPattern(TreePattern.UNRESOLVED_ORDINAL)))
+  }
+
+  test("SPARK-51820 Literals in SortOrder should only be replaced under Sort node") {
+    val schema = StructType(Seq(StructField("col1", IntegerType)))
+    val data = Seq(InternalRow(1))
+    val inputRows = data.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+    val localRelation = createLocalRelationProto(schema, inputRows)
+
+    val sumFunction = proto.Expression
+      .newBuilder()
+      .setUnresolvedFunction(
+        proto.Expression.UnresolvedFunction
+          .newBuilder()
+          .setFunctionName("sum")
+          .addArguments(
+            proto.Expression
+              .newBuilder()
+              .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+                .newBuilder()
+                .setUnparsedIdentifier("col1"))))
+      .build()
+
+    val windowExpression = proto.Expression
+      .newBuilder()
+      .setWindow(
+        proto.Expression.Window
+          .newBuilder()
+          .setWindowFunction(sumFunction)
+          .addOrderSpec(
+            proto.Expression.SortOrder
+              .newBuilder()
+              .setChild(proto.Expression
+                .newBuilder()
+                .setLiteral(proto.Expression.Literal.newBuilder().setInteger(4)))
+              .setDirection(proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
+              .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)))
+      .build()
+
+    val aliasedWindowExpression = proto.Expression
+      .newBuilder()
+      .setAlias(
+        proto.Expression.Alias
+          .newBuilder()
+          .setExpr(windowExpression)
+          .addName("sum_over"))
+      .build()
+
+    val project = proto.Project
+      .newBuilder()
+      .setInput(localRelation)
+      .addExpressions(aliasedWindowExpression)
+      .build()
+
+    val result = transform(proto.Relation.newBuilder().setProject(project).build())
+    val df = Dataset.ofRows(spark, result)
+
+    val collected = df.collect()
+    assert(collected.length == 1)
+    assert(df.schema.fields.head.name == "sum_over")
+    assert(collected(0).getAs[Long]("sum_over") == 1L)
+  }
+
+  test("Time literal") {
+    val project = proto.Project.newBuilder
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setTime(
+            proto.Expression.Literal.newBuilder.getTimeBuilder
+              .setNano(86399999999999L)
+              .setPrecision(TimeType.MIN_PRECISION)))
+          .build())
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(
+            proto.Expression.Literal.newBuilder.setTime(
+              proto.Expression.Literal.newBuilder.getTimeBuilder
+                .setNano(86399999999999L)
+                .setPrecision(TimeType.MAX_PRECISION)))
+          .build())
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(
+            proto.Expression.Literal.newBuilder.setTime(
+              proto.Expression.Literal.newBuilder.getTimeBuilder
+                .setNano(86399999999999L)
+                .setPrecision(TimeType.DEFAULT_PRECISION)))
+          .build())
+      .addExpressions(proto.Expression.newBuilder
+        .setLiteral(proto.Expression.Literal.newBuilder.setTime(
+          proto.Expression.Literal.newBuilder.getTimeBuilder.setNano(86399999999999L)))
+        .build())
+      .build()
+
+    val logical = transform(proto.Relation.newBuilder.setProject(project).build())
+    val df = Dataset.ofRows(spark, logical)
+    assertResult(df.schema.fields(0).dataType)(TimeType(TimeType.MIN_PRECISION))
+    assertResult(df.schema.fields(1).dataType)(TimeType(TimeType.MAX_PRECISION))
+    assertResult(df.schema.fields(2).dataType)(TimeType(TimeType.DEFAULT_PRECISION))
+    assertResult(df.schema.fields(3).dataType)(TimeType(TimeType.DEFAULT_PRECISION))
+    assertResult(df.collect()(0).toString)(
+      InternalRow(
+        "23:59:59.999999999",
+        "23:59:59.999999999",
+        "23:59:59.999999999",
+        "23:59:59.999999999").toString)
   }
 }

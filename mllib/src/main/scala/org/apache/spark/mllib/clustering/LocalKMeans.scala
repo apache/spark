@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{NUM_ITERATIONS, POINT_OF_CENTER}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.linalg.Vectors

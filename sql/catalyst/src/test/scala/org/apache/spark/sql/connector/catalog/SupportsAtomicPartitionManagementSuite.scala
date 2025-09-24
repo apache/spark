@@ -53,7 +53,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("createPartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
@@ -72,7 +72,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("createPartitions failed if partition already exists") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("4")
@@ -94,7 +94,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("dropPartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
@@ -112,7 +112,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("purgePartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
     partTable.createPartitions(
       partIdents,
@@ -129,7 +129,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("dropPartitions failed if partition not exists") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("4")
@@ -147,7 +147,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("truncatePartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     partTable.createPartitions(
@@ -156,9 +156,9 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 3)
 
     partTable.withData(Array(
-      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
-      new BufferedRows("4").withRow(InternalRow(1, "def", "4")),
-      new BufferedRows("5").withRow(InternalRow(2, "zyx", "5"))
+      BufferedRows("3", partTable.columns()).withRow(InternalRow(0, "abc", "3")),
+      BufferedRows("4", partTable.columns()).withRow(InternalRow(1, "def", "4")),
+      BufferedRows("5", partTable.columns()).withRow(InternalRow(2, "zyx", "5"))
     ))
 
     partTable.truncatePartitions(Array(InternalRow("3"), InternalRow("4")))

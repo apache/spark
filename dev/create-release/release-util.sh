@@ -106,6 +106,9 @@ function get_release_info {
   fi
 
   NEXT_VERSION="$VERSION"
+  if [ -n "$RELEASE_VERSION" ]; then
+    SPARK_RELEASE_VERSION="$RELEASE_VERSION"
+  fi
   RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
   SHORT_VERSION=$(echo "$VERSION" | cut -d . -f 1-2)
   local REV=$(echo "$RELEASE_VERSION" | cut -d . -f 3)
@@ -136,6 +139,11 @@ function get_release_info {
 
   if [ "$GIT_BRANCH" = "master" ]; then
     RELEASE_VERSION="$RELEASE_VERSION-preview1"
+    if [ -n "$SPARK_RELEASE_VERSION" ]; then
+      # If we are building it from master branch, respect the RELEASE_VERSION
+      # set before. This is usually a preview release.
+      RELEASE_VERSION="$SPARK_RELEASE_VERSION"
+    fi
   fi
   export NEXT_VERSION
   export RELEASE_VERSION=$(read_config "Release" "$RELEASE_VERSION")
@@ -144,6 +152,7 @@ function get_release_info {
   if [ -n "$SPARK_RC_COUNT" ]; then
     RC_COUNT=$SPARK_RC_COUNT
   fi
+  export SPARK_RC_COUNT=$RC_COUNT
 
   # Check if the RC already exists, and if re-creating the RC, skip tag creation.
   RELEASE_TAG="v${RELEASE_VERSION}-rc${RC_COUNT}"

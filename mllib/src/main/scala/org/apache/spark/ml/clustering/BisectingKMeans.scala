@@ -180,6 +180,9 @@ class BisectingKMeansModel private[ml] (
   override def summary: BisectingKMeansSummary = super.summary
 
   override def estimatedSize: Long = SizeEstimator.estimate(parentModel)
+
+  // BisectingKMeans model hasn't supported offloading, so put an empty `saveSummary` here for now
+  override private[spark] def saveSummary(path: String): Unit = {}
 }
 
 object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {

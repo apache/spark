@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashSet
 
-import org.apache.spark.sql.catalyst.analysis.NaturalAndUsingJoinResolution
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, NaturalAndUsingJoinResolution}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.{JoinType, NaturalJoin, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * Resolves [[Join]] operator by resolving its left and right children and its join condition. If
@@ -83,16 +84,20 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
   private def resolveJoinChild(
       unresolvedJoin: Join,
       child: LogicalPlan): (LogicalPlan, NameScope) = {
-    scopes.withNewScope() {
-      expressionIdAssigner.withNewMapping(collectChildMapping = true) {
-        cteRegistry.withNewScopeUnderMultiChildOperator(
-          unresolvedOperator = unresolvedJoin,
-          unresolvedChild = child
-        ) {
-          val resolvedLeftOperator = resolver.resolve(child)
-          (resolvedLeftOperator, scopes.current)
-        }
-      }
+    expressionIdAssigner.pushMapping()
+    scopes.pushScope()
+    cteRegistry.pushScopeForMultiChildOperator(
+      unresolvedOperator = unresolvedJoin,
+      unresolvedChild = child
+    )
+
+    try {
+      val resolvedLeftOperator = resolver.resolve(child)
+      (resolvedLeftOperator, scopes.current)
+    } finally {
+      cteRegistry.popScope()
+      scopes.popScope()
+      expressionIdAssigner.popMapping(collectChildMapping = true)
     }
   }
 
@@ -203,7 +208,7 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       scopes.current.hiddenOutput.filter(_.qualifiedAccessOnly)
 
     val newProjectList =
-      if (unresolvedJoin.getTagValue(Resolver.TOP_LEVEL_OPERATOR).isEmpty) {
+      if (unresolvedJoin.getTagValue(ResolverTag.TOP_LEVEL_OPERATOR).isEmpty) {
         newOutputList ++ qualifiedAccessOnlyColumnsFromHiddenOutput
       } else {
         newOutputList
@@ -314,11 +319,33 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       hiddenOutput = Some(leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput)
     )
 
-    unresolvedCondition.map { condition =>
+    val resolvedCondition = unresolvedCondition.map { condition =>
       expressionResolver.resolveExpressionTreeInOperator(
         condition,
         unresolvedJoin
       )
+    }
+
+    validateJoinConditionDataType(resolvedCondition, unresolvedJoin)
+
+    resolvedCondition
+  }
+
+  private def validateJoinConditionDataType(
+      condition: Option[Expression],
+      unresolvedJoin: Join): Unit = {
+    condition match {
+      case Some(condition) =>
+        if (condition.dataType != BooleanType) {
+          unresolvedJoin.failAnalysis(
+            errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+            messageParameters = Map(
+              "joinCondition" -> toSQLExpr(condition),
+              "conditionType" -> toSQLType(condition.dataType)
+            )
+          )
+        }
+      case None =>
     }
   }
 }

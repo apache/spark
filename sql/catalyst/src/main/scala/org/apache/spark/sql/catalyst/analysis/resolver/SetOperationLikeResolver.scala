@@ -22,17 +22,10 @@ import java.util.HashSet
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, ExprId}
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Except,
-  Intersect,
-  LogicalPlan,
-  Project,
-  SetOperation,
-  Union
-}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{DataType, MapType, MetadataBuilder, VariantType}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
 /**
  * The [[SetOperationLikeResolver]] performs [[Union]], [[Intersect]] or [[Except]] operator
@@ -53,16 +46,17 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
    *  - Create a new mapping in [[ExpressionIdAssigner]] for the current operator. We only need the
    *    left child mapping, because that's the only child whose expression IDs get propagated
    *    upwards for [[Union]], [[Intersect]] or [[Except]]. This is an optimization.
-   *  - Perform individual output deduplication to handle the distinct union case described in
-   *    [[performIndividualOutputExpressionIdDeduplication]] scaladoc.
-   *  - Validate that child outputs have same length or throw "NUM_COLUMNS_MISMATCH" otherwise.
    *  - Compute widened data types for child output attributes using
    *    [[getTypeCoercion.findWiderTypeForTwo]] or throw "INCOMPATIBLE_COLUMN_TYPE" if coercion
    *    fails.
+   *  - Perform individual output deduplication to handle the distinct union case described in
+   *    [[performIndividualOutputExpressionIdDeduplication]] scaladoc.
+   *  - Validate that child outputs have same length or throw "NUM_COLUMNS_MISMATCH" otherwise.
    *  - Add [[Project]] with [[Cast]] on children needing attribute data type widening.
    *  - Assert that coerced outputs don't have conflicting expression IDs.
    *  - Merge transformed outputs using a separate logic for each operator type.
    *  - Store merged output in current [[NameScope]].
+   *  - Validate that the operator doesn't have unsupported data types in the output
    *  - Create a new mapping in [[ExpressionIdAssigner]] using the coerced and validated outputs.
    *  - Return the resolved operator with new children optionally wrapped in [[WithCTE]]. See
    *    [[CteScope]] scaladoc for more info.
@@ -74,30 +68,32 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       newOutputIds = childScopes.head.getOutputIds
     )
 
-    val (deduplicatedChildren, deduplicatedChildOutputs) =
-      performIndividualOutputExpressionIdDeduplication(
-        resolvedChildren,
-        childScopes.map(_.output),
-        unresolvedOperator
-      )
+    val childOutputs = childScopes.map(_.output)
 
-    val (newChildren, newChildOutputs) =
-      if (needToCoerceChildOutputs(deduplicatedChildOutputs, unresolvedOperator)) {
+    val (coercedChildren, coercedChildOutputs) =
+      if (needToCoerceChildOutputs(childOutputs, unresolvedOperator)) {
         coerceChildOutputs(
-          deduplicatedChildren,
-          deduplicatedChildOutputs,
-          validateAndDeduceTypes(unresolvedOperator, deduplicatedChildOutputs)
+          resolvedChildren,
+          childOutputs,
+          validateAndDeduceTypes(unresolvedOperator, childOutputs)
         )
       } else {
-        (deduplicatedChildren, deduplicatedChildOutputs)
+        (resolvedChildren, childOutputs)
       }
+
+    val (newChildren, newChildOutputs) =
+      performIndividualOutputExpressionIdDeduplication(
+        coercedChildren,
+        coercedChildOutputs,
+        unresolvedOperator
+      )
 
     ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(newChildOutputs)
 
     val output = mergeChildOutputs(unresolvedOperator, newChildOutputs)
     scopes.overwriteCurrent(output = Some(output), hiddenOutput = Some(output))
 
-    validateOutputs(unresolvedOperator, output)
+    OperatorWithUncomparableTypeValidator.validate(unresolvedOperator, output)
 
     val resolvedOperator = unresolvedOperator.withNewChildren(newChildren)
 
@@ -119,16 +115,20 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       unresolvedOperator: LogicalPlan): (Seq[LogicalPlan], Seq[NameScope]) = {
     unresolvedOperator.children.zipWithIndex.map {
       case (unresolvedChild, childIndex) =>
-        scopes.withNewScope() {
-          expressionIdAssigner.withNewMapping(collectChildMapping = childIndex == 0) {
-            cteRegistry.withNewScopeUnderMultiChildOperator(
-              unresolvedOperator = unresolvedOperator,
-              unresolvedChild = unresolvedChild
-            ) {
-              val resolvedChild = resolver.resolve(unresolvedChild)
-              (resolvedChild, scopes.current)
-            }
-          }
+        expressionIdAssigner.pushMapping()
+        scopes.pushScope()
+        cteRegistry.pushScopeForMultiChildOperator(
+          unresolvedOperator = unresolvedOperator,
+          unresolvedChild = unresolvedChild
+        )
+
+        try {
+          val resolvedChild = resolver.resolve(unresolvedChild)
+          (resolvedChild, scopes.current)
+        } finally {
+          cteRegistry.popScope()
+          scopes.popScope()
+          expressionIdAssigner.popMapping(collectChildMapping = childIndex == 0)
         }
     }.unzip
   }
@@ -358,48 +358,12 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
     }
   }
 
-  /**
-   * Validate outputs of [[SetOperation]].
-   * - [[MapType]] and [[VariantType]] are currently not supported for [[SetOperations]] and we need
-   * to throw a relevant user-facing error.
-   */
-  private def validateOutputs(unresolvedPlan: LogicalPlan, output: Seq[Attribute]): Unit = {
-    unresolvedPlan match {
-      case _: SetOperation =>
-        output.find(a => hasMapType(a.dataType)).foreach { mapCol =>
-          throwUnsupportedSetOperationOnMapType(mapCol, unresolvedPlan)
-        }
-        output.find(a => hasVariantType(a.dataType)).foreach { variantCol =>
-          throwUnsupportedSetOperationOnVariantType(variantCol, unresolvedPlan)
-        }
-      case _ =>
-    }
-  }
-
   private def getTypeCoercion: TypeCoercionBase = {
     if (conf.ansiEnabled) {
       AnsiTypeCoercion
     } else {
       TypeCoercion
     }
-  }
-
-  private def throwUnsupportedSetOperationOnMapType(
-      mapCol: Attribute,
-      unresolvedPlan: LogicalPlan): Unit = {
-    throw QueryCompilationErrors.unsupportedSetOperationOnMapType(
-      mapCol = mapCol,
-      origin = unresolvedPlan.origin
-    )
-  }
-
-  private def throwUnsupportedSetOperationOnVariantType(
-      variantCol: Attribute,
-      unresolvedPlan: LogicalPlan): Unit = {
-    throw QueryCompilationErrors.unsupportedSetOperationOnVariantType(
-      variantCol = variantCol,
-      origin = unresolvedPlan.origin
-    )
   }
 
   private def throwNumColumnsMismatch(
@@ -431,13 +395,5 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
       hint = "",
       origin = unresolvedOperator.origin
     )
-  }
-
-  private def hasMapType(dt: DataType): Boolean = {
-    dt.existsRecursively(_.isInstanceOf[MapType])
-  }
-
-  private def hasVariantType(dt: DataType): Boolean = {
-    dt.existsRecursively(_.isInstanceOf[VariantType])
   }
 }

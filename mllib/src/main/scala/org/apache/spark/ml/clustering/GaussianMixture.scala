@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.{unpackUpperTriangular, EPSILON}
 import org.apache.spark.ml.linalg._
@@ -223,6 +223,36 @@ class GaussianMixtureModel private[ml] (
   override def summary: GaussianMixtureSummary = super.summary
 
   override def estimatedSize: Long = SizeEstimator.estimate((weights, gaussians))
+
+  private[spark] def createSummary(
+    predictions: DataFrame, logLikelihood: Double, iteration: Int
+  ): Unit = {
+    val summary = new GaussianMixtureSummary(predictions,
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iteration)
+    setSummary(Some(summary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[(Double, Int)](
+      path, (summary.logLikelihood, summary.numIter),
+      (data, dos) => {
+        dos.writeDouble(data._1)
+        dos.writeInt(data._2)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    val (logLikelihood: Double, numIter: Int) = ReadWriteUtils.loadObjectFromLocal[(Double, Int)](
+      path,
+      dis => {
+        val logLikelihood = dis.readDouble()
+        val numIter = dis.readInt()
+        (logLikelihood, numIter)
+      }
+    )
+    createSummary(dataset, logLikelihood, numIter)
+  }
 }
 
 @Since("2.0.0")
@@ -453,11 +483,10 @@ class GaussianMixture @Since("2.0.0") (
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists))
       .setParent(this)
-    val summary = new GaussianMixtureSummary(model.transform(dataset),
-      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iteration)
+    model.createSummary(model.transform(dataset), logLikelihood, iteration)
     instr.logNamedValue("logLikelihood", logLikelihood)
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    model.setSummary(Some(summary))
+    instr.logNamedValue("clusterSizes", model.summary.clusterSizes)
+    model
   }
 
   private def trainImpl(

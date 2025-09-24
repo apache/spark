@@ -19,11 +19,13 @@ syntax = "proto3";
 
 package spark.connect;
 
+import "google/protobuf/timestamp.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // Dispatch object for pipelines commands. See each individual command for documentation.
 message PipelineCommand {
@@ -100,13 +102,10 @@ message PipelineCommand {
     optional string target_dataset_name = 3;
 
     // An unresolved relation that defines the dataset's flow.
-    optional spark.connect.Relation plan = 4;
+    optional spark.connect.Relation relation = 4;
 
     // SQL configurations set when running this flow.
     map<string, string> sql_conf = 5;
-
-    // If true, this flow will only be run once per full refresh.
-    optional bool once = 6;
   }
 
   // Resolves all datasets and flows and start a pipeline update. Should be called after all
@@ -114,20 +113,34 @@ message PipelineCommand {
   message StartRun {
     // The graph to start.
     optional string dataflow_graph_id = 1;
+
+    // List of dataset to reset and recompute.
+    repeated string full_refresh_selection = 2;
+    
+    // Perform a full graph reset and recompute.
+    optional bool full_refresh_all = 3;
+    
+    // List of dataset to update.
+    repeated string refresh_selection = 4;
+
+    // If true, the run will not actually execute any flows, but will only validate the graph and
+    // check for any errors. This is useful for testing and validation purposes.
+    optional bool dry = 5;
+  }
+
+  // Parses the SQL file and registers all datasets and flows.
+  message DefineSqlGraphElements {
+    // The graph to attach this dataset to.
+    optional string dataflow_graph_id = 1;
+
+    // The full path to the SQL file. Can be relative or absolute.
+    optional string sql_file_path = 2;
+
+    // The contents of the SQL file.
+    optional string sql_text = 3;
   }
 }
 
-// Parses the SQL file and registers all datasets and flows.
-message DefineSqlGraphElements {
-  // The graph to attach this dataset to.
-  optional string dataflow_graph_id = 1;
-
-  // The full path to the SQL file. Can be relative or absolute.
-  optional string sql_file_path = 2;
-
-  // The contents of the SQL file.
-  optional string sql_text = 3;
-}
 
 // Dispatch object for pipelines command results.
 message PipelineCommandResult {
@@ -157,10 +170,9 @@ message PipelineEventResult {
   PipelineEvent event = 1;
 }
 
-// An event emitted during the run of a graph.
 message PipelineEvent {
-  // The time of the event.
-  optional string timestamp = 1;
+  // The timestamp corresponding to when the event occurred.
+  google.protobuf.Timestamp timestamp = 1;
   // The message that should be displayed to users.
   optional string message = 2;
 }

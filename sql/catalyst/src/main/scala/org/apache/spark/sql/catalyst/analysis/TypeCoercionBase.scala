@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Project,
   ReplaceTable,
   Union,
+  UnionLoop,
   Unpivot
 }
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -49,6 +50,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
+import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
 import org.apache.spark.sql.types.DataType
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
@@ -247,6 +249,25 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
             s.copy(children = newChildren) -> attrMapping
           }
+
+        case s: UnionLoop
+            if s.childrenResolved && s.anchor.output.length == s.recursion.output.length
+              && !s.resolved =>
+          // If the anchor data type is wider than the recursion data type, we cast the recursion
+          // type to match the anchor type.
+          // On the other hand, we cannot cast the anchor type into a wider recursion type, as at
+          // this point the UnionLoopRefs inside the recursion are already resolved with the
+          // narrower anchor type.
+          val projectList = s.recursion.output.zip(s.anchor.output.map(_.dataType)).map {
+            case (attr, dt) =>
+              val widerType = findWiderTypeForTwo(attr.dataType, dt)
+              if (widerType.isDefined && widerType.get == dt) {
+                Alias(Cast(attr, dt), attr.name)()
+              } else {
+                throw cannotMergeIncompatibleDataTypesError(dt, attr.dataType)
+              }
+          }
+          s.copy(recursion = Project(projectList, s.recursion)) -> Nil
       }
     }
 

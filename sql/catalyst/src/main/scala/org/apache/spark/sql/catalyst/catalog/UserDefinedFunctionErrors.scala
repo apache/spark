@@ -98,6 +98,12 @@ object UserDefinedFunctionErrors extends QueryErrorsBase {
         "tempObjName" -> toSQLId(varName)))
   }
 
+  def cyclicFunctionReference(path: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CYCLIC_FUNCTION_REFERENCE",
+      messageParameters = Map("path" -> path))
+  }
+
   def routinePropertyTooLarge(routineName: String): Throwable = {
     new AnalysisException(
       errorClass = "USER_DEFINED_FUNCTIONS.ROUTINE_PROPERTY_TOO_LARGE",

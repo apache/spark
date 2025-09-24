@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Linter"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250519
+ENV FULL_REFRESH_DATE=20250618
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -93,7 +93,7 @@ RUN python3.11 -m pip install \
     'pandas' \
     'pandas-stubs==1.2.0.53' \
     'plotly>=4.8' \
-    'pyarrow>=19.0.0' \
+    'pyarrow>=21.0.0' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
     && python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \

@@ -53,6 +53,12 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.DATE => DateType
       case proto.DataType.KindCase.TIMESTAMP => TimestampType
       case proto.DataType.KindCase.TIMESTAMP_NTZ => TimestampNTZType
+      case proto.DataType.KindCase.TIME =>
+        if (t.getTime.hasPrecision) {
+          TimeType(t.getTime.getPrecision)
+        } else {
+          TimeType()
+        }
 
       case proto.DataType.KindCase.CALENDAR_INTERVAL => CalendarIntervalType
       case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
@@ -103,7 +109,7 @@ object DataTypeProtoConverter {
     ArrayType(toCatalystType(t.getElementType), t.getContainsNull)
   }
 
-  private def toCatalystStructType(t: proto.DataType.Struct): StructType = {
+  private[common] def toCatalystStructType(t: proto.DataType.Struct): StructType = {
     val fields = t.getFieldsList.asScala.toSeq.map { protoField =>
       val metadata = if (protoField.hasMetadata) {
         Metadata.fromJson(protoField.getMetadata)
@@ -148,7 +154,11 @@ object DataTypeProtoConverter {
     }
   }
 
-  def toConnectProtoType(t: DataType): proto.DataType = {
+  def toConnectProtoType(t: DataType, bytesToBinary: Boolean = false): proto.DataType = {
+    toConnectProtoTypeInternal(t, bytesToBinary)
+  }
+
+  private def toConnectProtoTypeInternal(t: DataType, bytesToBinary: Boolean): proto.DataType = {
     t match {
       case NullType => ProtoDataTypes.NullType
 
@@ -204,6 +214,12 @@ object DataTypeProtoConverter {
 
       case TimestampNTZType => ProtoDataTypes.TimestampNTZType
 
+      case TimeType(precision) =>
+        proto.DataType
+          .newBuilder()
+          .setTime(proto.DataType.Time.newBuilder().setPrecision(precision).build())
+          .build()
+
       case CalendarIntervalType => ProtoDataTypes.CalendarIntervalType
 
       case YearMonthIntervalType(startField, endField) =>
@@ -229,15 +245,22 @@ object DataTypeProtoConverter {
           .build()
 
       case ArrayType(elementType: DataType, containsNull: Boolean) =>
-        proto.DataType
-          .newBuilder()
-          .setArray(
-            proto.DataType.Array
-              .newBuilder()
-              .setElementType(toConnectProtoType(elementType))
-              .setContainsNull(containsNull)
-              .build())
-          .build()
+        if (elementType == ByteType && bytesToBinary) {
+          proto.DataType
+            .newBuilder()
+            .setBinary(proto.DataType.Binary.newBuilder().build())
+            .build()
+        } else {
+          proto.DataType
+            .newBuilder()
+            .setArray(
+              proto.DataType.Array
+                .newBuilder()
+                .setElementType(toConnectProtoTypeInternal(elementType, bytesToBinary))
+                .setContainsNull(containsNull)
+                .build())
+            .build()
+        }
 
       case StructType(fields: Array[StructField]) =>
         val protoFields = fields.toImmutableArraySeq.map {
@@ -250,14 +273,14 @@ object DataTypeProtoConverter {
               proto.DataType.StructField
                 .newBuilder()
                 .setName(name)
-                .setDataType(toConnectProtoType(dataType))
+                .setDataType(toConnectProtoTypeInternal(dataType, bytesToBinary))
                 .setNullable(nullable)
                 .build()
             } else {
               proto.DataType.StructField
                 .newBuilder()
                 .setName(name)
-                .setDataType(toConnectProtoType(dataType))
+                .setDataType(toConnectProtoTypeInternal(dataType, bytesToBinary))
                 .setNullable(nullable)
                 .setMetadata(metadata.json)
                 .build()
@@ -278,8 +301,8 @@ object DataTypeProtoConverter {
           .setMap(
             proto.DataType.Map
               .newBuilder()
-              .setKeyType(toConnectProtoType(keyType))
-              .setValueType(toConnectProtoType(valueType))
+              .setKeyType(toConnectProtoTypeInternal(keyType, bytesToBinary))
+              .setValueType(toConnectProtoTypeInternal(valueType, bytesToBinary))
               .setValueContainsNull(valueContainsNull)
               .build())
           .build()
@@ -295,7 +318,7 @@ object DataTypeProtoConverter {
               .newBuilder()
               .setType("udt")
               .setPythonClass(pyudt.pyUDT)
-              .setSqlType(toConnectProtoType(pyudt.sqlType))
+              .setSqlType(toConnectProtoTypeInternal(pyudt.sqlType, bytesToBinary))
               .setSerializedPythonClass(pyudt.serializedPyClass)
               .build())
           .build()
@@ -316,7 +339,7 @@ object DataTypeProtoConverter {
             builder
               .setType("udt")
               .setJvmClass(className)
-              .setSqlType(toConnectProtoType(udt.sqlType))
+              .setSqlType(toConnectProtoTypeInternal(udt.sqlType, bytesToBinary))
 
             if (udt.pyUDT != null) {
               builder.setPythonClass(udt.pyUDT)

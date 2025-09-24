@@ -134,6 +134,7 @@ abstract class QueryStageExec extends LeafExecNode {
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     super.generateTreeString(depth,
       lastChildren,
@@ -143,10 +144,12 @@ abstract class QueryStageExec extends LeafExecNode {
       addSuffix,
       maxFields,
       printNodeId,
+      printOutputColumns,
       indent)
     lastChildren.add(true)
     plan.generateTreeString(
-      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
+      depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId,
+      printOutputColumns, indent)
     lastChildren.remove(lastChildren.size() - 1)
   }
 

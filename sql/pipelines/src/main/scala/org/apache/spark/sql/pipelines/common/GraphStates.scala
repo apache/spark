@@ -41,6 +41,28 @@ object FlowStatus {
   // This flow is idle because there are no updates to be made because all available data has
   // already been processed.
   case object IDLE extends FlowStatus
+
+  // check if the flow is in a terminal state
+  def isTerminal(status: FlowStatus): Boolean = status match {
+    case COMPLETED | FAILED | SKIPPED | STOPPED => true
+    case _ => false
+  }
+}
+
+sealed trait RunState
+
+object RunState {
+  // Run is currently executing queries.
+  case object RUNNING extends RunState
+
+  // Run is complete and all necessary resources are cleaned up.
+  case object COMPLETED extends RunState
+
+  // Run has run into an error that could not be recovered from.
+  case object FAILED extends RunState
+
+  // Run was canceled.
+  case object CANCELED extends RunState
 }
 
 // The type of the dataset.

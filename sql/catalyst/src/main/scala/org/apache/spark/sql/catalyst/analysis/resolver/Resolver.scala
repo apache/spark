@@ -21,7 +21,6 @@ import java.util.HashSet
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
   AnalysisErrorAt,
@@ -29,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   MultiInstanceRelation,
   RelationResolution,
   ResolvedInlineTable,
+  UnresolvedHaving,
   UnresolvedInlineTable,
   UnresolvedRelation,
   UnresolvedSubqueryColumnAliases
@@ -41,8 +41,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   ExprId
 }
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -94,6 +94,7 @@ class Resolver(
   private val filterResolver = new FilterResolver(this, expressionResolver)
   private val sortResolver = new SortResolver(this, expressionResolver)
   private val joinResolver = new JoinResolver(this, expressionResolver)
+  private val havingResolver = new HavingResolver(this, expressionResolver)
 
   /**
    * [[relationMetadataProvider]] is used to resolve metadata for relations. It's initialized with
@@ -110,7 +111,6 @@ class Resolver(
   private var relationMetadataProvider: RelationMetadataProvider = new MetadataResolver(
     catalogManager,
     relationResolution,
-    functionResolution,
     metadataResolverExtensions
   )
 
@@ -128,6 +128,11 @@ class Resolver(
    * Get the [[SubqueryRegistry]] which is a single instance per query resolution.
    */
   def getSubqueryRegistry: SubqueryRegistry = subqueryRegistry
+
+  /**
+   * Get the [[ViewResolver]] bound to the used [[Resolver]].
+   */
+  def getViewResolver: ViewResolver = viewResolver
 
   /**
    * This method is a top-level analysis entry point:
@@ -166,7 +171,7 @@ class Resolver(
 
     planLogger.logPlanResolutionEvent(planAfterSubstitution, "Main resolution")
 
-    planAfterSubstitution.setTagValue(Resolver.TOP_LEVEL_OPERATOR, ())
+    planAfterSubstitution.setTagValue(ResolverTag.TOP_LEVEL_OPERATOR, ())
 
     resolve(planAfterSubstitution)
   }
@@ -184,7 +189,10 @@ class Resolver(
    * producing a fully resolved plan or a descriptive error message.
    */
   override def resolve(unresolvedPlan: LogicalPlan): LogicalPlan = {
-    withOrigin(unresolvedPlan.origin) {
+    val previousOrigin = CurrentOrigin.get
+    CurrentOrigin.set(unresolvedPlan.origin)
+
+    try {
       planLogger.logPlanResolutionEvent(unresolvedPlan, "Unresolved plan")
 
       val resolvedPlan =
@@ -201,6 +209,8 @@ class Resolver(
             aggregateResolver.resolve(unresolvedAggregate)
           case unresolvedFilter: Filter =>
             filterResolver.resolve(unresolvedFilter)
+          case unresolvedHaving: UnresolvedHaving =>
+            havingResolver.resolve(unresolvedHaving)
           case unresolvedSubqueryColumnAliases: UnresolvedSubqueryColumnAliases =>
             resolveSubqueryColumnAliases(unresolvedSubqueryColumnAliases)
           case unresolvedSubqueryAlias: SubqueryAlias =>
@@ -245,6 +255,8 @@ class Resolver(
             resolveSupervisingCommand(supervisingCommand)
           case repartition: Repartition =>
             resolveRepartition(repartition)
+          case sample: Sample =>
+            resolveSample(sample)
           case _ =>
             tryDelegateResolutionToExtension(unresolvedPlan).getOrElse {
               handleUnmatchedOperator(unresolvedPlan)
@@ -260,6 +272,8 @@ class Resolver(
       resolvedPlan.copyTagsFrom(unresolvedPlan)
 
       resolvedPlan
+    } finally {
+      CurrentOrigin.set(previousOrigin)
     }
   }
 
@@ -279,19 +293,27 @@ class Resolver(
     for (cteRelation <- unresolvedWith.cteRelations) {
       val (cteName, ctePlan, _) = cteRelation
 
-      val resolvedCtePlan = scopes.withNewScope() {
-        expressionIdAssigner.withNewMapping() {
-          cteRegistry.withNewScope() {
-            resolve(ctePlan)
-          }
-        }
+      expressionIdAssigner.pushMapping()
+      scopes.pushScope()
+      cteRegistry.pushScope()
+
+      val resolvedCtePlan = try {
+        resolve(ctePlan)
+      } finally {
+        cteRegistry.popScope()
+        scopes.popScope()
+        expressionIdAssigner.popMapping()
       }
 
       cteRegistry.currentScope.registerCte(cteName, CTERelationDef(resolvedCtePlan))
     }
 
-    val resolvedChild = cteRegistry.withNewScope() {
+    cteRegistry.pushScope()
+
+    val resolvedChild = try {
       resolve(unresolvedWith.child)
+    } finally {
+      cteRegistry.popScope()
     }
 
     cteRegistry.currentScope.tryPutWithCTE(
@@ -307,12 +329,16 @@ class Resolver(
    */
   private def handleResolvedWithCte(withCte: WithCTE): LogicalPlan = {
     val resolvedCteDefs = withCte.cteDefs.map { cteDef =>
-      scopes.withNewScope() {
-        expressionIdAssigner.withNewMapping() {
-          cteRegistry.withNewScope() {
-            resolve(cteDef).asInstanceOf[CTERelationDef]
-          }
-        }
+      expressionIdAssigner.pushMapping()
+      scopes.pushScope()
+      cteRegistry.pushScope()
+
+      try {
+        resolve(cteDef).asInstanceOf[CTERelationDef]
+      } finally {
+        cteRegistry.popScope()
+        scopes.popScope()
+        expressionIdAssigner.popMapping()
       }
     }
 
@@ -450,12 +476,18 @@ class Resolver(
 
   /**
    * [[Distinct]] operator doesn't require any special resolution.
+   * We validate results of the resolution using the [[OperatorWithUncomparableTypeValidator]]
+   * ([[MapType]], [[VariantType]], [[GeometryType]] and [[GeographyType]] are not supported
+   * under [[Distinct]] operator).
    *
    * `hiddenOutput` and `availableAliases` are reset when [[Distinct]] is reached during tree
    * traversal.
    */
   private def resolveDistinct(unresolvedDistinct: Distinct): LogicalPlan = {
     val resolvedDistinct = unresolvedDistinct.copy(child = resolve(unresolvedDistinct.child))
+
+    OperatorWithUncomparableTypeValidator.validate(resolvedDistinct, scopes.current.output)
+
     scopes.overwriteCurrent(
       hiddenOutput = Some(scopes.current.output),
       availableAliases = Some(new HashSet[ExprId])
@@ -548,13 +580,17 @@ class Resolver(
 
   private def tryDelegateResolutionToExtension(
       unresolvedOperator: LogicalPlan): Option[LogicalPlan] = {
-    val resolutionResult = super.tryDelegateResolutionToExtension(unresolvedOperator, this)
+    val resolutionResult = runExtensions(unresolvedOperator)
     resolutionResult match {
       case Some(leafOperator: LeafNode) =>
         Some(handleLeafOperator(leafOperator))
       case other =>
         other
     }
+  }
+
+  private def runExtensions(unresolvedOperator: LogicalPlan): Option[LogicalPlan] = {
+    super.tryDelegateResolutionToExtension(unresolvedOperator, this)
   }
 
   /**
@@ -628,6 +664,14 @@ class Resolver(
    */
   private def resolveRepartition(repartition: Repartition): LogicalPlan = {
     repartition.copy(child = resolve(repartition.child))
+  }
+
+  /**
+   * Resolve [[Sample]] operator. Its resolution doesn't require any specific logic (besides
+   * child resolution).
+   */
+  private def resolveSample(sample: Sample): LogicalPlan = {
+    sample.copy(child = resolve(sample.child))
   }
 
   private def createCteRelationRef(name: String, cteRelationDef: CTERelationDef): LogicalPlan = {
@@ -740,11 +784,6 @@ class Resolver(
 }
 
 object Resolver {
-
-  /**
-   * Marks the operator as the top-most operator in a query or a view.
-   */
-  val TOP_LEVEL_OPERATOR = TreeNodeTag[Unit]("top_level_operator")
 
   /**
    * Create a new instance of the [[RelationResolution]].

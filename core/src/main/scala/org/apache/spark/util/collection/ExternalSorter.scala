@@ -28,12 +28,12 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys.{NUM_BYTES, TASK_ATTEMPT_ID}
 import org.apache.spark.serializer._
 import org.apache.spark.shuffle.{ShufflePartitionPairsWriter, ShuffleWriteMetricsReporter}
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
-import org.apache.spark.shuffle.checksum.ShuffleChecksumSupport
+import org.apache.spark.shuffle.checksum.{RowBasedChecksum, ShuffleChecksumSupport}
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
 import org.apache.spark.util.{CompletionIterator, Utils => TryUtils}
 
@@ -97,7 +97,8 @@ private[spark] class ExternalSorter[K, V, C](
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
-    serializer: Serializer = SparkEnv.get.serializer)
+    serializer: Serializer = SparkEnv.get.serializer,
+    rowBasedChecksums: Array[RowBasedChecksum] = Array.empty)
   extends Spillable[WritablePartitionedPairCollection[K, C]](context.taskMemoryManager())
   with Logging with ShuffleChecksumSupport {
 
@@ -142,9 +143,15 @@ private[spark] class ExternalSorter[K, V, C](
   private val forceSpillFiles = new ArrayBuffer[SpilledFile]
   @volatile private var readingIterator: SpillableIterator = null
 
+  /** Checksum calculator for each partition. Empty when shuffle checksum disabled. */
   private val partitionChecksums = createPartitionChecksums(numPartitions, conf)
 
   def getChecksums: Array[Long] = getChecksumValues(partitionChecksums)
+
+  def getRowBasedChecksums: Array[RowBasedChecksum] = rowBasedChecksums
+
+  def getAggregatedChecksumValue: Long =
+    RowBasedChecksum.getAggregatedChecksumValue(rowBasedChecksums)
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the
@@ -197,16 +204,24 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         addElementsRead()
         kv = records.next()
-        map.changeValue((actualPartitioner.getPartition(kv._1), kv._1), update)
+        val partitionId = actualPartitioner.getPartition(kv._1)
+        map.changeValue((partitionId, kv._1), update)
         maybeSpillCollection(usingMap = true)
+        if (rowBasedChecksums.nonEmpty) {
+          rowBasedChecksums(partitionId).update(kv._1, kv._2)
+        }
       }
     } else {
       // Stick values into our buffer
       while (records.hasNext) {
         addElementsRead()
         val kv = records.next()
-        buffer.insert(actualPartitioner.getPartition(kv._1), kv._1, kv._2.asInstanceOf[C])
+        val partitionId = actualPartitioner.getPartition(kv._1)
+        buffer.insert(partitionId, kv._1, kv._2.asInstanceOf[C])
         maybeSpillCollection(usingMap = false)
+        if (rowBasedChecksums.nonEmpty) {
+          rowBasedChecksums(partitionId).update(kv._1, kv._2)
+        }
       }
     }
   }

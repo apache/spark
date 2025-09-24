@@ -25,7 +25,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.LogKeys.{COST, INIT_MODE, NUM_ITERATIONS, TOTAL_TIME}
-import org.apache.spark.internal.MDC
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
@@ -215,6 +214,42 @@ class KMeansModel private[ml] (
   override def summary: KMeansSummary = super.summary
 
   override def estimatedSize: Long = SizeEstimator.estimate(parentModel.clusterCenters)
+
+  private[spark] def createSummary(
+    predictions: DataFrame, numIter: Int, trainingCost: Double
+  ): Unit = {
+    val summary = new KMeansSummary(
+      predictions,
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      numIter,
+      trainingCost)
+
+    setSummary(Some(summary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[(Int, Double)](
+      path, (summary.numIter, summary.trainingCost),
+      (data, dos) => {
+        dos.writeInt(data._1)
+        dos.writeDouble(data._2)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    val (numIter: Int, trainingCost: Double) = ReadWriteUtils.loadObjectFromLocal[(Int, Double)](
+      path,
+      dis => {
+        val numIter = dis.readInt()
+        val trainingCost = dis.readDouble()
+        (numIter, trainingCost)
+      }
+    )
+    createSummary(dataset, numIter, trainingCost)
+  }
 }
 
 /** Helper class for storing model data */
@@ -414,16 +449,9 @@ class KMeans @Since("1.5.0") (
     }
 
     val model = copyValues(new KMeansModel(uid, oldModel).setParent(this))
-    val summary = new KMeansSummary(
-      model.transform(dataset),
-      $(predictionCol),
-      $(featuresCol),
-      $(k),
-      oldModel.numIter,
-      oldModel.trainingCost)
 
-    model.setSummary(Some(summary))
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
+    model.createSummary(model.transform(dataset), oldModel.numIter, oldModel.trainingCost)
+    instr.logNamedValue("clusterSizes", model.summary.clusterSizes)
     model
   }
 

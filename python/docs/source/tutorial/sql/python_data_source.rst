@@ -520,4 +520,6 @@ The following example demonstrates how to implement a basic Data Source using Ar
 Usage Notes
 -----------
 
-- During Data Source resolution, built-in and Scala/Java Data Sources take precedence over Python Data Sources with the same name; to explicitly use a Python Data Source, make sure its name does not conflict with the other Data Sources.
+- During Data Source resolution, built-in and Scala/Java Data Sources take precedence over Python Data Sources with the same name; to explicitly use a Python Data Source, make sure its name does not conflict with the other non-Python Data Sources.
+- It is allowed to register multiple Python Data Sources with the same name. Later registrations will overwrite earlier ones.
+- To automatically register a data source, export it as ``DefaultSource`` in a top level module with name prefix ``pyspark_``. See `pyspark_huggingface <https://github.com/huggingface/pyspark_huggingface>`_ for an example.

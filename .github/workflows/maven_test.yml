@@ -67,7 +67,7 @@ jobs:
           - hive2.3
         modules:
           - >-
-            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils,common#variant
+            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils,common#utils-java,common#variant
           - >-
             graphx,streaming,hadoop-cloud
           - >-
@@ -78,19 +78,13 @@ jobs:
             connector#kafka-0-10,connector#kafka-0-10-sql,connector#kafka-0-10-token-provider,connector#spark-ganglia-lgpl,connector#protobuf,connector#avro,connector#kinesis-asl
           - >-
             sql#api,sql#catalyst,resource-managers#yarn,resource-managers#kubernetes#core
+          - >-
+            connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [ "" ]
         excluded-tags: [ "" ]
         comment: [ "" ]
         include:
-          # Connect tests
-          - modules: connect
-            java: ${{ inputs.java }}
-            hadoop: ${{ inputs.hadoop }}
-            hive: hive2.3
-            # TODO(SPARK-47110): Reenble AmmoniteTest tests in Maven builds
-            excluded-tags: org.apache.spark.tags.AmmoniteTest
-            comment: ""
           # Hive tests
           - modules: sql#hive
             java: ${{ inputs.java }}
@@ -181,15 +175,24 @@ jobs:
       - name: Install Python packages (Python 3.11)
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |
-          python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
+          python3.11 -m pip install 'numpy>=1.22' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
           python3.11 -m pip list
-      # Run the tests.
+      # Run the tests using script command.
+      # BSD's script command doesn't support -c option, and the usage is different from Linux's one.
+      # The kind of script command is tested by `script -qec true`.
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
+        shell: |
+          bash -c "if script -qec true 2>/dev/null; then script -qec bash\ {0}; else script -qe /dev/null bash {0}; fi"
         run: |
+          # Fix for TTY related issues when launching the Ammonite REPL in tests.
+          export TERM=vt100
+          # `set -e` to make the exit status as expected due to use script command to run the commands
+          set -e
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
+          export INPUT_BRANCH=${{ inputs.branch }}
           export ENABLE_KINESIS_TESTS=0
           # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
           export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
@@ -203,12 +206,20 @@ jobs:
           if [[ "$INCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
-            ./build/mvn $MAVEN_CLI_OPTS -Dtest.exclude.tags="$EXCLUDED_TAGS" -Djava.version=${JAVA_VERSION/-ea} -pl sql/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
+            ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl sql/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
           elif [[ "$EXCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == *"sql#hive-thriftserver"* ]]; then
             # To avoid a compilation loop, for the `sql/hive-thriftserver` module, run `clean install` instead
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install -fae
+          elif [[ "$MODULES_TO_TEST" == *"sql#pipelines"* && "$INPUT_BRANCH" == "branch-4.0" ]]; then
+            # SPARK-52441: Remove sql/pipelines from TEST_MODULES for branch-4.0, this branch can be deleted after the EOL of branch-4.0.
+            TEST_MODULES=${TEST_MODULES/,sql\/pipelines/}
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Pjvm-profiler -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} test -fae
+          elif [[ "$MODULES_TO_TEST" == *"common#utils-java"* && "$INPUT_BRANCH" == "branch-4.0" ]]; then
+            # SPARK-53138: Remove common/utils-java from TEST_MODULES for branch-4.0, this branch can be deleted after the EOL of branch-4.0.
+            TEST_MODULES=${TEST_MODULES/,common\/utils-java/}
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Pjvm-profiler -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} test -fae
           else
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Pjvm-profiler -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} test -fae
           fi

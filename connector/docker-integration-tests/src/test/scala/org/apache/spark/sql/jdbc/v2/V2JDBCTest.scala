@@ -19,21 +19,24 @@ package org.apache.spark.sql.jdbc.v2
 
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample, Sort}
+import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
-import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFunSuite {
+private[v2] trait V2JDBCTest
+  extends DataSourcePushdownTestUtils
+  with DockerIntegrationFunSuite
+  with SharedSparkSession {
   import testImplicits._
 
   val catalogName: String
@@ -136,6 +139,59 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         "url" -> "jdbc:.*",
         "tableName" -> s"`$tbl`")
     )
+  }
+
+  case class PartitioningInfo(
+      numPartitions: String,
+      lowerBound: String,
+      upperBound: String,
+      partitionColumn: String)
+  val tableNameToPartinioningOptions: Map[String, PartitioningInfo] = Map(
+    "employee" -> PartitioningInfo("4", "1", "8", "dept"),
+    // new_table is used in "SPARK-37038: Test TABLESAMPLE" test
+    "new_table" -> PartitioningInfo("4", "1", "20", "col1")
+  )
+
+  protected def getPartitioningInfo(testTableName: String): (String, Option[PartitioningInfo]) = {
+    tableNameToPartinioningOptions.get(testTableName) match {
+      case Some(partitionInfo) =>
+        val partitioningInfoString = Seq(
+          s"'numPartitions' '${partitionInfo.numPartitions}'",
+          s"'lowerBound' '${partitionInfo.lowerBound}'",
+          s"'upperBound' '${partitionInfo.upperBound}'",
+          s"'partitionColumn' '${partitionInfo.partitionColumn}'"
+        ).mkString(",")
+        (s"WITH ($partitioningInfoString)", Some(partitionInfo))
+      case _ => ("", None)
+    }
+  }
+
+  private def getTableOptions(
+      tableName: String,
+      partitioningEnabled: Boolean): (String, Option[PartitioningInfo]) = {
+    if (partitioningEnabled) {
+      getPartitioningInfo(tableName)
+    } else {
+      ("", None)
+    }
+  }
+
+  // This method is used to verify that the number of JDBCRDD partitions is
+  // equal to numPartitions
+  def multiplePartitionAdditionalCheck(
+      df: DataFrame,
+      partitioningInfo: Option[PartitioningInfo]): Unit = {
+    def getJDBCRDD(rdd: RDD[_]): Option[JDBCRDD] = {
+      rdd match {
+        case jdbcRdd: JDBCRDD => Some(jdbcRdd)
+        case _ if rdd.firstParent != null => getJDBCRDD(rdd.firstParent)
+        case _ => None
+      }
+    }
+
+    val jdbcRdd = getJDBCRDD(df.rdd)
+    assert(jdbcRdd.isDefined && jdbcRdd.get.getNumPartitions ==
+      partitioningInfo.get.numPartitions.toInt)
   }
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
@@ -413,44 +469,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def supportsTableSample: Boolean = false
 
-  private def checkSamplePushed(df: DataFrame, pushed: Boolean = true): Unit = {
-    val sample = df.queryExecution.optimizedPlan.collect {
-      case s: Sample => s
-    }
-    if (pushed) {
-      assert(sample.isEmpty)
-    } else {
-      assert(sample.nonEmpty)
-    }
-  }
-
-  protected def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
-    val filter = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    if (pushed) {
-      assert(filter.isEmpty)
-    } else {
-      assert(filter.nonEmpty)
-    }
-  }
-
-  private def checkLimitPushed(df: DataFrame, limit: Option[Int]): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case relation: DataSourceV2ScanRelation => relation.scan match {
-        case v1: V1ScanWrapper =>
-          assert(v1.pushedDownOperators.limit == limit)
-      }
-    }
-  }
-
-  private def checkColumnPruned(df: DataFrame, col: String): Unit = {
-    val scan = df.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
-    assert(scan.schema.names.sameElements(Seq(col)))
-  }
-
   test("SPARK-48172: Test CONTAINS") {
     val df1 = spark.sql(
       s"""
@@ -680,58 +698,80 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(rows12(5).getString(0) === "special_character_underscorenot_present")
   }
 
-  test("SPARK-37038: Test TABLESAMPLE") {
+  val partitioningEnabledTestCase = Seq(true, false)
+  gridTest(
+    "SPARK-37038: Test TABLESAMPLE"
+  )(partitioningEnabledTestCase) { partitioningEnabled =>
     if (supportsTableSample) {
       withTable(s"$catalogName.new_table") {
         sql(s"CREATE TABLE $catalogName.new_table (col1 INT, col2 INT)")
         spark.range(10).select($"id" * 2, $"id" * 2 + 1).write.insertInto(s"$catalogName.new_table")
 
+        val (tableOptions, partitionInfo) = getTableOptions("new_table", partitioningEnabled)
         // sample push down + column pruning
-        val df1 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
-          " REPEATABLE (12345)")
+        val df1 = sql(s"SELECT col1 FROM $catalogName.new_table $tableOptions " +
+          s"TABLESAMPLE (BUCKET 6 OUT OF 10) REPEATABLE (12345)")
         checkSamplePushed(df1)
         checkColumnPruned(df1, "col1")
+        if (partitioningEnabled) {
+          multiplePartitionAdditionalCheck(df1, partitionInfo)
+        }
         assert(df1.collect().length < 10)
 
         // sample push down only
-        val df2 = sql(s"SELECT * FROM $catalogName.new_table TABLESAMPLE (50 PERCENT)" +
-          " REPEATABLE (12345)")
+        val df2 = sql(s"SELECT * FROM $catalogName.new_table $tableOptions " +
+          s"TABLESAMPLE (50 PERCENT) REPEATABLE (12345)")
         checkSamplePushed(df2)
+        if (partitioningEnabled) {
+          multiplePartitionAdditionalCheck(df1, partitionInfo)
+        }
         assert(df2.collect().length < 10)
 
         // sample(BUCKET ... OUT OF) push down + limit push down + column pruning
-        val df3 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
-          " LIMIT 2")
+        val df3 = sql(s"SELECT col1 FROM $catalogName.new_table $tableOptions " +
+          s"TABLESAMPLE (BUCKET 6 OUT OF 10) LIMIT 2")
         checkSamplePushed(df3)
         checkLimitPushed(df3, Some(2))
         checkColumnPruned(df3, "col1")
+        if (partitioningEnabled) {
+          multiplePartitionAdditionalCheck(df1, partitionInfo)
+        }
         assert(df3.collect().length <= 2)
 
         // sample(... PERCENT) push down + limit push down + column pruning
-        val df4 = sql(s"SELECT col1 FROM $catalogName.new_table" +
+        val df4 = sql(s"SELECT col1 FROM $catalogName.new_table $tableOptions" +
           " TABLESAMPLE (50 PERCENT) REPEATABLE (12345) LIMIT 2")
         checkSamplePushed(df4)
         checkLimitPushed(df4, Some(2))
         checkColumnPruned(df4, "col1")
+        if (partitioningEnabled) {
+          multiplePartitionAdditionalCheck(df1, partitionInfo)
+        }
         assert(df4.collect().length <= 2)
 
         // sample push down + filter push down + limit push down
-        val df5 = sql(s"SELECT * FROM $catalogName.new_table" +
+        val df5 = sql(s"SELECT * FROM $catalogName.new_table $tableOptions" +
           " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
         checkSamplePushed(df5)
         checkFilterPushed(df5)
         checkLimitPushed(df5, Some(2))
+        if (partitioningEnabled) {
+          multiplePartitionAdditionalCheck(df1, partitionInfo)
+        }
         assert(df5.collect().length <= 2)
 
         // sample + filter + limit + column pruning
         // sample pushed down, filer/limit not pushed down, column pruned
         // Todo: push down filter/limit
-        val df6 = sql(s"SELECT col1 FROM $catalogName.new_table" +
+        val df6 = sql(s"SELECT col1 FROM $catalogName.new_table $tableOptions" +
           " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
         checkSamplePushed(df6)
         checkFilterPushed(df6, false)
         checkLimitPushed(df6, None)
         checkColumnPruned(df6, "col1")
+        if (partitioningEnabled) {
+          multiplePartitionAdditionalCheck(df1, partitionInfo)
+        }
         assert(df6.collect().length <= 2)
 
         // sample + limit
@@ -752,26 +792,26 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
-  private def checkSortRemoved(df: DataFrame): Unit = {
-    val sorts = df.queryExecution.optimizedPlan.collect {
-      case s: Sort => s
-    }
-    assert(sorts.isEmpty)
-  }
-
-  private def checkOffsetPushed(df: DataFrame, offset: Option[Int]): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case relation: DataSourceV2ScanRelation => relation.scan match {
-        case v1: V1ScanWrapper =>
-          assert(v1.pushedDownOperators.offset == offset)
-      }
-    }
-  }
-
-  test("simple scan with LIMIT") {
+  gridTest("simple scan")(partitioningEnabledTestCase) { partitioningEnabled =>
+    val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
     val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
-      s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1")
+      s"${caseConvert("employee")} $tableOptions")
+    checkFilterPushed(df)
+    if (partitioningEnabled) {
+      multiplePartitionAdditionalCheck(df, partitionInfo)
+    }
+    val rows = df.collect()
+    assert(rows.length == 5)
+  }
+
+  gridTest("simple scan with LIMIT")(partitioningEnabledTestCase) { partitioningEnabled =>
+    val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
+    val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+      s"${caseConvert("employee")} $tableOptions WHERE dept > 0 LIMIT 1")
     checkLimitPushed(df, Some(1))
+    if (partitioningEnabled) {
+      multiplePartitionAdditionalCheck(df, partitionInfo)
+    }
     val rows = df.collect()
     assert(rows.length === 1)
     assert(rows(0).getString(0) === "amy")
@@ -779,12 +819,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(rows(0).getDouble(2) === 1000d)
   }
 
-  test("simple scan with top N") {
+  gridTest("simple scan with top N")(partitioningEnabledTestCase) { partitioningEnabled =>
     Seq(NullOrdering.values()).flatten.foreach { nullOrdering =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df1 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
-        s"${caseConvert("employee")} WHERE dept > 0 ORDER BY salary $nullOrdering LIMIT 1")
-      checkLimitPushed(df1, Some(1))
-      checkSortRemoved(df1)
+        s"${caseConvert("employee")} $tableOptions " +
+        s"WHERE dept > 0 ORDER BY salary $nullOrdering LIMIT 1")
+      if (partitioningEnabled) {
+        checkLimitRemoved(df1, false)
+        checkSortRemoved(df1, false)
+        multiplePartitionAdditionalCheck(df1, partitionInfo)
+      } else {
+        checkLimitPushed(df1, Some(1))
+        checkSortRemoved(df1)
+      }
       val rows1 = df1.collect()
       assert(rows1.length === 1)
       assert(rows1(0).getString(0) === "cathy")
@@ -792,9 +840,16 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(rows1(0).getDouble(2) === 1200d)
 
       val df2 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
-        s"${caseConvert("employee")} WHERE dept > 0 ORDER BY bonus DESC $nullOrdering LIMIT 1")
-      checkLimitPushed(df2, Some(1))
-      checkSortRemoved(df2)
+        s"${caseConvert("employee")} $tableOptions " +
+        s"WHERE dept > 0 ORDER BY bonus DESC $nullOrdering LIMIT 1")
+      if (partitioningEnabled) {
+        checkLimitRemoved(df2, false)
+        checkSortRemoved(df2, false)
+        multiplePartitionAdditionalCheck(df2, partitionInfo)
+      } else {
+        checkLimitPushed(df2, Some(1))
+        checkSortRemoved(df2)
+      }
       val rows2 = df2.collect()
       assert(rows2.length === 1)
       assert(rows2(0).getString(0) === "david")
@@ -803,22 +858,40 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
-  test("simple scan with OFFSET") {
+  gridTest("simple scan with OFFSET")(partitioningEnabledTestCase) { partitioningEnabled =>
+    val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
     val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
-      s"${caseConvert("employee")} WHERE dept > 0 OFFSET 4")
-    checkOffsetPushed(df, Some(4))
+      s"${caseConvert("employee")} $tableOptions WHERE dept > 0 OFFSET 4")
+    if (partitioningEnabled) {
+      // Offset is not supported when numPartitions > 1
+      checkOffsetRemoved(df, false)
+      multiplePartitionAdditionalCheck(df, partitionInfo)
+    } else {
+      checkOffsetPushed(df, Some(4))
+    }
     val rows = df.collect()
     assert(rows.length === 1)
+    assert(rows(0).getString(0) === "jen")
     assert(rows(0).getString(0) === "jen")
     assert(rows(0).getDecimal(1) === new java.math.BigDecimal("12000.00"))
     assert(rows(0).getDouble(2) === 1200d)
   }
 
-  test("simple scan with LIMIT and OFFSET") {
+  gridTest(
+    "simple scan with LIMIT and OFFSET"
+  )(partitioningEnabledTestCase) { partitioningEnabled =>
+    val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
     val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
-      s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1 OFFSET 2")
-    checkLimitPushed(df, Some(3))
-    checkOffsetPushed(df, Some(2))
+      s"${caseConvert("employee")} $tableOptions WHERE dept > 0 LIMIT 1 OFFSET 2")
+    if (partitioningEnabled) {
+      // Limit and Offset is not pushed down when numPartitions > 1
+      checkLimitRemoved(df, false)
+      checkOffsetRemoved(df, false)
+      multiplePartitionAdditionalCheck(df, partitionInfo)
+    } else {
+      checkLimitPushed(df, Some(3))
+      checkOffsetPushed(df, Some(2))
+    }
     val rows = df.collect()
     assert(rows.length === 1)
     assert(rows(0).getString(0) === "cathy")
@@ -826,14 +899,25 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(rows(0).getDouble(2) === 1200d)
   }
 
-  test("simple scan with paging: top N and OFFSET") {
+  gridTest("simple scan with paging: top N and OFFSET")(partitioningEnabledTestCase) {
+    partitioningEnabled =>
     Seq(NullOrdering.values()).flatten.foreach { nullOrdering =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df1 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
-        s"${caseConvert("employee")}" +
+        s"${caseConvert("employee")} $tableOptions" +
         s" WHERE dept > 0 ORDER BY salary $nullOrdering, bonus LIMIT 1 OFFSET 2")
-      checkLimitPushed(df1, Some(3))
-      checkOffsetPushed(df1, Some(2))
-      checkSortRemoved(df1)
+      if (partitioningEnabled) {
+        // Sort is not supported when numPartitions > 1 and therefore limit and offset are
+        // not removed as well.
+        checkLimitRemoved(df1, false)
+        checkOffsetRemoved(df1, false)
+        checkSortRemoved(df1, false)
+        multiplePartitionAdditionalCheck(df1, partitionInfo)
+      } else {
+        checkLimitPushed(df1, Some(3))
+        checkOffsetPushed(df1, Some(2))
+        checkSortRemoved(df1)
+      }
       val rows1 = df1.collect()
       assert(rows1.length === 1)
       assert(rows1(0).getString(0) === "david")
@@ -841,37 +925,24 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(rows1(0).getDouble(2) === 1300d)
 
       val df2 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
-        s"${caseConvert("employee")}" +
+        s"${caseConvert("employee")} $tableOptions" +
         s" WHERE dept > 0 ORDER BY salary DESC $nullOrdering, bonus LIMIT 1 OFFSET 2")
-      checkLimitPushed(df2, Some(3))
-      checkOffsetPushed(df2, Some(2))
-      checkSortRemoved(df2)
+
+      if (tableOptions.isEmpty) {
+        checkLimitPushed(df2, Some(3))
+        checkOffsetPushed(df2, Some(2))
+        checkSortRemoved(df2)
+      } else {
+        checkLimitRemoved(df2, false)
+        checkOffsetRemoved(df2, false)
+        checkSortRemoved(df2, false)
+        multiplePartitionAdditionalCheck(df2, partitionInfo)
+      }
       val rows2 = df2.collect()
       assert(rows2.length === 1)
       assert(rows2(0).getString(0) === "amy")
       assert(rows2(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
       assert(rows2(0).getDouble(2) === 1000d)
-    }
-  }
-
-  private def checkAggregateRemoved(df: DataFrame): Unit = {
-    val aggregates = df.queryExecution.optimizedPlan.collect {
-      case agg: Aggregate => agg
-    }
-    assert(aggregates.isEmpty)
-  }
-
-  private def checkAggregatePushed(df: DataFrame, funcName: String): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, _, _, _) =>
-        assert(scan.isInstanceOf[V1ScanWrapper])
-        val wrapper = scan.asInstanceOf[V1ScanWrapper]
-        assert(wrapper.pushedDownOperators.aggregation.isDefined)
-        val aggregationExpressions =
-          wrapper.pushedDownOperators.aggregation.get.aggregateExpressions()
-        assert(aggregationExpressions.length == 1)
-        assert(aggregationExpressions(0).isInstanceOf[GeneralAggregateFunc])
-        assert(aggregationExpressions(0).asInstanceOf[GeneralAggregateFunc].name() == funcName)
     }
   }
 
@@ -881,12 +952,19 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val distinct = if (isDistinct) "DISTINCT " else ""
     val withOrWithout = if (isDistinct) "with" else "without"
 
-    test(s"scan with aggregate push-down: VAR_POP $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: VAR_POP $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(s"SELECT VAR_POP(${distinct}bonus) FROM $catalogAndNamespace." +
-        s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+        s"${caseConvert("employee")} $tableOptions " +
+        s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "VAR_POP")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 10000.0)
@@ -894,13 +972,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).getDouble(0) === 0.0)
     }
 
-    test(s"scan with aggregate push-down: VAR_SAMP $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: VAR_SAMP $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT VAR_SAMP(${distinct}bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "VAR_SAMP")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 20000.0)
@@ -908,13 +993,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).isNullAt(0))
     }
 
-    test(s"scan with aggregate push-down: STDDEV_POP $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: STDDEV_POP $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT STDDEV_POP(${distinct}bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "STDDEV_POP")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 100.0)
@@ -922,13 +1014,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).getDouble(0) === 0.0)
     }
 
-    test(s"scan with aggregate push-down: STDDEV_SAMP $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: STDDEV_SAMP $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT STDDEV_SAMP(${distinct}bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "STDDEV_SAMP")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 141.4213562373095)
@@ -936,13 +1035,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).isNullAt(0))
     }
 
-    test(s"scan with aggregate push-down: COVAR_POP $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: COVAR_POP $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT COVAR_POP(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "COVAR_POP")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 10000.0)
@@ -950,13 +1056,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).getDouble(0) === 0.0)
     }
 
-    test(s"scan with aggregate push-down: COVAR_SAMP $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: COVAR_SAMP $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT COVAR_SAMP(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "COVAR_SAMP")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 20000.0)
@@ -964,13 +1077,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).isNullAt(0))
     }
 
-    test(s"scan with aggregate push-down: CORR $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: CORR $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT CORR(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "CORR")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 1.0)
@@ -978,13 +1098,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).isNullAt(0))
     }
 
-    test(s"scan with aggregate push-down: REGR_INTERCEPT $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: REGR_INTERCEPT $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT REGR_INTERCEPT(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "REGR_INTERCEPT")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 0.0)
@@ -992,13 +1119,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).isNullAt(0))
     }
 
-    test(s"scan with aggregate push-down: REGR_SLOPE $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: REGR_SLOPE $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT REGR_SLOPE(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "REGR_SLOPE")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 1.0)
@@ -1006,13 +1140,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).isNullAt(0))
     }
 
-    test(s"scan with aggregate push-down: REGR_R2 $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: REGR_R2 $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT REGR_R2(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "REGR_R2")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 1.0)
@@ -1020,13 +1161,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(row(2).isNullAt(0))
     }
 
-    test(s"scan with aggregate push-down: REGR_SXY $withOrWithout DISTINCT") {
+    gridTest(
+      s"scan with aggregate push-down: REGR_SXY $withOrWithout DISTINCT"
+    )(partitioningEnabledTestCase) { partitioningEnabled =>
+      val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
       val df = sql(
         s"SELECT REGR_SXY(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
-          s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+          s"${caseConvert("employee")} $tableOptions " +
+          s"WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFilterPushed(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "REGR_SXY")
+      if (partitioningEnabled) {
+        multiplePartitionAdditionalCheck(df, partitionInfo)
+      }
       val row = df.collect()
       assert(row.length === 3)
       assert(row(0).getDouble(0) === 20000.0)

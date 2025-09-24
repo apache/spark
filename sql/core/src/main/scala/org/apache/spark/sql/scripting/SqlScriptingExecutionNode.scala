@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.Exceptio
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.errors.SqlScriptingErrors
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
@@ -997,10 +997,14 @@ class ForStatementExec(
   private var state = ForState.VariableAssignment
 
   private var queryResult: util.Iterator[Row] = _
+  private var queryColumnNameToDataType: Map[String, DataType] = _
   private var isResultCacheValid = false
   private def cachedQueryResult(): util.Iterator[Row] = {
     if (!isResultCacheValid) {
-      queryResult = query.buildDataFrame(session).toLocalIterator()
+      val df = query.buildDataFrame(session)
+      queryResult = df.toLocalIterator()
+      queryColumnNameToDataType = df.schema.fields.map(f => f.name -> f.dataType).toMap
+
       query.isExecuted = true
       isResultCacheValid = true
     }
@@ -1063,7 +1067,7 @@ class ForStatementExec(
           val variableInitStatements = row.schema.names.toSeq
             .map { colName => (colName, createExpressionFromValue(row.getAs(colName))) }
             .flatMap { case (colName, expr) => Seq(
-              createDeclareVarExec(colName, expr),
+              createDeclareVarExec(colName),
               createSetVarExec(colName, expr)
             ) }
 
@@ -1166,10 +1170,11 @@ class ForStatementExec(
     case _ => Literal(value)
   }
 
-  private def createDeclareVarExec(varName: String, variable: Expression): SingleStatementExec = {
-    val defaultExpression = DefaultValueExpression(Literal(null, variable.dataType), "null")
+  private def createDeclareVarExec(varName: String): SingleStatementExec = {
+    val defaultExpression = DefaultValueExpression(
+      Literal(null, queryColumnNameToDataType(varName)), "null")
     val declareVariable = CreateVariable(
-      UnresolvedIdentifier(Seq(varName)),
+      Seq(UnresolvedIdentifier(Seq(varName))),
       defaultExpression,
       replace = false
     )
@@ -1182,7 +1187,7 @@ class ForStatementExec(
       OneRowRelation()
     )
     val setIdentifierToCurrentRow =
-      SetVariable(Seq(UnresolvedAttribute(varName)), projectNamedStruct)
+      SetVariable(Seq(UnresolvedAttribute.quoted(varName)), projectNamedStruct)
     new SingleStatementExec(
       setIdentifierToCurrentRow,
       Origin(),

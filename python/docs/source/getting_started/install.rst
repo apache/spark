@@ -30,7 +30,7 @@ and building from the source.
 Python Versions Supported
 -------------------------
 
-Python 3.9 and above.
+Python 3.10 and above.
 
 
 Using PyPI
@@ -143,7 +143,7 @@ the same session as pyspark (you can install in several steps too).
 
 .. code-block:: bash
 
-    conda install -c conda-forge pyspark  # can also add "python=3.9 some_package [etc.]" here
+    conda install -c conda-forge pyspark  # can also add "python=3.10 some_package [etc.]" here
 
 Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
 separately by the community; while new versions generally get packaged quickly, the
@@ -225,8 +225,8 @@ Installable with ``pip install "pyspark[connect]"``.
 ========================== ================= ==========================
 Package                    Supported version Note
 ========================== ================= ==========================
-`pandas`                   >=2.0.0           Required for Spark Connect
-`pyarrow`                  >=11.0.0          Required for Spark Connect
+`pandas`                   >=2.2.0           Required for Spark Connect
+`pyarrow`                  >=15.0.0          Required for Spark Connect
 `grpcio`                   >=1.67.0          Required for Spark Connect
 `grpcio-status`            >=1.67.0          Required for Spark Connect
 `googleapis-common-protos` >=1.65.0          Required for Spark Connect
@@ -241,8 +241,8 @@ Installable with ``pip install "pyspark[sql]"``.
 ========= ================= ======================
 Package   Supported version Note
 ========= ================= ======================
-`pandas`  >=2.0.0           Required for Spark SQL
-`pyarrow` >=11.0.0          Required for Spark SQL
+`pandas`  >=2.2.0           Required for Spark SQL
+`pyarrow` >=15.0.0          Required for Spark SQL
 ========= ================= ======================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -259,7 +259,7 @@ Installable with ``pip install "pyspark[pandas_on_spark]"``.
 Package   Supported version Note
 ========= ================= ================================
 `pandas`  >=2.2.0           Required for Pandas API on Spark
-`pyarrow` >=11.0.0          Required for Pandas API on Spark
+`pyarrow` >=15.0.0          Required for Pandas API on Spark
 ========= ================= ================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -277,7 +277,7 @@ Installable with ``pip install "pyspark[ml]"``.
 ======= ================= ======================================
 Package Supported version Note
 ======= ================= ======================================
-`numpy` >=1.21            Required for MLlib DataFrame-based API
+`numpy` >=1.22            Required for MLlib DataFrame-based API
 ======= ================= ======================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -297,5 +297,22 @@ Installable with ``pip install "pyspark[mllib]"``.
 ======= ================= ==================
 Package Supported version Note
 ======= ================= ==================
-`numpy` >=1.21            Required for MLlib
+`numpy` >=1.22            Required for MLlib
 ======= ================= ==================
+
+Declarative Pipelines
+^^^^^^^^^^^^^^^^^^^^^
+
+Installable with ``pip install "pyspark[pipelines]"``. Includes all dependencies for both Spark SQL and Spark Connect, because Declarative Pipelines is built on top of both.
+
+========================== ================= ===================================================
+Package                    Supported version Note
+========================== ================= ===================================================
+`pandas`                   >=2.2.0           Required for Spark Connect and Spark SQL
+`pyarrow`                  >=15.0.0          Required for Spark Connect and Spark SQL
+`grpcio`                   >=1.67.0          Required for Spark Connect
+`grpcio-status`            >=1.67.0          Required for Spark Connect
+`googleapis-common-protos` >=1.65.0          Required for Spark Connect
+`pyyaml`                   >=3.11            Required for spark-pipelines command line interface
+`graphviz`                 >=0.20            Optional for Spark Connect
+========================== ================= ===================================================

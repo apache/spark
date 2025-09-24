@@ -26,7 +26,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
@@ -126,7 +125,7 @@ abstract class SparkFunSuite
     // copy it into a temporary one for accessing it from the dependent module.
     val file = File.createTempFile("test-resource", suffix)
     file.deleteOnExit()
-    FileUtils.copyURLToFile(url, file)
+    Utils.copyURLToFile(url, file)
     file
   }
 
@@ -205,7 +204,7 @@ abstract class SparkFunSuite
         logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
         workerLogfiles.foreach { logFile =>
           logInfo(s"\n----- Logfile: ${logFile.getAbsolutePath()}")
-          logInfo(FileUtils.readFileToString(logFile, "UTF-8"))
+          logInfo(Files.readString(logFile.toPath))
         }
       }
     }
@@ -233,6 +232,20 @@ abstract class SparkFunSuite
       outcome
     } finally {
       logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
+    }
+  }
+
+  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
+    testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
+    }
+  }
+
+  protected def namedGridTest[A](testNamePrefix: String, testTags: Tag*)(params: Map[String, A])(
+    testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ${param._1}", testTags: _*)(testFun(param._2))
     }
   }
 
@@ -268,7 +281,7 @@ abstract class SparkFunSuite
   protected def withLogAppender(
       appender: AbstractAppender,
       loggerNames: Seq[String] = Seq.empty,
-      level: Option[Level] = None)(
+      level: Option[Level] = Some(Level.INFO))(
       f: => Unit): Unit = {
     val loggers = if (loggerNames.nonEmpty) {
       loggerNames.map(LogManager.getLogger)

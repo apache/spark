@@ -93,16 +93,15 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             dataflow_graph_id=self._dataflow_graph_id,
             flow_name=flow.name,
             target_dataset_name=flow.target,
-            plan=relation,
+            relation=relation,
             sql_conf=flow.spark_conf,
-            once=flow.once,
         )
         command = pb2.Command()
         command.pipeline_command.define_flow.CopyFrom(inner_command)
         self._client.execute_command(command)
 
     def register_sql(self, sql_text: str, file_path: Path) -> None:
-        inner_command = pb2.DefineSqlGraphElements(
+        inner_command = pb2.PipelineCommand.DefineSqlGraphElements(
             dataflow_graph_id=self._dataflow_graph_id,
             sql_text=sql_text,
             sql_file_path=str(file_path),

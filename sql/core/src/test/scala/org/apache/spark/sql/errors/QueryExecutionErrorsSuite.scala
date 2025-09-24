@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
@@ -656,6 +656,7 @@ class QueryExecutionErrorsSuite
       sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
+    JdbcDialects.registerDialect(existH2Dialect)
   }
 
   test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
@@ -1275,6 +1276,22 @@ class QueryExecutionErrorsSuite
       sql("ALTER TABLE t SET LOCATION '/mister/spark'")
     }
   }
+
+  test("SPARK-42841: SQL query with unsupported data types for ordering") {
+    import org.apache.spark.sql.catalyst.types.PhysicalDataType
+    import org.apache.spark.sql.types.CalendarIntervalType
+
+    // Test PhysicalDataType.ordering() with CalendarIntervalType
+    // It's hard to make a sql test that passes Argument verification but fails
+    // Order verification. So we directly test the error.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        PhysicalDataType.ordering(CalendarIntervalType)
+      },
+      condition = "DATATYPE_CANNOT_ORDER",
+      parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))
+  }
+
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {

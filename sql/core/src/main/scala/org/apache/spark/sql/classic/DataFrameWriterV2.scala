@@ -148,14 +148,17 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   /** @inheritdoc */
   override def create(): Unit = {
-    runCommand(
-      CreateTableAsSelect(
-        UnresolvedIdentifier(tableName),
-        partitioning.getOrElse(Seq.empty) ++ clustering,
-        logicalPlan,
-        buildTableSpec(),
-        options.toMap,
-        false))
+    runCommand(createCommand())
+  }
+
+  private[sql] def createCommand(): LogicalPlan = {
+    CreateTableAsSelect(
+      UnresolvedIdentifier(tableName),
+      partitioning.getOrElse(Seq.empty) ++ clustering,
+      logicalPlan,
+      buildTableSpec(),
+      options.toMap,
+      false)
   }
 
   private def buildTableSpec(): UnresolvedTableSpec = {
@@ -186,28 +189,37 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   /** @inheritdoc */
   @throws(classOf[NoSuchTableException])
   def append(): Unit = {
-    val append = AppendData.byName(
+    runCommand(appendCommand())
+  }
+
+  private[sql] def appendCommand(): LogicalPlan = {
+    AppendData.byName(
       UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT)),
       logicalPlan, options.toMap)
-    runCommand(append)
   }
 
   /** @inheritdoc */
   @throws(classOf[NoSuchTableException])
   def overwrite(condition: Column): Unit = {
-    val overwrite = OverwriteByExpression.byName(
+    runCommand(overwriteCommand(condition))
+  }
+
+  private[sql] def overwriteCommand(condition: Column): LogicalPlan = {
+    OverwriteByExpression.byName(
       UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
       logicalPlan, expression(condition), options.toMap)
-    runCommand(overwrite)
   }
 
   /** @inheritdoc */
   @throws(classOf[NoSuchTableException])
   def overwritePartitions(): Unit = {
-    val dynamicOverwrite = OverwritePartitionsDynamic.byName(
+    runCommand(overwritePartitionsCommand())
+  }
+
+  private[sql] def overwritePartitionsCommand(): LogicalPlan = {
+    OverwritePartitionsDynamic.byName(
       UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
       logicalPlan, options.toMap)
-    runCommand(dynamicOverwrite)
   }
 
   /**
@@ -215,18 +227,24 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * callback functions.
    */
   private def runCommand(command: LogicalPlan): Unit = {
-    val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker)
+    val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker,
+      shuffleCleanupMode =
+        QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf))
     qe.assertCommandExecuted()
   }
 
   private def internalReplace(orCreate: Boolean): Unit = {
-    runCommand(ReplaceTableAsSelect(
+    runCommand(replaceCommand(orCreate))
+  }
+
+  private[sql] def replaceCommand(orCreate: Boolean): LogicalPlan = {
+    ReplaceTableAsSelect(
       UnresolvedIdentifier(tableName),
       partitioning.getOrElse(Seq.empty) ++ clustering,
       logicalPlan,
       buildTableSpec(),
       writeOptions = options.toMap,
-      orCreate = orCreate))
+      orCreate = orCreate)
   }
 }
 

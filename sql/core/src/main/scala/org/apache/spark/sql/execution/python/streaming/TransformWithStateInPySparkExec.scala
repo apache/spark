@@ -28,18 +28,18 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, PythonUDF, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.ProcessingTime
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPySpark
-import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
+import org.apache.spark.sql.execution.{CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.ArrowPythonRunner
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
-import org.apache.spark.sql.execution.streaming.{DriverStatefulProcessorHandleImpl, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, TransformWithStateMetadataUtils, TransformWithStateVariableInfo, WatermarkSupport}
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, OperatorStateMetadata, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOperatorsUtils}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateExecBase, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
@@ -83,18 +83,23 @@ case class TransformWithStateInPySparkExec(
     initialState: SparkPlan,
     initialStateGroupingAttrs: Seq[Attribute],
     initialStateSchema: StructType)
-  extends BinaryExecNode
-  with StateStoreWriter
-  with WatermarkSupport
-  with TransformWithStateMetadataUtils {
+  extends TransformWithStateExecBase(
+    groupingAttributes,
+    timeMode,
+    outputMode,
+    batchTimestampMs,
+    eventTimeWatermarkForEviction,
+    child,
+    initialStateGroupingAttrs,
+    initialState) {
 
   // NOTE: This is needed to comply with existing release of transformWithStateInPandas.
   override def shortName: String = if (
     userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS
   ) {
-    "transformWithStateInPandasExec"
+    StatefulOperatorsUtils.TRANSFORM_WITH_STATE_IN_PANDAS_EXEC_OP_NAME
   } else {
-    "transformWithStateInPySparkExec"
+    StatefulOperatorsUtils.TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME
   }
 
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
@@ -115,16 +120,11 @@ case class TransformWithStateInPySparkExec(
 
   private val numOutputRows: SQLMetric = longMetric("numOutputRows")
 
-  // The keys that may have a watermark attribute.
-  override def keyExpressions: Seq[Attribute] = groupingAttributes
-
   // Each state variable has its own schema, this is a dummy one.
   protected val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
 
   // Each state variable has its own schema, this is a dummy one.
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
-
-  override def operatorStateMetadataVersion: Int = 2
 
   override def getColFamilySchemas(
       shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
@@ -146,37 +146,6 @@ case class TransformWithStateInPySparkExec(
   private val driverProcessorHandle: DriverStatefulProcessorHandleImpl =
     new DriverStatefulProcessorHandleImpl(timeMode, groupingKeyExprEncoder)
 
-  /**
-   * Distribute by grouping attributes - We need the underlying data and the initial state data
-   * to have the same grouping so that the data are co-located on the same task.
-   */
-  override def requiredChildDistribution: Seq[Distribution] = {
-    StatefulOperatorPartitioning.getCompatibleDistribution(groupingAttributes,
-      getStateInfo, conf) ::
-      StatefulOperatorPartitioning.getCompatibleDistribution(
-        initialStateGroupingAttrs, getStateInfo, conf) ::
-      Nil
-  }
-
-  /**
-   * We need the initial state to also use the ordering as the data so that we can co-locate the
-   * keys from the underlying data and the initial state.
-   */
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
-    groupingAttributes.map(SortOrder(_, Ascending)),
-    initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
-
-  override def operatorStateMetadata(
-      stateSchemaPaths: List[List[String]]): OperatorStateMetadata = {
-    getOperatorStateMetadata(stateSchemaPaths, getStateInfo, shortName, timeMode, outputMode)
-  }
-
-  override def validateNewMetadata(
-      oldOperatorMetadata: OperatorStateMetadata,
-      newOperatorMetadata: OperatorStateMetadata): Unit = {
-    validateNewMetadataForTWS(oldOperatorMetadata, newOperatorMetadata)
-  }
-
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
@@ -185,7 +154,6 @@ case class TransformWithStateInPySparkExec(
     val runner = new TransformWithStateInPySparkPythonPreInitRunner(
       pythonFunction,
       "pyspark.sql.streaming.transform_with_state_driver_worker",
-      sessionLocalTimeZone,
       groupingKeySchema,
       driverProcessorHandle
     )
@@ -206,60 +174,6 @@ case class TransformWithStateInPySparkExec(
     validateAndWriteStateSchema(hadoopConf, batchId, stateSchemaVersion, info, stateSchemaDir,
       session, operatorStateMetadataVersion, stateStoreEncodingFormat =
         conf.stateStoreEncodingFormat)
-  }
-
-  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
-    if (timeMode == ProcessingTime) {
-      // TODO SPARK-50180: check if we can return true only if actual timers are registered,
-      //  or there is expired state
-      true
-    } else if (outputMode == OutputMode.Append || outputMode == OutputMode.Update) {
-      eventTimeWatermarkForEviction.isDefined &&
-        newInputWatermark > eventTimeWatermarkForEviction.get
-    } else {
-      false
-    }
-  }
-
-  /**
-   * Controls watermark propagation to downstream modes. If timeMode is
-   * ProcessingTime, the output rows cannot be interpreted in eventTime, hence
-   * this node will not propagate watermark in this timeMode.
-   *
-   * For timeMode EventTime, output watermark is same as input Watermark because
-   * transformWithState does not allow users to set the event time column to be
-   * earlier than the watermark.
-   */
-  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
-    timeMode match {
-      case ProcessingTime =>
-        None
-      case _ =>
-        Some(inputWatermarkMs)
-    }
-  }
-
-  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
-    Seq(
-      // metrics around state variables
-      StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
-      StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
-      StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
-      StatefulOperatorCustomSumMetric("numDeletedStateVars", "Number of deleted state variables"),
-      // metrics around timers
-      StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
-      StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),
-      StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers"),
-      // metrics around TTL
-      StatefulOperatorCustomSumMetric("numValueStateWithTTLVars",
-        "Number of value state variables with TTL"),
-      StatefulOperatorCustomSumMetric("numListStateWithTTLVars",
-        "Number of list state variables with TTL"),
-      StatefulOperatorCustomSumMetric("numMapStateWithTTLVars",
-        "Number of map state variables with TTL"),
-      StatefulOperatorCustomSumMetric("numValuesRemovedDueToTTLExpiry",
-        "Number of values removed due to TTL expiry")
-    )
   }
 
   /**
@@ -376,8 +290,6 @@ case class TransformWithStateInPySparkExec(
     }
   }
 
-  override def supportsSchemaEvolution: Boolean = true
-
   private def processDataWithPartition(
       store: StateStore,
       dataIterator: Iterator[InternalRow],
@@ -476,7 +388,7 @@ case class TransformWithStateInPySparkExec(
           store.abort()
         }
       }
-      setStoreMetrics(store)
+      setStoreMetrics(store, isStreaming)
       setOperatorMetrics()
     }).map { row =>
       numOutputRows += 1
@@ -491,10 +403,6 @@ case class TransformWithStateInPySparkExec(
     } else {
       copy(child = newLeft)
     }
-
-  override def left: SparkPlan = child
-
-  override def right: SparkPlan = initialState
 }
 
 // scalastyle:off argcount

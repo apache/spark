@@ -224,17 +224,8 @@ class FMClassifier @Since("3.0.0") (
     factors: Matrix,
     objectiveHistory: Array[Double]): FMClassificationModel = {
     val model = copyValues(new FMClassificationModel(uid, intercept, linear, factors))
-    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
-
-    val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-    val summary = new FMClassificationTrainingSummaryImpl(
-      summaryModel.transform(dataset),
-      probabilityColName,
-      predictionColName,
-      $(labelCol),
-      weightColName,
-      objectiveHistory)
-    model.setSummary(Some(summary))
+    model.createSummary(dataset, objectiveHistory)
+    model
   }
 
   @Since("3.0.0")
@@ -342,6 +333,42 @@ class FMClassificationModel private[classification] (
     s"FMClassificationModel: " +
       s"uid=${super.toString}, numClasses=$numClasses, numFeatures=$numFeatures, " +
       s"factorSize=${$(factorSize)}, fitLinear=${$(fitLinear)}, fitIntercept=${$(fitIntercept)}"
+  }
+
+  private[spark] def createSummary(
+    dataset: Dataset[_], objectiveHistory: Array[Double]
+  ): Unit = {
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
+
+    val (summaryModel, probabilityColName, predictionColName) = findSummaryModel()
+    val summary = new FMClassificationTrainingSummaryImpl(
+      summaryModel.transform(dataset),
+      probabilityColName,
+      predictionColName,
+      $(labelCol),
+      weightColName,
+      objectiveHistory)
+    setSummary(Some(summary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[Tuple1[Array[Double]]](
+      path, Tuple1(summary.objectiveHistory),
+      (data, dos) => {
+        ReadWriteUtils.serializeDoubleArray(data._1, dos)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    val Tuple1(objectiveHistory: Array[Double])
+    = ReadWriteUtils.loadObjectFromLocal[Tuple1[Array[Double]]](
+      path,
+      dis => {
+        Tuple1(ReadWriteUtils.deserializeDoubleArray(dis))
+      }
+    )
+    createSummary(dataset, objectiveHistory)
   }
 }
 

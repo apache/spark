@@ -41,8 +41,8 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1623,7 +1623,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
         (0 until numRecords).foreach { i =>
           val record = new SimpleGroup(schema)
-          record.add(0, localTime(23, 59, 59, 123456))
+          record.add(0, localTime(23, 59, 59, 123456) / DateTimeConstants.NANOS_PER_MICROS)
           writer.write(record)
         }
         writer.close

@@ -809,7 +809,20 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "0",
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      testSpill()
+    }
+  }
 
+  test("SPARK-49386: test SortMergeJoin (with spill by size threshold)") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "0",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString,
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SIZE_SPILL_THRESHOLD.key -> "1") {
+      testSpill()
+    }
+  }
+
+  private def testSpill(): Unit = {
       assertSpilled(sparkContext, "inner join") {
         checkAnswer(
           sql("SELECT * FROM testData JOIN testData2 ON key = a where key = 2"),
@@ -896,7 +909,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         )
       }
     }
-  }
 
   test("outer broadcast hash join should not throw NPE") {
     withTempView("v1", "v2") {
@@ -1559,30 +1571,58 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       spark.range(10).map(i => (i.toString, i + 1)).toDF("c1", "c2").write.saveAsTable("t1")
       spark.range(10).map(i => ((i % 5).toString, i % 3)).toDF("c1", "c2").write.saveAsTable("t2")
 
+      spark.range(10).map(i => (i, i + 1)).toDF("c1", "c2").write.saveAsTable("t1a")
+      spark.range(10).map(i => (i % 5, i % 3)).toDF("c1", "c2").write.saveAsTable("t2a")
+
+      val semiExpected1 = Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4"))
+      val antiExpected1 = Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9"))
+      val semiExpected2 = Seq(Row(0))
+      val antiExpected2 = Seq.tabulate(9) { x => Row(x + 1) }
+
       val semiJoinQueries = Seq(
         // No join condition, ignore duplicated key.
         (s"SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2 ON t1.c1 = t2.c1",
-          true),
+          true, semiExpected1, antiExpected1),
         // Have join condition on build join key only, ignore duplicated key.
         (s"""
             |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
             |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
           """.stripMargin,
-          true),
+          true, semiExpected1, antiExpected1),
         // Have join condition on other build attribute beside join key, do not ignore
         // duplicated key.
         (s"""
             |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
             |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
           """.stripMargin,
-          false)
+          false, semiExpected1, antiExpected1),
+        // SPARK-52873: Have a join condition that references attributes from the build-side
+        // join key, but those attributes are contained by a different expression than that
+        // used as the build-side join key (that is, CAST((t2.c2+10000)/1000 AS INT) is not
+        // the same as t2.c2). In this case, ignoreDuplicatedKey should be false
+        (
+          s"""
+             |SELECT /*+ SHUFFLE_HASH(t2a) */ t1a.c1 FROM t1a LEFT SEMI JOIN t2a
+             |ON CAST((t1a.c2+10000)/1000 AS INT) = CAST((t2a.c2+10000)/1000 AS INT)
+             |AND t2a.c2 >= t1a.c2 + 1
+             |""".stripMargin,
+        false, semiExpected2, antiExpected2),
+        // SPARK-52873: Have a join condition that contains the same expression as the
+        // build-side join key,and does not violate any other rules for the join condition.
+        // In this case, ignoreDuplicatedKey should be true
+        (
+          s"""
+             |SELECT /*+ SHUFFLE_HASH(t2a) */ t1a.c1 FROM t1a LEFT SEMI JOIN t2a
+             |ON t1a.c1 * 10000 = t2a.c1 * 1000 AND t2a.c1 * 1000 >= t1a.c1
+             |""".stripMargin,
+          true, semiExpected2, antiExpected2)
       )
       semiJoinQueries.foreach {
-        case (query, ignoreDuplicatedKey) =>
+        case (query, ignoreDuplicatedKey, semiExpected, antiExpected) =>
           val semiJoinDF = sql(query)
           val antiJoinDF = sql(query.replaceAll("SEMI", "ANTI"))
-          checkAnswer(semiJoinDF, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
-          checkAnswer(antiJoinDF, Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9")))
+          checkAnswer(semiJoinDF, semiExpected)
+          checkAnswer(antiJoinDF, antiExpected)
           Seq(semiJoinDF, antiJoinDF).foreach { df =>
             assert(collect(df.queryExecution.executedPlan) {
               case j: ShuffledHashJoinExec if j.ignoreDuplicatedKey == ignoreDuplicatedKey => true

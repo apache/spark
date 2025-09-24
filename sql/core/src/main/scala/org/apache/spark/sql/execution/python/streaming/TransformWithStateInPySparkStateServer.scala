@@ -17,33 +17,29 @@
 
 package org.apache.spark.sql.execution.python.streaming
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.nio.channels.{Channels, ServerSocketChannel}
+import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException, InterruptedIOException}
+import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel}
 import java.time.Duration
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
-import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState, StateVariableType}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithMapIterator, StateResponseWithMapKeysOrValues, StateResponseWithStringTypeVal, StateResponseWithTimer, StateVariableRequest, TimerInfo, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.KeyAndValuePair
 import org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithListGet
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.util.Utils
 
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
@@ -59,16 +55,12 @@ class TransformWithStateInPySparkStateServer(
     stateServerSocket: ServerSocketChannel,
     statefulProcessorHandle: StatefulProcessorHandleImplBase,
     groupingKeySchema: StructType,
-    timeZoneId: String,
-    errorOnDuplicatedFieldNames: Boolean,
-    largeVarTypes: Boolean,
     arrowTransformWithStateInPySparkMaxRecordsPerBatch: Int,
     batchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForEviction: Option[Long] = None,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPySparkDeserializer = null,
-    arrowStreamWriterForTest: BaseStreamingArrowWriter = null,
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
     iteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
     mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null,
@@ -180,15 +172,32 @@ class TransformWithStateInPySparkStateServer(
           logWarning(log"No more data to read from the socket")
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
-        case _: InterruptedException =>
+        case _: InterruptedException | _: InterruptedIOException |
+             _: ClosedByInterruptException =>
+          // InterruptedIOException - thrown when an I/O operation is interrupted
+          // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
           logInfo(log"Thread interrupted, shutting down state server")
           Thread.currentThread().interrupt()
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
         case e: Exception =>
           logError(log"Error reading message: ${MDC(LogKeys.ERROR, e.getMessage)}", e)
-          sendResponse(1, e.getMessage)
-          outputStream.flush()
+          try {
+            sendResponse(1, e.getMessage)
+            outputStream.flush()
+          } catch {
+            // InterruptedIOException - thrown when an I/O operation is interrupted
+            // ClosedByInterruptException - thrown when an I/O operation upon a
+            //                              channel is interrupted
+            case _: InterruptedException | _: InterruptedIOException |
+                 _: ClosedByInterruptException =>
+              logInfo(log"Thread is interrupted during flushing error response, " +
+                log"shutting down state server")
+            case e: Throwable =>
+              logError(log"Failed to flush with errorMsg=" +
+                log"${MDC(LogKeys.ERROR, e.getMessage)}", e)
+              throw e
+          }
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           return
       }
@@ -465,93 +474,79 @@ class TransformWithStateInPySparkStateServer(
       return
     }
     val listStateInfo = listStates(stateName)
-    val deserializer = if (deserializerForTest != null) {
-      deserializerForTest
-    } else {
-      new TransformWithStateInPySparkDeserializer(listStateInfo.deserializer)
-    }
-    message.getMethodCase match {
-      case ListStateCall.MethodCase.EXISTS =>
-        if (listStateInfo.listState.exists()) {
+    var deserializer: TransformWithStateInPySparkDeserializer = null
+    try {
+      deserializer = if (deserializerForTest != null) {
+        deserializerForTest
+      } else {
+        new TransformWithStateInPySparkDeserializer(listStateInfo.deserializer)
+      }
+      message.getMethodCase match {
+        case ListStateCall.MethodCase.EXISTS =>
+          if (listStateInfo.listState.exists()) {
+            sendResponse(0)
+          } else {
+            // Send status code 2 to indicate that the list state doesn't have a value yet.
+            sendResponse(2, s"state $stateName doesn't exist")
+          }
+        case ListStateCall.MethodCase.LISTSTATEPUT =>
+          val rows = if (message.getListStatePut.getFetchWithArrow) {
+            deserializer.readArrowBatches(inputStream)
+          } else {
+            val elements = message.getListStatePut.getValueList.asScala
+            elements.map { e =>
+              PythonSQLUtils.toJVMRow(
+                e.toByteArray,
+                listStateInfo.schema,
+                listStateInfo.deserializer)
+            }
+          }
+          listStateInfo.listState.put(rows.toArray)
           sendResponse(0)
-        } else {
-          // Send status code 2 to indicate that the list state doesn't have a value yet.
-          sendResponse(2, s"state $stateName doesn't exist")
-        }
-      case ListStateCall.MethodCase.LISTSTATEPUT =>
-        val rows = if (message.getListStatePut.getFetchWithArrow) {
-          deserializer.readArrowBatches(inputStream)
-        } else {
-          val elements = message.getListStatePut.getValueList.asScala
-          elements.map { e =>
-            PythonSQLUtils.toJVMRow(
-              e.toByteArray,
-              listStateInfo.schema,
-              listStateInfo.deserializer)
+        case ListStateCall.MethodCase.LISTSTATEGET =>
+          val iteratorId = message.getListStateGet.getIteratorId
+          var iteratorOption = iterators.get(iteratorId)
+          if (iteratorOption.isEmpty) {
+            iteratorOption = Some(listStateInfo.listState.get())
+            iterators.put(iteratorId, iteratorOption.get)
           }
-        }
-        listStateInfo.listState.put(rows.toArray)
-        sendResponse(0)
-      case ListStateCall.MethodCase.LISTSTATEGET =>
-        val iteratorId = message.getListStateGet.getIteratorId
-        var iteratorOption = iterators.get(iteratorId)
-        if (iteratorOption.isEmpty) {
-          iteratorOption = Some(listStateInfo.listState.get())
-          iterators.put(iteratorId, iteratorOption.get)
-        }
-        if (!iteratorOption.get.hasNext) {
-          sendResponse(2, s"List state $stateName doesn't contain any value.")
-        } else {
-          sendResponseWithListGet(0, iter = iteratorOption.get)
-        }
-      case ListStateCall.MethodCase.APPENDVALUE =>
-        val byteArray = message.getAppendValue.getValue.toByteArray
-        val newRow = PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema,
-          listStateInfo.deserializer)
-        listStateInfo.listState.appendValue(newRow)
-        sendResponse(0)
-      case ListStateCall.MethodCase.APPENDLIST =>
-        val rows = if (message.getAppendList.getFetchWithArrow) {
-          deserializer.readArrowBatches(inputStream)
-        } else {
-          val elements = message.getAppendList.getValueList.asScala
-          elements.map { e =>
-            PythonSQLUtils.toJVMRow(
-              e.toByteArray,
-              listStateInfo.schema,
-              listStateInfo.deserializer)
+          if (!iteratorOption.get.hasNext) {
+            sendResponse(2, s"List state $stateName doesn't contain any value.")
+          } else {
+            sendResponseWithListGet(0, iter = iteratorOption.get)
           }
-        }
-        listStateInfo.listState.appendList(rows.toArray)
-        sendResponse(0)
-      case ListStateCall.MethodCase.CLEAR =>
-        listStates(stateName).listState.clear()
-        sendResponse(0)
-      case _ =>
-        throw new IllegalArgumentException("Invalid method call")
+        case ListStateCall.MethodCase.APPENDVALUE =>
+          val byteArray = message.getAppendValue.getValue.toByteArray
+          val newRow =
+            PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema, listStateInfo.deserializer)
+          listStateInfo.listState.appendValue(newRow)
+          sendResponse(0)
+        case ListStateCall.MethodCase.APPENDLIST =>
+          val rows = if (message.getAppendList.getFetchWithArrow) {
+            deserializer.readArrowBatches(inputStream)
+          } else {
+            val elements = message.getAppendList.getValueList.asScala
+            elements.map { e =>
+              PythonSQLUtils.toJVMRow(
+                e.toByteArray,
+                listStateInfo.schema,
+                listStateInfo.deserializer)
+            }
+          }
+          listStateInfo.listState.appendList(rows.toArray)
+          sendResponse(0)
+        case ListStateCall.MethodCase.CLEAR =>
+          listStates(stateName).listState.clear()
+          sendResponse(0)
+        case _ =>
+          throw new IllegalArgumentException("Invalid method call")
+      }
+    } finally {
+      // Close the deserializer to free up resources.
+      if (deserializer != null) {
+        deserializer.close()
+      }
     }
-  }
-
-  private def sendIteratorForListState(iter: Iterator[Row]): Unit = {
-    // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-    // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
-    // when there are multiple state variables, user tries to access a different state variable
-    // while the current state variable is not exhausted yet.
-    var rowCount = 0
-    while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
-      val data = iter.next()
-
-      // Serialize the value row as a byte array
-      val valueBytes = PythonSQLUtils.toPyRow(data)
-      val lenBytes = valueBytes.length
-
-      outputStream.writeInt(lenBytes)
-      outputStream.write(valueBytes)
-
-      rowCount += 1
-    }
-    outputStream.writeInt(-1)
-    outputStream.flush()
   }
 
   private[sql] def handleMapStateRequest(message: MapStateCall): Unit = {
@@ -938,45 +933,6 @@ class TransformWithStateInPySparkStateServer(
       outputStream.write(responseMessageBytes)
     }
 
-    def sendIteratorAsArrowBatches[T](
-        iter: Iterator[T],
-        outputSchema: StructType,
-        arrowStreamWriterForTest: BaseStreamingArrowWriter = null)(func: T => InternalRow): Unit = {
-      outputStream.flush()
-      val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
-        errorOnDuplicatedFieldNames, largeVarTypes)
-      val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-        s"stdout writer for transformWithStateInPySpark state socket", 0, Long.MaxValue)
-      val root = VectorSchemaRoot.create(arrowSchema, allocator)
-      val writer = new ArrowStreamWriter(root, null, outputStream)
-      val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
-        arrowStreamWriterForTest
-      } else {
-        new BaseStreamingArrowWriter(root, writer,
-          arrowTransformWithStateInPySparkMaxRecordsPerBatch)
-      }
-      // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-      // the arrowTransformWithStateInPySparkMaxRecordsPerBatch limit. This is to handle a case
-      // when there are multiple state variables, user tries to access a different state variable
-      // while the current state variable is not exhausted yet.
-      var rowCount = 0
-      while (iter.hasNext && rowCount < arrowTransformWithStateInPySparkMaxRecordsPerBatch) {
-        val data = iter.next()
-        val internalRow = func(data)
-        arrowStreamWriter.writeRow(internalRow)
-        rowCount += 1
-      }
-      arrowStreamWriter.finalizeCurrentArrowBatch()
-      Utils.tryWithSafeFinally {
-        // end writes footer to the output stream and doesn't clean any resources.
-        // It could throw exception if the output stream is closed, so it should be
-        // in the try block.
-        writer.end()
-      } {
-        root.close()
-        allocator.close()
-      }
-    }
   }
 }
 

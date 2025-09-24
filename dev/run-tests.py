@@ -427,7 +427,7 @@ def parse_opts():
     parser.add_argument(
         "--python-executables",
         type=str,
-        default="python3.9",
+        default="python3.11",
         help="A comma-separated list of Python executables to test against (default: %(default)s)",
     )
     parser.add_argument(

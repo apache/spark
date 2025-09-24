@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Mapping, Iterator, Optional, cast
+from datetime import timezone
+from typing import Any, Dict, Mapping, Iterator, Optional, cast, Sequence
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql import SparkSession
 from pyspark.errors.exceptions.base import PySparkValueError
+from pyspark.pipelines.logging_utils import log_with_provided_timestamp
 
 
 def create_dataflow_graph(
@@ -53,21 +55,38 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
             # We expect to get a pipeline_command_result back in response to the initial StartRun
             # command.
             continue
-        elif "pipeline_events_result" not in result.keys():
+        elif "pipeline_event_result" not in result.keys():
             raise PySparkValueError(
                 "Pipeline logs stream handler received an unexpected result: " f"{result}"
             )
         else:
-            for e in result["pipeline_events_result"].events:
-                print(f"{e.timestamp}: {e.message}")
+            event = result["pipeline_event_result"].event
+            dt = event.timestamp.ToDatetime().replace(tzinfo=timezone.utc)
+            log_with_provided_timestamp(event.message, dt)
 
 
-def start_run(spark: SparkSession, dataflow_graph_id: str) -> Iterator[Dict[str, Any]]:
+def start_run(
+    spark: SparkSession,
+    dataflow_graph_id: str,
+    full_refresh: Optional[Sequence[str]],
+    full_refresh_all: bool,
+    refresh: Optional[Sequence[str]],
+    dry: bool,
+) -> Iterator[Dict[str, Any]]:
     """Start a run of the dataflow graph in the Spark Connect server.
 
     :param dataflow_graph_id: The ID of the dataflow graph to start.
+    :param full_refresh: List of datasets to reset and recompute.
+    :param full_refresh_all: Perform a full graph reset and recompute.
+    :param refresh: List of datasets to update.
     """
-    inner_command = pb2.PipelineCommand.StartRun(dataflow_graph_id=dataflow_graph_id)
+    inner_command = pb2.PipelineCommand.StartRun(
+        dataflow_graph_id=dataflow_graph_id,
+        full_refresh_selection=full_refresh or [],
+        full_refresh_all=full_refresh_all,
+        refresh_selection=refresh or [],
+        dry=dry,
+    )
     command = pb2.Command()
     command.pipeline_command.start_run.CopyFrom(inner_command)
     # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to

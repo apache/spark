@@ -44,7 +44,7 @@ trait AliasHelper {
     AttributeMap(aliasMap)
   }
 
-  protected def getAliasMap(exprs: Seq[NamedExpression]): AttributeMap[Alias] = {
+  protected def getAliasMap(exprs: Iterable[NamedExpression]): AttributeMap[Alias] = {
     // Create a map of Aliases to their values from the child projection.
     // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> Alias(a + b, c)).
     AttributeMap(exprs.collect { case a: Alias => (a.toAttribute, a) })
@@ -99,16 +99,12 @@ trait AliasHelper {
     val res = CurrentOrigin.withOrigin(e.origin) {
       e match {
         case a: Alias =>
-          val metadata = if (a.metadata == Metadata.empty) {
-            None
-          } else {
-            Some(a.metadata)
-          }
+          // Preserve the _effective_ metadata.
           a.copy(child = trimAliases(a.child))(
             exprId = a.exprId,
             qualifier = a.qualifier,
-            explicitMetadata = metadata,
-            nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
+            explicitMetadata = Some(a.metadata),
+            nonInheritableMetadataKeys = Nil)
         case a: MultiAlias =>
           a.copy(child = trimAliases(a.child))
         case other => trimAliases(other)

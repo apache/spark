@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -27,17 +28,18 @@ import org.apache.spark.ErrorMessageFormat.MINIMAL
 import org.apache.spark.SparkThrowableHelper.getMessage
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.IntegratedUDFTestUtils.{TestUDF, TestUDTFSet}
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTime, CurrentTimestampLike, CurrentUser, Literal}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DateType, StructType, TimestampType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
-trait SQLQueryTestHelper extends Logging {
+trait SQLQueryTestHelper extends SQLConfHelper with Logging {
 
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
@@ -55,7 +57,7 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
-      .replaceAll("Owner\t.*", s"Owner\t$notIncludedMsg")
+      .replaceAll("Owner[\t ]+(.*)", s"Owner\t$notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
@@ -117,7 +119,9 @@ trait SQLQueryTestHelper extends Logging {
     if (deterministic) {
       // Perform query analysis, but also get rid of the #1234 expression IDs that show up in the
       // resolved plans.
-      (schema, Seq(replaceNotIncludedMsg(analyzed.toString)))
+      withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> Int.MaxValue.toString) {
+        (schema, Seq(replaceNotIncludedMsg(analyzed.toString)))
+      }
     } else {
       // The analyzed plan is nondeterministic so elide it from the result to keep tests reliable.
       (schema, Seq("[Analyzer test output redacted due to nondeterminism]"))
@@ -406,7 +410,7 @@ trait SQLQueryTestHelper extends Logging {
     val importedTestCaseName = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
     val importedCode = importedTestCaseName.flatMap { testCaseName =>
       allTestCases.find(_.name == testCaseName).map { testCase =>
-        val input = fileToString(new File(testCase.inputFile))
+        val input = Files.readString(new File(testCase.inputFile).toPath)
         val (_, code) = splitCommentsAndCodes(input)
         code
       }

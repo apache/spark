@@ -444,8 +444,8 @@ class RelationalGroupedDataset protected[sql](
       stateStructType: StructType,
       outputModeStr: String,
       timeoutConfStr: String): DataFrame = {
-    val timeoutConf = org.apache.spark.sql.execution.streaming
-      .GroupStateImpl.groupStateTimeoutFromString(timeoutConfStr)
+    val timeoutConf = org.apache.spark.sql.execution.streaming.operators.stateful.
+      flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString(timeoutConfStr)
     val outputMode = InternalOutputModes(outputModeStr)
     if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
       throw new IllegalArgumentException("The output mode of function should be append or update")

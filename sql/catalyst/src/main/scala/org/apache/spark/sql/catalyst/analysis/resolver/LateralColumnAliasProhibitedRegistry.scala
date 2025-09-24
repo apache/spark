@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
  * idempotent.
  */
 class LateralColumnAliasProhibitedRegistry extends LateralColumnAliasRegistry {
-  def withNewLcaScope(body: => Alias): Alias = body
+  def withNewLcaScope(isTopLevelAlias: Boolean)(body: => Alias): Alias = body
 
   def getAttribute(attributeName: String): Option[Attribute] =
     throwLcaResolutionNotEnabled()

@@ -25,7 +25,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.LogKeys.{CODEGEN_STAGE_ID, CONFIG, ERROR, HUGE_METHOD_LIMIT, MAX_METHOD_CODE_SIZE, TREE_NODE}
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -548,6 +547,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     child.generateTreeString(
       depth,
@@ -558,6 +558,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       addSuffix = false,
       maxFields,
       printNodeId,
+      printOutputColumns,
       indent)
   }
 
@@ -819,6 +820,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     child.generateTreeString(
       depth,
@@ -829,6 +831,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       false,
       maxFields,
       printNodeId,
+      printOutputColumns,
       indent)
   }
 

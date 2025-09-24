@@ -57,10 +57,15 @@ from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.udtf import OrderingColumn, PartitioningColumn, SelectedColumn  # noqa: F401
 from pyspark.sql.udtf import SkipRestOfInputTableException  # noqa: F401
-from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
+from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf, _create_pyarrow_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
-from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
+from pyspark.sql.pandas.functions import (  # noqa: F401
+    arrow_udf,  # noqa: F401
+    pandas_udf,  # noqa: F401
+    ArrowUDFType,  # noqa: F401
+    PandasUDFType,  # noqa: F401
+)  # noqa: F401
 
 from pyspark.sql.utils import (
     to_str as _to_str,
@@ -9288,6 +9293,68 @@ def current_timezone() -> Column:
     return _invoke_function("current_timezone")
 
 
+@overload
+def current_time() -> Column:
+    ...
+
+
+@overload
+def current_time(precision: int) -> Column:
+    ...
+
+
+@_try_remote_functions
+def current_time(precision: Optional[int] = None) -> Column:
+    """
+    Returns the current time at the start of query evaluation as a :class:`TimeType` column. All
+    calls of current_time within the same query return the same value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    precision: literal int, optional
+        number in the range [0..6], indicating how many fractional digits of seconds to include.
+        If omitted, the default is 6.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        current time.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_date`
+    :meth:`pyspark.sql.functions.current_timestamp`
+
+    Examples
+    --------
+    Example 1: Current time with default precision
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.current_time().alias("time")).show() # doctest: +SKIP
+    +---------------+
+    |           time|
+    +---------------+
+    |16:57:04.304361|
+    +---------------+
+
+    Example 2: Current time with specified precision
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.current_time(3).alias("time")).show() # doctest: +SKIP
+    +------------+
+    |        time|
+    +------------+
+    |16:57:04.304|
+    +------------+
+    """
+    if precision is None:
+        return _invoke_function("current_time")
+    else:
+        return _invoke_function("current_time", _enum_to_value(precision))
+
+
 @_try_remote_functions
 def current_timestamp() -> Column:
     """
@@ -9795,6 +9862,7 @@ def dayofweek(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Examples
     --------
@@ -9875,6 +9943,7 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Returns
     -------
@@ -10057,6 +10126,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Examples
     --------
@@ -10127,10 +10197,13 @@ def hour(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.1.0
+        Added support for time type.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target date/timestamp column to work on.
+        target date/time/timestamp column to work on.
 
     Returns
     -------
@@ -10177,6 +10250,21 @@ def hour(col: "ColumnOrName") -> Column:
     |2015-04-08 13:08:15| timestamp|      13|
     |2024-10-31 10:09:16| timestamp|      10|
     +-------------------+----------+--------+
+
+    Example 3: Extract the hours from a time column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("13:08:15",),
+    ...     ("10:09:16",)], ['t']).withColumn("t", sf.col("t").cast("time"))
+    >>> df.select("*", sf.typeof('t'), sf.hour('t')).show()
+    +--------+---------+-------+
+    |       t|typeof(t)|hour(t)|
+    +--------+---------+-------+
+    |13:08:15|  time(6)|     13|
+    |10:09:16|  time(6)|     10|
+    +--------+---------+-------+
     """
     return _invoke_function_over_columns("hour", col)
 
@@ -10191,10 +10279,13 @@ def minute(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.1.0
+        Added support for time type.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target date/timestamp column to work on.
+        target date/time/timestamp column to work on.
 
     See Also
     --------
@@ -10241,6 +10332,21 @@ def minute(col: "ColumnOrName") -> Column:
     |2015-04-08 13:08:15| timestamp|         8|
     |2024-10-31 10:09:16| timestamp|         9|
     +-------------------+----------+----------+
+
+    Example 3: Extract the minutes from a time column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("13:08:15",),
+    ...     ("10:09:16",)], ['t']).withColumn("t", sf.col("t").cast("time"))
+    >>> df.select("*", sf.typeof('t'), sf.minute('t')).show()
+    +--------+---------+---------+
+    |       t|typeof(t)|minute(t)|
+    +--------+---------+---------+
+    |13:08:15|  time(6)|        8|
+    |10:09:16|  time(6)|        9|
+    +--------+---------+---------+
     """
     return _invoke_function_over_columns("minute", col)
 
@@ -10255,10 +10361,13 @@ def second(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.1.0
+        Added support for time type.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target date/timestamp column to work on.
+        target date/time/timestamp column to work on.
 
     Returns
     -------
@@ -10305,6 +10414,21 @@ def second(col: "ColumnOrName") -> Column:
     |2015-04-08 13:08:15| timestamp|        15|
     |2024-10-31 10:09:16| timestamp|        16|
     +-------------------+----------+----------+
+
+    Example 3: Extract the seconds from a time column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("13:08:15",),
+    ...     ("10:09:16",)], ['t']).withColumn("t", sf.col("t").cast("time"))
+    >>> df.select("*", sf.typeof('t'), sf.second('t')).show()
+    +--------+---------+---------+
+    |       t|typeof(t)|second(t)|
+    +--------+---------+---------+
+    |13:08:15|  time(6)|       15|
+    |10:09:16|  time(6)|       16|
+    +--------+---------+---------+
     """
     return _invoke_function_over_columns("second", col)
 
@@ -10334,6 +10458,9 @@ def weekofyear(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
 
     Examples
     --------
@@ -11345,6 +11472,70 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 @_try_remote_functions
+def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
+    """This is a special version of `try_to_date` that performs the same operation, but returns a
+    NULL value instead of raising an error if date cannot be created.
+
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of values to convert.
+    format: literal string, optional
+        format to use to convert date values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        date value as :class:`pyspark.sql.types.DateType` type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
+    :meth:`pyspark.sql.functions.date_format`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('1997-02-28',)], ['ts'])
+    >>> df.select('*', sf.try_to_date(df.ts)).show()
+    +----------+---------------+
+    |        ts|try_to_date(ts)|
+    +----------+---------------+
+    |1997-02-28|     1997-02-28|
+    +----------+---------------+
+
+    >>> df.select('*', sf.try_to_date('ts', 'yyyy-MM-dd')).show()
+    +----------+---------------------------+
+    |        ts|try_to_date(ts, yyyy-MM-dd)|
+    +----------+---------------------------+
+    |1997-02-28|                 1997-02-28|
+    +----------+---------------------------+
+
+    >>> df = spark.createDataFrame([('foo',)], ['ts'])
+    >>> df.select(sf.try_to_date(df.ts)).show()
+    +---------------+
+    |try_to_date(ts)|
+    +---------------+
+    |           NULL|
+    +---------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    if format is None:
+        return _invoke_function_over_columns("try_to_date", col)
+    else:
+        return _invoke_function("try_to_date", _to_java_column(col), _enum_to_value(format))
+
+
+@_try_remote_functions
 def unix_date(col: "ColumnOrName") -> Column:
     """Returns the number of days since 1970-01-01.
 
@@ -11516,6 +11707,74 @@ def unix_seconds(col: "ColumnOrName") -> Column:
 
 
 @overload
+def to_time(str: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
+    ...
+
+
+@_try_remote_functions
+def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimeType` using the
+    optionally specified format. Specify formats according to `datetime pattern`_. By default, it
+    follows casting rules to :class:`pyspark.sql.types.TimeType` if the format is omitted.
+    Equivalent to ``col.cast("time")``.
+
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or column name
+        string to be parsed to time.
+    format: :class:`~pyspark.sql.Column` or column name, optional
+        time format pattern to follow.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        time value as :class:`pyspark.sql.types.TimeType` type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.try_to_time`
+
+    Examples
+    --------
+    Example 1: Convert string to a time
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("10:30:00",)], ["str"])
+    >>> df.select(sf.to_time(df.str)).show()
+    +------------+
+    |to_time(str)|
+    +------------+
+    |    10:30:00|
+    +------------+
+
+    Example 2: Convert string to a time with a format
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["str", "format"])
+    >>> df.select(sf.to_time(df.str, df.format)).show()
+    +--------------------+
+    |to_time(str, format)|
+    +--------------------+
+    |            10:30:00|
+    +--------------------+
+    """
+    if format is None:
+        return _invoke_function_over_columns("to_time", str)
+    else:
+        return _invoke_function_over_columns("to_time", str, format)
+
+
+@overload
 def to_timestamp(col: "ColumnOrName") -> Column:
     ...
 
@@ -11593,6 +11852,85 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function("to_timestamp", _to_java_column(col), _enum_to_value(format))
 
 
+@overload
+def try_to_time(str: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
+    ...
+
+
+@_try_remote_functions
+def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimeType` using the
+    optionally specified format. Specify formats according to `datetime pattern`_. By default, it
+    follows casting rules to :class:`pyspark.sql.types.TimeType` if the format is omitted.
+    Equivalent to ``col.cast("time")``. The function always returns null on an invalid input.
+
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or column name
+        string to be parsed to time.
+    format: :class:`~pyspark.sql.Column` or column name, optional
+        time format pattern to follow.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        time value as :class:`pyspark.sql.types.TimeType` type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_time`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
+
+    Examples
+    --------
+    Example 1: Convert string to a time
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("10:30:00",)], ["str"])
+    >>> df.select(sf.try_to_time(df.str).alias("time")).show()
+    +--------+
+    |    time|
+    +--------+
+    |10:30:00|
+    +--------+
+
+    Example 2: Convert string to a time with a format
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["str", "format"])
+    >>> df.select(sf.try_to_time(df.str, df.format).alias("time")).show()
+    +--------+
+    |    time|
+    +--------+
+    |10:30:00|
+    +--------+
+
+    Example 3: Converion failure results in NULL
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("malformed",)], ["str"])
+    >>> df.select(sf.try_to_time(df.str).alias("time")).show()
+    +----+
+    |time|
+    +----+
+    |NULL|
+    +----+
+    """
+    if format is None:
+        return _invoke_function_over_columns("try_to_time", str)
+    else:
+        return _invoke_function_over_columns("try_to_time", str, format)
+
+
 @_try_remote_functions
 def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
@@ -11622,9 +11960,9 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t).alias('dt')).show()
+    >>> df.select(sf.try_to_timestamp(df.t)).show()
     +-------------------+
-    |                 dt|
+    |try_to_timestamp(t)|
     +-------------------+
     |1997-02-28 10:30:00|
     +-------------------+
@@ -11633,12 +11971,12 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss')).alias('dt')).show()
-    +-------------------+
-    |                 dt|
-    +-------------------+
-    |1997-02-28 10:30:00|
-    +-------------------+
+    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss'))).show()
+    +----------------------------------------+
+    |try_to_timestamp(t, yyyy-MM-dd HH:mm:ss)|
+    +----------------------------------------+
+    |                     1997-02-28 10:30:00|
+    +----------------------------------------+
 
     Example 3: Converion failure results in NULL when ANSI mode is on
 
@@ -11886,6 +12224,7 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.date_trunc`
+    :meth:`pyspark.sql.functions.time_trunc`
 
     Examples
     --------
@@ -11939,6 +12278,7 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.time_trunc`
 
     Examples
     --------
@@ -12368,6 +12708,47 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
 
     return _invoke_function_over_columns("timestamp_seconds", col)
+
+
+@_try_remote_functions
+def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
+    """
+    Returns `time` truncated to the `unit`.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : :class:`~pyspark.sql.Column` or column name
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    time : :class:`~pyspark.sql.Column` or column name
+        A time to truncate.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A time truncated to the specified unit.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.date_trunc`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("HOUR", "13:08:15")],
+    ...     ['unit', 'time']).withColumn("time", sf.col("time").cast("time"))
+    >>> df.select('*', sf.time_trunc('unit', 'time')).show()
+    +----+--------+----------------------+
+    |unit|    time|time_trunc(unit, time)|
+    +----+--------+----------------------+
+    |HOUR|13:08:15|              13:00:00|
+    +----+--------+----------------------+
+    """
+    return _invoke_function_over_columns("time_trunc", unit, time)
 
 
 @_try_remote_functions
@@ -13195,15 +13576,22 @@ def session_user() -> Column:
 
 
 @_try_remote_functions
-def uuid() -> Column:
+def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
     """Returns an universally unique identifier (UUID) string.
     The value is returned as a canonical UUID 36-character string.
 
     .. versionadded:: 4.1.0
 
+    Parameters
+    ----------
+    seed : :class:`~pyspark.sql.Column` or int
+        Optional random number seed to use.
+
     Examples
     --------
-    >>> import pyspark.sql.functions as sf
+    Example 1: Generate UUIDs with random seed
+
+    >>> from pyspark.sql import functions as sf
     >>> spark.range(5).select(sf.uuid()).show(truncate=False) # doctest: +SKIP
     +------------------------------------+
     |uuid()                              |
@@ -13214,8 +13602,27 @@ def uuid() -> Column:
     |fb1d6178-7676-4791-baa9-f2ddcc494515|
     |d48665e8-2657-4c6b-b7c8-8ae0cd646e41|
     +------------------------------------+
+
+    Example 2: Generate UUIDs with a specified seed
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 5, 1, 1).select(sf.uuid(seed=123)).show(truncate=False)
+    +------------------------------------+
+    |uuid()                              |
+    +------------------------------------+
+    |4c99192d-23d6-4d88-b814-a634398120f0|
+    |af506873-3c53-41e3-8354-a24856b8de8a|
+    |7b4b370e-e867-47e2-93c0-f6990463a12d|
+    |1c4d1733-ff1a-4a6c-b144-0b0345adf0d0|
+    |7478f235-f8bc-4112-8e59-a28f50e46890|
+    +------------------------------------+
     """
-    return _invoke_function("uuid")
+    from pyspark.sql.classic.column import _to_java_column
+
+    if seed is None:
+        return _invoke_function("uuid")
+    else:
+        return _invoke_function("uuid", _to_java_column(lit(seed)))
 
 
 @_try_remote_functions
@@ -24306,6 +24713,41 @@ def make_interval(
 
 
 @_try_remote_functions
+def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrName") -> Column:
+    """
+    Create time from hour, minute and second fields. For invalid inputs it will throw an error.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    hour : :class:`~pyspark.sql.Column` or column name
+        The hour to represent, from 0 to 23.
+    minute : :class:`~pyspark.sql.Column` or column name
+        The minute to represent, from 0 to 59.
+    second : :class:`~pyspark.sql.Column` or column name
+        The second to represent, from 0 to 59.999999.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column representing the created time.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(6, 30, 45.887)], ["hour", "minute", "second"])
+    >>> df.select(sf.make_time("hour", "minute", "second").alias("time")).show()
+    +------------+
+    |        time|
+    +------------+
+    |06:30:45.887|
+    +------------+
+    """
+    return _invoke_function_over_columns("make_time", hour, minute, second)
+
+
+@_try_remote_functions
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -24355,6 +24797,7 @@ def make_timestamp(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24451,6 +24894,7 @@ def try_make_timestamp(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24562,6 +25006,7 @@ def make_timestamp_ltz(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24658,6 +25103,7 @@ def try_make_timestamp_ltz(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24765,6 +25211,7 @@ def make_timestamp_ntz(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24836,6 +25283,7 @@ def try_make_timestamp_ntz(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -26640,32 +27088,7 @@ def udf(
     # The following table shows most of Python data and SQL type conversions in normal UDFs that
     # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
     # future. The table might have to be eventually documented externally.
-    # Please see SPARK-28131's PR to see the codes in order to generate the table below.
-    #
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|         a(str)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|bytearray(b'ABC')(bytearray)|  1(Decimal)|{'a': 1}(dict)|Row(kwargs=1)(Row)|Row(namedtuple=1)(Row)|  # noqa
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    # |                      boolean|          None|      True|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                      tinyint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                     smallint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                          int|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       bigint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       string|          None|    'true'|   '1'|            'a'|'java.util.Gregor...|         'java.util.Gregor...|     '1.0'|         '[I@66cbb73a'|    '[1]'|'[Ljava.lang.Obje...|               '[B@5a51eb1a'|         '1'|       '{a=1}'|                 X|                     X|  # noqa
-    # |                         date|          None|         X|     X|              X|datetime.date(197...|         datetime.date(197...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
-    # |                    timestamp|          None|         X|     X|              X|                   X|         datetime.datetime...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
-    # |                        float|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       double|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                   array<int>|          None|      None|  None|           None|                None|                         None|      None|                   [1]|      [1]|                 [1]|                [65, 66, 67]|        None|          None|                 X|                     X|  # noqa
-    # |                       binary|          None|      None|  None|bytearray(b'a')|                None|                         None|      None|                  None|     None|                None|           bytearray(b'ABC')|        None|          None|                 X|                     X|  # noqa
-    # |                decimal(10,0)|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|Decimal('1')|          None|                 X|                     X|  # noqa
-    # |              map<string,int>|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|      {'a': 1}|                 X|                     X|  # noqa
-    # |               struct<_1:int>|          None|         X|     X|              X|                   X|                            X|         X|                     X|Row(_1=1)|           Row(_1=1)|                           X|           X|  Row(_1=None)|         Row(_1=1)|             Row(_1=1)|  # noqa
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    #
-    # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
-    #       used in `returnType`.
-    # Note: The values inside of the table are generated by `repr`.
-    # Note: 'X' means it throws an exception during the conversion.
+    # Please see python/pyspark/sql/tests/udf_type_tests for type tests and golden files
 
     # decorator @udf, @udf(), @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):
@@ -26848,6 +27271,75 @@ def udtf(
         return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
     else:
         return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
+
+
+@_try_remote_functions
+def arrow_udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
+    """Creates a PyArrow-native user defined table function (UDTF).
+
+    This function provides a PyArrow-native interface for UDTFs, where the eval method
+    receives PyArrow RecordBatches or Arrays and returns an Iterator of PyArrow Tables
+    or RecordBatches.
+    This enables true vectorized computation without row-by-row processing overhead.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    cls : class, optional
+        the Python user-defined table function handler class.
+    returnType : :class:`pyspark.sql.types.StructType` or str, optional
+        the return type of the user-defined table function. The value can be either a
+        :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+
+    Examples
+    --------
+    UDTF with PyArrow RecordBatch input:
+
+    >>> import pyarrow as pa
+    >>> from pyspark.sql.functions import arrow_udtf
+    >>> @arrow_udtf(returnType="x int, y int")
+    ... class MyUDTF:
+    ...     def eval(self, batch: pa.RecordBatch):
+    ...         # Process the entire batch vectorized
+    ...         x_array = batch.column('x')
+    ...         y_array = batch.column('y')
+    ...         result_table = pa.table({
+    ...             'x': x_array,
+    ...             'y': y_array
+    ...         })
+    ...         yield result_table
+    ...
+    >>> df = spark.range(10).selectExpr("id as x", "id as y")
+    >>> MyUDTF(df.asTable()).show()  # doctest: +SKIP
+
+    UDTF with PyArrow Array inputs:
+
+    >>> @arrow_udtf(returnType="x int, y int")
+    ... class MyUDTF2:
+    ...     def eval(self, x: pa.Array, y: pa.Array):
+    ...         # Process arrays vectorized
+    ...         result_table = pa.table({
+    ...             'x': x,
+    ...             'y': y
+    ...         })
+    ...         yield result_table
+    ...
+    >>> MyUDTF2(lit(1), lit(2)).show()  # doctest: +SKIP
+
+    Notes
+    -----
+    - The eval method must accept PyArrow RecordBatches or Arrays as input
+    - The eval method must yield PyArrow Tables or RecordBatches as output
+    """
+    if cls is None:
+        return functools.partial(_create_pyarrow_udtf, returnType=returnType)
+    else:
+        return _create_pyarrow_udtf(cls=cls, returnType=returnType)
 
 
 def _test() -> None:

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import java.util.HashSet
+import java.util.{Arrays, HashSet}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedStar
 import org.apache.spark.sql.catalyst.analysis.resolver.{NameScope, NameScopeStack, NameTarget}
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
@@ -34,15 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   OuterReference
 }
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.types.{
-  ArrayType,
-  BooleanType,
-  IntegerType,
-  MapType,
-  StringType,
-  StructField,
-  StructType
-}
+import org.apache.spark.sql.types._
 
 class NameScopeSuite extends PlanTest {
   private val col1Integer = AttributeReference(name = "col1", dataType = IntegerType)()
@@ -85,6 +77,7 @@ class NameScopeSuite extends PlanTest {
     name = "col10",
     dataType = MapType(StringType, IntegerType)
   )()
+  private val col10Integer = AttributeReference(name = "col10", dataType = IntegerType)()
   private val col11MapWithStruct = AttributeReference(
     name = "col11",
     dataType = MapType(
@@ -358,23 +351,6 @@ class NameScopeSuite extends PlanTest {
       )
     )
 
-    val matchedMapStructs = stack.resolveMultipartName(Seq("col11", "key", "field"))
-    assert(
-      matchedMapStructs == NameTarget(
-        candidates = Seq(
-          GetStructField(GetMapValue(col11MapWithStruct, Literal("key")), 0, Some("field"))),
-        aliasName = Some("field"),
-        output = Seq(
-          col8Struct,
-          col9NestedStruct,
-          col10Map,
-          col11MapWithStruct,
-          col12Array,
-          col13ArrayWithStruct
-        )
-      )
-    )
-
     var matchedArrays = stack.resolveMultipartName(Seq("col12", "element"))
     assert(
       matchedArrays == NameTarget(
@@ -446,7 +422,7 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer, col9NestedStruct, col10Map)))
 
-    stack.withNewScope(isSubqueryRoot = true) {
+    withNewScope(stack, isSubqueryRoot = true) {
       stack.overwriteCurrent(output = Some(Seq(col1IntegerOther, col3Boolean)))
 
       assert(
@@ -509,10 +485,10 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
 
-    stack.withNewScope(isSubqueryRoot = true) {
-      stack.withNewScope() {
-        stack.withNewScope() {
-          stack.withNewScope() {
+    withNewScope(stack, isSubqueryRoot = true) {
+      withNewScope(stack) {
+        withNewScope(stack) {
+          withNewScope(stack) {
             assert(
               stack.resolveMultipartName(Seq("col1")) == NameTarget(
                 candidates = Seq(OuterReference(col1Integer)),
@@ -531,7 +507,7 @@ class NameScopeSuite extends PlanTest {
 
           stack.overwriteCurrent(output = Some(Seq(col1IntegerOther, col3Boolean)))
 
-          stack.withNewScope() {
+          withNewScope(stack) {
             assert(
               stack.resolveMultipartName(Seq("col1")) == NameTarget(
                 candidates = Seq(OuterReference(col1Integer)),
@@ -557,10 +533,10 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
 
-    stack.withNewScope(isSubqueryRoot = true) {
+    withNewScope(stack, isSubqueryRoot = true) {
       stack.overwriteCurrent(output = Some(Seq(col1IntegerOther)))
 
-      stack.withNewScope(isSubqueryRoot = true) {
+      withNewScope(stack, isSubqueryRoot = true) {
         stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
 
         assert(
@@ -611,14 +587,14 @@ class NameScopeSuite extends PlanTest {
   test("Hidden output gets properly propagated in a stack") {
     val stack = new NameScopeStack
 
-    stack.withNewScope() {
+    withNewScope(stack) {
 
       stack.overwriteCurrent(output = Some(Seq(col1Integer)), hiddenOutput = Some(Seq(col1Integer)))
 
-      stack.withNewScope(isSubqueryRoot = true) {
+      withNewScope(stack, isSubqueryRoot = true) {
 
-        stack.withNewScope() {
-          stack.withNewScope() {
+        withNewScope(stack) {
+          withNewScope(stack) {
             stack.overwriteCurrent(
               output = Some(Seq(col1Integer, col2Integer)),
               hiddenOutput = Some(Seq(col1Integer, col2Integer, col3Boolean))
@@ -661,6 +637,259 @@ class NameScopeSuite extends PlanTest {
     }
   }
 
+  test("Hidden output gets prioritized because of conflict") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer, col1IntegerOther)),
+      hiddenOutput = Some(Seq(col1IntegerOther, col2Integer)),
+      availableAliases = Some(new HashSet[ExprId](Arrays.asList(col1Integer.exprId)))
+    )
+
+    assert(
+      stack.resolveMultipartName(Seq("col1")) == NameTarget(
+        candidates = Seq(col1Integer, col1IntegerOther),
+        output = Seq(col1Integer, col1IntegerOther)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(Seq("col1"), shouldPreferHiddenOutput = true) == NameTarget(
+        candidates = Seq(col1Integer, col1IntegerOther),
+        output = Seq(col1Integer, col1IntegerOther)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(Seq("col1"), canResolveNameByHiddenOutput = true) == NameTarget(
+        candidates = Seq(col1IntegerOther),
+        output = Seq(col1Integer, col1IntegerOther)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col1"),
+        canResolveNameByHiddenOutput = true,
+        shouldPreferHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq(col1IntegerOther),
+        output = Seq(col1Integer, col1IntegerOther)
+      )
+    )
+  }
+
+  test("Main output gets prioritized because of conflict") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, col1IntegerOther, col2Integer)),
+      availableAliases = Some(new HashSet[ExprId])
+    )
+
+    assert(
+      stack.resolveMultipartName(Seq("col1")) == NameTarget(
+        candidates = Seq(col1Integer),
+        output = Seq(col1Integer)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(Seq("col1"), shouldPreferHiddenOutput = true) == NameTarget(
+        candidates = Seq(col1Integer),
+        output = Seq(col1Integer)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(Seq("col1"), canResolveNameByHiddenOutput = true) == NameTarget(
+        candidates = Seq(col1Integer),
+        output = Seq(col1Integer)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col1"),
+        canResolveNameByHiddenOutput = true,
+        shouldPreferHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq(col1Integer),
+        output = Seq(col1Integer)
+      )
+    )
+  }
+
+  test("Both main and hidden outputs have a conflict") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer, col1IntegerOther)),
+      hiddenOutput = Some(Seq(col1Integer, col1IntegerOther, col2Integer)),
+      availableAliases = Some(new HashSet[ExprId])
+    )
+
+    assert(
+      stack.resolveMultipartName(Seq("col1")) == NameTarget(
+        candidates = Seq(col1Integer, col1IntegerOther),
+        output = Seq(col1Integer, col1IntegerOther)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(Seq("col1"), shouldPreferHiddenOutput = true) == NameTarget(
+        candidates = Seq(col1Integer, col1IntegerOther),
+        output = Seq(col1Integer, col1IntegerOther)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(Seq("col1"), canResolveNameByHiddenOutput = true) == NameTarget(
+        candidates = Seq(col1Integer, col1IntegerOther),
+        output = Seq(col1Integer, col1IntegerOther)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col1"),
+        canResolveNameByHiddenOutput = true,
+        shouldPreferHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq(col1Integer, col1IntegerOther),
+        output = Seq(col1Integer, col1IntegerOther)
+      )
+    )
+  }
+
+  test("Hidden output gets prioritized because of impossible extract") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col10Integer)),
+      hiddenOutput = Some(Seq(col10Map)),
+      availableAliases = Some(new HashSet[ExprId](Arrays.asList(col10Integer.exprId)))
+    )
+
+    assert(
+      stack.resolveMultipartName(Seq("col10", "key")) == NameTarget(
+        candidates = Seq.empty,
+        output = Seq(col10Integer)
+      )
+    )
+    assert(
+      stack
+        .resolveMultipartName(Seq("col10", "key"), shouldPreferHiddenOutput = true) == NameTarget(
+        candidates = Seq.empty,
+        output = Seq(col10Integer)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col10", "key"),
+        canResolveNameByHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq(GetMapValue(col10Map, Literal("key"))),
+        aliasName = Some("key"),
+        output = Seq(col10Integer)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col10", "key"),
+        canResolveNameByHiddenOutput = true,
+        shouldPreferHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq(GetMapValue(col10Map, Literal("key"))),
+        aliasName = Some("key"),
+        output = Seq(col10Integer)
+      )
+    )
+  }
+
+  test("Main output gets prioritized because of impossible extract") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col10Map)),
+      hiddenOutput = Some(Seq(col10Integer)),
+      availableAliases = Some(new HashSet[ExprId](Arrays.asList(col10Map.exprId)))
+    )
+
+    assert(
+      stack.resolveMultipartName(Seq("col10", "key")) == NameTarget(
+        candidates = Seq(GetMapValue(col10Map, Literal("key"))),
+        aliasName = Some("key"),
+        output = Seq(col10Map)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col10", "key"),
+        shouldPreferHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq(GetMapValue(col10Map, Literal("key"))),
+        aliasName = Some("key"),
+        output = Seq(col10Map)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col10", "key"),
+        canResolveNameByHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq(GetMapValue(col10Map, Literal("key"))),
+        aliasName = Some("key"),
+        output = Seq(col10Map)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col10", "key"),
+        canResolveNameByHiddenOutput = true,
+        shouldPreferHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq(GetMapValue(col10Map, Literal("key"))),
+        aliasName = Some("key"),
+        output = Seq(col10Map)
+      )
+    )
+  }
+
+  test("Both main and hidden outputs have impossible extract") {
+    val stack = new NameScopeStack
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1IntegerOther)),
+      availableAliases = Some(new HashSet[ExprId](Arrays.asList(col1Integer.exprId)))
+    )
+
+    assert(
+      stack.resolveMultipartName(Seq("col1", "key")) == NameTarget(
+        candidates = Seq.empty,
+        output = Seq(col1Integer)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(Seq("col1", "key"), shouldPreferHiddenOutput = true) == NameTarget(
+        candidates = Seq.empty,
+        output = Seq(col1Integer)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col1", "key"),
+        canResolveNameByHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq.empty,
+        output = Seq(col1Integer)
+      )
+    )
+    assert(
+      stack.resolveMultipartName(
+        Seq("col1", "key"),
+        canResolveNameByHiddenOutput = true,
+        shouldPreferHiddenOutput = true
+      ) == NameTarget(
+        candidates = Seq.empty,
+        output = Seq(col1Integer)
+      )
+    )
+  }
+
   test("Empty stack") {
     val stack = new NameScopeStack
 
@@ -692,7 +921,7 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
 
-    val output = stack.withNewScope() {
+    val output = withNewScope(stack) {
       assert(stack.current.output.isEmpty)
 
       stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
@@ -715,13 +944,13 @@ class NameScopeSuite extends PlanTest {
 
     stack.overwriteCurrent(output = Some(Seq(col1Integer)))
 
-    val output = stack.withNewScope() {
+    val output = withNewScope(stack) {
       stack.overwriteCurrent(output = Some(Seq(col2Integer)))
 
-      val output = stack.withNewScope() {
+      val output = withNewScope(stack) {
         stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
 
-        val output = stack.withNewScope() {
+        val output = withNewScope(stack) {
           stack.overwriteCurrent(output = Some(Seq(col4String)))
 
           assert(stack.current.output == Seq(col4String))
@@ -745,37 +974,6 @@ class NameScopeSuite extends PlanTest {
     assert(stack.current.output == Seq(col1Integer))
   }
 
-  test(
-    "Name resolution should prefer table columns over aliases with same name when " +
-    "shouldPreferTableColumnsOverAliases is set or throw AMBIGUOUS_REFERENCE otherwise"
-  ) {
-    val stack = new NameScopeStack
-    val output = Seq(col1Integer, col1IntegerOther)
-    val availableAliases = new HashSet[ExprId](1)
-    availableAliases.add(col1IntegerOther.exprId)
-
-    stack.overwriteCurrent(output = Some(output), availableAliases = Some(availableAliases))
-
-    assert(
-      stack.resolveMultipartName(
-        multipartName = Seq("col1"),
-        shouldPreferTableColumnsOverAliases = true
-      ) == NameTarget(
-        candidates = Seq(col1Integer),
-        output = output
-      )
-    )
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        val nameTarget = stack.resolveMultipartName(multipartName = Seq("col1"))
-        nameTarget.pickCandidate(UnresolvedAttribute(nameParts = Seq("col1")))
-      },
-      condition = "AMBIGUOUS_REFERENCE",
-      parameters = Map("name" -> "`col1`", "referenceNames" -> "[`col1`, `col1`]")
-    )
-  }
-
   /**
    * Check both [[resolveMultipartName]] and [[findAttributesByName]] for a single part name.
    *
@@ -795,5 +993,15 @@ class NameScopeSuite extends PlanTest {
       )
     )
     assert(nameScope.findAttributesByName(name) == candidates)
+  }
+
+  private def withNewScope[R](stack: NameScopeStack, isSubqueryRoot: Boolean = false)(
+      body: => R): R = {
+    stack.pushScope(isSubqueryRoot = isSubqueryRoot)
+    try {
+      body
+    } finally {
+      stack.popScope()
+    }
   }
 }

@@ -63,7 +63,6 @@ from google.rpc import error_details_pb2
 
 from pyspark.util import is_remote_only
 from pyspark.accumulators import SpecialAccumulatorIds
-from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
@@ -108,7 +107,9 @@ from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_p
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
+    from google.rpc.status_pb2 import Status
     from pyspark.sql.connect._typing import DataTypeOrString
+    from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
 
 
@@ -393,22 +394,19 @@ class DefaultChannelBuilder(ChannelBuilder):
                     )
                 self.set(kv[0], urllib.parse.unquote(kv[1]))
 
-        netloc = self.url.netloc.split(":")
-        if len(netloc) == 1:
-            self._host = netloc[0]
-            self._port = DefaultChannelBuilder.default_port()
-        elif len(netloc) == 2:
-            self._host = netloc[0]
-            self._port = int(netloc[1])
-        else:
+        if not self.url.hostname:
             raise PySparkValueError(
                 errorClass="INVALID_CONNECT_URL",
                 messageParameters={
-                    "detail": f"Target destination '{self.url.netloc}' should match the "
-                    f"'<host>:<port>' pattern. Please update the destination to follow "
-                    f"the correct format, e.g., 'hostname:port'.",
+                    "detail": f"Hostname is missing in the URL: '{self.url.geturl()}'. "
+                    "Please update the URL to follow the correct format, "
+                    "e.g., 'sc://hostname:port'.",
                 },
             )
+        self._host = f"[{self.url.hostname}]" if ":" in self.url.hostname else self.url.hostname
+        self._port = (
+            self.url.port if self.url.port is not None else DefaultChannelBuilder.default_port()
+        )
 
     @property
     def secure(self) -> bool:
@@ -606,6 +604,9 @@ class SparkConnectClient(object):
         channel_options: Optional[List[Tuple[str, Any]]] = None,
         retry_policy: Optional[Dict[str, Any]] = None,
         use_reattachable_execute: bool = True,
+        session_hooks: Optional[list["SparkSession.Hook"]] = None,
+        allow_arrow_batch_chunking: bool = True,
+        preferred_arrow_chunk_size: Optional[int] = None,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -636,6 +637,23 @@ class SparkConnectClient(object):
                     a failed request. Default: 60000(ms).
         use_reattachable_execute: bool
             Enable reattachable execution.
+        session_hooks: list[SparkSession.Hook], optional
+            List of session hooks to call.
+        allow_arrow_batch_chunking: bool
+            Whether to allow the server to split large Arrow batches into smaller chunks.
+            Although Arrow results are split into batches with a size limit according to estimation,
+            the size of the batches is not guaranteed to be less than the limit, especially when a
+            single row is larger than the limit, in which case the server will fail to split it
+            further into smaller batches. As a result, the client may encounter a gRPC error stating
+            "Received message larger than max" when a batch is too large.
+            If true, the server will split large Arrow batches into smaller chunks, and the client
+            is expected to handle the chunked Arrow batches.
+            If false, the server will not chunk large Arrow batches.
+        preferred_arrow_chunk_size: Optional[int]
+            Optional preferred Arrow batch size in bytes for the server to use when sending Arrow
+            results.
+            The server will attempt to use this size if it is set and within the valid range
+            ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
         """
         self.thread_local = threading.local()
 
@@ -675,6 +693,9 @@ class SparkConnectClient(object):
             self._user_id, self._session_id, self._channel, self._builder.metadata()
         )
         self._use_reattachable_execute = use_reattachable_execute
+        self._allow_arrow_batch_chunking = allow_arrow_batch_chunking
+        self._preferred_arrow_chunk_size = preferred_arrow_chunk_size
+        self._session_hooks = session_hooks or []
         # Configure logging for the SparkConnect client.
 
         # Capture the server-side session ID and set it to None initially. It will
@@ -963,7 +984,7 @@ class SparkConnectClient(object):
             # Rename columns to avoid duplicated column names.
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
 
-            pandas_options = {}
+            pandas_options = {"coerce_temporal_nanoseconds": True}
             if self_destruct:
                 # Configure PyArrow to use as little memory as possible:
                 # self_destruct - free columns as they are converted
@@ -974,15 +995,6 @@ class SparkConnectClient(object):
                         "self_destruct": True,
                         "split_blocks": True,
                         "use_threads": False,
-                    }
-                )
-            if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
-                # A legacy option to coerce date32, date64, duration, and timestamp
-                # time units to nanoseconds when converting to pandas.
-                # This option can only be added since 13.0.0.
-                pandas_options.update(
-                    {
-                        "coerce_temporal_nanoseconds": True,
                     }
                 )
             pdf = renamed_table.to_pandas(**pandas_options)
@@ -1240,6 +1252,15 @@ class SparkConnectClient(object):
             req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
+        # Add request option to allow result chunking.
+        req.request_options.append(
+            pb2.ExecutePlanRequest.RequestOption(
+                result_chunking_options=pb2.ResultChunkingOptions(
+                    allow_arrow_batch_chunking=self._allow_arrow_batch_chunking,
+                    preferred_arrow_chunk_size=self._preferred_arrow_chunk_size,
+                )
+            )
+        )
         if operation_id is not None:
             try:
                 uuid.UUID(operation_id, version=4)
@@ -1365,6 +1386,9 @@ class SparkConnectClient(object):
         """
         logger.debug("Execute")
 
+        for hook in self._session_hooks:
+            req = hook.on_execute_plan(req)
+
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
             self._verify_response_integrity(b)
 
@@ -1406,7 +1430,11 @@ class SparkConnectClient(object):
             # when not at debug log level.
             logger.debug(f"ExecuteAndFetchAsIterator. Request: {self._proto_to_string(req)}")
 
+        for hook in self._session_hooks:
+            req = hook.on_execute_plan(req)
+
         num_records = 0
+        arrow_batch_chunks_to_assemble: List[bytes] = []
 
         def handle_response(
             b: pb2.ExecutePlanResponse,
@@ -1474,6 +1502,10 @@ class SparkConnectClient(object):
             if b.HasField("streaming_query_listener_events_result"):
                 event_result = b.streaming_query_listener_events_result
                 yield {"streaming_query_listener_events_result": event_result}
+            if b.HasField("pipeline_command_result"):
+                yield {"pipeline_command_result": b.pipeline_command_result}
+            if b.HasField("pipeline_event_result"):
+                yield {"pipeline_event_result": b.pipeline_event_result}
             if b.HasField("get_resources_command_result"):
                 resources = {}
                 for key, resource in b.get_resources_command_result.resources.items():
@@ -1490,32 +1522,65 @@ class SparkConnectClient(object):
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
+                    f"Number of chunks in batch={b.arrow_batch.num_chunks_in_batch} "
+                    f"Chunk index={b.arrow_batch.chunk_index} "
                     f"size={len(b.arrow_batch.data)}"
                 )
 
+                if arrow_batch_chunks_to_assemble:
+                    # Expect next chunk of the same batch
+                    if b.arrow_batch.chunk_index != len(arrow_batch_chunks_to_assemble):
+                        raise SparkConnectException(
+                            f"Expected chunk index {len(arrow_batch_chunks_to_assemble)} of the "
+                            f"arrow batch but got {b.arrow_batch.chunk_index}."
+                        )
+                else:
+                    # Expect next batch
+                    if (
+                        b.arrow_batch.HasField("start_offset")
+                        and num_records != b.arrow_batch.start_offset
+                    ):
+                        # Expect next batch
+                        raise SparkConnectException(
+                            f"Expected arrow batch to start at row offset {num_records} in "
+                            + "results, but received arrow batch starting at offset "
+                            + f"{b.arrow_batch.start_offset}."
+                        )
+                    if b.arrow_batch.chunk_index != 0:
+                        raise SparkConnectException(
+                            f"Expected chunk index 0 of the next arrow batch "
+                            f"but got {b.arrow_batch.chunk_index}."
+                        )
+
+                arrow_batch_chunks_to_assemble.append(b.arrow_batch.data)
+                # Assemble the chunks to an arrow batch to process if
+                # (a) chunking is not enabled (num_chunks_in_batch is not set or is 0,
+                #  in this case, it is the single chunk in the batch)
+                # (b) or the client has received all chunks of the batch.
                 if (
-                    b.arrow_batch.HasField("start_offset")
-                    and num_records != b.arrow_batch.start_offset
+                    not b.arrow_batch.HasField("num_chunks_in_batch")
+                    or b.arrow_batch.num_chunks_in_batch == 0
+                    or len(arrow_batch_chunks_to_assemble) == b.arrow_batch.num_chunks_in_batch
                 ):
-                    raise SparkConnectException(
-                        f"Expected arrow batch to start at row offset {num_records} in results, "
-                        + "but received arrow batch starting at offset "
-                        + f"{b.arrow_batch.start_offset}."
+                    arrow_batch_data = b"".join(arrow_batch_chunks_to_assemble)
+                    arrow_batch_chunks_to_assemble.clear()
+                    logger.debug(
+                        f"Assembling arrow batch of size {len(arrow_batch_data)} from "
+                        f"{b.arrow_batch.num_chunks_in_batch} chunks."
                     )
 
-                num_records_in_batch = 0
-                with pa.ipc.open_stream(b.arrow_batch.data) as reader:
-                    for batch in reader:
-                        assert isinstance(batch, pa.RecordBatch)
-                        num_records_in_batch += batch.num_rows
-                        yield batch
-
-                if num_records_in_batch != b.arrow_batch.row_count:
-                    raise SparkConnectException(
-                        f"Expected {b.arrow_batch.row_count} rows in arrow batch but got "
-                        + f"{num_records_in_batch}."
-                    )
-                num_records += num_records_in_batch
+                    num_records_in_batch = 0
+                    with pa.ipc.open_stream(arrow_batch_data) as reader:
+                        for batch in reader:
+                            assert isinstance(batch, pa.RecordBatch)
+                            num_records_in_batch += batch.num_rows
+                            if num_records_in_batch != b.arrow_batch.row_count:
+                                raise SparkConnectException(
+                                    f"Expected {b.arrow_batch.row_count} rows in arrow batch but "
+                                    + f"got {num_records_in_batch}."
+                                )
+                            num_records += num_records_in_batch
+                            yield batch
             if b.HasField("create_resource_profile_command_result"):
                 profile_id = b.create_resource_profile_command_result.profile_id
                 yield {"create_resource_profile_command_result": profile_id}
@@ -1885,7 +1950,9 @@ class SparkConnectClient(object):
         logger.exception("GRPC Error received")
         # We have to cast the value here because, a RpcError is a Call as well.
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
-        status = rpc_status.from_call(cast(grpc.Call, rpc_error))
+        error: grpc.Call = cast(grpc.Call, rpc_error)
+        status_code: grpc.StatusCode = error.code()
+        status: Optional[Status] = rpc_status.from_call(error)
         if status:
             for d in status.details:
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
@@ -1893,7 +1960,7 @@ class SparkConnectClient(object):
                     d.Unpack(info)
                     logger.debug(f"Received ErrorInfo: {info}")
 
-                    if info.metadata["errorClass"] == "INVALID_HANDLE.SESSION_CHANGED":
+                    if info.metadata.get("errorClass") == "INVALID_HANDLE.SESSION_CHANGED":
                         self._closed = True
 
                     raise convert_exception(
@@ -1901,14 +1968,18 @@ class SparkConnectClient(object):
                         status.message,
                         self._fetch_enriched_error(info),
                         self._display_server_stack_trace(),
-                        status.code,
+                        status_code,
                     ) from None
 
             raise SparkConnectGrpcException(
-                message=status.message, grpc_status_code=status.code
+                message=status.message,
+                grpc_status_code=status_code,
             ) from None
         else:
-            raise SparkConnectGrpcException(str(rpc_error)) from None
+            raise SparkConnectGrpcException(
+                message=str(error),
+                grpc_status_code=status_code,
+            ) from None
 
     def add_artifacts(self, *paths: str, pyfile: bool, archive: bool, file: bool) -> None:
         try:
@@ -1981,7 +2052,7 @@ class SparkConnectClient(object):
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
-    def _delete_ml_cache(self, cache_ids: List[str]) -> List[str]:
+    def _delete_ml_cache(self, cache_ids: List[str], evict_only: bool = False) -> List[str]:
         # try best to delete the cache
         try:
             if len(cache_ids) > 0:
@@ -1989,6 +2060,7 @@ class SparkConnectClient(object):
                 command.ml_command.delete.obj_refs.extend(
                     [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
                 )
+                command.ml_command.delete.evict_only = evict_only
                 (_, properties, _) = self.execute_command(command)
 
                 assert properties is not None
@@ -2021,3 +2093,15 @@ class SparkConnectClient(object):
             return [item.string for item in ml_command_result.param.array.elements]
 
         return []
+
+    def _query_model_size(self, model_ref_id: str) -> int:
+        command = pb2.Command()
+        command.ml_command.get_model_size.CopyFrom(
+            pb2.MlCommand.GetModelSize(model_ref=pb2.ObjectRef(id=model_ref_id))
+        )
+        (_, properties, _) = self.execute_command(command)
+
+        assert properties is not None
+
+        ml_command_result = properties["ml_command_result"]
+        return ml_command_result.param.long

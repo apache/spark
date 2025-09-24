@@ -196,8 +196,7 @@ class ParquetToSparkSchemaConverter(
       field: ColumnIO,
       sparkReadType: Option[DataType] = None): ParquetColumn = {
     val targetType = sparkReadType.map {
-      case udt: UserDefinedType[_] => udt.sqlType
-      case otherType => otherType
+      _.transformRecursively { case t: UserDefinedType[_] => t.sqlType }
     }
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
@@ -550,15 +549,16 @@ class SparkToParquetSchemaConverter(
   def convert(catalystSchema: StructType): MessageType = {
     Types
       .buildMessage()
-      .addFields(catalystSchema.map(convertField): _*)
+      .addFields(catalystSchema.map(f => convertField(f, inShredded = false)): _*)
       .named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
   }
 
   /**
-   * Converts a Spark SQL [[StructField]] to a Parquet [[Type]].
+   * Converts a Spark SQL [[StructField]] to a Parquet [[Type]]. `inShredded` indicates whether
+   * the field is within a shredded Variant schema.
    */
-  def convertField(field: StructField): Type = {
-    val converted = convertField(field, if (field.nullable) OPTIONAL else REQUIRED)
+  def convertField(field: StructField, inShredded: Boolean): Type = {
+    val converted = convertField(field, if (field.nullable) OPTIONAL else REQUIRED, inShredded)
     if (useFieldId && ParquetUtils.hasFieldId(field)) {
       converted.withId(ParquetUtils.getFieldId(field))
     } else {
@@ -566,7 +566,10 @@ class SparkToParquetSchemaConverter(
     }
   }
 
-  private def convertField(field: StructField, repetition: Type.Repetition): Type = {
+  private def convertField(
+      field: StructField,
+      repetition: Type.Repetition,
+      inShredded: Boolean): Type = {
 
     field.dataType match {
       // ===================
@@ -622,16 +625,26 @@ class SparkToParquetSchemaConverter(
       // from Spark 1.5.0, we resort to a timestamp type with microsecond precision so that we can
       // store a timestamp into a `Long`.  This design decision is subject to change though, for
       // example, we may resort to nanosecond precision in the future.
+      //
+      // The Parquet Variant Shredding spec states that timestamps coming from shredded Variants
+      // must be stored as INT64, and the Spark Timestamp type always has microsecond precision,
+      // therefore, the TIMESTAMP_MICROS configuration is used when writing shredded variant
+      // timestamp subfields.
       case TimestampType =>
-        outputTimestampType match {
-          case SQLConf.ParquetOutputTimestampType.INT96 =>
-            Types.primitive(INT96, repetition).named(field.name)
-          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
-            Types.primitive(INT64, repetition)
-              .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS)).named(field.name)
-          case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
-            Types.primitive(INT64, repetition)
-              .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
+        if (inShredded) {
+          Types.primitive(INT64, repetition)
+            .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS)).named(field.name)
+        } else {
+          outputTimestampType match {
+            case SQLConf.ParquetOutputTimestampType.INT96 =>
+              Types.primitive(INT96, repetition).named(field.name)
+            case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
+              Types.primitive(INT64, repetition)
+                .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS)).named(field.name)
+            case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
+              Types.primitive(INT64, repetition)
+                .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
+          }
         }
 
       case TimestampNTZType =>
@@ -707,7 +720,7 @@ class SparkToParquetSchemaConverter(
           .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
           .addField(Types
             .buildGroup(REPEATED)
-            .addField(convertField(StructField("array", elementType, nullable)))
+            .addField(convertField(StructField("array", elementType, nullable), inShredded))
             .named("bag"))
           .named(field.name)
 
@@ -723,7 +736,7 @@ class SparkToParquetSchemaConverter(
         Types
           .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
           // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
-          .addField(convertField(StructField("array", elementType, nullable), REPEATED))
+          .addField(convertField(StructField("array", elementType, nullable), REPEATED, inShredded))
           .named(field.name)
 
       // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
@@ -738,8 +751,8 @@ class SparkToParquetSchemaConverter(
         ConversionPatterns.mapType(
           repetition,
           field.name,
-          convertField(StructField("key", keyType, nullable = false)),
-          convertField(StructField("value", valueType, valueContainsNull)))
+          convertField(StructField("key", keyType, nullable = false), inShredded),
+          convertField(StructField("value", valueType, valueContainsNull), inShredded))
 
       // =====================================
       // ArrayType and MapType (standard mode)
@@ -755,7 +768,7 @@ class SparkToParquetSchemaConverter(
           .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
           .addField(
             Types.repeatedGroup()
-              .addField(convertField(StructField("element", elementType, containsNull)))
+              .addField(convertField(StructField("element", elementType, containsNull), inShredded))
               .named("list"))
           .named(field.name)
 
@@ -771,9 +784,10 @@ class SparkToParquetSchemaConverter(
           .addField(
             Types
               .repeatedGroup()
-              .addField(convertField(StructField("key", keyType, nullable = false)))
-              .addField(convertField(StructField("value", valueType, valueContainsNull)))
-              .named("key_value"))
+              .addField(convertField(StructField("key", keyType, nullable = false), inShredded))
+              .addField(
+                convertField(StructField("value", valueType, valueContainsNull), inShredded)
+              ).named("key_value"))
           .named(field.name)
 
       // ===========
@@ -782,25 +796,25 @@ class SparkToParquetSchemaConverter(
 
       case VariantType =>
         Types.buildGroup(repetition)
-          .addField(convertField(StructField("value", BinaryType, nullable = false)))
-          .addField(convertField(StructField("metadata", BinaryType, nullable = false)))
+          .addField(convertField(StructField("value", BinaryType, nullable = false), inShredded))
+          .addField(convertField(StructField("metadata", BinaryType, nullable = false), inShredded))
           .named(field.name)
 
       case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
         // Variant struct takes a Variant and writes to Parquet as a shredded schema.
         val group = Types.buildGroup(repetition)
         s.fields.foreach { f =>
-          group.addField(convertField(f))
+          group.addField(convertField(f, inShredded = true))
         }
         group.named(field.name)
 
       case StructType(fields) =>
         fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>
-          builder.addField(convertField(field))
+          builder.addField(convertField(field, inShredded))
         }.named(field.name)
 
       case udt: UserDefinedType[_] =>
-        convertField(field.copy(dataType = udt.sqlType))
+        convertField(field.copy(dataType = udt.sqlType), inShredded)
 
       case _ =>
         throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)

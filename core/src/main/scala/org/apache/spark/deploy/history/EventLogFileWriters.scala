@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -43,6 +43,7 @@ import org.apache.spark.util.Utils
  *   spark.eventLog.compression.codec - The codec to compress logged events
  *   spark.eventLog.overwrite - Whether to overwrite any existing files
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
+ *   spark.eventLog.excludedPatterns - Specifes a comma-separated event names to be excluded
  *
  * Note that descendant classes can maintain its own parameters: refer the javadoc of each class
  * for more details.
@@ -58,6 +59,8 @@ abstract class EventLogFileWriter(
 
   protected val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS) &&
       !sparkConf.get(EVENT_LOG_COMPRESSION_CODEC).equalsIgnoreCase("none")
+  protected val excludedPatterns = sparkConf.get(EVENT_LOG_EXCLUDED_PATTERNS)
+      .map(name => s"""{"Event":"$name"""")
   protected val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
   protected val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt * 1024
   protected val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
@@ -117,6 +120,7 @@ abstract class EventLogFileWriter(
   }
 
   protected def writeLine(line: String, flushLogger: Boolean = false): Unit = {
+    if (excludedPatterns.exists(line.startsWith(_))) return
     // scalastyle:off println
     writer.foreach(_.println(line))
     // scalastyle:on println

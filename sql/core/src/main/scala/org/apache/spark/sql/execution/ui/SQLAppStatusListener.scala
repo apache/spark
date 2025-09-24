@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._

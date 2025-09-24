@@ -55,7 +55,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
     // to the applicationId since the secrets change between application attempts on yarn.
     shuffleSecretMap.put(appId, shuffleSecret);
     logger.info("Registered shuffle secret for application {}",
-      MDC.of(LogKeys.APP_ID$.MODULE$, appId));
+      MDC.of(LogKeys.APP_ID, appId));
   }
 
   /**
@@ -72,7 +72,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   public void unregisterApp(String appId) {
     shuffleSecretMap.remove(appId);
     logger.info("Unregistered shuffle secret for application {}",
-      MDC.of(LogKeys.APP_ID$.MODULE$, appId));
+      MDC.of(LogKeys.APP_ID, appId));
   }
 
   /**
