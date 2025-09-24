@@ -818,20 +818,20 @@ class FunctionsTestsMixin:
         self.assertEqual(row_from_name[0], result)
 
     def test_make_timestamp_ntz(self):
-        # Test data
+        """Comprehensive test cases for make_timestamp_ntz with various argument combinations and edge cases."""
+        from pyspark.errors import PySparkValueError, PySparkTypeError
+
+        # Test 1: Basic 6 positional arguments
         data = [(2024, 5, 22, 10, 30, 0)]
         result = datetime.datetime(2024, 5, 22, 10, 30)
         df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
 
-        # 6 argument patterns
-
-        # Test 1: make_timestamp_ntz(y, mon, d, h, min, s)
         actual = df.select(
             F.make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
         )
         assertDataFrameEqual(actual, [Row(result)])
 
-        # Test 2: make_timestamp_ntz(years=y, months=mon, days=d, hours=h, mins=min, secs=s)
+        # Test 2: All 6 keyword arguments
         actual = df.select(
             F.make_timestamp_ntz(
                 years=df.year,
@@ -844,7 +844,7 @@ class FunctionsTestsMixin:
         )
         assertDataFrameEqual(actual, [Row(result)])
 
-        # Test 3: make_timestamp_ntz(date=d, time=t) - using keyword arguments
+        # Test 3: Date/time keyword arguments
         df_dt = self.spark.range(1).select(
             F.lit(datetime.date(2024, 5, 22)).alias("date"),
             F.lit(datetime.time(10, 30, 0)).alias("time"),
@@ -852,19 +852,108 @@ class FunctionsTestsMixin:
         actual = df_dt.select(F.make_timestamp_ntz(date=df_dt.date, time=df_dt.time))
         assertDataFrameEqual(actual, [Row(result)])
 
-    def test_make_timestamp_ntz_error_handling(self):
-        """Test that make_timestamp_ntz properly raises errors for invalid argument combinations."""
-        from pyspark.errors import PySparkValueError
-
-        df = self.spark.createDataFrame(
-            [(2024, 5, 22, 10, 30, 0)], ["year", "month", "day", "hour", "minute", "second"]
+        # Test 4: Fractional seconds with positional arguments
+        data_frac = [(2024, 5, 22, 10, 30, 45.123)]
+        result_frac = datetime.datetime(2024, 5, 22, 10, 30, 45, 123000)
+        df_frac = self.spark.createDataFrame(
+            data_frac, ["year", "month", "day", "hour", "minute", "second"]
         )
 
-        # Test 1: Mixing timestamp and date/time keyword arguments
-        df_dt = self.spark.range(1).select(
+        actual = df_frac.select(
+            F.make_timestamp_ntz(
+                df_frac.year,
+                df_frac.month,
+                df_frac.day,
+                df_frac.hour,
+                df_frac.minute,
+                df_frac.second,
+            )
+        )
+        assertDataFrameEqual(actual, [Row(result_frac)])
+
+        # Test 5: Fractional seconds with keyword arguments
+        actual = df_frac.select(
+            F.make_timestamp_ntz(
+                years=df_frac.year,
+                months=df_frac.month,
+                days=df_frac.day,
+                hours=df_frac.hour,
+                mins=df_frac.minute,
+                secs=df_frac.second,
+            )
+        )
+        assertDataFrameEqual(actual, [Row(result_frac)])
+
+        # Test 6: Fractional seconds with date/time arguments
+        df_dt_frac = self.spark.range(1).select(
             F.lit(datetime.date(2024, 5, 22)).alias("date"),
-            F.lit(datetime.time(10, 30, 0)).alias("time"),
+            F.lit(datetime.time(10, 30, 45, 123000)).alias("time"),
         )
+        actual = df_dt_frac.select(F.make_timestamp_ntz(date=df_dt_frac.date, time=df_dt_frac.time))
+        assertDataFrameEqual(actual, [Row(result_frac)])
+
+        # Test 7: Edge case - February 29 in leap year
+        df_leap = self.spark.createDataFrame(
+            [(2024, 2, 29, 0, 0, 0)], ["year", "month", "day", "hour", "minute", "second"]
+        )
+        expected_leap = datetime.datetime(2024, 2, 29, 0, 0, 0)
+        actual = df_leap.select(
+            F.make_timestamp_ntz(
+                df_leap.year,
+                df_leap.month,
+                df_leap.day,
+                df_leap.hour,
+                df_leap.minute,
+                df_leap.second,
+            )
+        )
+        assertDataFrameEqual(actual, [Row(expected_leap)])
+
+        # Test 8: Maximum valid time values
+        df_max = self.spark.createDataFrame(
+            [(2024, 12, 31, 23, 59, 59)], ["year", "month", "day", "hour", "minute", "second"]
+        )
+        expected_max = datetime.datetime(2024, 12, 31, 23, 59, 59)
+        actual = df_max.select(
+            F.make_timestamp_ntz(
+                df_max.year, df_max.month, df_max.day, df_max.hour, df_max.minute, df_max.second
+            )
+        )
+        assertDataFrameEqual(actual, [Row(expected_max)])
+
+        # Test 9: Minimum valid values
+        df_min = self.spark.createDataFrame(
+            [(1, 1, 1, 0, 0, 0)], ["year", "month", "day", "hour", "minute", "second"]
+        )
+        expected_min = datetime.datetime(1, 1, 1, 0, 0, 0)
+        actual = df_min.select(
+            F.make_timestamp_ntz(
+                df_min.year, df_min.month, df_min.day, df_min.hour, df_min.minute, df_min.second
+            )
+        )
+        assertDataFrameEqual(actual, [Row(expected_min)])
+
+        # Test 10: Mixed positional and keyword (should work for valid combinations)
+        actual = df.select(
+            F.make_timestamp_ntz(
+                df.year, df.month, df.day, hours=df.hour, mins=df.minute, secs=df.second
+            )
+        )
+        assertDataFrameEqual(actual, [Row(result)])
+
+        # Test 11: Using literal values
+        actual = self.spark.range(1).select(
+            F.make_timestamp_ntz(F.lit(2024), F.lit(5), F.lit(22), F.lit(10), F.lit(30), F.lit(0))
+        )
+        assertDataFrameEqual(actual, [Row(result)])
+
+        # Test 12: Using string column names
+        actual = df.select(F.make_timestamp_ntz("year", "month", "day", "hour", "minute", "second"))
+        assertDataFrameEqual(actual, [Row(result)])
+
+        # Error handling tests
+
+        # Test 13: Mixing timestamp and date/time keyword arguments
         with self.assertRaises(PySparkValueError) as context:
             df_dt.select(
                 F.make_timestamp_ntz(years=df.year, date=df_dt.date, time=df_dt.time)
@@ -873,63 +962,84 @@ class FunctionsTestsMixin:
         self.assertIn("CANNOT_SET_TOGETHER", error_msg)
         self.assertIn("years|months|days|hours|mins|secs and date|time", error_msg)
 
-        # Test 2: Incomplete keyword arguments - should raise NOT_COLUMN_OR_STR for None values
-        from pyspark.errors import PySparkTypeError
-
+        # Test 14: Incomplete keyword arguments - should raise NOT_COLUMN_OR_STR for None values
         with self.assertRaises(PySparkTypeError) as context:
             df.select(F.make_timestamp_ntz(years=df.year, months=df.month, days=df.day)).collect()
         error_msg = str(context.exception)
         self.assertIn("NOT_COLUMN_OR_STR", error_msg)
         self.assertIn("NoneType", error_msg)
 
-        # Test 3: Only one keyword argument - should raise NOT_COLUMN_OR_STR for None values
+        # Test 15: Only one keyword argument - should raise NOT_COLUMN_OR_STR for None values
         with self.assertRaises(PySparkTypeError) as context:
             df.select(F.make_timestamp_ntz(years=df.year)).collect()
         error_msg = str(context.exception)
         self.assertIn("NOT_COLUMN_OR_STR", error_msg)
         self.assertIn("NoneType", error_msg)
 
-        # Test 4: Only date without time - should raise NOT_COLUMN_OR_STR for None values
+        # Test 16: Only date without time - should raise NOT_COLUMN_OR_STR for None values
         with self.assertRaises(PySparkTypeError) as context:
             df_dt.select(F.make_timestamp_ntz(date=df_dt.date)).collect()
         error_msg = str(context.exception)
         self.assertIn("NOT_COLUMN_OR_STR", error_msg)
         self.assertIn("NoneType", error_msg)
 
-    def test_make_timestamp_ntz_with_keywords(self):
-        # Test with fractional seconds
-        data = [(2024, 5, 22, 10, 30, 45.123)]
-        result = datetime.datetime(2024, 5, 22, 10, 30, 45, 123000)
-        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        # Test 17: Invalid data types
+        with self.assertRaises(
+            Exception
+        ):  # Should raise some form of analysis or runtime exception
+            self.spark.range(1).select(
+                F.make_timestamp_ntz(
+                    F.lit("invalid"), F.lit(5), F.lit(22), F.lit(10), F.lit(30), F.lit(0)
+                )
+            ).collect()
 
-        # Test all keyword argument patterns with fractional seconds
-
-        # All 6 keyword arguments
-        actual = df.select(
-            F.make_timestamp_ntz(
-                years=df.year,
-                months=df.month,
-                days=df.day,
-                hours=df.hour,
-                mins=df.minute,
-                secs=df.second,
-            )
+        # Test 18: Out of range values (month=13)
+        df_invalid = self.spark.createDataFrame(
+            [(2024, 13, 22, 10, 30, 0)], ["year", "month", "day", "hour", "minute", "second"]
         )
-        assertDataFrameEqual(actual, [Row(result)])
+        with self.assertRaises(Exception):  # Should raise runtime exception for invalid date
+            df_invalid.select(
+                F.make_timestamp_ntz(
+                    df_invalid.year,
+                    df_invalid.month,
+                    df_invalid.day,
+                    df_invalid.hour,
+                    df_invalid.minute,
+                    df_invalid.second,
+                )
+            ).collect()
 
-        # All 6 positional arguments
-        actual = df.select(
-            F.make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
+        # Test 19: Out of range values (hour=25)
+        df_invalid_hour = self.spark.createDataFrame(
+            [(2024, 5, 22, 25, 30, 0)], ["year", "month", "day", "hour", "minute", "second"]
         )
-        assertDataFrameEqual(actual, [Row(result)])
+        with self.assertRaises(Exception):  # Should raise runtime exception for invalid time
+            df_invalid_hour.select(
+                F.make_timestamp_ntz(
+                    df_invalid_hour.year,
+                    df_invalid_hour.month,
+                    df_invalid_hour.day,
+                    df_invalid_hour.hour,
+                    df_invalid_hour.minute,
+                    df_invalid_hour.second,
+                )
+            ).collect()
 
-        # Test with date/time keyword arguments
-        df2 = self.spark.range(1).select(
-            F.lit(datetime.date(2024, 5, 22)).alias("date"),
-            F.lit(datetime.time(10, 30, 45, 123000)).alias("time"),
+        # Test 20: February 29 in non-leap year
+        df_non_leap = self.spark.createDataFrame(
+            [(2023, 2, 29, 0, 0, 0)], ["year", "month", "day", "hour", "minute", "second"]
         )
-        actual = df2.select(F.make_timestamp_ntz(date=df2.date, time=df2.time))
-        assertDataFrameEqual(actual, [Row(result)])
+        with self.assertRaises(Exception):  # Should raise runtime exception for invalid date
+            df_non_leap.select(
+                F.make_timestamp_ntz(
+                    df_non_leap.year,
+                    df_non_leap.month,
+                    df_non_leap.day,
+                    df_non_leap.hour,
+                    df_non_leap.minute,
+                    df_non_leap.second,
+                )
+            ).collect()
 
     def test_make_date(self):
         # SPARK-36554: expose make_date expression
