@@ -608,6 +608,21 @@ class FunctionsTestsMixin:
         )
         assertDataFrameEqual(actual, [Row(None)])
 
+        # Test 14: None date parameter should use default NULL and return NULL
+        df = self.spark.range(1).select(F.lit(datetime.time(10, 30, 0)).alias("time"))
+        actual = df.select(F.try_make_timestamp_ntz(date=None, time=df.time))
+        assertDataFrameEqual(actual, [Row(None)])
+
+        # Test 15: None time parameter should use default NULL and return NULL
+        df = self.spark.range(1).select(F.lit(datetime.date(2024, 5, 22)).alias("date"))
+        actual = df.select(F.try_make_timestamp_ntz(date=df.date, time=None))
+        assertDataFrameEqual(actual, [Row(None)])
+
+        # Test 16: All None parameters should use default NULL values and return NULL
+        df = self.spark.range(1)
+        actual = df.select(F.try_make_timestamp_ntz())
+        assertDataFrameEqual(actual, [Row(None)])
+
     def test_string_functions(self):
         string_functions = [
             "upper",

@@ -25407,9 +25407,9 @@ def try_make_timestamp_ntz(
             "try_make_timestamp_ntz", _years, _months, _days, _hours, _mins, _secs
         )
     else:
-        return _invoke_function_over_columns(
-            "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
-        )
+        _date = lit(None) if date is None else date
+        _time = lit(None) if time is None else time
+        return _invoke_function_over_columns("try_make_timestamp_ntz", _date, _time)
 
 
 @_try_remote_functions
