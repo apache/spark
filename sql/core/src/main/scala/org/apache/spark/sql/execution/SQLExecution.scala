@@ -30,6 +30,9 @@ import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PRE
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
@@ -64,6 +67,17 @@ object SQLExecution extends Logging {
       // set by calling withNewExecutionId in the action that begins execution, like
       // Dataset.collect or DataFrameWriter.insertInto.
       throw SparkException.internalError("Execution ID should be set")
+    }
+  }
+
+  private def extractShuffleIds(plan: SparkPlan): Seq[Int] = {
+    plan match {
+      case ae: AdaptiveSparkPlanExec =>
+        ae.context.shuffleIds.asScala.keys.toSeq
+      case nonAdaptivePlan =>
+        nonAdaptivePlan.collect {
+          case exec: ShuffleExchangeLike => exec.shuffleId
+        }
     }
   }
 
@@ -176,10 +190,12 @@ object SQLExecution extends Logging {
               if (queryExecution.shuffleCleanupMode != DoNotCleanup
                 && isExecutedPlanAvailable) {
                 val shuffleIds = queryExecution.executedPlan match {
-                  case ae: AdaptiveSparkPlanExec =>
-                    ae.context.shuffleIds.asScala.keys
-                  case _ =>
-                    Iterable.empty
+                  case command: V2CommandExec =>
+                    command.children.flatMap(extractShuffleIds)
+                  case dataWritingCommand: DataWritingCommandExec =>
+                    extractShuffleIds(dataWritingCommand.child)
+                  case plan =>
+                    extractShuffleIds(plan)
                 }
                 shuffleIds.foreach { shuffleId =>
                   queryExecution.shuffleCleanupMode match {

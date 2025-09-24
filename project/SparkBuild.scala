@@ -59,10 +59,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, variant, pipelines, _*
+    commonUtils, commonUtilsJava, variant, pipelines, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "variant", "pipelines"
+    "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
@@ -400,7 +400,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
-      connectClient, variant, connectShims, profiler
+      connectClient, variant, connectShims, profiler, commonUtilsJava
     ).contains(x)
   }
 
@@ -1498,7 +1498,7 @@ object Unidoc {
     ) ++ (
       // Add links to sources when generating Scaladoc for a non-snapshot release
       if (!isSnapshot.value) {
-        Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH}.scala")
+        Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH_EXT}")
       } else {
         Seq()
       }
@@ -1683,6 +1683,7 @@ object TestSettings {
     (Test / javaOptions) ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
+    (Test / javaOptions) += s"-XX:ErrorFile=${baseDirectory.value}/target/hs_err_pid%p.log",
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
       val heapSize = sys.env.get("HEAP_SIZE").getOrElse("4g")

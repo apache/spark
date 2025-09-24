@@ -128,7 +128,7 @@ case class CTERelationDef(
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
 
   lazy val hasSelfReferenceAsCTERef: Boolean = child.collectFirstWithSubqueries {
-    case CTERelationRef(this.id, _, _, _, _, true, _) => true
+    case CTERelationRef(this.id, _, _, _, _, true, _, _) => true
   }.getOrElse(false)
   lazy val hasSelfReferenceInAnchor: Boolean = {
     val unionNode: Option[Union] = child match {
@@ -144,8 +144,24 @@ case class CTERelationDef(
     }
     if (unionNode.isDefined) {
       unionNode.get.children.head.collectFirstWithSubqueries {
-        case CTERelationRef(this.id, _, _, _, _, true, _) => true
+        case CTERelationRef(this.id, _, _, _, _, true, _, _) => true
       }.getOrElse(false)
+    } else {
+      false
+    }
+  }
+  lazy val hasSelfReferenceInSubCTE: Boolean = {
+    val withCTENode: Option[WithCTE] = child match {
+      case SubqueryAlias(_, withCTE @ WithCTE(_, _)) =>
+        Some(withCTE)
+      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, withCTE @ WithCTE(_, _))) =>
+        Some(withCTE)
+      case _ => None
+    }
+    if (withCTENode.isDefined) {
+      withCTENode.exists(_.cteDefs.exists(_.collectFirstWithSubqueries {
+        case CTERelationRef(this.id, _, _, _, _, true, _, _) => true
+      }.isDefined))
     } else {
       false
     }
@@ -178,7 +194,8 @@ case class CTERelationRef(
     override val isStreaming: Boolean,
     statsOpt: Option[Statistics] = None,
     recursive: Boolean = false,
-    override val maxRows: Option[Long] = None) extends LeafNode with MultiInstanceRelation {
+    override val maxRows: Option[Long] = None,
+    isUnlimitedRecursion: Boolean = false) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 

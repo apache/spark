@@ -18,7 +18,7 @@
 
 import unittest
 
-from pyspark.testing import should_test_connect, connect_requirement_message
+from pyspark.testing.utils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
     from pyspark.errors.exceptions.connect import (
@@ -188,6 +188,182 @@ class ConnectErrorsTest(unittest.TestCase):
             exception.getMessage(), "(org.apache.spark.UnknownReason) Fallback error occurred"
         )
         self.assertEqual(exception.getGrpcStatusCode(), StatusCode.UNKNOWN)
+
+    def test_convert_exception_with_breaking_change_info(self):
+        """Test that breaking change info is correctly extracted from protobuf response."""
+        import pyspark.sql.connect.proto as pb2
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
+        # Create mock FetchErrorDetailsResponse with breaking change info
+        resp = pb2.FetchErrorDetailsResponse()
+        resp.root_error_idx = 0
+
+        error = resp.errors.add()
+        error.message = "Test error with breaking change"
+        error.error_type_hierarchy.append("org.apache.spark.SparkException")
+
+        # Add SparkThrowable with breaking change info
+        spark_throwable = error.spark_throwable
+        spark_throwable.error_class = "TEST_BREAKING_CHANGE_ERROR"
+
+        # Add breaking change info
+        bci = spark_throwable.breaking_change_info
+        bci.migration_message.append("Please update your code to use new API")
+        bci.migration_message.append("See documentation for details")
+        bci.needs_audit = False
+
+        # Add mitigation config
+        mitigation_config = bci.mitigation_config
+        mitigation_config.key = "spark.sql.legacy.behavior.enabled"
+        mitigation_config.value = "true"
+
+        info = ErrorInfo()
+        info.reason = "org.apache.spark.SparkException"
+        info.metadata["classes"] = '["org.apache.spark.SparkException"]'
+
+        exception = convert_exception(
+            info=info,
+            truncated_message="Test error",
+            resp=resp,
+            grpc_status_code=StatusCode.INTERNAL,
+        )
+
+        # Verify breaking change info is correctly extracted
+        breaking_change_info = exception.getBreakingChangeInfo()
+        self.assertIsNotNone(breaking_change_info)
+        self.assertEqual(
+            breaking_change_info["migration_message"],
+            ["Please update your code to use new API", "See documentation for details"],
+        )
+        self.assertEqual(breaking_change_info["needs_audit"], False)
+        self.assertIn("mitigation_config", breaking_change_info)
+        self.assertEqual(
+            breaking_change_info["mitigation_config"]["key"],
+            "spark.sql.legacy.behavior.enabled",
+        )
+        self.assertEqual(breaking_change_info["mitigation_config"]["value"], "true")
+
+    def test_convert_exception_without_breaking_change_info(self):
+        """Test that getBreakingChangeInfo returns None when no breaking change info."""
+        import pyspark.sql.connect.proto as pb2
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
+        # Create mock FetchErrorDetailsResponse without breaking change info
+        resp = pb2.FetchErrorDetailsResponse()
+        resp.root_error_idx = 0
+
+        error = resp.errors.add()
+        error.message = "Test error without breaking change"
+        error.error_type_hierarchy.append("org.apache.spark.SparkException")
+
+        # Add SparkThrowable without breaking change info
+        spark_throwable = error.spark_throwable
+        spark_throwable.error_class = "REGULAR_ERROR"
+
+        info = ErrorInfo()
+        info.reason = "org.apache.spark.SparkException"
+        info.metadata["classes"] = '["org.apache.spark.SparkException"]'
+
+        exception = convert_exception(
+            info=info,
+            truncated_message="Test error",
+            resp=resp,
+            grpc_status_code=StatusCode.INTERNAL,
+        )
+
+        # Verify breaking change info is None
+        breaking_change_info = exception.getBreakingChangeInfo()
+        self.assertIsNone(breaking_change_info)
+
+    def test_breaking_change_info_storage_in_exception(self):
+        """Test SparkConnectGrpcException correctly stores and retrieves breaking change info."""
+        from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+
+        breaking_change_info = {
+            "migration_message": ["Test migration message"],
+            "mitigation_config": {"key": "test.config.key", "value": "test.config.value"},
+            "needs_audit": True,
+        }
+
+        exception = SparkConnectGrpcException(
+            message="Test error", errorClass="TEST_ERROR", breaking_change_info=breaking_change_info
+        )
+
+        stored_info = exception.getBreakingChangeInfo()
+        self.assertEqual(stored_info, breaking_change_info)
+
+    def test_breaking_change_info_inheritance(self):
+        """Test that subclasses of SparkConnectGrpcException
+        correctly inherit breaking change info."""
+        from pyspark.errors.exceptions.connect import AnalysisException, UnknownException
+
+        breaking_change_info = {
+            "migration_message": ["Inheritance test message"],
+            "needs_audit": False,
+        }
+
+        # Test AnalysisException
+        analysis_exception = AnalysisException(
+            message="Analysis error with breaking change",
+            errorClass="TEST_ANALYSIS_ERROR",
+            breaking_change_info=breaking_change_info,
+        )
+
+        stored_info = analysis_exception.getBreakingChangeInfo()
+        self.assertEqual(stored_info, breaking_change_info)
+
+        # Test UnknownException
+        unknown_exception = UnknownException(
+            message="Unknown error with breaking change",
+            errorClass="TEST_UNKNOWN_ERROR",
+            breaking_change_info=breaking_change_info,
+        )
+
+        stored_info = unknown_exception.getBreakingChangeInfo()
+        self.assertEqual(stored_info, breaking_change_info)
+
+    def test_breaking_change_info_without_mitigation_config(self):
+        """Test breaking change info that only has migration messages."""
+        import pyspark.sql.connect.proto as pb2
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
+        # Create mock FetchErrorDetailsResponse with breaking change info (no mitigation config)
+        resp = pb2.FetchErrorDetailsResponse()
+        resp.root_error_idx = 0
+
+        error = resp.errors.add()
+        error.message = "Test error with breaking change"
+        error.error_type_hierarchy.append("org.apache.spark.SparkException")
+
+        # Add SparkThrowable with breaking change info
+        spark_throwable = error.spark_throwable
+        spark_throwable.error_class = "TEST_BREAKING_CHANGE_ERROR"
+
+        # Add breaking change info without mitigation config
+        bci = spark_throwable.breaking_change_info
+        bci.migration_message.append("Migration message only")
+        bci.needs_audit = True
+
+        info = ErrorInfo()
+        info.reason = "org.apache.spark.SparkException"
+        info.metadata["classes"] = '["org.apache.spark.SparkException"]'
+
+        exception = convert_exception(
+            info=info,
+            truncated_message="Test error",
+            resp=resp,
+            grpc_status_code=StatusCode.INTERNAL,
+        )
+
+        # Verify breaking change info is correctly extracted
+        breaking_change_info = exception.getBreakingChangeInfo()
+        self.assertIsNotNone(breaking_change_info)
+        self.assertEqual(breaking_change_info["migration_message"], ["Migration message only"])
+        self.assertEqual(breaking_change_info["needs_audit"], True)
+        self.assertNotIn("mitigation_config", breaking_change_info)
 
 
 if __name__ == "__main__":

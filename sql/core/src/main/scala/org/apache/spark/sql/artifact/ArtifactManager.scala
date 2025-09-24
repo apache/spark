@@ -25,14 +25,15 @@ import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.{FilenameUtils, FileUtils}
+import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
@@ -213,7 +214,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       // Disallow overwriting with modified version
       if (Files.exists(target)) {
         // makes the query idempotent
-        if (FileUtils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+        if (Utils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
           return
         }
 
@@ -266,27 +267,38 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    * they are from a permanent location.
    */
   private[sql] def addLocalArtifacts(artifacts: Seq[Artifact]): Unit = {
+    val failedArtifactExceptions = ListBuffer[SparkRuntimeException]()
+
     artifacts.foreach { artifact =>
-      artifact.storage match {
-        case d: Artifact.LocalFile =>
-          addArtifact(
-            artifact.path,
-            d.path,
-            fragment = None,
-            deleteStagedFile = false)
-        case d: Artifact.InMemory =>
-          val tempDir = Utils.createTempDir().toPath
-          val tempFile = tempDir.resolve(artifact.path.getFileName)
-          val outStream = Files.newOutputStream(tempFile)
-          Utils.tryWithSafeFinallyAndFailureCallbacks {
-            d.stream.transferTo(outStream)
-            addArtifact(artifact.path, tempFile, fragment = None)
-          }(finallyBlock = {
-            outStream.close()
-          })
-        case _ =>
-          throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
+      try {
+        artifact.storage match {
+          case d: Artifact.LocalFile =>
+            addArtifact(
+              artifact.path,
+              d.path,
+              fragment = None,
+              deleteStagedFile = false)
+          case d: Artifact.InMemory =>
+            val tempDir = Utils.createTempDir().toPath
+            val tempFile = tempDir.resolve(artifact.path.getFileName)
+            val outStream = Files.newOutputStream(tempFile)
+            Utils.tryWithSafeFinallyAndFailureCallbacks {
+              d.stream.transferTo(outStream)
+              addArtifact(artifact.path, tempFile, fragment = None)
+            }(finallyBlock = {
+              outStream.close()
+            })
+          case _ =>
+            throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
+        }
+      } catch {
+        case e: SparkRuntimeException if e.getCondition == "ARTIFACT_ALREADY_EXISTS" =>
+          failedArtifactExceptions += e
       }
+    }
+
+    if (failedArtifactExceptions.nonEmpty) {
+      throw ArtifactUtils.mergeExceptionsWithSuppressed(failedArtifactExceptions.toSeq)
     }
   }
 
@@ -340,7 +352,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     val sparkContext = session.sparkContext
     val newArtifactManager = new ArtifactManager(newSession)
     if (artifactPath.toFile.exists()) {
-      FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+      Utils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
     }
     val blockManager = sparkContext.env.blockManager
     val newBlockIds = cachedBlockIdList.asScala.map { blockId =>

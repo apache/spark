@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
@@ -255,6 +255,12 @@ trait ReadOnlySparkConf {
         throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
     }
   }
+
+  /**
+   * By using this instead of System.getenv(), environment variables can be mocked
+   * in unit tests.
+   */
+  private[spark] def getenv(name: String): String = System.getenv(name)
 }
 
 /**
@@ -527,12 +533,6 @@ class SparkConf(loadDefaults: Boolean)
     }
     cloned
   }
-
-  /**
-   * By using this instead of System.getenv(), environment variables can be mocked
-   * in unit tests.
-   */
-  private[spark] def getenv(name: String): String = System.getenv(name)
 
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not

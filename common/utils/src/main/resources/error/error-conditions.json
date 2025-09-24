@@ -368,6 +368,11 @@
           "The change log writer version cannot be <version>."
         ]
       },
+      "INVALID_CHECKPOINT_LINEAGE" : {
+        "message" : [
+          "Invalid checkpoint lineage: <lineage>. <message>"
+        ]
+      },
       "KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
         "message" : [
           "<msg>"
@@ -1494,6 +1499,12 @@
     ],
     "sqlState" : "42711"
   },
+  "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
+    "message" : [
+      "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
       "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
@@ -1839,12 +1850,6 @@
       "An error occurred in the user provided function in foreach sink. Reason: <reason>"
     ],
     "sqlState" : "39000"
-  },
-  "FOUND_MULTIPLE_DATA_SOURCES" : {
-    "message" : [
-      "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
-    ],
-    "sqlState" : "42710"
   },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
@@ -2737,6 +2742,12 @@
     ],
     "sqlState" : "42001"
   },
+  "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Expression type must be string type but got <exprType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [
       "The external type <externalType> is not valid for the type <type> at the expression <expr>."
@@ -3499,7 +3510,7 @@
   },
   "INVALID_RECURSIVE_CTE" : {
     "message" : [
-      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references. Any top level inner CTE must not contain self references."
     ],
     "sqlState" : "42836"
   },
@@ -3637,6 +3648,12 @@
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42K08"
+  },
+  "INVALID_SQL_FUNCTION_DATA_ACCESS" : {
+    "message" : [
+      "Cannot create a SQL function with CONTAINS SQL that accesses a table/view or a SQL function that reads SQL data. Please use READS SQL DATA instead."
+    ],
+    "sqlState" : "42K0E"
   },
   "INVALID_SQL_FUNCTION_PLAN_STRUCTURE" : {
     "message" : [
@@ -3908,12 +3925,6 @@
     },
     "sqlState" : "42K0M"
   },
-  "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
-    "message" : [
-      "Variable type must be string type but got <varType>."
-    ],
-    "sqlState" : "42K09"
-  },
   "INVALID_VARIANT_CAST" : {
     "message" : [
       "The variant value `<value>` cannot be cast into `<dataType>`. Please use `try_variant_get` instead."
@@ -4028,7 +4039,7 @@
   },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
-      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>."
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. <externalEngineError>."
     ],
     "subClass" : {
       "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
@@ -4073,6 +4084,13 @@
       "The label or FOR variable name <label> is forbidden."
     ],
     "sqlState" : "42K0L"
+  },
+  "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED" : {
+    "message" : [
+      "LATERAL JOIN with Arrow-optimized user-defined table functions (UDTFs) is not supported. Arrow UDTFs cannot be used on the right-hand side of a lateral join.",
+      "Please use a regular UDTF instead, or restructure your query to avoid the lateral join."
+    ],
+    "sqlState" : "0A000"
   },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
@@ -4902,6 +4920,12 @@
     ],
     "sqlState" : "42601"
   },
+  "REMAINDER_BY_ZERO" : {
+    "message" : [
+      "Remainder by zero. Use `try_mod` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22012"
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
       "Failed to rename as <sourcePath> was not found."
@@ -5149,6 +5173,19 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_CHECKPOINT_IDS_NOT_SUPPORTED" : {
+    "message" : [
+      "<msg>"
+    ],
+    "sqlState" : "KD002"
+  },
+  "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
+    "message" : [
+      "The checkpoint location <checkpointLocation> should be empty on batch 0",
+      "Please either use a new checkpoint location, or delete the existing data in the checkpoint location."
+    ],
+    "sqlState" : "42K03"
+  },
   "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
     "message" : [
       "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
@@ -5386,6 +5423,14 @@
       }
     },
     "sqlState" : "42616"
+  },
+  "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED" : {
+    "message" : [
+      "Reading state across different checkpoint format versions is not supported.",
+      "startBatchId=<startBatchId>, endBatchId=<endBatchId>.",
+      "startFormatVersion=<startFormatVersion>, endFormatVersion=<endFormatVersion>."
+    ],
+    "sqlState" : "KD002"
   },
   "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
     "message" : [
@@ -6618,12 +6663,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION" : {
-    "message" : [
-      "The function <funcName> does not support streaming. Please remove the STREAM keyword"
-    ],
-    "sqlState" : "42000"
-  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"
@@ -6718,6 +6757,12 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_TABLE_CHANGE_IN_AUTO_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "The table changes <changes> are not supported by the catalog on table <tableName>."
+    ],
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [

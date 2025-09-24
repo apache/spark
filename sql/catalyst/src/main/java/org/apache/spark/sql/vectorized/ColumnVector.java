@@ -338,7 +338,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets up the data type of this column vector.
    */
   protected ColumnVector(DataType type) {
-    this.type = type.transformRecursively(
+    this.type = type == null ? null : type.transformRecursively(
       new PartialFunction<DataType, DataType>() {
         @Override
         public boolean isDefinedAt(DataType x) {

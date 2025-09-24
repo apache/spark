@@ -23,7 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolE
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
-import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.collection.mutable.{HashMap, ListBuffer, Map, Set}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
@@ -34,7 +34,7 @@ import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOut
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -98,6 +98,12 @@ private class ShuffleStatus(
    * Keep the previous deleted MapStatus for recovery.
    */
   val mapStatusesDeleted = new Array[MapStatus](numPartitions)
+
+  /**
+   * Keep the indices of the Map tasks whose checksums are different across retries.
+   * Exposed for testing.
+   */
+  private[spark] val checksumMismatchIndices: Set[Int] = Set()
 
   /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the
@@ -168,6 +174,15 @@ private class ShuffleStatus(
       invalidateSerializedMapOutputStatusCache()
     } else {
       mapIdToMapIndex.remove(currentMapStatus.mapId)
+    }
+    logDebug(s"Checksum of map output for task ${status.mapId} is ${status.checksumValue}")
+
+    val preStatus =
+      if (mapStatuses(mapIndex) != null) mapStatuses(mapIndex) else mapStatusesDeleted(mapIndex)
+    if (preStatus != null && preStatus.checksumValue != status.checksumValue) {
+      logInfo(s"Checksum of map output changes from ${preStatus.checksumValue} to " +
+        s"${status.checksumValue} for task ${status.mapId}.")
+      checksumMismatchIndices.add(mapIndex)
     }
     mapStatuses(mapIndex) = status
     mapIdToMapIndex(status.mapId) = mapIndex

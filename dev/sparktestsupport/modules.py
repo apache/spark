@@ -113,9 +113,20 @@ tags = Module(
     ],
 )
 
+utils_java = Module(
+    name="utils-java",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/utils-java/",
+    ],
+    sbt_test_goals=[
+        "common-utils-java/test",
+    ],
+)
+
 utils = Module(
     name="utils",
-    dependencies=[tags],
+    dependencies=[tags, utils_java],
     source_file_regexes=[
         "common/utils/",
     ],
@@ -137,7 +148,7 @@ kvstore = Module(
 
 network_common = Module(
     name="network-common",
-    dependencies=[tags, utils],
+    dependencies=[tags, utils_java],
     source_file_regexes=[
         "common/network-common/",
     ],
@@ -547,6 +558,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.arrow.test_arrow_udf_grouped_agg",
         "pyspark.sql.tests.arrow.test_arrow_udf_scalar",
         "pyspark.sql.tests.arrow.test_arrow_udf_window",
+        "pyspark.sql.tests.arrow.test_arrow_udf_typehints",
+        "pyspark.sql.tests.arrow.test_arrow_udtf",
         "pyspark.sql.tests.pandas.test_pandas_cogrouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
@@ -572,7 +585,9 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_subquery",
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
+        "pyspark.sql.tests.test_udf_combinations",
         "pyspark.sql.tests.test_udf_profiler",
+        "pyspark.sql.tests.test_unified_udf",
         "pyspark.sql.tests.test_udtf",
         "pyspark.sql.tests.test_tvf",
         "pyspark.sql.tests.test_utils",
@@ -580,6 +595,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.plot.test_frame_plot",
         "pyspark.sql.tests.plot.test_frame_plot_plotly",
         "pyspark.sql.tests.test_connect_compatibility",
+        "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
+        "pyspark.sql.tests.udf_type_tests.test_udf_return_types",
     ],
 )
 
@@ -1089,7 +1106,9 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_column",
         "pyspark.sql.tests.connect.test_parity_readwriter",
         "pyspark.sql.tests.connect.test_parity_udf",
+        "pyspark.sql.tests.connect.test_parity_udf_combinations",
         "pyspark.sql.tests.connect.test_parity_udf_profiler",
+        "pyspark.sql.tests.connect.test_parity_unified_udf",
         "pyspark.sql.tests.connect.test_parity_memory_profiler",
         "pyspark.sql.tests.connect.test_parity_udtf",
         "pyspark.sql.tests.connect.test_parity_tvf",
@@ -1118,6 +1137,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_scalar",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_grouped_agg",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_window",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udtf",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_map",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map_with_state",

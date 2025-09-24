@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys.BATCH_ID
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
@@ -37,8 +39,13 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, Sink, Source}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeq, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
+import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
-import org.apache.spark.sql.execution.streaming.state.StateSchemaBroadcast
+import org.apache.spark.sql.execution.streaming.state.{StateSchemaBroadcast, StateStoreErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, Utils}
@@ -558,9 +565,37 @@ class MicroBatchExecution(
           log"offsets ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)} and " +
           log"available offsets ${MDC(LogKeys.STREAMING_OFFSETS_END, execCtx.endOffsets)}")
       case None => // We are starting this stream for the first time.
+        val shouldVerifyNewCheckpointDirectory =
+          sparkSession.conf.get(SQLConf.STREAMING_VERIFY_CHECKPOINT_DIRECTORY_EMPTY_ON_START)
+        if (shouldVerifyNewCheckpointDirectory) {
+          verifyNewCheckpointDirectory()
+        }
         logInfo(s"Starting new streaming query.")
         execCtx.batchId = 0
         watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
+    }
+  }
+
+  /**
+   * Verify that the checkpoint directory is in a good state to start a new
+   * streaming query. This checks that the offsets, state, commits directories are
+   * either non-existent or empty.
+   *
+   * If this check fails, an exception is thrown.
+   */
+  private def verifyNewCheckpointDirectory(): Unit = {
+    val fileManager = CheckpointFileManager.create(new Path(resolvedCheckpointRoot),
+      sparkSession.sessionState.newHadoopConf())
+    val dirNamesThatShouldNotHaveFiles = Array[String](
+      DIR_NAME_OFFSETS, DIR_NAME_STATE, DIR_NAME_COMMITS)
+
+    dirNamesThatShouldNotHaveFiles.foreach { dirName =>
+      val path = new Path(resolvedCheckpointRoot, dirName)
+
+      if (fileManager.exists(path) && !fileManager.list(path).isEmpty) {
+        val loc = path.toString
+        throw StateStoreErrors.streamingStateCheckpointLocationNotEmpty(loc)
+      }
     }
   }
 
@@ -766,6 +801,16 @@ class MicroBatchExecution(
             case _ => false
           }
           val finalDataPlan = dataPlan transformUp {
+            // SPARK-53625: Propagate metadata columns through Projects
+            case p: Project if hasFileMetadata =>
+              // Check if there is any metadata fields not in the output list
+              val newMetadata = p.metadataOutput.filterNot(p.outputSet.contains)
+              if (newMetadata.nonEmpty) {
+                // If so, add it to projection
+                p.copy(projectList = p.projectList ++ newMetadata)
+              } else {
+                p
+              }
             case l: LogicalRelation =>
               var newRelation = l
               if (hasFileMetadata) {

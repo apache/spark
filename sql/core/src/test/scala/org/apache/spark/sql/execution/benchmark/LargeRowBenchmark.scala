@@ -40,7 +40,7 @@ object LargeRowBenchmark extends SqlBasedBenchmark {
   private def writeLargeRow(path: String, rowsNum: Int, numCols: Int, cellSizeMb: Double): Unit = {
     val stringLength = (cellSizeMb * 1024 * 1024).toInt
     spark.range(rowsNum)
-      .select(Seq.tabulate(numCols)(i => lit("a" * stringLength).as(s"col$i")): _*)
+      .select(Seq.tabulate(numCols)(i => lit("a".repeat(stringLength)).as(s"col$i")): _*)
       .write.parquet(path)
   }
 

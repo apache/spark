@@ -24,7 +24,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
@@ -257,6 +257,10 @@ class BatchTableWrite(
         }
         dataFrameWriter
           .mode("append")
+          // In "append" mode with saveAsTable, partition columns must be specified in query
+          // because the format and options of the existing table is used, and the table could
+          // have been created with partition columns.
+          .partitionBy(destination.partitionCols.getOrElse(Seq.empty): _*)
           .saveAsTable(destination.identifier.unquotedString)
       }
     }

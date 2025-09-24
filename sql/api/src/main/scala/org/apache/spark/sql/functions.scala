@@ -3578,6 +3578,15 @@ object functions {
   def uuid(): Column = Column.fn("uuid", lit(SparkClassUtils.random.nextLong))
 
   /**
+   * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
+   * UUID 36-character string.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def uuid(seed: Column): Column = Column.fn("uuid", seed)
+
+  /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
    * Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`,
    * `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional initialization
@@ -6293,6 +6302,49 @@ object functions {
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
+   * Returns the difference between two times, measured in specified units. Throws a
+   * SparkIllegalArgumentException, in case the specified unit is not supported.
+   *
+   * @param unit
+   *   A STRING representing the unit of the time difference. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+   * @param start
+   *   A starting TIME.
+   * @param end
+   *   An ending TIME.
+   * @return
+   *   The difference between `end` and `start` times, measured in specified units.
+   * @note
+   *   If any of the inputs is `NULL`, the result is `NULL`.
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def time_diff(unit: Column, start: Column, end: Column): Column = {
+    Column.fn("time_diff", unit, start, end)
+  }
+
+  /**
+   * Returns `time` truncated to the `unit`.
+   *
+   * @param unit
+   *   A STRING representing the unit to truncate the time to. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+   * @param time
+   *   A TIME to truncate.
+   * @return
+   *   A TIME truncated to the specified unit.
+   * @note
+   *   If any of the inputs is `NULL`, the result is `NULL`.
+   * @throws IllegalArgumentException
+   *   If the `unit` is not supported.
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def time_trunc(unit: Column, time: Column): Column = {
+    Column.fn("time_trunc", unit, time)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *
@@ -8599,6 +8651,15 @@ object functions {
     Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
+   * Create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp_ntz(date: Column, time: Column): Column =
+    Column.fn("make_timestamp_ntz", date, time)
+
+  /**
    * Try to create a local date-time from years, months, days, hours, mins, secs fields. The
    * function returns NULL on invalid inputs.
    *
@@ -8613,6 +8674,15 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("try_make_timestamp_ntz", years, months, days, hours, mins, secs)
+
+  /**
+   * Try to create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp_ntz(date: Column, time: Column): Column =
+    Column.fn("try_make_timestamp_ntz", date, time)
 
   /**
    * Make year-month interval from years, months.

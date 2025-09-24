@@ -97,6 +97,37 @@ SELECT * FROM t LIMIT 60;
 
 DROP VIEW ZeroAndOne;
 
+-- limited recursion allowed to stop from failing by putting LIMIT ALL
+WITH RECURSIVE t(n) MAX RECURSION LEVEL 100 AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+SELECT * FROM t LIMIT ALL;
+
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+SELECT * FROM t LIMIT ALL;
+
+-- One reference is limit all but other isn't. Should fail.
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+   (SELECT n FROM t LIMIT ALL) UNION ALL (SELECT n FROM t);
+
+-- One references are limit all.
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+   (SELECT n FROM t LIMIT ALL) UNION ALL (SELECT n FROM t LIMIT ALL);
+
 -- terminate recursion with LIMIT
 WITH RECURSIVE r(level) AS (
   VALUES 0
@@ -782,3 +813,14 @@ WITH RECURSIVE t1 AS (
     UNION ALL
     SELECT n+1 FROM t1 WHERE n < 5)
 SELECT * FROM t1;
+
+-- Query with recursion that gets optimized to empty relation
+WITH RECURSIVE t AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + m
+    FROM (SELECT 2 as m) subq
+             JOIN t ON n = m
+    WHERE n <> m
+)
+SELECT * FROM t;

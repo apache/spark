@@ -749,6 +749,24 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     testDataTransformingEnc(enc, data)
   }
 
+  test("SPARK-52601 TransformingEncoder from primitive to timestamp") {
+    val enc: AgnosticEncoder[Long] =
+      TransformingEncoder[Long, java.sql.Timestamp](
+        classTag,
+        TimestampEncoder(true),
+        () =>
+          new Codec[Long, java.sql.Timestamp] with Serializable {
+            override def encode(in: Long): Timestamp = Timestamp.from(microsToInstant(in))
+            override def decode(out: Timestamp): Long = instantToMicros(out.toInstant)
+        }
+    )
+    val data: Seq[Long] = Seq(0L, 1L, 2L)
+
+    assert(enc.dataType === TimestampType)
+
+    testDataTransformingEnc(enc, data)
+  }
+
   val longEncForTimestamp: AgnosticEncoder[V[Long]] =
     TransformingEncoder[V[Long], java.sql.Timestamp](
       classTag,
@@ -796,50 +814,51 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   }
   // Scala / Java big decimals ----------------------------------------------------------
 
-  encodeDecodeTest(BigDecimal(("9" * 20) + "." + "9" * 18),
+  encodeDecodeTest(BigDecimal("9".repeat(20) + "." + "9".repeat(18)),
     "scala decimal within precision/scale limit")
-  encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18),
+  encodeDecodeTest(new java.math.BigDecimal("9".repeat(20) + "." + "9".repeat(18)),
     "java decimal within precision/scale limit")
 
-  encodeDecodeTest(-BigDecimal(("9" * 20) + "." + "9" * 18),
+  encodeDecodeTest(-BigDecimal("9".repeat(20) + "." + "9".repeat(18)),
     "negative scala decimal within precision/scale limit")
-  encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18).negate,
+  encodeDecodeTest(new java.math.BigDecimal("9".repeat(20) + "." + "9".repeat(18)).negate,
     "negative java decimal within precision/scale limit")
 
-  testOverflowingBigNumeric(BigDecimal("1" * 21), "scala big decimal")
-  testOverflowingBigNumeric(new java.math.BigDecimal("1" * 21), "java big decimal")
+  testOverflowingBigNumeric(BigDecimal("1".repeat(21)), "scala big decimal")
+  testOverflowingBigNumeric(new java.math.BigDecimal("1".repeat(21)), "java big decimal")
 
-  testOverflowingBigNumeric(-BigDecimal("1" * 21), "negative scala big decimal")
-  testOverflowingBigNumeric(new java.math.BigDecimal("1" * 21).negate, "negative java big decimal")
+  testOverflowingBigNumeric(-BigDecimal("1".repeat(21)), "negative scala big decimal")
+  testOverflowingBigNumeric(new java.math.BigDecimal("1".repeat(21)).negate,
+    "negative java big decimal")
 
-  testOverflowingBigNumeric(BigDecimal(("1" * 21) + ".123"),
+  testOverflowingBigNumeric(BigDecimal("1".repeat(21) + ".123"),
     "scala big decimal with fractional part")
-  testOverflowingBigNumeric(new java.math.BigDecimal(("1" * 21) + ".123"),
+  testOverflowingBigNumeric(new java.math.BigDecimal("1".repeat(21) + ".123"),
     "java big decimal with fractional part")
 
-  testOverflowingBigNumeric(BigDecimal(("1" * 21)  + "." + "9999" * 100),
+  testOverflowingBigNumeric(BigDecimal("1".repeat(21)  + "." + "9999".repeat(100)),
     "scala big decimal with long fractional part")
-  testOverflowingBigNumeric(new java.math.BigDecimal(("1" * 21)  + "." + "9999" * 100),
+  testOverflowingBigNumeric(new java.math.BigDecimal("1".repeat(21)  + "." + "9999".repeat(100)),
     "java big decimal with long fractional part")
 
   // Scala / Java big integers ----------------------------------------------------------
 
-  encodeDecodeTest(BigInt("9" * 38), "scala big integer within precision limit")
-  encodeDecodeTest(new BigInteger("9" * 38), "java big integer within precision limit")
+  encodeDecodeTest(BigInt("9".repeat(38)), "scala big integer within precision limit")
+  encodeDecodeTest(new BigInteger("9".repeat(38)), "java big integer within precision limit")
 
-  encodeDecodeTest(-BigInt("9" * 38),
+  encodeDecodeTest(-BigInt("9".repeat(38)),
     "negative scala big integer within precision limit")
-  encodeDecodeTest(new BigInteger("9" * 38).negate(),
+  encodeDecodeTest(new BigInteger("9".repeat(38)).negate(),
     "negative java big integer within precision limit")
 
-  testOverflowingBigNumeric(BigInt("1" * 39), "scala big int")
-  testOverflowingBigNumeric(new BigInteger("1" * 39), "java big integer")
+  testOverflowingBigNumeric(BigInt("1".repeat(39)), "scala big int")
+  testOverflowingBigNumeric(new BigInteger("1".repeat(39)), "java big integer")
 
-  testOverflowingBigNumeric(-BigInt("1" * 39), "negative scala big int")
-  testOverflowingBigNumeric(new BigInteger("1" * 39).negate, "negative java big integer")
+  testOverflowingBigNumeric(-BigInt("1".repeat(39)), "negative scala big int")
+  testOverflowingBigNumeric(new BigInteger("1".repeat(39)).negate, "negative java big integer")
 
-  testOverflowingBigNumeric(BigInt("9" * 100), "scala very large big int")
-  testOverflowingBigNumeric(new BigInteger("9" * 100), "java very big int")
+  testOverflowingBigNumeric(BigInt("9".repeat(100)), "scala very large big int")
+  testOverflowingBigNumeric(new BigInteger("9".repeat(100)), "java very big int")
 
   private def testOverflowingBigNumeric[T: TypeTag](bigNumeric: T, testName: String): Unit = {
     Seq(true, false).foreach { ansiEnabled =>

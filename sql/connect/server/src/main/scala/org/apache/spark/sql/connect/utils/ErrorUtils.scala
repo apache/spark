@@ -30,14 +30,13 @@ import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
 import io.grpc.Status
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{OP_TYPE, SESSION_ID, USER_ID}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
@@ -143,6 +142,25 @@ private[connect] object ErrorUtils extends Logging {
           if (sparkThrowable.getSqlState != null) {
             sparkThrowableBuilder.setSqlState(sparkThrowable.getSqlState)
           }
+          // Add breaking change info if present
+          if (sparkThrowable.getBreakingChangeInfo != null) {
+            val breakingChangeInfo = sparkThrowable.getBreakingChangeInfo
+            val breakingChangeInfoBuilder = FetchErrorDetailsResponse.BreakingChangeInfo
+              .newBuilder()
+            import scala.jdk.CollectionConverters._
+            breakingChangeInfoBuilder
+              .addAllMigrationMessage(breakingChangeInfo.migrationMessage.asJava)
+            if (breakingChangeInfo.mitigationConfig.isDefined) {
+              val mitigationConfig = breakingChangeInfo.mitigationConfig.get
+              val mitigationConfigBuilder = FetchErrorDetailsResponse.MitigationConfig
+                .newBuilder()
+                .setKey(mitigationConfig.key)
+                .setValue(mitigationConfig.value)
+              breakingChangeInfoBuilder.setMitigationConfig(mitigationConfigBuilder.build())
+            }
+            breakingChangeInfoBuilder.setNeedsAudit(breakingChangeInfo.needsAudit)
+            sparkThrowableBuilder.setBreakingChangeInfo(breakingChangeInfoBuilder.build())
+          }
           sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>
@@ -217,7 +235,7 @@ private[connect] object ErrorUtils extends Logging {
         .put(errorId, st)
     }
 
-    lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
+    lazy val stackTrace = Option(Utils.stackTraceToString(st))
     val stackTraceEnabled = sessionHolderOpt.exists(
       _.session.sessionState.conf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
     val withStackTrace =

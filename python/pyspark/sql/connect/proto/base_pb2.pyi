@@ -1093,9 +1093,12 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         REATTACH_OPTIONS_FIELD_NUMBER: builtins.int
+        RESULT_CHUNKING_OPTIONS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
         @property
         def reattach_options(self) -> global___ReattachOptions: ...
+        @property
+        def result_chunking_options(self) -> global___ResultChunkingOptions: ...
         @property
         def extension(self) -> google.protobuf.any_pb2.Any:
             """Extension type for request options"""
@@ -1103,6 +1106,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
             self,
             *,
             reattach_options: global___ReattachOptions | None = ...,
+            result_chunking_options: global___ResultChunkingOptions | None = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
         def HasField(
@@ -1114,6 +1118,8 @@ class ExecutePlanRequest(google.protobuf.message.Message):
                 b"reattach_options",
                 "request_option",
                 b"request_option",
+                "result_chunking_options",
+                b"result_chunking_options",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -1125,11 +1131,16 @@ class ExecutePlanRequest(google.protobuf.message.Message):
                 b"reattach_options",
                 "request_option",
                 b"request_option",
+                "result_chunking_options",
+                b"result_chunking_options",
             ],
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["request_option", b"request_option"]
-        ) -> typing_extensions.Literal["reattach_options", "extension"] | None: ...
+        ) -> (
+            typing_extensions.Literal["reattach_options", "result_chunking_options", "extension"]
+            | None
+        ): ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -1308,38 +1319,78 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         ROW_COUNT_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
         START_OFFSET_FIELD_NUMBER: builtins.int
+        CHUNK_INDEX_FIELD_NUMBER: builtins.int
+        NUM_CHUNKS_IN_BATCH_FIELD_NUMBER: builtins.int
         row_count: builtins.int
         """Count rows in `data`. Must match the number of rows inside `data`."""
         data: builtins.bytes
         """Serialized Arrow data."""
         start_offset: builtins.int
         """If set, row offset of the start of this ArrowBatch in execution results."""
+        chunk_index: builtins.int
+        """Index of this chunk in the batch if chunking is enabled. The index starts from 0."""
+        num_chunks_in_batch: builtins.int
+        """Total number of chunks in this batch if chunking is enabled.
+        It is missing when chunking is disabled - the batch is returned whole
+        and client will treat this response as the batch.
+        """
         def __init__(
             self,
             *,
             row_count: builtins.int = ...,
             data: builtins.bytes = ...,
             start_offset: builtins.int | None = ...,
+            chunk_index: builtins.int | None = ...,
+            num_chunks_in_batch: builtins.int | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_start_offset", b"_start_offset", "start_offset", b"start_offset"
+                "_chunk_index",
+                b"_chunk_index",
+                "_num_chunks_in_batch",
+                b"_num_chunks_in_batch",
+                "_start_offset",
+                b"_start_offset",
+                "chunk_index",
+                b"chunk_index",
+                "num_chunks_in_batch",
+                b"num_chunks_in_batch",
+                "start_offset",
+                b"start_offset",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_chunk_index",
+                b"_chunk_index",
+                "_num_chunks_in_batch",
+                b"_num_chunks_in_batch",
                 "_start_offset",
                 b"_start_offset",
+                "chunk_index",
+                b"chunk_index",
                 "data",
                 b"data",
+                "num_chunks_in_batch",
+                b"num_chunks_in_batch",
                 "row_count",
                 b"row_count",
                 "start_offset",
                 b"start_offset",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_chunk_index", b"_chunk_index"]
+        ) -> typing_extensions.Literal["chunk_index"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_num_chunks_in_batch", b"_num_chunks_in_batch"],
+        ) -> typing_extensions.Literal["num_chunks_in_batch"] | None: ...
+        @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_start_offset", b"_start_offset"]
         ) -> typing_extensions.Literal["start_offset"] | None: ...
@@ -2942,6 +2993,62 @@ class ReattachOptions(google.protobuf.message.Message):
 
 global___ReattachOptions = ReattachOptions
 
+class ResultChunkingOptions(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ALLOW_ARROW_BATCH_CHUNKING_FIELD_NUMBER: builtins.int
+    PREFERRED_ARROW_CHUNK_SIZE_FIELD_NUMBER: builtins.int
+    allow_arrow_batch_chunking: builtins.bool
+    """Although Arrow results are split into batches with a size limit according to estimation, the
+    size of the batches is not guaranteed to be less than the limit, especially when a single row
+    is larger than the limit, in which case the server will fail to split it further into smaller
+    batches. As a result, the client may encounter a gRPC error stating “Received message larger
+    than max” when a batch is too large.
+    If allow_arrow_batch_chunking=true, the server will split large Arrow batches into smaller chunks,
+    and the client is expected to handle the chunked Arrow batches.
+
+    If false, the server will not chunk large Arrow batches.
+    """
+    preferred_arrow_chunk_size: builtins.int
+    """Optional preferred Arrow batch size in bytes for the server to use when sending Arrow results.
+    The server will attempt to use this size if it is set and within the valid range
+    ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
+    """
+    def __init__(
+        self,
+        *,
+        allow_arrow_batch_chunking: builtins.bool = ...,
+        preferred_arrow_chunk_size: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size",
+            b"_preferred_arrow_chunk_size",
+            "preferred_arrow_chunk_size",
+            b"preferred_arrow_chunk_size",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size",
+            b"_preferred_arrow_chunk_size",
+            "allow_arrow_batch_chunking",
+            b"allow_arrow_batch_chunking",
+            "preferred_arrow_chunk_size",
+            b"preferred_arrow_chunk_size",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_preferred_arrow_chunk_size", b"_preferred_arrow_chunk_size"
+        ],
+    ) -> typing_extensions.Literal["preferred_arrow_chunk_size"] | None: ...
+
+global___ResultChunkingOptions = ResultChunkingOptions
+
 class ReattachExecuteRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -3625,6 +3732,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         MESSAGE_PARAMETERS_FIELD_NUMBER: builtins.int
         QUERY_CONTEXTS_FIELD_NUMBER: builtins.int
         SQL_STATE_FIELD_NUMBER: builtins.int
+        BREAKING_CHANGE_INFO_FIELD_NUMBER: builtins.int
         error_class: builtins.str
         """Succinct, human-readable, unique, and consistent representation of the error category."""
         @property
@@ -3643,6 +3751,9 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         """Portable error identifier across SQL engines
         If null, error class or SQLSTATE is not set.
         """
+        @property
+        def breaking_change_info(self) -> global___FetchErrorDetailsResponse.BreakingChangeInfo:
+            """Additional information if the error was caused by a breaking change."""
         def __init__(
             self,
             *,
@@ -3653,14 +3764,20 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             ]
             | None = ...,
             sql_state: builtins.str | None = ...,
+            breaking_change_info: global___FetchErrorDetailsResponse.BreakingChangeInfo
+            | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "_breaking_change_info",
+                b"_breaking_change_info",
                 "_error_class",
                 b"_error_class",
                 "_sql_state",
                 b"_sql_state",
+                "breaking_change_info",
+                b"breaking_change_info",
                 "error_class",
                 b"error_class",
                 "sql_state",
@@ -3670,10 +3787,14 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_breaking_change_info",
+                b"_breaking_change_info",
                 "_error_class",
                 b"_error_class",
                 "_sql_state",
                 b"_sql_state",
+                "breaking_change_info",
+                b"breaking_change_info",
                 "error_class",
                 b"error_class",
                 "message_parameters",
@@ -3686,12 +3807,107 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_breaking_change_info", b"_breaking_change_info"
+            ],
+        ) -> typing_extensions.Literal["breaking_change_info"] | None: ...
+        @typing.overload
+        def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
         ) -> typing_extensions.Literal["error_class"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_sql_state", b"_sql_state"]
         ) -> typing_extensions.Literal["sql_state"] | None: ...
+
+    class BreakingChangeInfo(google.protobuf.message.Message):
+        """BreakingChangeInfo defines the schema for breaking change information."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MIGRATION_MESSAGE_FIELD_NUMBER: builtins.int
+        MITIGATION_CONFIG_FIELD_NUMBER: builtins.int
+        NEEDS_AUDIT_FIELD_NUMBER: builtins.int
+        @property
+        def migration_message(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """A message explaining how the user can migrate their job to work
+            with the breaking change.
+            """
+        @property
+        def mitigation_config(self) -> global___FetchErrorDetailsResponse.MitigationConfig:
+            """A spark config flag that can be used to mitigate the breaking change."""
+        needs_audit: builtins.bool
+        """If true, the breaking change should be inspected manually.
+        If false, the spark job should be retried by setting the mitigationConfig.
+        """
+        def __init__(
+            self,
+            *,
+            migration_message: collections.abc.Iterable[builtins.str] | None = ...,
+            mitigation_config: global___FetchErrorDetailsResponse.MitigationConfig | None = ...,
+            needs_audit: builtins.bool | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_mitigation_config",
+                b"_mitigation_config",
+                "_needs_audit",
+                b"_needs_audit",
+                "mitigation_config",
+                b"mitigation_config",
+                "needs_audit",
+                b"needs_audit",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_mitigation_config",
+                b"_mitigation_config",
+                "_needs_audit",
+                b"_needs_audit",
+                "migration_message",
+                b"migration_message",
+                "mitigation_config",
+                b"mitigation_config",
+                "needs_audit",
+                b"needs_audit",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_mitigation_config", b"_mitigation_config"],
+        ) -> typing_extensions.Literal["mitigation_config"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_needs_audit", b"_needs_audit"]
+        ) -> typing_extensions.Literal["needs_audit"] | None: ...
+
+    class MitigationConfig(google.protobuf.message.Message):
+        """MitigationConfig defines a spark config flag that can be used to mitigate a breaking change."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        """The spark config key."""
+        value: builtins.str
+        """The spark config value that mitigates the breaking change."""
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""

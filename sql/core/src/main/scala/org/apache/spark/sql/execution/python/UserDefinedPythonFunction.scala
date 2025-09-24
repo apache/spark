@@ -25,14 +25,14 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, TableArg}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.TableValuedFunctionArgument
+import org.apache.spark.sql.internal.{SQLConf, TableValuedFunctionArgument}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -57,7 +57,7 @@ case class UserDefinedPythonFunction(
        * - don't have duplicated names
        * - don't contain positional arguments after named arguments
        */
-      NamedParametersSupport.splitAndCheckNamedArguments(e, name)
+      NamedParametersSupport.splitAndCheckNamedArguments(e, name, SQLConf.get.resolver)
     } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
@@ -121,7 +121,17 @@ case class UserDefinedPythonTableFunction(
      * - don't have duplicated names
      * - don't contain positional arguments after named arguments
      */
-    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
+    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name, SQLConf.get.resolver)
+
+    // Check which argument is a table argument here since it will be replaced with
+    // `UnresolvedAttribute` to construct lateral join.
+    val tableArgs = exprs.map {
+      case _: FunctionTableSubqueryArgumentExpression => true
+      case _: UnresolvedTableArgPlanId => true
+      case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
+      case NamedArgumentExpression(_, _: UnresolvedTableArgPlanId) => true
+      case _ => false
+    }
 
     val udtf = returnType match {
       case Some(rt) =>
@@ -132,15 +142,9 @@ case class UserDefinedPythonTableFunction(
           pickledAnalyzeResult = None,
           children = exprs,
           evalType = pythonEvalType,
-          udfDeterministic = udfDeterministic)
+          udfDeterministic = udfDeterministic,
+          tableArguments = Some(tableArgs))
       case _ =>
-        // Check which argument is a table argument here since it will be replaced with
-        // `UnresolvedAttribute` to construct lateral join.
-        val tableArgs = exprs.map {
-          case _: FunctionTableSubqueryArgumentExpression => true
-          case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
-          case _ => false
-        }
         val runAnalyzeInPython = (func: PythonFunction, exprs: Seq[Expression]) => {
           val runner =
             new UserDefinedPythonTableFunctionAnalyzeRunner(name, func, exprs, tableArgs, parser)
@@ -152,7 +156,8 @@ case class UserDefinedPythonTableFunction(
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
-          resolveElementMetadata = runAnalyzeInPython)
+          resolveElementMetadata = runAnalyzeInPython,
+          tableArguments = Some(tableArgs))
     }
     Generate(
       udtf,

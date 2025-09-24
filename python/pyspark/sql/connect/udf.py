@@ -77,10 +77,7 @@ def _create_py_udf(
     else:
         is_arrow_enabled = useArrow
 
-    eval_type: int = PythonEvalType.SQL_BATCHED_UDF
-
     if is_arrow_enabled:
-        eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
         try:
             require_minimum_pandas_version()
             require_minimum_pyarrow_version()
@@ -91,6 +88,25 @@ def _create_py_udf(
                 "Falling back to a non-Arrow-optimized UDF.",
                 RuntimeWarning,
             )
+
+    eval_type: Optional[int] = None
+    if useArrow is None:
+        # If the user doesn't explicitly set useArrow
+        from pyspark.sql.pandas.typehints import infer_eval_type_for_udf
+
+        try:
+            # Try to infer the eval type from type hints
+            eval_type = infer_eval_type_for_udf(f)
+        except Exception:
+            warnings.warn("Cannot infer the eval type from type hints. ", UserWarning)
+
+    if eval_type is None:
+        if is_arrow_enabled:
+            # Arrow optimized Python UDF
+            eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
+        else:
+            # Fallback to Regular Python UDF
+            eval_type = PythonEvalType.SQL_BATCHED_UDF
 
     return _create_udf(f, returnType, eval_type)
 
@@ -162,7 +178,6 @@ class UserDefinedFunction:
     def returnType(self) -> DataType:
         # Make sure this is called after Connect Session is initialized.
         # ``_parse_datatype_string`` accesses to Connect Server for parsing a DDL formatted string.
-        # TODO: PythonEvalType.SQL_BATCHED_UDF
         if self._returnType_placeholder is None:
             if isinstance(self._returnType, DataType):
                 self._returnType_placeholder = self._returnType
@@ -286,7 +301,8 @@ class UDFRegistration:
                     errorClass="INVALID_UDF_EVAL_TYPE",
                     messageParameters={
                         "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
-                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF, "
+                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
+                        "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
                         "SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF"
                     },
                 )

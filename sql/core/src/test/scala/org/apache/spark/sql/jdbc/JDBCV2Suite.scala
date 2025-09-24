@@ -18,11 +18,10 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.util.Properties
+import java.util.{HexFormat, Properties}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.codec.binary.Hex
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
@@ -3103,7 +3102,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
-    val hexBinary = Hex.encodeHexString(testBytes, false)
+    val hexBinary = HexFormat.of().withUpperCase().formatHex(testBytes)
     val binary = "X'" + hexBinary + "'"
     val df = sql(s"SELECT * FROM h2.test.binary_tab WHERE b = $binary")
     checkFiltersRemoved(df)

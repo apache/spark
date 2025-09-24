@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PREDICATES
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SaveMode}
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -54,7 +54,7 @@ import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushedDownOperators}
-import org.apache.spark.sql.execution.streaming.StreamingRelation
+import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources._
@@ -401,7 +401,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty, None),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         l.stream,
@@ -476,7 +476,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty, None),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.stream,
@@ -500,7 +500,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty, None),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.stream,
@@ -513,6 +513,8 @@ object DataSourceStrategy
   def translateJoinType(joinType: JoinType): Option[V2JoinType] = {
     joinType match {
       case Inner => Some(V2JoinType.INNER_JOIN)
+      case LeftOuter => Some(V2JoinType.LEFT_OUTER_JOIN)
+      case RightOuter => Some(V2JoinType.RIGHT_OUTER_JOIN)
       case _ => None
     }
   }

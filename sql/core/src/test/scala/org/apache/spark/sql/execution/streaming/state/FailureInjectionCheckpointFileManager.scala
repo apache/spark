@@ -25,8 +25,8 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.util.Progressable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
-import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
+import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
 
 /**
  * A wrapper file output stream that will throw exception in close() and put the underlying
@@ -259,7 +259,7 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int,
       eventForwarder: Option[RocksDBEventForwarder] = None,
-      uniqueId: String): RocksDB = {
+      uniqueId: Option[String]): RocksDB = {
     FailureInjectionRocksDBStateStoreProvider.createRocksDBWithFaultInjection(
       dfsRootDir,
       conf,
@@ -289,7 +289,7 @@ object FailureInjectionRocksDBStateStoreProvider {
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int,
       eventForwarder: Option[RocksDBEventForwarder],
-      uniqueId: String): RocksDB = {
+      uniqueId: Option[String]): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf = conf,

@@ -1617,6 +1617,32 @@ class DataFrameSetOperationsSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-53550: union partitioning should compare canonicalized attributes") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("person_base", "person_a", "person_b", "person_c") {
+        // scalastyle:off line.size.limit
+        sql(
+          """create or replace temp view person_base(id, name, age) as values
+            |(0, "mike", 30),
+            |(1, "jim", 20);
+            |""".stripMargin)
+        sql(
+          """create or replace temp view person_a as
+            |SELECT name, avg(age) as avg_age FROM person_base GROUP BY name;""".stripMargin)
+        sql(
+          """create or replace temp view person_b as
+            |SELECT p1.name, p2.avg_age FROM person_base p1 JOIN person_a p2 ON p1.name = p2.name;""".stripMargin)
+        sql(
+          """create or replace temp view person_c as
+            |SELECT * FROM person_a UNION SELECT * FROM person_b;""".stripMargin)
+        val df = sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name")
+        // scalastyle:on line.size.limit
+        checkAnswer(df, Row("jim", 20) :: Row("mike", 30) :: Nil)
+      }
+    }
+  }
 }
 
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)

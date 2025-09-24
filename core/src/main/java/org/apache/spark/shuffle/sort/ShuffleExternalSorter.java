@@ -90,9 +90,9 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
   private final int numElementsForSpillThreshold;
 
   /**
-   * Force this sorter to spill when the size in memory is beyond this threshold.
+   * Force this sorter to spill when the in memory size in bytes is beyond this threshold.
    */
-  private final long recordsSizeForSpillThreshold;
+  private final long sizeInBytesForSpillThreshold;
 
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
   private final int fileBufferSizeBytes;
@@ -117,7 +117,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
   @Nullable private ShuffleInMemorySorter inMemSorter;
   @Nullable private MemoryBlock currentPage = null;
   private long pageCursor = -1;
-  private long inMemRecordsSize = 0;
+  private long totalPageMemoryUsageBytes = 0;
 
   // Checksum calculator for each partition. Empty when shuffle checksum disabled.
   private final Checksum[] partitionChecksums;
@@ -142,7 +142,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
         (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.numElementsForSpillThreshold =
         (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());
-    this.recordsSizeForSpillThreshold =
+    this.sizeInBytesForSpillThreshold =
         (long) conf.get(package$.MODULE$.SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD());
     this.writeMetrics = writeMetrics;
     this.inMemSorter = new ShuffleInMemorySorter(
@@ -170,11 +170,11 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     if (!isFinalFile) {
       logger.info(
         "Task {} on Thread {} spilling sort data of {} to disk ({} {} so far)",
-        MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskContext.taskAttemptId()),
-        MDC.of(LogKeys.THREAD_ID$.MODULE$, Thread.currentThread().getId()),
-        MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(getMemoryUsage())),
-        MDC.of(LogKeys.NUM_SPILLS$.MODULE$, spills.size()),
-        MDC.of(LogKeys.SPILL_TIMES$.MODULE$, spills.size() != 1 ? "times" : "time"));
+        MDC.of(LogKeys.TASK_ATTEMPT_ID, taskContext.taskAttemptId()),
+        MDC.of(LogKeys.THREAD_ID, Thread.currentThread().getId()),
+        MDC.of(LogKeys.MEMORY_SIZE, Utils.bytesToString(getMemoryUsage())),
+        MDC.of(LogKeys.NUM_SPILLS, spills.size()),
+        MDC.of(LogKeys.SPILL_TIMES, spills.size() != 1 ? "times" : "time"));
     }
 
     // This call performs the actual sort.
@@ -314,11 +314,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
   }
 
   private long getMemoryUsage() {
-    long totalPageSize = 0;
-    for (MemoryBlock page : allocatedPages) {
-      totalPageSize += page.size();
-    }
-    return ((inMemSorter == null) ? 0 : inMemSorter.getMemoryUsage()) + totalPageSize;
+    return ((inMemSorter == null) ? 0 : inMemSorter.getMemoryUsage()) + totalPageMemoryUsageBytes;
   }
 
   private void updatePeakMemoryUsed() {
@@ -342,11 +338,11 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     for (MemoryBlock block : allocatedPages) {
       memoryFreed += block.size();
       freePage(block);
+      totalPageMemoryUsageBytes -= block.size();
     }
     allocatedPages.clear();
     currentPage = null;
     pageCursor = 0;
-    inMemRecordsSize = 0;
     return memoryFreed;
   }
 
@@ -362,7 +358,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     for (SpillInfo spill : spills) {
       if (spill.file.exists() && !spill.file.delete()) {
         logger.error("Unable to delete spill file {}",
-          MDC.of(LogKeys.PATH$.MODULE$, spill.file.getPath()));
+          MDC.of(LogKeys.PATH, spill.file.getPath()));
       }
     }
   }
@@ -417,6 +413,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
       currentPage = allocatePage(required);
       pageCursor = currentPage.getBaseOffset();
       allocatedPages.add(currentPage);
+      totalPageMemoryUsageBytes += currentPage.size();
     }
   }
 
@@ -429,13 +426,20 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
       logger.info("Spilling data because number of spilledRecords ({}) crossed the threshold {}",
-        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_RECORDS$.MODULE$, inMemSorter.numRecords()),
-        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD$.MODULE$, numElementsForSpillThreshold));
+        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_RECORDS, inMemSorter.numRecords()),
+        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD, numElementsForSpillThreshold));
       spill();
-    } else if (inMemRecordsSize >= recordsSizeForSpillThreshold) {
-      logger.info("Spilling data because size of spilledRecords ({}) crossed the size threshold {}",
-        MDC.of(LogKeys.SPILL_RECORDS_SIZE$.MODULE$, inMemRecordsSize),
-        MDC.of(LogKeys.SPILL_RECORDS_SIZE_THRESHOLD$.MODULE$, recordsSizeForSpillThreshold));
+    }
+
+    // TODO: Ideally we only need to check the spill threshold when new memory needs to be
+    //       allocated (both this sorter and the underlying ShuffleInMemorySorter may allocate
+    //       new memory), but it's simpler to check the total memory usage of these two sorters
+    //       before inserting each record.
+    final long usedMemory = getMemoryUsage();
+    if (usedMemory >= sizeInBytesForSpillThreshold) {
+      logger.info("Spilling data because memory usage ({}) crossed the threshold {}",
+        MDC.of(LogKeys.SPILL_RECORDS_SIZE, usedMemory),
+        MDC.of(LogKeys.SPILL_RECORDS_SIZE_THRESHOLD, sizeInBytesForSpillThreshold));
       spill();
     }
 
@@ -453,7 +457,6 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
     pageCursor += length;
     inMemSorter.insertRecord(recordAddress, partitionId);
-    inMemRecordsSize += required;
   }
 
   /**

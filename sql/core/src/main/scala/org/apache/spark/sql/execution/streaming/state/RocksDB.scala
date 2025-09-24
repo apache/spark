@@ -37,7 +37,7 @@ import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{NextIterator, Utils}
@@ -75,7 +75,7 @@ class RocksDB(
     enableStateStoreCheckpointIds: Boolean = false,
     partitionId: Int = 0,
     eventForwarder: Option[RocksDBEventForwarder] = None,
-    uniqueId: String = "") extends Logging {
+    uniqueId: Option[String] = None) extends Logging {
 
   import RocksDB._
 
@@ -158,6 +158,8 @@ class RocksDB(
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
+  private val loadMetrics = new mutable.HashMap[String, Long]()
+
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
@@ -195,11 +197,12 @@ class RocksDB(
   // This prevents performance impact from querying RocksDB memory too frequently.
   private val memoryUpdateIntervalMs = conf.memoryUpdateIntervalMs
 
-  // Register with RocksDBMemoryManager if we have a unique ID
-  if (uniqueId.nonEmpty) {
-    // Initial registration with zero memory usage
-    RocksDBMemoryManager.updateMemoryUsage(uniqueId, 0L, conf.boundedMemoryUsage)
-  }
+  // Generate a unique ID if not provided to ensure proper memory tracking
+  private val instanceUniqueId = uniqueId.getOrElse(UUID.randomUUID().toString)
+
+  // Register with RocksDBMemoryManager
+  // Initial registration with zero memory usage
+  RocksDBMemoryManager.updateMemoryUsage(instanceUniqueId, 0L, conf.boundedMemoryUsage)
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -339,6 +342,63 @@ class RocksDB(
     currLineage
   }
 
+  /**
+   * Construct the full lineage from startVersion to endVersion (inclusive) by
+   * walking backwards using lineage information embedded in changelog files.
+   */
+  def getFullLineage(
+      startVersion: Long,
+      endVersion: Long,
+      endVersionStateStoreCkptId: Option[String]): Array[LineageItem] = {
+    assert(startVersion <= endVersion,
+      s"startVersion $startVersion should be less than or equal to endVersion $endVersion")
+    assert(endVersionStateStoreCkptId.isDefined,
+      "endVersionStateStoreCkptId should be defined")
+
+    // A buffer to collect the lineage information, the entries should be decreasing in version
+    val buf = mutable.ArrayBuffer[LineageItem]()
+    buf.append(LineageItem(endVersion, endVersionStateStoreCkptId.get))
+
+    while (buf.last.version > startVersion) {
+      val prevSmallestVersion = buf.last.version
+      val lineage = getLineageFromChangelogFile(buf.last.version, Some(buf.last.checkpointUniqueId))
+      // lineage array is sorted in increasing order, we need to make it decreasing
+      val lineageSortedDecreasing = lineage.filter(_.version >= startVersion).sortBy(-_.version)
+      // append to the buffer in reverse order, so the buffer is always decreasing in version
+      buf.appendAll(lineageSortedDecreasing)
+
+      // to prevent infinite loop if we make no progress, throw an exception
+      if (buf.last.version == prevSmallestVersion) {
+        throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(buf.reverse.toArray),
+          s"Cannot find version smaller than ${buf.last.version} in lineage.")
+      }
+    }
+
+    // we return the lineage in increasing order
+    val ret = buf.reverse.toArray
+
+    // Sanity checks
+    if (ret.head.version != startVersion) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        s"Lineage does not start with startVersion: $startVersion.")
+    }
+    if (ret.last.version != endVersion) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        s"Lineage does not end with endVersion: $endVersion.")
+    }
+    // Verify that the lineage versions are increasing by one
+    // We do this by checking that each entry is one version higher than the previous one
+    val increasingByOne = ret.sliding(2).forall {
+      case Array(prev, next) => prev.version + 1 == next.version
+      case _ => true
+    }
+    if (!increasingByOne) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        "Lineage versions are not increasing by one.")
+    }
+
+    ret
+  }
 
   /**
    * Load the given version of data in a native RocksDB instance.
@@ -584,8 +644,13 @@ class RocksDB(
       version: Long,
       stateStoreCkptId: Option[String] = None,
       readOnly: Boolean = false): RocksDB = {
+    val startTime = System.currentTimeMillis()
+
     assert(version >= 0)
     recordedMetrics = None
+    // Reset the load metrics before loading
+    loadMetrics.clear()
+
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
     if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
@@ -594,6 +659,11 @@ class RocksDB(
       loadWithoutCheckpointId(version, readOnly)
     }
 
+    // Record the metrics after loading
+    val duration = System.currentTimeMillis() - startTime
+    loadMetrics ++= Map(
+      "load" -> duration
+    )
     // Register with memory manager after successful load
     updateMemoryUsageIfNeeded()
 
@@ -607,18 +677,33 @@ class RocksDB(
    *
    * @param snapshotVersion version of the snapshot to start with
    * @param endVersion end version
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return A RocksDB instance loaded with the state endVersion replayed from snapshotVersion.
    *         Note that the instance will be read-only since this method is only used in State Data
    *         Source.
    */
-  def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
+  def loadFromSnapshot(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): RocksDB = {
+    val startTime = System.currentTimeMillis()
+
+    assert(snapshotVersionStateStoreCkptId.isDefined == endVersionStateStoreCkptId.isDefined)
     assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
     recordedMetrics = None
+    loadMetrics.clear()
+
     logInfo(
       log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
       log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
     try {
-      replayFromCheckpoint(snapshotVersion, endVersion)
+      replayFromCheckpoint(
+        snapshotVersion,
+        endVersion,
+        snapshotVersionStateStoreCkptId,
+        endVersionStateStoreCkptId)
 
       logInfo(
         log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
@@ -630,6 +715,12 @@ class RocksDB(
     }
     // Report this snapshot version to the coordinator
     reportSnapshotUploadToCoordinator(snapshotVersion)
+
+    // Record the metrics after loading
+    loadMetrics ++= Map(
+      "loadFromSnapshot" -> (System.currentTimeMillis() - startTime)
+    )
+
     this
   }
 
@@ -640,11 +731,19 @@ class RocksDB(
    *
    * @param snapshotVersion start checkpoint version
    * @param endVersion end version
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    */
-  private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
+  private def replayFromCheckpoint(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): Any = {
+    assert(snapshotVersionStateStoreCkptId.isDefined == endVersionStateStoreCkptId.isDefined)
+
     closeDB()
     val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion,
-      workingDir, rocksDBFileMapping)
+      workingDir, rocksDBFileMapping, snapshotVersionStateStoreCkptId)
     loadedVersion = snapshotVersion
     lastSnapshotVersion = snapshotVersion
 
@@ -676,7 +775,17 @@ class RocksDB(
 
     if (loadedVersion != endVersion) {
       val versionsAndUniqueIds: Array[(Long, Option[String])] =
+      if (endVersionStateStoreCkptId.isDefined) {
+        val fullVersionLineage = getFullLineage(
+          loadedVersion + 1,
+          endVersion,
+          endVersionStateStoreCkptId)
+        fullVersionLineage
+          .sortBy(_.version)
+          .map(item => (item.version, Some(item.checkpointUniqueId)))
+      } else {
         (loadedVersion + 1 to endVersion).map((_, None)).toArray
+      }
       replayChangelog(versionsAndUniqueIds)
       loadedVersion = endVersion
     }
@@ -695,6 +804,8 @@ class RocksDB(
    * Replay change log from the loaded version to the target version.
    */
   private def replayChangelog(versionsAndUniqueIds: Array[(Long, Option[String])]): Unit = {
+    val startTime = System.currentTimeMillis()
+
     assert(!versionsAndUniqueIds.isEmpty && versionsAndUniqueIds.head._1 == loadedVersion + 1,
       s"Replay changelog should start from one version after loadedVersion: $loadedVersion," +
         s" but it is not."
@@ -716,13 +827,13 @@ class RocksDB(
           changelogReader.foreach { case (recordType, key, value) =>
             recordType match {
               case RecordType.PUT_RECORD =>
-                put(key, value, includesPrefix = true)
+                put(key, value, includesPrefix = true, deriveCfName = true)
 
               case RecordType.DELETE_RECORD =>
-                remove(key, includesPrefix = true)
+                remove(key, includesPrefix = true, deriveCfName = true)
 
               case RecordType.MERGE_RECORD =>
-                merge(key, value, includesPrefix = true)
+                merge(key, value, includesPrefix = true, deriveCfName = true)
             }
           }
         } else {
@@ -743,6 +854,12 @@ class RocksDB(
         if (changelogReader != null) changelogReader.closeIfNeeded()
       }
     }
+
+    val duration = System.currentTimeMillis() - startTime
+    loadMetrics ++= Map(
+      "replayChangelog" -> Math.max(duration, 1L), // avoid flaky tests
+      "numReplayChangeLogFiles" -> versionsAndUniqueIds.length
+    )
   }
 
   /**
@@ -845,7 +962,8 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
@@ -853,7 +971,14 @@ class RocksDB(
       key
     }
 
-    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = true)
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
     db.put(writeOptions, keyWithPrefix, value)
     changelogWriter.foreach(_.put(keyWithPrefix, value))
   }
@@ -873,7 +998,8 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
@@ -881,7 +1007,14 @@ class RocksDB(
       key
     }
 
-    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = true)
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
     db.merge(writeOptions, keyWithPrefix, value)
     changelogWriter.foreach(_.merge(keyWithPrefix, value))
   }
@@ -893,7 +1026,8 @@ class RocksDB(
   def remove(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
@@ -901,7 +1035,14 @@ class RocksDB(
       key
     }
 
-    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = false)
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = false)
     db.delete(writeOptions, keyWithPrefix)
     changelogWriter.foreach(_.delete(keyWithPrefix))
   }
@@ -909,7 +1050,7 @@ class RocksDB(
   /**
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
-  def iterator(): Iterator[ByteArrayPair] = {
+  def iterator(): NextIterator[ByteArrayPair] = {
     updateMemoryUsageIfNeeded()
     val iter = db.newIterator()
     logInfo(log"Getting iterator from version ${MDC(LogKeys.LOADED_VERSION, loadedVersion)}")
@@ -946,7 +1087,7 @@ class RocksDB(
   /**
    * Get an iterator of all committed and uncommitted key-value pairs for the given column family.
    */
-  def iterator(cfName: String): Iterator[ByteArrayPair] = {
+  def iterator(cfName: String): NextIterator[ByteArrayPair] = {
     updateMemoryUsageIfNeeded()
     if (!useColumnFamilies) {
       iterator()
@@ -996,7 +1137,7 @@ class RocksDB(
 
   def prefixScan(
       prefix: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair] = {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {
     updateMemoryUsageIfNeeded()
     val iter = db.newIterator()
     val updatedPrefix = if (useColumnFamilies) {
@@ -1044,6 +1185,7 @@ class RocksDB(
    * - Sync the checkpoint dir files to DFS
    */
   def commit(): (Long, StateStoreCheckpointInfo) = {
+    commitLatencyMs.clear()
     updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
@@ -1056,13 +1198,14 @@ class RocksDB(
         commitLatencyMs ++= snapshotLatency
       }
 
+      var isUploaded = false
+
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
           // If we have changed the columnFamilyId mapping, we have set a new
           // snapshot and need to upload this to the DFS even if changelog checkpointing
           // is enabled.
-          var isUploaded = false
           if (shouldForceSnapshot.get()) {
             assert(snapshot.isDefined)
             uploadSnapshot(snapshot.get)
@@ -1073,7 +1216,14 @@ class RocksDB(
           // ensure that changelog files are always written
           try {
             assert(changelogWriter.isDefined)
-            changelogWriter.foreach(_.commit())
+            val changeLogWriterCommitTimeMs = timeTakenMs {
+              changelogWriter.foreach(_.commit())
+            }
+            // Record the commit time for the changelog writer
+            commitLatencyMs ++= Map(
+              "changeLogWriterCommit" -> changeLogWriterCommitTimeMs
+            )
+
             if (!isUploaded) {
               snapshot.foreach(snapshotsToUploadQueue.offer)
             }
@@ -1084,7 +1234,17 @@ class RocksDB(
           assert(changelogWriter.isEmpty)
           assert(snapshot.isDefined)
           uploadSnapshot(snapshot.get)
+          isUploaded = true
         }
+      }
+
+      if (isUploaded) {
+        // If we have uploaded the snapshot, the fileManagerMetrics will be cleared and updated
+        // in uploadSnapshot. If there are new metrics needed to be added specific to this commit,
+        // add them here to not accidentally use old fileManagerMetrics from the maintenance threads
+        commitLatencyMs ++= Map(
+          "saveZipFiles" -> fileManagerMetrics.saveZipFilesTimeMs.getOrElse(0L)
+        )
       }
 
       if (enableStateStoreCheckpointIds) {
@@ -1260,14 +1420,12 @@ class RocksDB(
       }
 
       // Unregister from RocksDBMemoryManager
-      if (uniqueId.nonEmpty) {
-        try {
-          RocksDBMemoryManager.unregisterInstance(uniqueId)
-        } catch {
-          case NonFatal(e) =>
-            logWarning(log"Failed to unregister from RocksDBMemoryManager " +
-              log"${MDC(LogKeys.EXCEPTION, e)}")
-        }
+      try {
+        RocksDBMemoryManager.unregisterInstance(instanceUniqueId)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to unregister from RocksDBMemoryManager " +
+            log"${MDC(LogKeys.EXCEPTION, e)}")
       }
 
       silentDeleteRecursively(localRootDir, "closing RocksDB")
@@ -1302,9 +1460,6 @@ class RocksDB(
   private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
-    val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
-    val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
-    val blockCacheUsage = getDBProperty("rocksdb.block-cache-usage")
     val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
@@ -1338,14 +1493,8 @@ class RocksDB(
       nativeStats.getTickerCount(typ)
     }
 
-    // if bounded memory usage is enabled, we share the block cache across all state providers
-    // running on the same node and account the usage to this single cache. In this case, its not
-    // possible to provide partition level or query level memory usage.
-    val memoryUsage = if (conf.boundedMemoryUsage) {
-      0L
-    } else {
-      readerMemUsage + memTableMemUsage + blockCacheUsage
-    }
+    // Use RocksDBMemoryManager to calculate the memory usage accounting
+    val memoryUsage = RocksDBMemoryManager.getInstanceMemoryUsage(instanceUniqueId, getMemoryUsage)
 
     RocksDBMetrics(
       numKeysOnLoadedVersion,
@@ -1355,7 +1504,9 @@ class RocksDB(
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros,
-      commitLatencyMs,
+      // Ensure that the maps are cloned to avoid sharing these Maps
+      commitLatencyMs.clone(),
+      loadMetrics.clone(),
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
@@ -1380,6 +1531,13 @@ class RocksDB(
     rocksDBMetricsOpt
   }
 
+  /**
+   * Refresh the recorded metrics with the latest metrics.
+   */
+  private[state] def refreshRecordedMetricsForTest(): Unit = {
+    recordedMetrics = Some(metrics)
+  }
+
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
 
   /**
@@ -1396,11 +1554,8 @@ class RocksDB(
    * @return Total memory usage in bytes across all tracked components
    */
   def getMemoryUsage: Long = {
-
     require(db != null && !db.isClosed, "RocksDB must be open to get memory usage")
-    RocksDB.mainMemorySources.map { memorySource =>
-      getDBProperty(memorySource)
-    }.sum
+    RocksDB.mainMemorySources.map(getDBProperty).sum
   }
 
   /**
@@ -1408,7 +1563,6 @@ class RocksDB(
    * This is called from task thread operations, so it's already thread-safe.
    */
   def updateMemoryUsageIfNeeded(): Unit = {
-    if (uniqueId.isEmpty) return // No tracking without unique ID
 
     val currentTime = System.currentTimeMillis()
     val timeSinceLastUpdate = currentTime - lastMemoryUpdateTime.get()
@@ -1419,7 +1573,7 @@ class RocksDB(
         lastMemoryUpdateTime.set(currentTime)
         // Report usage to RocksDBMemoryManager
         RocksDBMemoryManager.updateMemoryUsage(
-          uniqueId,
+          instanceUniqueId,
           usage,
           conf.boundedMemoryUsage)
       } catch {
@@ -1551,9 +1705,8 @@ object RocksDB extends Logging {
 
   val mainMemorySources: Seq[String] = Seq(
     "rocksdb.estimate-table-readers-mem",
-    "rocksdb.cur-size-all-mem-tables",
-    "rocksdb.block-cache-usage",
-    "rocksdb.block-cache-pinned-usage")
+    "rocksdb.size-all-mem-tables",
+    "rocksdb.block-cache-usage")
 
   case class RocksDBSnapshot(
       checkpointDir: File,
@@ -2007,6 +2160,7 @@ case class RocksDBMetrics(
     totalSSTFilesBytes: Long,
     nativeOpsHistograms: Map[String, RocksDBNativeHistogram],
     lastCommitLatencyMs: Map[String, Long],
+    loadMetrics: Map[String, Long],
     filesCopied: Long,
     bytesCopied: Long,
     filesReused: Long,

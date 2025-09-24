@@ -24,7 +24,7 @@ import scala.language.implicitConversions
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
@@ -603,7 +603,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
         partitionId = 0,
         eventForwarder = None,
-        uniqueId = "")
+        uniqueId = None)
       db.load(version, checkpointId)
       func(db)
     } finally {

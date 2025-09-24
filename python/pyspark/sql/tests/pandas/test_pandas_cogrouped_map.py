@@ -262,7 +262,7 @@ class CogroupedApplyInPandasTestsMixin:
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     self._test_merge_error(
-                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["2.0"]}),
+                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["test_string"]}),
                         output_schema="id long, k double",
                         errorClass=PythonException,
                         error_message_regex=expected,

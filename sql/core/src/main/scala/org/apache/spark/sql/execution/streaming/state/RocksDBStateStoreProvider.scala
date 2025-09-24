@@ -27,12 +27,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.StateStoreEncoding.Avro
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
@@ -315,7 +315,7 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
     }
 
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
       // Note this verify function only verify on the colFamilyName being valid,
       // we are actually doing prefix when useColumnFamilies,
@@ -323,9 +323,10 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("iterator", colFamilyName)
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
-
       if (useColumnFamilies) {
-        rocksDB.iterator(colFamilyName).map { kv =>
+        val rocksDbIter = rocksDB.iterator(colFamilyName)
+
+        val iter = rocksDbIter.map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
@@ -335,8 +336,12 @@ private[sql] class RocksDBStateStoreProvider
           }
           rowPair
         }
+
+        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
       } else {
-        rocksDB.iterator().map { kv =>
+        val rocksDbIter = rocksDB.iterator()
+
+        val iter = rocksDbIter.map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
@@ -346,11 +351,14 @@ private[sql] class RocksDBStateStoreProvider
           }
           rowPair
         }
+
+        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
       }
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
+    override def prefixScan(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
@@ -360,11 +368,15 @@ private[sql] class RocksDBStateStoreProvider
 
       val rowPair = new UnsafeRowPair()
       val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
-      rocksDB.prefixScan(prefix, colFamilyName).map { kv =>
+
+      val rocksDbIter = rocksDB.prefixScan(prefix, colFamilyName)
+      val iter = rocksDbIter.map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         rowPair
       }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
@@ -432,6 +444,9 @@ private[sql] class RocksDBStateStoreProvider
         def commitLatencyMs(typ: String): Long =
           rocksDBMetrics.lastCommitLatencyMs.getOrElse(typ, 0L)
 
+        def loadMetrics(typ: String): Long =
+          rocksDBMetrics.loadMetrics.getOrElse(typ, 0L)
+
         def nativeOpsLatencyMillis(typ: String): Long = {
           rocksDBMetrics.nativeOpsMetrics.get(typ).map(_ * 1000).getOrElse(0)
         }
@@ -467,6 +482,13 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_COMMIT_COMPACT_TIME -> commitLatencyMs("compact"),
           CUSTOM_METRIC_CHECKPOINT_TIME -> commitLatencyMs("checkpoint"),
           CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
+          CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME -> commitLatencyMs("changeLogWriterCommit"),
+          CUSTOM_METRIC_SAVE_ZIP_FILES_TIME -> commitLatencyMs("saveZipFiles"),
+
+          CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME -> loadMetrics("loadFromSnapshot"),
+          CUSTOM_METRIC_LOAD_TIME -> loadMetrics("load"),
+          CUSTOM_METRIC_REPLAY_CHANGE_LOG -> loadMetrics("replayChangelog"),
+          CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES -> loadMetrics("numReplayChangeLogFiles"),
           CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
           CUSTOM_METRIC_FILES_COPIED -> rocksDBMetrics.filesCopied,
           CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused,
@@ -745,7 +767,9 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def close(): Unit = {
-    rocksDB.close()
+    if (stateMachine.close()) {
+      rocksDB.close()
+    }
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = ALL_CUSTOM_METRICS
@@ -777,7 +801,7 @@ private[sql] class RocksDBStateStoreProvider
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int = 0,
       eventForwarder: Option[RocksDBEventForwarder] = None,
-      uniqueId: String = ""): RocksDB = {
+      uniqueId: Option[String] = None): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf,
@@ -800,7 +824,8 @@ private[sql] class RocksDBStateStoreProvider
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, loggingId,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
-      rocksDBEventForwarder, stateStoreProviderId.toString)
+      rocksDBEventForwarder,
+      Some(s"${stateStoreProviderId.toString}_${UUID.randomUUID().toString}"))
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -819,10 +844,17 @@ private[sql] class RocksDBStateStoreProvider
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[StateStore]]
    */
   override def replayStateFromSnapshot(
-      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
+      snapshotVersion: Long,
+      endVersion: Long,
+      readOnly: Boolean,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): StateStore = {
     try {
       if (snapshotVersion < 1) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
@@ -832,7 +864,11 @@ private[sql] class RocksDBStateStoreProvider
       }
       val stamp = stateMachine.acquireStamp()
       try {
-        rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
+        rocksDB.loadFromSnapshot(
+          snapshotVersion,
+          endVersion,
+          snapshotVersionStateStoreCkptId,
+          endVersionStateStoreCkptId)
         new RocksDBStateStore(endVersion, stamp, readOnly)
       } catch {
         case e: Throwable =>
@@ -853,15 +889,18 @@ private[sql] class RocksDBStateStoreProvider
   override def getStateStoreChangeDataReader(
       startVersion: Long,
       endVersion: Long,
-      colFamilyNameOpt: Option[String] = None):
+      colFamilyNameOpt: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None):
     StateStoreChangeDataReader = {
     val statePath = stateStoreId.storeCheckpointLocation()
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     new RocksDBStateStoreChangeDataReader(
       CheckpointFileManager.create(statePath, hadoopConf),
+      rocksDB,
       statePath,
       startVersion,
       endVersion,
+      endVersionStateStoreCkptId,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keyValueEncoderMap,
       colFamilyNameOpt)
@@ -1108,6 +1147,25 @@ object RocksDBStateStoreProvider {
     "rocksdbFilesReused", "RocksDB: file manager - files reused")
   val CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED = StateStoreCustomSizeMetric(
     "rocksdbZipFileBytesUncompressed", "RocksDB: file manager - uncompressed zip file bytes")
+  val CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME = StateStoreCustomTimingMetric(
+    "rocksdbChangeLogWriterCommitLatencyMs",
+    "RocksDB: commit - changelog commit time")
+  val CUSTOM_METRIC_SAVE_ZIP_FILES_TIME = StateStoreCustomTimingMetric(
+    "rocksdbSaveZipFilesLatencyMs",
+    "RocksDB: commit - zip files sync to external storage time")
+
+  val CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME = StateStoreCustomTimingMetric(
+    "rocksdbLoadFromSnapshotLatencyMs",
+    "RocksDB: load from snapshot - time taken to load the store from snapshot")
+  val CUSTOM_METRIC_LOAD_TIME = StateStoreCustomTimingMetric(
+    "rocksdbLoadLatencyMs",
+    "RocksDB: load - time taken to load the store")
+  val CUSTOM_METRIC_REPLAY_CHANGE_LOG = StateStoreCustomTimingMetric(
+    "rocksdbReplayChangeLogLatencyMs",
+    "RocksDB: load - time taken to replay the change log")
+  val CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES = StateStoreCustomSizeMetric(
+    "rocksdbNumReplayChangelogFiles",
+    "RocksDB: load - number of change log files replayed")
 
   val CUSTOM_METRIC_BLOCK_CACHE_MISS = StateStoreCustomSumMetric(
     "rocksdbReadBlockCacheMissCount",
@@ -1162,13 +1220,16 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
     CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
     CUSTOM_METRIC_BYTES_COPIED, CUSTOM_METRIC_FILES_COPIED, CUSTOM_METRIC_FILES_REUSED,
-    CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
+    CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME,
+    CUSTOM_METRIC_SAVE_ZIP_FILES_TIME, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
     CUSTOM_METRIC_BLOCK_CACHE_MISS, CUSTOM_METRIC_BLOCK_CACHE_HITS, CUSTOM_METRIC_BYTES_READ,
     CUSTOM_METRIC_BYTES_WRITTEN, CUSTOM_METRIC_ITERATOR_BYTES_READ, CUSTOM_METRIC_STALL_TIME,
     CUSTOM_METRIC_TOTAL_COMPACT_TIME, CUSTOM_METRIC_COMPACT_READ_BYTES,
     CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES,
     CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS,
-    CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES)
+    CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES,
+    CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME, CUSTOM_METRIC_LOAD_TIME, CUSTOM_METRIC_REPLAY_CHANGE_LOG,
+    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES)
 
   val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreSnapshotLastUploadInstanceMetric()
 
@@ -1178,9 +1239,11 @@ object RocksDBStateStoreProvider {
 /** [[StateStoreChangeDataReader]] implementation for [[RocksDBStateStoreProvider]] */
 class RocksDBStateStoreChangeDataReader(
     fm: CheckpointFileManager,
+    rocksDB: RocksDB,
     stateLocation: Path,
     startVersion: Long,
     endVersion: Long,
+    endVersionStateStoreCkptId: Option[String],
     compressionCodec: CompressionCodec,
     keyValueEncoderMap:
       ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)],
@@ -1188,7 +1251,20 @@ class RocksDBStateStoreChangeDataReader(
   extends StateStoreChangeDataReader(
     fm, stateLocation, startVersion, endVersion, compressionCodec, colFamilyNameOpt) {
 
-  override protected var changelogSuffix: String = "changelog"
+  override protected val versionsAndUniqueIds: Array[(Long, Option[String])] =
+    if (endVersionStateStoreCkptId.isDefined) {
+      val fullVersionLineage = rocksDB.getFullLineage(
+        startVersion,
+        endVersion,
+        endVersionStateStoreCkptId)
+      fullVersionLineage
+        .sortBy(_.version)
+        .map(item => (item.version, Some(item.checkpointUniqueId)))
+    } else {
+      (startVersion to endVersion).map((_, None)).toArray
+    }
+
+  override protected val changelogSuffix: String = "changelog"
 
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null

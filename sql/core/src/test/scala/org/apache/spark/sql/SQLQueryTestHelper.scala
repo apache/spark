@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -31,7 +32,6 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTime, CurrentTimestampLike, CurrentUser, Literal}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
@@ -57,7 +57,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
-      .replaceAll("Owner\t.*", s"Owner\t$notIncludedMsg")
+      .replaceAll("Owner[\t ]+(.*)", s"Owner\t$notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
@@ -410,7 +410,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     val importedTestCaseName = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
     val importedCode = importedTestCaseName.flatMap { testCaseName =>
       allTestCases.find(_.name == testCaseName).map { testCase =>
-        val input = fileToString(new File(testCase.inputFile))
+        val input = Files.readString(new File(testCase.inputFile).toPath)
         val (_, code) = splitCommentsAndCodes(input)
         code
       }

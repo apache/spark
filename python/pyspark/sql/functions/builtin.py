@@ -57,7 +57,7 @@ from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.udtf import OrderingColumn, PartitioningColumn, SelectedColumn  # noqa: F401
 from pyspark.sql.udtf import SkipRestOfInputTableException  # noqa: F401
-from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
+from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf, _create_pyarrow_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import (  # noqa: F401
@@ -9862,6 +9862,7 @@ def dayofweek(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Examples
     --------
@@ -9942,6 +9943,7 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Returns
     -------
@@ -10124,6 +10126,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.weekofyear`
 
     Examples
     --------
@@ -10455,6 +10458,9 @@ def weekofyear(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.weekday`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofyear`
 
     Examples
     --------
@@ -11744,23 +11750,23 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00",)], ["str"])
-    >>> df.select(sf.to_time(df.str).alias("time")).show()
-    +--------+
-    |    time|
-    +--------+
-    |10:30:00|
-    +--------+
+    >>> df.select(sf.to_time(df.str)).show()
+    +------------+
+    |to_time(str)|
+    +------------+
+    |    10:30:00|
+    +------------+
 
     Example 2: Convert string to a time with a format
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["str", "format"])
-    >>> df.select(sf.to_time(df.str, df.format).alias("time")).show()
-    +--------+
-    |    time|
-    +--------+
-    |10:30:00|
-    +--------+
+    >>> df.select(sf.to_time(df.str, df.format)).show()
+    +--------------------+
+    |to_time(str, format)|
+    +--------------------+
+    |            10:30:00|
+    +--------------------+
     """
     if format is None:
         return _invoke_function_over_columns("to_time", str)
@@ -11954,9 +11960,9 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t).alias('dt')).show()
+    >>> df.select(sf.try_to_timestamp(df.t)).show()
     +-------------------+
-    |                 dt|
+    |try_to_timestamp(t)|
     +-------------------+
     |1997-02-28 10:30:00|
     +-------------------+
@@ -11965,12 +11971,12 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss')).alias('dt')).show()
-    +-------------------+
-    |                 dt|
-    +-------------------+
-    |1997-02-28 10:30:00|
-    +-------------------+
+    >>> df.select(sf.try_to_timestamp(df.t, sf.lit('yyyy-MM-dd HH:mm:ss'))).show()
+    +----------------------------------------+
+    |try_to_timestamp(t, yyyy-MM-dd HH:mm:ss)|
+    +----------------------------------------+
+    |                     1997-02-28 10:30:00|
+    +----------------------------------------+
 
     Example 3: Converion failure results in NULL when ANSI mode is on
 
@@ -12218,6 +12224,7 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.date_trunc`
+    :meth:`pyspark.sql.functions.time_trunc`
 
     Examples
     --------
@@ -12271,6 +12278,7 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.time_trunc`
 
     Examples
     --------
@@ -12700,6 +12708,47 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
 
     return _invoke_function_over_columns("timestamp_seconds", col)
+
+
+@_try_remote_functions
+def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
+    """
+    Returns `time` truncated to the `unit`.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : :class:`~pyspark.sql.Column` or column name
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    time : :class:`~pyspark.sql.Column` or column name
+        A time to truncate.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A time truncated to the specified unit.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.date_trunc`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("HOUR", "13:08:15")],
+    ...     ['unit', 'time']).withColumn("time", sf.col("time").cast("time"))
+    >>> df.select('*', sf.time_trunc('unit', 'time')).show()
+    +----+--------+----------------------+
+    |unit|    time|time_trunc(unit, time)|
+    +----+--------+----------------------+
+    |HOUR|13:08:15|              13:00:00|
+    +----+--------+----------------------+
+    """
+    return _invoke_function_over_columns("time_trunc", unit, time)
 
 
 @_try_remote_functions
@@ -13527,15 +13576,22 @@ def session_user() -> Column:
 
 
 @_try_remote_functions
-def uuid() -> Column:
+def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
     """Returns an universally unique identifier (UUID) string.
     The value is returned as a canonical UUID 36-character string.
 
     .. versionadded:: 4.1.0
 
+    Parameters
+    ----------
+    seed : :class:`~pyspark.sql.Column` or int
+        Optional random number seed to use.
+
     Examples
     --------
-    >>> import pyspark.sql.functions as sf
+    Example 1: Generate UUIDs with random seed
+
+    >>> from pyspark.sql import functions as sf
     >>> spark.range(5).select(sf.uuid()).show(truncate=False) # doctest: +SKIP
     +------------------------------------+
     |uuid()                              |
@@ -13546,8 +13602,27 @@ def uuid() -> Column:
     |fb1d6178-7676-4791-baa9-f2ddcc494515|
     |d48665e8-2657-4c6b-b7c8-8ae0cd646e41|
     +------------------------------------+
+
+    Example 2: Generate UUIDs with a specified seed
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 5, 1, 1).select(sf.uuid(seed=123)).show(truncate=False)
+    +------------------------------------+
+    |uuid()                              |
+    +------------------------------------+
+    |4c99192d-23d6-4d88-b814-a634398120f0|
+    |af506873-3c53-41e3-8354-a24856b8de8a|
+    |7b4b370e-e867-47e2-93c0-f6990463a12d|
+    |1c4d1733-ff1a-4a6c-b144-0b0345adf0d0|
+    |7478f235-f8bc-4112-8e59-a28f50e46890|
+    +------------------------------------+
     """
-    return _invoke_function("uuid")
+    from pyspark.sql.classic.column import _to_java_column
+
+    if seed is None:
+        return _invoke_function("uuid")
+    else:
+        return _invoke_function("uuid", _to_java_column(lit(seed)))
 
 
 @_try_remote_functions
@@ -24722,6 +24797,7 @@ def make_timestamp(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24818,6 +24894,7 @@ def try_make_timestamp(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -24929,6 +25006,7 @@ def make_timestamp_ltz(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -25025,6 +25103,7 @@ def try_make_timestamp_ltz(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -25132,6 +25211,7 @@ def make_timestamp_ntz(
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
     :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -25203,6 +25283,7 @@ def try_make_timestamp_ntz(
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
     :meth:`pyspark.sql.functions.try_make_timestamp`
     :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
@@ -27007,32 +27088,7 @@ def udf(
     # The following table shows most of Python data and SQL type conversions in normal UDFs that
     # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
     # future. The table might have to be eventually documented externally.
-    # Please see SPARK-28131's PR to see the codes in order to generate the table below.
-    #
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|         a(str)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|bytearray(b'ABC')(bytearray)|  1(Decimal)|{'a': 1}(dict)|Row(kwargs=1)(Row)|Row(namedtuple=1)(Row)|  # noqa
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    # |                      boolean|          None|      True|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                      tinyint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                     smallint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                          int|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       bigint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       string|          None|    'true'|   '1'|            'a'|'java.util.Gregor...|         'java.util.Gregor...|     '1.0'|         '[I@66cbb73a'|    '[1]'|'[Ljava.lang.Obje...|               '[B@5a51eb1a'|         '1'|       '{a=1}'|                 X|                     X|  # noqa
-    # |                         date|          None|         X|     X|              X|datetime.date(197...|         datetime.date(197...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
-    # |                    timestamp|          None|         X|     X|              X|                   X|         datetime.datetime...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
-    # |                        float|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                       double|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
-    # |                   array<int>|          None|      None|  None|           None|                None|                         None|      None|                   [1]|      [1]|                 [1]|                [65, 66, 67]|        None|          None|                 X|                     X|  # noqa
-    # |                       binary|          None|      None|  None|bytearray(b'a')|                None|                         None|      None|                  None|     None|                None|           bytearray(b'ABC')|        None|          None|                 X|                     X|  # noqa
-    # |                decimal(10,0)|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|Decimal('1')|          None|                 X|                     X|  # noqa
-    # |              map<string,int>|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|      {'a': 1}|                 X|                     X|  # noqa
-    # |               struct<_1:int>|          None|         X|     X|              X|                   X|                            X|         X|                     X|Row(_1=1)|           Row(_1=1)|                           X|           X|  Row(_1=None)|         Row(_1=1)|             Row(_1=1)|  # noqa
-    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
-    #
-    # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
-    #       used in `returnType`.
-    # Note: The values inside of the table are generated by `repr`.
-    # Note: 'X' means it throws an exception during the conversion.
+    # Please see python/pyspark/sql/tests/udf_type_tests for type tests and golden files
 
     # decorator @udf, @udf(), @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):
@@ -27215,6 +27271,75 @@ def udtf(
         return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
     else:
         return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
+
+
+@_try_remote_functions
+def arrow_udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
+    """Creates a PyArrow-native user defined table function (UDTF).
+
+    This function provides a PyArrow-native interface for UDTFs, where the eval method
+    receives PyArrow RecordBatches or Arrays and returns an Iterator of PyArrow Tables
+    or RecordBatches.
+    This enables true vectorized computation without row-by-row processing overhead.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    cls : class, optional
+        the Python user-defined table function handler class.
+    returnType : :class:`pyspark.sql.types.StructType` or str, optional
+        the return type of the user-defined table function. The value can be either a
+        :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+
+    Examples
+    --------
+    UDTF with PyArrow RecordBatch input:
+
+    >>> import pyarrow as pa
+    >>> from pyspark.sql.functions import arrow_udtf
+    >>> @arrow_udtf(returnType="x int, y int")
+    ... class MyUDTF:
+    ...     def eval(self, batch: pa.RecordBatch):
+    ...         # Process the entire batch vectorized
+    ...         x_array = batch.column('x')
+    ...         y_array = batch.column('y')
+    ...         result_table = pa.table({
+    ...             'x': x_array,
+    ...             'y': y_array
+    ...         })
+    ...         yield result_table
+    ...
+    >>> df = spark.range(10).selectExpr("id as x", "id as y")
+    >>> MyUDTF(df.asTable()).show()  # doctest: +SKIP
+
+    UDTF with PyArrow Array inputs:
+
+    >>> @arrow_udtf(returnType="x int, y int")
+    ... class MyUDTF2:
+    ...     def eval(self, x: pa.Array, y: pa.Array):
+    ...         # Process arrays vectorized
+    ...         result_table = pa.table({
+    ...             'x': x,
+    ...             'y': y
+    ...         })
+    ...         yield result_table
+    ...
+    >>> MyUDTF2(lit(1), lit(2)).show()  # doctest: +SKIP
+
+    Notes
+    -----
+    - The eval method must accept PyArrow RecordBatches or Arrays as input
+    - The eval method must yield PyArrow Tables or RecordBatches as output
+    """
+    if cls is None:
+        return functools.partial(_create_pyarrow_udtf, returnType=returnType)
+    else:
+        return _create_pyarrow_udtf(cls=cls, returnType=returnType)
 
 
 def _test() -> None:

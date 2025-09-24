@@ -38,7 +38,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{EXECUTOR_ENVS, EXECUTOR_LAUNCH_COMMANDS, EXECUTOR_RESOURCES}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils

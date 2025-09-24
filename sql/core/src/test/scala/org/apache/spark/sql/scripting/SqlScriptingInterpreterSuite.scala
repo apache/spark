@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.{SparkConf, SparkException, SparkNumberFormatException}
+import org.apache.spark.{SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SqlScriptingContextManager}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
@@ -33,30 +33,28 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Output from the interpreter (iterator over executable statements) is then checked - statements
  *   are executed and output DataFrames are compared with expected outputs.
  */
-class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
+class SqlScriptingInterpreterSuite
+    extends QueryTest
+    with SharedSparkSession
+    with SqlScriptingTestUtils {
 
-  // Tests setup
-  override protected def sparkConf: SparkConf = {
-    super.sparkConf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key)
+    super.afterAll()
   }
 
   // Helpers
   private def runSqlScript(
       sqlText: String,
       args: Map[String, Expression] = Map.empty): Array[DataFrame] = {
-    val interpreter = SqlScriptingInterpreter(spark)
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
 
-    // Initialize context so scopes can be entered correctly.
-    val context = new SqlScriptingExecutionContext()
-    val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
-    context.frames.append(new SqlScriptingExecutionFrame(
-      executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
-    executionPlan.enterScope()
-
-    val handle =
-      SqlScriptingContextManager.create(new SqlScriptingContextManagerImpl(context))
-    handle.runWith {
+    withSqlScriptingContextManager(spark, compoundBody, args) { executionPlan =>
       executionPlan.getTreeIterator.flatMap {
         case statement: SingleStatementExec =>
           if (statement.isExecuted) {
@@ -3479,7 +3477,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Duplicate SQLEXCEPTION Handler") {
+  test("Duplicate SQLEXCEPTION EXIT/EXIT Handler") {
     val sqlScript =
       """
         |BEGIN
@@ -3502,11 +3500,146 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("Duplicate NOT FOUND Handler") {
+  test("Duplicate NOT FOUND EXIT/EXIT Handler") {
     val sqlScript =
       """
         |BEGIN
         |  DECLARE EXIT HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "NOT FOUND")
+    )
+  }
+
+  test("Duplicate SQLEXCEPTION CONTINUE/CONTINUE Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "SQLEXCEPTION")
+    )
+  }
+
+  test("Duplicate NOT FOUND CONTINUE/CONTINUE Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "NOT FOUND")
+    )
+  }
+
+  test("Duplicate SQLEXCEPTION EXIT/CONTINUE Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "SQLEXCEPTION")
+    )
+  }
+
+  test("Duplicate NOT FOUND EXIT/CONTINUE Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "NOT FOUND")
+    )
+  }
+
+  test("Duplicate SQLEXCEPTION CONTINUE/EXIT Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        runSqlScript(sqlScript)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "SQLEXCEPTION")
+    )
+  }
+
+  test("Duplicate NOT FOUND CONTINUE/EXIT Handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND
         |  BEGIN
         |    SELECT 1;
         |  END;

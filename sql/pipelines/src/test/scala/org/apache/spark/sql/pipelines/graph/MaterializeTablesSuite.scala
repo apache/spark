@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Expressions
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.graph.DatasetManager.TableMaterializationException
 import org.apache.spark.sql.pipelines.utils.{BaseCoreExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -262,6 +262,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   test("invalid schema merge") {
     val session = spark
     import session.implicits._
+    implicit def sqlContext: org.apache.spark.sql.classic.SQLContext = spark.sqlContext
 
     val streamInts = MemoryStream[Int]
     streamInts.addData(1, 2)
@@ -329,6 +330,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   test("specified schema incompatible with existing table") {
     val session = spark
     import session.implicits._
+    implicit def sqlContext: org.apache.spark.sql.classic.SQLContext = spark.sqlContext
 
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t6(x BOOLEAN)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
@@ -627,6 +629,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     ) {
       val session = spark
       import session.implicits._
+      implicit def sqlContext: org.apache.spark.sql.classic.SQLContext = spark.sqlContext
 
       val streamInts = MemoryStream[Int]
       streamInts.addData(1 until 5: _*)

@@ -17,7 +17,7 @@
 import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
+from typing import Any, Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
 
 from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.errors.utils import ErrorClassesReader
@@ -137,6 +137,23 @@ class PySparkException(Exception):
         :meth:`PySparkException.getSqlState`
         """
         return f"[{self.getCondition()}] {self._message}"
+
+    def getBreakingChangeInfo(self) -> Optional[Dict[str, Any]]:
+        """
+        Returns the breaking change info for an error, or None.
+
+        Breaking change info is a dict with two fields:
+
+        migration_message: list of str
+            A message explaining how the user can migrate their job to work
+                with the breaking change.
+
+        mitigation_config:
+            A dict with key: str and value: str fields.
+            A spark config flag that can be used to mitigate the
+                breaking change.
+        """
+        return self._error_reader.get_breaking_change_info(self._errorClass)
 
     def getQueryContext(self) -> List["QueryContext"]:
         """
@@ -347,13 +364,6 @@ class PySparkNotImplementedError(PySparkException, NotImplementedError):
 class PySparkPicklingError(PySparkException, PicklingError):
     """
     Wrapper class for pickle.PicklingError to support error classes.
-    """
-
-
-class RetriesExceeded(PySparkException):
-    """
-    Represents an exception which is considered retriable, but retry limits
-    were exceeded
     """
 
 

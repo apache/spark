@@ -17,10 +17,11 @@
 package org.apache.spark.util
 
 import java.io.File
-import java.net.{URI, URISyntaxException}
-import java.nio.file.{Files, Path}
+import java.net.{URI, URISyntaxException, URL}
+import java.nio.file.{Files, Path, StandardCopyOption}
+import java.nio.file.attribute.FileTime
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.network.util.JavaUtils
 
 private[spark] trait SparkFileUtils extends Logging {
@@ -73,6 +74,20 @@ private[spark] trait SparkFileUtils extends Logging {
   }
 
   /**
+   * Lists regular files recursively.
+   */
+  def listFiles(f: File): java.util.Set[File] = {
+    JavaUtils.listFiles(f)
+  }
+
+  /**
+   * Lists regular paths recursively.
+   */
+  def listPaths(f: File): java.util.Set[Path] = {
+    JavaUtils.listPaths(f)
+  }
+
+  /**
    * Create a directory given the abstract pathname
    * @return true, if the directory is successfully created; otherwise, return false.
    */
@@ -119,6 +134,21 @@ private[spark] trait SparkFileUtils extends Logging {
     createDirectory(root, namePrefix)
   }
 
+  def createParentDirs(file: File): Unit = {
+    if (file == null) {
+      throw new IllegalArgumentException("Input should not be null.")
+    }
+    val parent = file.getParentFile()
+    if (parent != null) {
+      Files.createDirectories(parent.toPath())
+    }
+  }
+
+  /** Delete recursively while keeping the given directory itself. */
+  def cleanDirectory(dir: File): Unit = {
+    JavaUtils.cleanDirectory(dir)
+  }
+
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
@@ -133,6 +163,11 @@ private[spark] trait SparkFileUtils extends Logging {
     JavaUtils.deleteQuietly(file)
   }
 
+  /** Registers the file or directory for deletion when the JVM exists. */
+  def forceDeleteOnExit(file: File): Unit = {
+    JavaUtils.forceDeleteOnExit(file)
+  }
+
   def getFile(names: String*): File = {
     require(names != null && names.forall(_ != null))
     names.tail.foldLeft(Path.of(names.head)) { (path, part) =>
@@ -145,6 +180,63 @@ private[spark] trait SparkFileUtils extends Logging {
     names.foldLeft(parent.toPath) { (path, part) =>
       path.resolve(part)
     }.toFile
+  }
+
+  /** Move src to dst simply. File attribute times are not copied. */
+  def moveFile(src: File, dst: File): Unit = {
+    JavaUtils.moveFile(src, dst)
+  }
+
+  /** Move src to dst simply. File attribute times are not copied. */
+  def moveDirectory(src: File, dst: File): Unit = {
+    JavaUtils.moveDirectory(src, dst)
+  }
+
+  /** Copy src to the target directory simply. File attribute times are not copied. */
+  def copyDirectory(src: File, dir: File): Unit = {
+    JavaUtils.copyDirectory(src, dir)
+  }
+
+  /** Copy file to the target directory simply. File attribute times are not copied. */
+  def copyFileToDirectory(file: File, dir: File): Unit = {
+    if (file == null || dir == null || !file.exists() || (dir.exists() && !dir.isDirectory())) {
+      throw new IllegalArgumentException(s"Invalid input file $file or directory $dir")
+    }
+    Files.createDirectories(dir.toPath())
+    val newFile = new File(dir, file.getName())
+    Files.copy(file.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+  }
+
+  def copyFile(src: File, dst: File): Unit = {
+    if (src == null || dst == null || !src.exists() || (dst.exists() && dst.isDirectory())) {
+      throw new IllegalArgumentException(s"Invalid input file $src or directory $dst")
+    }
+    Files.copy(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING)
+  }
+
+  def copyURLToFile(url: URL, file: File): Unit = {
+    JavaUtils.copyURLToFile(url, file)
+  }
+
+  /** Return true if the content of the files are equal or they both don't exist */
+  def contentEquals(file1: File, file2: File): Boolean = {
+    JavaUtils.contentEquals(file1, file2)
+  }
+
+  def touch(file: File): Unit = {
+    if (file == null) {
+      throw new IllegalArgumentException("Invalid input file: null")
+    }
+    val path = file.toPath
+    if (Files.exists(path)) {
+      Files.setLastModifiedTime(path, FileTime.fromMillis(System.currentTimeMillis()))
+    } else {
+      val parent = path.getParent()
+      if (parent != null && !Files.exists(parent)) {
+        Files.createDirectories(parent)
+      }
+      Files.createFile(path)
+    }
   }
 }
 

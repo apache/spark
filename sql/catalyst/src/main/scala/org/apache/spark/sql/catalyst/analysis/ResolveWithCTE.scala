@@ -59,7 +59,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               cteDefMap.put(cteDef.id, cteDef)
             }
             cteDef
-          case cteDef if cteDef.hasSelfReferenceInAnchor =>
+          case cteDef if cteDef.hasSelfReferenceInAnchor || cteDef.hasSelfReferenceInSubCTE =>
             throw new AnalysisException(
               errorClass = "INVALID_RECURSIVE_CTE",
               messageParameters = Map.empty)
@@ -286,7 +286,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
         cteDefMap.get(ref.cteId).map { cteDef =>
           // cteDef is certainly resolved, otherwise it would not have been in the map.
           CTERelationRef(
-            cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming, maxRows = cteDef.maxRows)
+            cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming, maxRows = cteDef.maxRows,
+              isUnlimitedRecursion = ref.isUnlimitedRecursion)
         }.getOrElse {
           ref
         }

@@ -24,13 +24,12 @@ import java.util
 
 import scala.util.Try
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.shims.ShimLoader
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmit
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FALLBACK_VERSION, HADOOP_VERSION, PATH}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -66,7 +65,7 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            val fallbackVersion = "3.4.1"
+            val fallbackVersion = "3.4.2"
             logWarning(log"Failed to resolve Hadoop artifacts for the version " +
               log"${MDC(HADOOP_VERSION, hadoopVersion)}. We will change the hadoop version from " +
               log"${MDC(HADOOP_VERSION, hadoopVersion)} to " +
@@ -99,6 +98,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       case (3, 0, _) => Some(hive.v3_0)
       case (3, 1, _) => Some(hive.v3_1)
       case (4, 0, _) => Some(hive.v4_0)
+      case (4, 1, _) => Some(hive.v4_1)
       case _ => None
     }.getOrElse {
       throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
@@ -149,7 +149,7 @@ private[hive] object IsolatedClientLoader extends Logging {
 
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
-    allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
+    allFiles.foreach(f => Utils.copyFileToDirectory(f, tempDir))
     logInfo(log"Downloaded metastore jars to ${MDC(PATH, tempDir.getCanonicalPath)}")
     tempDir.listFiles().map(_.toURI.toURL).toImmutableArraySeq
   }

@@ -28,7 +28,7 @@ import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
-import java.util.{Locale, Properties, Random, UUID}
+import java.util.{HexFormat, Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
@@ -46,10 +46,8 @@ import scala.util.matching.Regex
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
-import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import jakarta.ws.rs.core.UriBuilder
-import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
@@ -67,7 +65,7 @@ import org.slf4j.Logger
 
 import org.apache.spark.{SPARK_VERSION, _}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -350,7 +348,7 @@ private[spark] object Utils
   def fetchFile(
       url: String,
       targetDir: File,
-      conf: SparkConf,
+      conf: ReadOnlySparkConf,
       hadoopConf: Configuration,
       timestamp: Long,
       useCache: Boolean,
@@ -593,7 +591,7 @@ private[spark] object Utils
         case (f1, f2) => filesEqualRecursive(f1, f2)
       }
     } else if (file1.isFile && file2.isFile) {
-      GFiles.equal(file1, file2)
+      contentEquals(file1, file2)
     } else {
       false
     }
@@ -624,7 +622,7 @@ private[spark] object Utils
       url: String,
       targetDir: File,
       filename: String,
-      conf: SparkConf,
+      conf: ReadOnlySparkConf,
       hadoopConf: Configuration): File = {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
@@ -671,7 +669,7 @@ private[spark] object Utils
       path: Path,
       targetDir: File,
       fs: FileSystem,
-      conf: SparkConf,
+      conf: ReadOnlySparkConf,
       hadoopConf: Configuration,
       fileOverwrite: Boolean,
       filename: Option[String] = None): Unit = {
@@ -726,7 +724,7 @@ private[spark] object Utils
    * always return a single directory. The return directory is chosen randomly from the array
    * of directories it gets from getOrCreateLocalRootDirs.
    */
-  def getLocalDir(conf: SparkConf): String = {
+  def getLocalDir(conf: ReadOnlySparkConf): String = {
     val localRootDirs = getOrCreateLocalRootDirs(conf)
     if (localRootDirs.isEmpty) {
       val configuredLocalDirs = getConfiguredLocalDirs(conf)
@@ -737,7 +735,7 @@ private[spark] object Utils
     }
   }
 
-  private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
+  private[spark] def isRunningInYarnContainer(conf: ReadOnlySparkConf): Boolean = {
     // These environment variables are set by YARN.
     conf.getenv("CONTAINER_ID") != null
   }
@@ -757,7 +755,7 @@ private[spark] object Utils
    * So calling it multiple times with a different configuration will always return the same
    * set of directories.
    */
-  private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
+  private[spark] def getOrCreateLocalRootDirs(conf: ReadOnlySparkConf): Array[String] = {
     if (localRootDirs == null) {
       this.synchronized {
         if (localRootDirs == null) {
@@ -773,7 +771,7 @@ private[spark] object Utils
    * method does not create any directories on its own, it only encapsulates the
    * logic of locating the local directories according to deployment mode.
    */
-  def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
+  def getConfiguredLocalDirs(conf: ReadOnlySparkConf): Array[String] = {
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -792,7 +790,7 @@ private[spark] object Utils
     }
   }
 
-  private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
+  private def getOrCreateLocalRootDirsImpl(conf: ReadOnlySparkConf): Array[String] = {
     val configuredLocalDirs = getConfiguredLocalDirs(conf)
     val uris = configuredLocalDirs.filter { root =>
       // Here, we guess if the given value is a URI at its best - check if scheme is set.
@@ -827,7 +825,7 @@ private[spark] object Utils
   }
 
   /** Get the Yarn approved local directories. */
-  private def getYarnLocalDirs(conf: SparkConf): String = {
+  private def getYarnLocalDirs(conf: ReadOnlySparkConf): String = {
     val localDirs = Option(conf.getenv("LOCAL_DIRS")).getOrElse("")
 
     if (localDirs.isEmpty) {
@@ -1521,7 +1519,7 @@ private[spark] object Utils
 
   private var compressedLogFileLengthCache: LoadingCache[String, java.lang.Long] = null
   private def getCompressedLogFileLengthCache(
-      sparkConf: SparkConf): LoadingCache[String, java.lang.Long] = this.synchronized {
+      sparkConf: ReadOnlySparkConf): LoadingCache[String, java.lang.Long] = this.synchronized {
     if (compressedLogFileLengthCache == null) {
       val compressedLogFileLengthCacheSize = sparkConf.get(
         UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF)
@@ -1541,7 +1539,7 @@ private[spark] object Utils
    * It also caches the uncompressed file size to avoid repeated decompression. The cache size is
    * read from workerConf.
    */
-  def getFileLength(file: File, workConf: SparkConf): Long = {
+  def getFileLength(file: File, workConf: ReadOnlySparkConf): Long = {
     if (file.getName.endsWith(".gz")) {
       getCompressedLogFileLengthCache(workConf).get(file.getAbsolutePath)
     } else {
@@ -1558,10 +1556,10 @@ private[spark] object Utils
       gzInputStream = new GZIPInputStream(new FileInputStream(file))
       val bufSize = 1024
       val buf = new Array[Byte](bufSize)
-      var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
+      var numBytes = gzInputStream.readNBytes(buf, 0, bufSize)
       while (numBytes > 0) {
         fileSize += numBytes
-        numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
+        numBytes = gzInputStream.readNBytes(buf, 0, bufSize)
       }
       fileSize
     } catch {
@@ -1588,8 +1586,8 @@ private[spark] object Utils
     }
 
     try {
-      ByteStreams.skipFully(stream, effectiveStart)
-      ByteStreams.readFully(stream, buff)
+      stream.skipNBytes(effectiveStart)
+      readFully(stream, buff, 0, buff.length)
     } finally {
       stream.close()
     }
@@ -2179,7 +2177,9 @@ private[spark] object Utils
   /**
    * Convert all spark properties set in the given SparkConf to a sequence of java options.
    */
-  def sparkJavaOpts(conf: SparkConf, filterKey: (String => Boolean) = _ => true): Seq[String] = {
+  def sparkJavaOpts(
+      conf: ReadOnlySparkConf,
+      filterKey: (String => Boolean) = _ => true): Seq[String] = {
     conf.getAll
       .filter { case (k, _) => filterKey(k) }
       .map { case (k, v) => s"-D$k=$v" }
@@ -2189,7 +2189,7 @@ private[spark] object Utils
   /**
    * Maximum number of retries when binding to a port before giving up.
    */
-  def portMaxRetries(conf: SparkConf): Int = {
+  def portMaxRetries(conf: ReadOnlySparkConf): Int = {
     val maxRetries = conf.getOption("spark.port.maxRetries").map(_.toInt)
     if (conf.contains(IS_TESTING)) {
       // Set a higher number of retries for tests...
@@ -2214,7 +2214,7 @@ private[spark] object Utils
   def startServiceOnPort[T](
       startPort: Int,
       startService: Int => (T, Int),
-      conf: SparkConf,
+      conf: ReadOnlySparkConf,
       serviceName: String = ""): (T, Int) = {
     startServiceOnPort(startPort, startService, portMaxRetries(conf), serviceName)
   }
@@ -2445,7 +2445,7 @@ private[spark] object Utils
   val EMPTY_USER_GROUPS = Set.empty[String]
 
   // Returns the groups to which the current user belongs.
-  def getCurrentUserGroups(sparkConf: SparkConf, username: String): Set[String] = {
+  def getCurrentUserGroups(sparkConf: ReadOnlySparkConf, username: String): Set[String] = {
     val groupProviderClassName = sparkConf.get(USER_GROUPS_MAPPING)
     if (groupProviderClassName != "") {
       try {
@@ -2608,7 +2608,7 @@ private[spark] object Utils
       (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
   }
 
-  def isStreamingDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+  def isStreamingDynamicAllocationEnabled(conf: ReadOnlySparkConf): Boolean = {
     val streamingDynamicAllocationEnabled = conf.get(STREAMING_DYN_ALLOCATION_ENABLED)
     streamingDynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.get(STREAMING_DYN_ALLOCATION_TESTING))
@@ -2617,7 +2617,7 @@ private[spark] object Utils
   /**
    * Return the initial number of executors for dynamic allocation.
    */
-  def getDynamicAllocationInitialExecutors(conf: SparkConf): Int = {
+  def getDynamicAllocationInitialExecutors(conf: ReadOnlySparkConf): Int = {
     if (conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS) < conf.get(DYN_ALLOCATION_MIN_EXECUTORS)) {
       logWarning(log"${MDC(CONFIG, DYN_ALLOCATION_INITIAL_EXECUTORS.key)} less than " +
         log"${MDC(CONFIG2, DYN_ALLOCATION_MIN_EXECUTORS.key)} is invalid, ignoring its setting, " +
@@ -2684,7 +2684,7 @@ private[spark] object Utils
    * This is designed for a code path which logging system may be initilized before
    * loading SparkConf.
    */
-  def resetStructuredLogging(sparkConf: SparkConf): Unit = {
+  def resetStructuredLogging(sparkConf: ReadOnlySparkConf): Unit = {
     if (sparkConf.get(STRUCTURED_LOGGING_ENABLED)) {
       Logging.enableStructuredLogging()
     } else {
@@ -2697,7 +2697,7 @@ private[spark] object Utils
    * these jars through file server. In the YARN mode, it will return an empty list, since YARN
    * has its own mechanism to distribute jars.
    */
-  def getUserJars(conf: SparkConf): Seq[String] = {
+  def getUserJars(conf: ReadOnlySparkConf): Seq[String] = {
     conf.get(JARS).filter(_.nonEmpty)
   }
 
@@ -2706,7 +2706,7 @@ private[spark] object Utils
    * specified by --jars (spark.jars) or --packages, remote jars will be downloaded to local by
    * SparkSubmit at first.
    */
-  def getLocalUserJarsForShell(conf: SparkConf): Seq[String] = {
+  def getLocalUserJarsForShell(conf: ReadOnlySparkConf): Seq[String] = {
     val localJars = conf.getOption("spark.repl.local.jars")
     localJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
   }
@@ -2717,7 +2717,7 @@ private[spark] object Utils
    * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
    * its value is replaced with a dummy text.
    */
-  def redact(conf: SparkConf,
+  def redact(conf: ReadOnlySparkConf,
       kvs: scala.collection.Seq[(String, String)]): scala.collection.Seq[(String, String)] = {
     val redactionPattern = conf.get(SECRET_REDACTION_PATTERN)
     redact(redactionPattern, kvs)
@@ -2794,7 +2794,7 @@ private[spark] object Utils
     redact(redactionPattern, kvs.toArray)
   }
 
-  def redactCommandLineArgs(conf: SparkConf, commands: Seq[String]): Seq[String] = {
+  def redactCommandLineArgs(conf: ReadOnlySparkConf, commands: Seq[String]): Seq[String] = {
     val redactionPattern = conf.get(SECRET_REDACTION_PATTERN)
     commands.map {
       case PATTERN_FOR_COMMAND_LINE_ARG(key, value) =>
@@ -2915,12 +2915,12 @@ private[spark] object Utils
     opt.replace("{{SPARK_VERSION}}", SPARK_VERSION)
   }
 
-  def createSecret(conf: SparkConf): String = {
+  def createSecret(conf: ReadOnlySparkConf): String = {
     val bits = conf.get(AUTH_SECRET_BIT_LENGTH)
     val rnd = new SecureRandom()
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
-    Hex.encodeHexString(secretBytes)
+    HexFormat.of().formatHex(secretBytes)
   }
 
   /**
@@ -2966,7 +2966,7 @@ private[spark] object Utils
     }
   }
 
-  def isClientMode(conf: SparkConf): Boolean = {
+  def isClientMode(conf: ReadOnlySparkConf): Boolean = {
     "client".equals(conf.get(SparkLauncher.DEPLOY_MODE, "client"))
   }
 
@@ -3032,7 +3032,7 @@ private[spark] object Utils
   /**
    * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
-  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+  def executorOffHeapMemorySizeAsMb(sparkConf: ReadOnlySparkConf): Int = {
     val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
     checkOffHeapEnabled(sparkConf, sizeInMB).toInt
   }
@@ -3040,7 +3040,7 @@ private[spark] object Utils
   /**
    * return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
-  def checkOffHeapEnabled(sparkConf: SparkConf, offHeapSize: Long): Long = {
+  def checkOffHeapEnabled(sparkConf: ReadOnlySparkConf, offHeapSize: Long): Long = {
     if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
       require(offHeapSize > 0,
         s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")

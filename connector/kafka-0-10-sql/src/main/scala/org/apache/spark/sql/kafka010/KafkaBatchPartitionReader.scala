@@ -20,13 +20,13 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.execution.streaming.{MicroBatchExecution, StreamExecution}
+import org.apache.spark.sql.execution.streaming.runtime.{MicroBatchExecution, StreamExecution}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 
 /** A [[InputPartition]] for reading Kafka data in a batch based streaming query. */

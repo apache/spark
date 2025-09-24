@@ -35,7 +35,7 @@ import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.util.ArrayImplicits._
 
 /** Provides utility functions to be used inside SparkSubmit. */

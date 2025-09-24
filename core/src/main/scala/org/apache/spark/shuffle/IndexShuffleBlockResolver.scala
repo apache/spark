@@ -29,7 +29,7 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -310,13 +310,13 @@ private[spark] class IndexShuffleBlockResolver(
             val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
               shuffleId, _ => new OpenHashSet[Long](8)
             )
-            mapTaskIds.add(mapId)
+            mapTaskIds.synchronized { mapTaskIds.add(mapId) }
 
           case ShuffleDataBlockId(shuffleId, mapId, _) =>
             val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
               shuffleId, _ => new OpenHashSet[Long](8)
             )
-            mapTaskIds.add(mapId)
+            mapTaskIds.synchronized { mapTaskIds.add(mapId) }
 
           case _ => // Unreachable
         }

@@ -184,6 +184,7 @@ class TypesTestsMixin:
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.time(hour=1, minute=2, second=3),
             datetime.timedelta(microseconds=123456678),
             1.0,
             array.array("d", [1]),
@@ -207,6 +208,7 @@ class TypesTestsMixin:
             "string",
             "date",
             "timestamp",
+            "time(6)",
             "interval day to second",
             "double",
             "array<double>",
@@ -230,6 +232,7 @@ class TypesTestsMixin:
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.time(hour=1, minute=2, second=3),
             datetime.timedelta(microseconds=123456678),
             1.0,
             [1.0],
@@ -647,6 +650,17 @@ class TypesTestsMixin:
         from pyspark.sql.types import _parse_datatype_json_string
 
         unicode_collation = "UNICODE"
+        utf8_lcase_collation = "UTF8_LCASE"
+
+        standalone_string = StringType(unicode_collation)
+
+        standalone_array = ArrayType(StringType(unicode_collation))
+
+        standalone_map = MapType(StringType(utf8_lcase_collation), StringType(unicode_collation))
+
+        standalone_nested = ArrayType(
+            MapType(StringType(utf8_lcase_collation), ArrayType(StringType(unicode_collation)))
+        )
 
         simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
 
@@ -718,6 +732,10 @@ class TypesTestsMixin:
         )
 
         schemas = [
+            standalone_string,
+            standalone_array,
+            standalone_map,
+            standalone_nested,
             simple_struct,
             nested_struct,
             array_in_schema,
