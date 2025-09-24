@@ -3817,6 +3817,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         @property
         def breaking_change_info(self) -> global___FetchErrorDetailsResponse.BreakingChangeInfo:
             """Additional information if the error was caused by a breaking change."""
+
         def __init__(
             self,
             *,
@@ -3826,8 +3827,9 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 collections.abc.Iterable[global___FetchErrorDetailsResponse.QueryContext] | None
             ) = ...,
             sql_state: builtins.str | None = ...,
-            breaking_change_info: global___FetchErrorDetailsResponse.BreakingChangeInfo
-            | None = ...,
+            breaking_change_info: (
+                global___FetchErrorDetailsResponse.BreakingChangeInfo | None
+            ) = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -3898,6 +3900,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             """A message explaining how the user can migrate their job to work
             with the breaking change.
             """
+
         @property
         def mitigation_config(self) -> global___FetchErrorDetailsResponse.MitigationConfig:
             """A spark config flag that can be used to mitigate the breaking change."""
