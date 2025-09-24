@@ -25240,12 +25240,12 @@ def make_timestamp_ntz(
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    # 6 positional/keyword arguments: years, months, days, hours, mins, secs
-    if (
-        all(kw is not None for kw in [years, months, days, hours, mins, secs])
-        and date is None
-        and time is None
-    ):
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
         return _invoke_function_over_columns(
             "make_timestamp_ntz",
             cast("ColumnOrName", years),
@@ -25255,24 +25255,15 @@ def make_timestamp_ntz(
             cast("ColumnOrName", mins),
             cast("ColumnOrName", secs),
         )
-
-    # 2 keyword arguments: date, time
-    elif (
-        all(kw is None for kw in [years, months, days, hours, mins, secs])
-        and date is not None
-        and time is not None
-    ):
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
         return _invoke_function_over_columns(
             "make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
         )
-
-    # Error for invalid combinations
-    from pyspark.errors import PySparkValueError
-
-    raise PySparkValueError(
-        errorClass="CANNOT_SET_TOGETHER",
-        messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
-    )
 
 
 @overload
@@ -25405,35 +25396,20 @@ def try_make_timestamp_ntz(
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    # 6 positional/keyword arguments: years, months, days, hours, mins, secs
-    if (
-        all(kw is not None for kw in [years, months, days, hours, mins, secs])
-        and date is None
-        and time is None
-    ):
+    if years is not None:
+        _years = years
+        _months = lit(0) if months is None else months
+        _days = lit(0) if days is None else days
+        _hours = lit(0) if hours is None else hours
+        _mins = lit(0) if mins is None else mins
+        _secs = lit(0) if secs is None else secs
         return _invoke_function_over_columns(
-            "try_make_timestamp_ntz",
-            cast("ColumnOrName", years),
-            cast("ColumnOrName", months),
-            cast("ColumnOrName", days),
-            cast("ColumnOrName", hours),
-            cast("ColumnOrName", mins),
-            cast("ColumnOrName", secs),
+            "try_make_timestamp_ntz", _years, _months, _days, _hours, _mins, _secs
         )
-
-    # 2 keyword arguments: date, time
-    elif (
-        all(kw is None for kw in [years, months, days, hours, mins, secs])
-        and date is not None
-        and time is not None
-    ):
+    else:
         return _invoke_function_over_columns(
             "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
         )
-
-    # Invalid argument combinations - return NULL for try_ functions
-    # For try_ functions, invalid inputs should return NULL, not raise exceptions
-    return lit(None)
 
 
 @_try_remote_functions
