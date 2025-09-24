@@ -23,6 +23,7 @@ from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
 from pyspark import SparkConf
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
+
 @unittest.skip("Disabled due to slowness")
 class TransformWithStateInPandasParityTests(
     TransformWithStateInPandasTestsMixin, ReusedConnectTestCase
@@ -52,6 +53,7 @@ class TransformWithStateInPandasParityTests(
     @unittest.skip("Flaky in spark connect on CI. Skip for now. See SPARK-51368 for details.")
     def test_schema_evolution_scenarios(self):
         pass
+
 
 @unittest.skip("Disabled due to slowness")
 class TransformWithStateInPySparkParityTests(

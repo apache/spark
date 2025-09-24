@@ -1931,19 +1931,23 @@ class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateIn
         cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
         return cfg
 
+
 @unittest.skip("Disabled due to slowness")
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
     pass
 
+
 @unittest.skip("Disabled due to slowness")
 class TransformWithStateInPySparkTests(TransformWithStateInPySparkTestsMixin, ReusedSQLTestCase):
     pass
+
 
 @unittest.skip("Disabled due to slowness")
 class TransformWithStateInPandasWithCheckpointV2Tests(
     TransformWithStateInPandasWithCheckpointV2TestsMixin, ReusedSQLTestCase
 ):
     pass
+
 
 @unittest.skip("Disabled due to slowness")
 class TransformWithStateInPySparkWithCheckpointV2Tests(
