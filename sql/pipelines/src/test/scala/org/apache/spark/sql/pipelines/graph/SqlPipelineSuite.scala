@@ -1052,9 +1052,9 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
         updateContext.pipelineExecution.runPipeline()
         updateContext.pipelineExecution.awaitCompletion()
 
-        assert(
-          spark.sql(s"SELECT * FROM $datasetFullyQualifiedName ORDER BY wStart, wEnd, id")
-            .collect().toSeq == Seq(Row(0, 5, 'a', 2), Row(0, 5, 'b', 1))
+        checkAnswer(
+          spark.sql(s"SELECT * FROM $datasetFullyQualifiedName ORDER BY wStart, wEnd, id"),
+          Seq(Row(0, 5, 'a', 2), Row(0, 5, 'b', 1))
         )
       }
     }
