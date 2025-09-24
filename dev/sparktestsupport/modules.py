@@ -1337,8 +1337,8 @@ pyspark_pandas_connect = Module(
     ],
 )
 
-pyspark_pandas_connect_slow = Module(
-    name="pyspark-pandas-connect-slow",
+pyspark_pandas_slow_connect = Module(
+    name="pyspark-pandas-slow-connect",
     dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
         "python/pyspark/pandas",
