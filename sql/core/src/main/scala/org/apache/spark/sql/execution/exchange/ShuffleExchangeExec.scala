@@ -481,7 +481,8 @@ object ShuffleExchangeExec {
     // are in the form of (partitionId, row) and every partitionId is in the expected range
     // [0, part.numPartitions - 1]. The partitioner of this is a PartitionIdPassthrough.
     val checksumSize =
-      if (SQLConf.get.shuffleOrderIndependentChecksumEnabled) {
+      if (SQLConf.get.shuffleOrderIndependentChecksumEnabled ||
+        SparkEnv.get.conf.get(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED)) {
         part.numPartitions
       } else {
         0

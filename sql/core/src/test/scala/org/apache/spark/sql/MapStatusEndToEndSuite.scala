@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{MapOutputTrackerMaster, SparkFunSuite}
+import org.apache.spark.{MapOutputTrackerMaster, SparkEnv, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -25,7 +26,6 @@ import org.apache.spark.sql.test.SQLTestUtils
 class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
     override def spark: SparkSession = SparkSession.builder()
       .master("local")
-      .config(SQLConf.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.key, value = true)
       .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)
       .config(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, value = false)
       .getOrCreate()
@@ -39,26 +39,40 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("Propagate checksum from executor to driver") {
-    assert(spark.sparkContext.conf
-      .get("spark.sql.shuffle.orderIndependentChecksum.enabled") == "true")
-    assert(spark.conf.get("spark.sql.shuffle.orderIndependentChecksum.enabled") == "true")
     assert(spark.sparkContext.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
     assert(spark.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
     assert(spark.sparkContext.conf.get("spark.sql.classic.shuffleDependency.fileCleanup.enabled")
       == "false")
     assert(spark.conf.get("spark.sql.classic.shuffleDependency.fileCleanup.enabled") == "false")
 
-    withTable("t") {
-      spark.range(1000).repartition(10).write.mode("overwrite").
-        saveAsTable("t")
+    var shuffleId = 0
+    Seq(("true", "false"), ("false", "true"), ("true", "true")).foreach {
+      case (orderIndependentChecksumEnabled: String, checksumMismatchFullRetryEnabled: String) =>
+        withSQLConf(
+          "spark.sql.shuffle.orderIndependentChecksum.enabled" -> orderIndependentChecksumEnabled) {
+          withSparkEnvConfs("spark.scheduler.checksumMismatchFullRetry.enabled" ->
+            checksumMismatchFullRetryEnabled) {
+
+            assert(SQLConf.get.shuffleOrderIndependentChecksumEnabled ===
+              orderIndependentChecksumEnabled.toBoolean)
+            assert(SparkEnv.get.conf.get(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED) ===
+              checksumMismatchFullRetryEnabled.toBoolean)
+
+            withTable("t") {
+              spark.range(1000).repartition(10).write.mode("overwrite").
+                saveAsTable("t")
+            }
+
+            val shuffleStatuses = spark.sparkContext.env.mapOutputTracker.
+              asInstanceOf[MapOutputTrackerMaster].shuffleStatuses
+            assert(shuffleStatuses.contains(shuffleId))
+
+            val mapStatuses = shuffleStatuses(shuffleId).mapStatuses
+            assert(mapStatuses.length == 5)
+            assert(mapStatuses.forall(_.checksumValue != 0))
+            shuffleId += 1
+          }
+        }
     }
-
-    val shuffleStatuses = spark.sparkContext.env.mapOutputTracker.
-      asInstanceOf[MapOutputTrackerMaster].shuffleStatuses
-    assert(shuffleStatuses.size == 1)
-
-    val mapStatuses = shuffleStatuses(0).mapStatuses
-    assert(mapStatuses.length == 5)
-    assert(mapStatuses.forall(_.checksumValue != 0))
   }
 }
