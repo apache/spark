@@ -145,9 +145,9 @@ message PipelineCommandResult {
     DefineFlowResult define_flow_result = 3;
   }
   message CatalogIdentifier {
-    optional string catalog = 1;
-    optional string database = 2;
-    optional string name = 3;
+    string resolved_catalog_name = 1;
+    repeated string resolved_namespace = 2;
+    string resolved_table_name = 3;
   }
   message CreateDataflowGraphResult {
     // The ID of the created graph.

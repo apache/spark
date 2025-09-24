@@ -84,9 +84,11 @@ private[connect] object PipelinesHandler extends Logging {
         val resolvedDataset =
           defineDataset(cmd.getDefineDataset, sessionHolder)
         val identifierBuilder = PipelineCommandResult.CatalogIdentifier.newBuilder()
-        resolvedDataset.resolvedCatalog.foreach(identifierBuilder.setCatalog)
-        resolvedDataset.resolvedDb.foreach(identifierBuilder.setDatabase)
-        identifierBuilder.setName(resolvedDataset.resolvedId)
+        resolvedDataset.resolvedCatalog.foreach(identifierBuilder.setResolvedCatalogName)
+        resolvedDataset.resolvedDb.foreach { ns =>
+          identifierBuilder.addResolvedNamespace(ns)
+        }
+        identifierBuilder.setResolvedTableName(resolvedDataset.resolvedId)
         val identifier = identifierBuilder.build()
         PipelineCommandResult
           .newBuilder()
@@ -101,9 +103,11 @@ private[connect] object PipelinesHandler extends Logging {
         val resolvedFlow =
           defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
         val identifierBuilder = PipelineCommandResult.CatalogIdentifier.newBuilder()
-        resolvedFlow.resolvedCatalog.foreach(identifierBuilder.setCatalog)
-        resolvedFlow.resolvedDb.foreach(identifierBuilder.setDatabase)
-        identifierBuilder.setName(resolvedFlow.resolvedId)
+        resolvedFlow.resolvedCatalog.foreach(identifierBuilder.setResolvedCatalogName)
+        resolvedFlow.resolvedDb.foreach { ns =>
+          identifierBuilder.addResolvedNamespace(ns)
+        }
+        identifierBuilder.setResolvedTableName(resolvedFlow.resolvedId)
         val identifier = identifierBuilder.build()
         PipelineCommandResult
           .newBuilder()

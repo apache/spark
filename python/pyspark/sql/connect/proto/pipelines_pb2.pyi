@@ -722,65 +722,33 @@ class PipelineCommandResult(google.protobuf.message.Message):
     class CatalogIdentifier(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        CATALOG_FIELD_NUMBER: builtins.int
-        DATABASE_FIELD_NUMBER: builtins.int
-        NAME_FIELD_NUMBER: builtins.int
-        catalog: builtins.str
-        database: builtins.str
-        name: builtins.str
+        RESOLVED_CATALOG_NAME_FIELD_NUMBER: builtins.int
+        RESOLVED_NAMESPACE_FIELD_NUMBER: builtins.int
+        RESOLVED_TABLE_NAME_FIELD_NUMBER: builtins.int
+        resolved_catalog_name: builtins.str
+        @property
+        def resolved_namespace(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        resolved_table_name: builtins.str
         def __init__(
             self,
             *,
-            catalog: builtins.str | None = ...,
-            database: builtins.str | None = ...,
-            name: builtins.str | None = ...,
+            resolved_catalog_name: builtins.str = ...,
+            resolved_namespace: collections.abc.Iterable[builtins.str] | None = ...,
+            resolved_table_name: builtins.str = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_catalog",
-                b"_catalog",
-                "_database",
-                b"_database",
-                "_name",
-                b"_name",
-                "catalog",
-                b"catalog",
-                "database",
-                b"database",
-                "name",
-                b"name",
-            ],
-        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_catalog",
-                b"_catalog",
-                "_database",
-                b"_database",
-                "_name",
-                b"_name",
-                "catalog",
-                b"catalog",
-                "database",
-                b"database",
-                "name",
-                b"name",
+                "resolved_catalog_name",
+                b"resolved_catalog_name",
+                "resolved_namespace",
+                b"resolved_namespace",
+                "resolved_table_name",
+                b"resolved_table_name",
             ],
         ) -> None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_catalog", b"_catalog"]
-        ) -> typing_extensions.Literal["catalog"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_database", b"_database"]
-        ) -> typing_extensions.Literal["database"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_name", b"_name"]
-        ) -> typing_extensions.Literal["name"] | None: ...
 
     class CreateDataflowGraphResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
