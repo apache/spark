@@ -106,9 +106,7 @@ function get_release_info {
   fi
 
   NEXT_VERSION="$VERSION"
-  if [ -z "$RELEASE_VERSION" ]; then
-    RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
-  fi
+  RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
   SHORT_VERSION=$(echo "$VERSION" | cut -d . -f 1-2)
   local REV=$(echo "$RELEASE_VERSION" | cut -d . -f 3)
 
