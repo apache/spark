@@ -670,46 +670,17 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-51831: Column pruning with exists Join") {
-    withTempPath { dir =>
-      spark.range(100)
-        .withColumn("col1", col("id") + 1)
-        .withColumn("col2", col("id") + 2)
-        .withColumn("col3", col("id") + 3)
-        .withColumn("col4", col("id") + 4)
-        .withColumn("col5", col("id") + 5)
-        .withColumn("col6", col("id") + 6)
-        .withColumn("col7", col("id") + 7)
-        .withColumn("col8", col("id") + 8)
-        .withColumn("col9", col("id") + 9)
-        .write
-        .mode("overwrite")
-        .format(dataSourceName)
-        .save(dir.getCanonicalPath + "/t1")
-      spark.range(10)
-        .write
-        .mode("overwrite")
-        .format(dataSourceName)
-        .save(dir.getCanonicalPath + "/t2")
-
-      spark.read
-        .format(dataSourceName)
-        .load(dir.getCanonicalPath + "/t1")
-        .createOrReplaceTempView("t1")
-      spark.read
-        .format(dataSourceName)
-        .load(dir.getCanonicalPath + "/t2")
-        .createOrReplaceTempView("t2")
+    withContacts {
       val query = sql(
         """
           |select sum(t1.id) as sum_id
-          |from t1, t2
-          |where t1.id == t2.id
-          |      and exists(select * from t1 where t1.id == t2.id and t1.col1>5)
+          |from contacts as t1
+          |where exists(select * from contacts as t2 where t1.id == t2.id)
           |""".stripMargin)
       checkScan(query,
-        "struct<id:long>",
-        "struct<id:long>",
-        "struct<id:long, col1:long>")
+        "struct<id:int>",
+        "struct<id:int>")
+      checkAnswer(query, Row(6))
     }
   }
 
