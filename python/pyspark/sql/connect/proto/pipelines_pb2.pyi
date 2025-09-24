@@ -790,7 +790,7 @@ class PipelineCommandResult(google.protobuf.message.Message):
         RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
         @property
         def resolved_identifier(self) -> global___PipelineCommandResult.CatalogIdentifier:
-            """Resolved name of the dataset"""
+            """Resolved identifier of the dataset"""
         def __init__(
             self,
             *,
@@ -825,7 +825,7 @@ class PipelineCommandResult(google.protobuf.message.Message):
         RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
         @property
         def resolved_identifier(self) -> global___PipelineCommandResult.CatalogIdentifier:
-            """Resolved name of the flow"""
+            """Resolved identifier of the flow"""
         def __init__(
             self,
             *,
