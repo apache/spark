@@ -545,6 +545,44 @@ class CompressedSerializer(FramedSerializer):
         return "CompressedSerializer(%s)" % self.serializer
 
 
+class BinaryConvertingSerializer(Serializer):
+    """
+    Converts bytearray to bytes for binary data when binary_as_bytes is enabled
+    """
+
+    def __init__(self, serializer, binary_as_bytes=False):
+        self.serializer = serializer
+        self.binary_as_bytes = binary_as_bytes
+
+    def _convert_binary(self, obj):
+        """Recursively convert bytearray to bytes in data structures"""
+        if not self.binary_as_bytes:
+            return obj
+
+        if isinstance(obj, bytearray):
+            return bytes(obj)
+        elif isinstance(obj, (list, tuple)):
+            converted = [self._convert_binary(item) for item in obj]
+            return type(obj)(converted)
+        elif isinstance(obj, dict):
+            return {key: self._convert_binary(value) for key, value in obj.items()}
+        else:
+            return obj
+
+    def dump_stream(self, iterator, stream):
+        self.serializer.dump_stream(iterator, stream)
+
+    def load_stream(self, stream):
+        for obj in self.serializer.load_stream(stream):
+            yield self._convert_binary(obj)
+
+    def __repr__(self):
+        return "BinaryConvertingSerializer(%s, binary_as_bytes=%s)" % (
+            str(self.serializer),
+            self.binary_as_bytes,
+        )
+
+
 class UTF8Deserializer(Serializer):
 
     """
