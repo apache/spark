@@ -747,6 +747,10 @@ class PlanGenerationTestSuite
     simple.repartitionByRange(fn.col("a").asc, fn.col("id").desc_nulls_first)
   }
 
+  test("repartitionById") {
+    simple.repartitionById(10, fn.col("id").cast("int"))
+  }
+
   test("coalesce") {
     simple.coalesce(5)
   }
@@ -3419,6 +3423,11 @@ class PlanGenerationTestSuite
           mutable.LinkedHashMap("a" -> 1, "b" -> 2),
           mutable.LinkedHashMap("a" -> 3, "b" -> 4),
           mutable.LinkedHashMap("a" -> 5, "b" -> 6))),
+      fn.typedLit(
+        Seq(
+          mutable.LinkedHashMap("a" -> Seq("1", "2"), "b" -> Seq("3", "4")),
+          mutable.LinkedHashMap("a" -> Seq("5", "6"), "b" -> Seq("7", "8")),
+          mutable.LinkedHashMap("a" -> Seq.empty[String], "b" -> Seq.empty[String]))),
       fn.typedLit(
         mutable.LinkedHashMap(
           1 -> mutable.LinkedHashMap("a" -> 1, "b" -> 2),

@@ -50,8 +50,8 @@ class SparkILoop(config: ShellConfig, in0: BufferedReader, out: PrintWriter)
       }
     @transient val sc = {
       val _sc = spark.sparkContext
-      if (_sc.getConf.getBoolean("spark.ui.reverseProxy", false)) {
-        val proxyUrl = _sc.getConf.get("spark.ui.reverseProxyUrl", null)
+      if (_sc.getReadOnlyConf.getBoolean("spark.ui.reverseProxy", false)) {
+        val proxyUrl = _sc.getReadOnlyConf.get("spark.ui.reverseProxyUrl", null)
         if (proxyUrl != null) {
           println(
             s"Spark Context Web UI is available at ${proxyUrl}/proxy/${_sc.applicationId}")

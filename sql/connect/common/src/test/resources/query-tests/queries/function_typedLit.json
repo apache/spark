@@ -409,10 +409,6 @@
             "integer": 6
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            }
           }
         }
       },
@@ -710,10 +706,6 @@
             "integer": 3
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            }
           }
         }
       },
@@ -745,10 +737,6 @@
             "integer": 3
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            }
           }
         }
       },
@@ -786,10 +774,6 @@
             "keyType": {
               "string": {
                 "collation": "UTF8_BINARY"
-              }
-            },
-            "valueType": {
-              "integer": {
               }
             }
           }
@@ -887,10 +871,6 @@
             "integer": 1
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -925,14 +905,6 @@
             }
           }],
           "dataType": {
-            "keyType": {
-              "integer": {
-              }
-            },
-            "valueType": {
-              "integer": {
-              }
-            },
             "valueContainsNull": true
           }
         }
@@ -967,14 +939,6 @@
             }
           }],
           "dataType": {
-            "keyType": {
-              "integer": {
-              }
-            },
-            "valueType": {
-              "integer": {
-              }
-            },
             "valueContainsNull": true
           }
         }
@@ -1009,14 +973,6 @@
             }
           }],
           "dataType": {
-            "keyType": {
-              "integer": {
-              }
-            },
-            "valueType": {
-              "integer": {
-              }
-            },
             "valueContainsNull": true
           }
         }
@@ -1051,10 +1007,6 @@
                 "integer": 3
               }],
               "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
               }
             }
           }, {
@@ -1065,13 +1017,7 @@
                 "integer": 5
               }, {
                 "integer": 6
-              }],
-              "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
-              }
+              }]
             }
           }, {
             "array": {
@@ -1081,24 +1027,10 @@
                 "integer": 8
               }, {
                 "integer": 9
-              }],
-              "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
-              }
+              }]
             }
           }],
           "dataType": {
-            "elementType": {
-              "array": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
-              }
-            },
             "containsNull": true
           }
         }
@@ -1140,10 +1072,6 @@
                   "string": {
                     "collation": "UTF8_BINARY"
                   }
-                },
-                "valueType": {
-                  "integer": {
-                  }
                 }
               }
             }
@@ -1158,18 +1086,7 @@
                 "integer": 3
               }, {
                 "integer": 4
-              }],
-              "dataType": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueType": {
-                  "integer": {
-                  }
-                }
-              }
+              }]
             }
           }, {
             "map": {
@@ -1182,6 +1099,65 @@
                 "integer": 5
               }, {
                 "integer": 6
+              }]
+            }
+          }],
+          "dataType": {
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
+            "map": {
+              "keys": [{
+                "string": "a"
+              }, {
+                "string": "b"
+              }],
+              "values": [{
+                "array": {
+                  "elements": [{
+                    "string": "1"
+                  }, {
+                    "string": "2"
+                  }],
+                  "dataType": {
+                    "elementType": {
+                      "string": {
+                        "collation": "UTF8_BINARY"
+                      }
+                    },
+                    "containsNull": true
+                  }
+                }
+              }, {
+                "array": {
+                  "elements": [{
+                    "string": "3"
+                  }, {
+                    "string": "4"
+                  }]
+                }
               }],
               "dataType": {
                 "keyType": {
@@ -1189,27 +1165,51 @@
                     "collation": "UTF8_BINARY"
                   }
                 },
-                "valueType": {
-                  "integer": {
-                  }
-                }
+                "valueContainsNull": true
               }
+            }
+          }, {
+            "map": {
+              "keys": [{
+                "string": "a"
+              }, {
+                "string": "b"
+              }],
+              "values": [{
+                "array": {
+                  "elements": [{
+                    "string": "5"
+                  }, {
+                    "string": "6"
+                  }]
+                }
+              }, {
+                "array": {
+                  "elements": [{
+                    "string": "7"
+                  }, {
+                    "string": "8"
+                  }]
+                }
+              }]
+            }
+          }, {
+            "map": {
+              "keys": [{
+                "string": "a"
+              }, {
+                "string": "b"
+              }],
+              "values": [{
+                "array": {
+                }
+              }, {
+                "array": {
+                }
+              }]
             }
           }],
           "dataType": {
-            "elementType": {
-              "map": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueType": {
-                  "integer": {
-                  }
-                }
-              }
-            },
             "containsNull": true
           }
         }
@@ -1256,10 +1256,6 @@
                   "string": {
                     "collation": "UTF8_BINARY"
                   }
-                },
-                "valueType": {
-                  "integer": {
-                  }
                 }
               }
             }
@@ -1274,38 +1270,10 @@
                 "integer": 3
               }, {
                 "integer": 4
-              }],
-              "dataType": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueType": {
-                  "integer": {
-                  }
-                }
-              }
+              }]
             }
           }],
           "dataType": {
-            "keyType": {
-              "integer": {
-              }
-            },
-            "valueType": {
-              "map": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueType": {
-                  "integer": {
-                  }
-                }
-              }
-            },
             "valueContainsNull": true
           }
         }
@@ -1340,10 +1308,6 @@
                 "integer": 3
               }],
               "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
               }
             }
           }, {
@@ -1362,10 +1326,6 @@
                 "keyType": {
                   "string": {
                     "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueType": {
-                  "integer": {
                   }
                 }
               }
@@ -1387,10 +1347,6 @@
                     "string": "b"
                   }],
                   "dataType": {
-                    "keyType": {
-                      "integer": {
-                      }
-                    },
                     "valueType": {
                       "string": {
                         "collation": "UTF8_BINARY"

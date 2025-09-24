@@ -49,10 +49,6 @@
                 "integer": 1
               }],
               "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                },
                 "containsNull": true
               }
             }
@@ -60,39 +56,16 @@
             "array": {
               "elements": [{
                 "integer": 2
-              }],
-              "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
               "elements": [{
                 "integer": 3
-              }],
-              "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
           }],
           "dataType": {
-            "elementType": {
-              "array": {
-                "elementType": {
-                  "integer": {
-                  }
-                },
-                "containsNull": true
-              }
-            },
             "containsNull": true
           }
         }
@@ -125,24 +98,11 @@
                     "integer": 1
                   }],
                   "dataType": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
                     "containsNull": true
                   }
                 }
               }],
               "dataType": {
-                "elementType": {
-                  "array": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
-                },
                 "containsNull": true
               }
             }
@@ -152,28 +112,9 @@
                 "array": {
                   "elements": [{
                     "integer": 2
-                  }],
-                  "dataType": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
+                  }]
                 }
-              }],
-              "dataType": {
-                "elementType": {
-                  "array": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
@@ -181,45 +122,12 @@
                 "array": {
                   "elements": [{
                     "integer": 3
-                  }],
-                  "dataType": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
+                  }]
                 }
-              }],
-              "dataType": {
-                "elementType": {
-                  "array": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
-                },
-                "containsNull": true
-              }
+              }]
             }
           }],
           "dataType": {
-            "elementType": {
-              "array": {
-                "elementType": {
-                  "array": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
-                },
-                "containsNull": true
-              }
-            },
             "containsNull": true
           }
         }
@@ -250,10 +158,6 @@
             "boolean": false
           }],
           "dataType": {
-            "elementType": {
-              "boolean": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -307,10 +211,6 @@
             "short": 9874
           }],
           "dataType": {
-            "elementType": {
-              "short": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -343,10 +243,6 @@
             "integer": -8726533
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -379,10 +275,6 @@
             "long": "7834609328726533"
           }],
           "dataType": {
-            "elementType": {
-              "long": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -415,10 +307,6 @@
             "double": 2.0
           }],
           "dataType": {
-            "elementType": {
-              "double": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -451,10 +339,6 @@
             "float": -0.9
           }],
           "dataType": {
-            "elementType": {
-              "float": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -664,10 +548,6 @@
             "date": 18546
           }],
           "dataType": {
-            "elementType": {
-              "date": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -698,10 +578,6 @@
             "timestamp": "1677155519809000"
           }],
           "dataType": {
-            "elementType": {
-              "timestamp": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -732,10 +608,6 @@
             "timestamp": "23456000"
           }],
           "dataType": {
-            "elementType": {
-              "timestamp": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -766,10 +638,6 @@
             "timestampNtz": "1677188160000000"
           }],
           "dataType": {
-            "elementType": {
-              "timestampNtz": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -800,10 +668,6 @@
             "date": 19417
           }],
           "dataType": {
-            "elementType": {
-              "date": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -914,10 +778,6 @@
             }
           }],
           "dataType": {
-            "elementType": {
-              "calendarInterval": {
-              }
-            },
             "containsNull": true
           }
         }
