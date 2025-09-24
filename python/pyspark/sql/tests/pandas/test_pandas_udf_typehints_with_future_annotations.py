@@ -158,6 +158,13 @@ class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
             infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.GROUPED_AGG
         )
 
+        def func() -> float:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.GROUPED_AGG
+        )
+
     def test_type_annotation_negative(self):
         def func(col: str) -> pd.Series:
             pass
