@@ -20,6 +20,7 @@ syntax = "proto3";
 package spark.connect;
 
 import "google/protobuf/timestamp.proto";
+import "spark/connect/common.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -143,11 +144,6 @@ message PipelineCommandResult {
     CreateDataflowGraphResult create_dataflow_graph_result = 1;
     DefineDatasetResult define_dataset_result = 2;
     DefineFlowResult define_flow_result = 3;
-  }
-  message CatalogIdentifier {
-    string resolved_catalog_name = 1;
-    repeated string resolved_namespace = 2;
-    string resolved_table_name = 3;
   }
   message CreateDataflowGraphResult {
     // The ID of the created graph.

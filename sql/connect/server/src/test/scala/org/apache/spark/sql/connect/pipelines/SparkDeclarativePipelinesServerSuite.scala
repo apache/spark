@@ -569,9 +569,9 @@ class SparkDeclarativePipelinesServerSuite
       val graphResult = res.getDefineDatasetResult
       val identifier = graphResult.getResolvedIdentifier
 
-      assert(identifier.getResolvedCatalogName == testCase.expectedResolvedCatalog)
-      assert(identifier.getResolvedNamespaceList.asScala == testCase.expectedResolvedNamespace)
-      assert(identifier.getResolvedTableName == testCase.datasetName)
+      assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
+      assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
+      assert(identifier.getTableName == testCase.datasetName)
     }
   }
 
@@ -606,9 +606,9 @@ class SparkDeclarativePipelinesServerSuite
       val graphResult = res.getDefineDatasetResult
       val identifier = graphResult.getResolvedIdentifier
 
-      assert(identifier.getResolvedCatalogName == testCase.expectedResolvedCatalog)
-      assert(identifier.getResolvedNamespaceList.asScala == testCase.expectedResolvedNamespace)
-      assert(identifier.getResolvedTableName == testCase.datasetName)
+      assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
+      assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
+      assert(identifier.getTableName == testCase.datasetName)
     }
   }
 
@@ -709,9 +709,9 @@ class SparkDeclarativePipelinesServerSuite
       val graphResult = res.getDefineFlowResult
       val identifier = graphResult.getResolvedIdentifier
 
-      assert(identifier.getResolvedCatalogName == testCase.expectedResolvedCatalog)
-      assert(identifier.getResolvedNamespaceList.asScala == testCase.expectedResolvedNamespace)
-      assert(identifier.getResolvedTableName == testCase.flowName)
+      assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
+      assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
+      assert(identifier.getTableName == testCase.flowName)
     }
   }
 
@@ -773,9 +773,9 @@ class SparkDeclarativePipelinesServerSuite
       val graphResult = res.getDefineFlowResult
       val identifier = graphResult.getResolvedIdentifier
 
-      assert(identifier.getResolvedCatalogName == testCase.expectedResolvedCatalog)
-      assert(identifier.getResolvedNamespaceList.asScala == testCase.expectedResolvedNamespace)
-      assert(identifier.getResolvedTableName == testCase.flowName)
+      assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
+      assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
+      assert(identifier.getTableName == testCase.flowName)
     }
   }
 }

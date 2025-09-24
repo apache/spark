@@ -40,6 +40,7 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import google.protobuf.timestamp_pb2
+import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -719,37 +720,6 @@ class PipelineCommandResult(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class CatalogIdentifier(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        RESOLVED_CATALOG_NAME_FIELD_NUMBER: builtins.int
-        RESOLVED_NAMESPACE_FIELD_NUMBER: builtins.int
-        RESOLVED_TABLE_NAME_FIELD_NUMBER: builtins.int
-        resolved_catalog_name: builtins.str
-        @property
-        def resolved_namespace(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
-        resolved_table_name: builtins.str
-        def __init__(
-            self,
-            *,
-            resolved_catalog_name: builtins.str = ...,
-            resolved_namespace: collections.abc.Iterable[builtins.str] | None = ...,
-            resolved_table_name: builtins.str = ...,
-        ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "resolved_catalog_name",
-                b"resolved_catalog_name",
-                "resolved_namespace",
-                b"resolved_namespace",
-                "resolved_table_name",
-                b"resolved_table_name",
-            ],
-        ) -> None: ...
-
     class CreateDataflowGraphResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -789,12 +759,13 @@ class PipelineCommandResult(google.protobuf.message.Message):
 
         RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
         @property
-        def resolved_identifier(self) -> global___PipelineCommandResult.CatalogIdentifier:
+        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.CatalogIdentifier:
             """Resolved identifier of the dataset"""
         def __init__(
             self,
             *,
-            resolved_identifier: global___PipelineCommandResult.CatalogIdentifier | None = ...,
+            resolved_identifier: pyspark.sql.connect.proto.common_pb2.CatalogIdentifier
+            | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -824,12 +795,13 @@ class PipelineCommandResult(google.protobuf.message.Message):
 
         RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
         @property
-        def resolved_identifier(self) -> global___PipelineCommandResult.CatalogIdentifier:
+        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.CatalogIdentifier:
             """Resolved identifier of the flow"""
         def __init__(
             self,
             *,
-            resolved_identifier: global___PipelineCommandResult.CatalogIdentifier | None = ...,
+            resolved_identifier: pyspark.sql.connect.proto.common_pb2.CatalogIdentifier
+            | None = ...,
         ) -> None: ...
         def HasField(
             self,

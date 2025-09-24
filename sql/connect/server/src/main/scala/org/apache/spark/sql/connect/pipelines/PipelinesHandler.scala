@@ -23,7 +23,7 @@ import scala.util.Using
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation}
+import org.apache.spark.connect.proto.{CatalogIdentifier, ExecutePlanResponse, PipelineCommandResult, Relation}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -83,12 +83,12 @@ private[connect] object PipelinesHandler extends Logging {
         logInfo(s"Define pipelines dataset cmd received: $cmd")
         val resolvedDataset =
           defineDataset(cmd.getDefineDataset, sessionHolder)
-        val identifierBuilder = PipelineCommandResult.CatalogIdentifier.newBuilder()
-        resolvedDataset.resolvedCatalog.foreach(identifierBuilder.setResolvedCatalogName)
+        val identifierBuilder = CatalogIdentifier.newBuilder()
+        resolvedDataset.resolvedCatalog.foreach(identifierBuilder.setCatalogName)
         resolvedDataset.resolvedDb.foreach { ns =>
-          identifierBuilder.addResolvedNamespace(ns)
+          identifierBuilder.addNamespace(ns)
         }
-        identifierBuilder.setResolvedTableName(resolvedDataset.resolvedId)
+        identifierBuilder.setTableName(resolvedDataset.resolvedId)
         val identifier = identifierBuilder.build()
         PipelineCommandResult
           .newBuilder()
@@ -102,12 +102,12 @@ private[connect] object PipelinesHandler extends Logging {
         logInfo(s"Define pipelines flow cmd received: $cmd")
         val resolvedFlow =
           defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
-        val identifierBuilder = PipelineCommandResult.CatalogIdentifier.newBuilder()
-        resolvedFlow.resolvedCatalog.foreach(identifierBuilder.setResolvedCatalogName)
+        val identifierBuilder = CatalogIdentifier.newBuilder()
+        resolvedFlow.resolvedCatalog.foreach(identifierBuilder.setCatalogName)
         resolvedFlow.resolvedDb.foreach { ns =>
-          identifierBuilder.addResolvedNamespace(ns)
+          identifierBuilder.addNamespace(ns)
         }
-        identifierBuilder.setResolvedTableName(resolvedFlow.resolvedId)
+        identifierBuilder.setTableName(resolvedFlow.resolvedId)
         val identifier = identifierBuilder.build()
         PipelineCommandResult
           .newBuilder()
