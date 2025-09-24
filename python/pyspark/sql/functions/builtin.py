@@ -25226,6 +25226,8 @@ def make_timestamp_ntz(
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
+    Example 1: Make local date-time from years, months, days, hours, mins, secs.
+
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
     ...     ['year', 'month', 'day', 'hour', 'min', 'sec'])
@@ -25237,6 +25239,21 @@ def make_timestamp_ntz(
     +----------------------------------------------------+
     |2014-12-28 06:30:45.887                             |
     +----------------------------------------------------+
+
+    Example 2: Make local date-time from date and time.
+
+    >>> import pyspark.sql.functions as sf
+    >>> from datetime import date, time
+    >>> df = spark.range(1).select(
+    ...     sf.lit(date(2014, 12, 28)).alias("date"),
+    ...     sf.lit(time(6, 30, 45, 887000)).alias("time")
+    ... )
+    >>> df.select(sf.make_timestamp_ntz(date=df.date, time=df.time)).show(truncate=False)
+    +----------------------------------+
+    |make_timestamp_ntz(date, time)    |
+    +----------------------------------+
+    |2014-12-28 06:30:45.887           |
+    +----------------------------------+
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
@@ -25393,6 +25410,21 @@ def try_make_timestamp_ntz(
     +--------------------------------------------------------+
     |NULL                                                    |
     +--------------------------------------------------------+
+
+    Example 3: Make local date-time from date and time.
+
+    >>> import pyspark.sql.functions as sf
+    >>> from datetime import date, time
+    >>> df = spark.range(1).select(
+    ...     sf.lit(date(2014, 12, 28)).alias("date"),
+    ...     sf.lit(time(6, 30, 45, 887000)).alias("time")
+    ... )
+    >>> df.select(sf.try_make_timestamp_ntz(date=df.date, time=df.time)).show(truncate=False)
+    +--------------------------------------+
+    |try_make_timestamp_ntz(date, time)    |
+    +--------------------------------------+
+    |2014-12-28 06:30:45.887               |
+    +--------------------------------------+
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
