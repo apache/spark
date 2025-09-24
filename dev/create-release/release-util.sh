@@ -107,8 +107,9 @@ function get_release_info {
 
   NEXT_VERSION="$VERSION"
   if [ -z "$RELEASE_VERSION" ]; then
-    RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
+    SPARK_RELEASE_VERSION="$RELEASE_VERSION"
   fi
+  RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
   SHORT_VERSION=$(echo "$VERSION" | cut -d . -f 1-2)
   local REV=$(echo "$RELEASE_VERSION" | cut -d . -f 3)
 
@@ -138,6 +139,11 @@ function get_release_info {
 
   if [ "$GIT_BRANCH" = "master" ]; then
     RELEASE_VERSION="$RELEASE_VERSION-preview1"
+    if [ -n "$SPARK_RELEASE_VERSION" ]; then
+      # If we are building it from master branch, respect the RELEASE_VERSION
+      # set before. This is usually a preview release.
+      RELEASE_VERSION="$SPARK_RELEASE_VERSION"
+    fi
   fi
   export NEXT_VERSION
   export RELEASE_VERSION=$(read_config "Release" "$RELEASE_VERSION")
