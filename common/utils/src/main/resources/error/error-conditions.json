@@ -9959,11 +9959,6 @@
       "Doesn't support month or year interval: <interval>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3263" : {
-    "message" : [
-      "Multiple aliases are not supported in watermark clause"
-    ]
-  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
