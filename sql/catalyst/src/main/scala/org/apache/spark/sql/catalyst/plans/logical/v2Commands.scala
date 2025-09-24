@@ -1654,12 +1654,19 @@ case class Call(
   }
 
   override def simpleString(maxFields: Int): String = {
-    val name = procedure match {
+    procedure match {
       case ResolvedProcedure(catalog, ident, _) =>
-        s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
+        val name = s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
+        simpleString(name, maxFields)
       case UnresolvedProcedure(nameParts) =>
-        nameParts.quoted
+        val name = nameParts.quoted
+        simpleString(name, maxFields)
+      case _ =>
+        super.simpleString(maxFields)
     }
+  }
+
+  private def simpleString(name: String, maxFields: Int): String = {
     val argsString = truncatedString(args, ", ", maxFields)
     s"Call $name($argsString)"
   }
