@@ -28,9 +28,10 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql.pandas.typehints import infer_eval_type
+from pyspark.sql.pandas.typehints import infer_eval_type, infer_group_arrow_eval_type
 from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType
 from pyspark.sql import Row
+from pyspark.util import PythonEvalType
 
 if have_pyarrow:
     import pyarrow as pa
@@ -163,6 +164,28 @@ class ArrowUDFTypeHintsTests(ReusedSQLTestCase):
         self.assertEqual(
             infer_eval_type(signature(func), get_type_hints(func)), ArrowUDFType.GROUPED_AGG
         )
+
+    def test_type_annotation_group_map(self):
+        def func(col: pa.Table) -> pa.Table:
+            pass
+
+        self.assertEqual(
+            infer_group_arrow_eval_type(signature(func), get_type_hints(func)),
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        )
+
+        def func(col: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            pass
+
+        self.assertEqual(
+            infer_group_arrow_eval_type(signature(func), get_type_hints(func)),
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+        )
+
+        def func(col: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            pass
+
+        self.assertEqual(infer_group_arrow_eval_type(signature(func), get_type_hints(func)), None)
 
     def test_type_annotation_negative(self):
         def func(col: str) -> pa.Array:
