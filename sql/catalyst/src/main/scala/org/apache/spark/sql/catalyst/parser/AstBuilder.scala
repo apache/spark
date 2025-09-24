@@ -2087,8 +2087,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     if (expression.isInstanceOf[MultiAlias]) {
       throw new AnalysisException(
-        // FIXME: Assign error class
-        errorClass = "_LEGACY_ERROR_TEMP_3263",
+        errorClass = "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE",
         messageParameters = Map()
       )
     }
@@ -2098,7 +2097,7 @@ class AstBuilder extends DataTypeAstBuilder
       case e: Expression => UnresolvedAlias(e)
     }
 
-    // FIXME: This seems to need to find the new expression by index. We can't rely on exprId
+    // TODO: This seems to need to find the new expression by index. We can't rely on exprId
     //  due to UnresolvedAlias. Are there better ways to do?
     val proj = Project(Seq(namedExpression, UnresolvedStar(None)), query)
     val attrRef = proj.projectList.head.toAttribute
