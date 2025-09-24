@@ -3870,6 +3870,17 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("EXPLAIN") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id int, data string)")
+      val explain = spark.sql(s"EXPLAIN EXTENDED SELECT * FROM $t").head().getString(0)
+      val relationPattern = raw".*RelationV2\[[^\]]*]\s+$t\s*$$".r
+      val relations = explain.split("\n").filter(_.contains("RelationV2"))
+      assert(relations.nonEmpty && relations.forall(line => relationPattern.matches(line.trim)))
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
