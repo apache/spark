@@ -328,6 +328,17 @@ object Connect {
       .booleanConf
       .createWithDefault(true)
 
+  val CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS =
+    buildStaticConf("spark.connect.session.inactiveOperations.cacheExpiration")
+      .doc(
+        "Expiration time for inactive operation IDs cache in Spark Connect Session." +
+          " Operations are cached after completion for a period of time to detect duplicates." +
+          " The time should allow for network late arrivals, at least several minutes.")
+      .version("4.1.0")
+      .internal()
+      .timeConf(TimeUnit.MINUTES)
+      .createWithDefault(30)
+
   val CONNECT_AUTHENTICATE_TOKEN =
     buildStaticConf("spark.connect.authenticate.token")
       .doc("A pre-shared token that will be used to authenticate clients. This secret must be" +
