@@ -1054,7 +1054,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
 
         checkAnswer(
           spark.sql(s"SELECT * FROM $datasetFullyQualifiedName ORDER BY wStart, wEnd, id"),
-          Seq(Row(0, 5, 'a', 2), Row(0, 5, 'b', 1))
+          Seq(Row(0L, 5L, "a", 2L), Row(0L, 5L, "b", 1L))
         )
       }
     }

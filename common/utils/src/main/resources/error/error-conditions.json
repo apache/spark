@@ -587,7 +587,7 @@
     "message" : [
       "Multiple aliases are not supported in watermark clause."
     ],
-    "sqlState": "42000"
+    "sqlState" : "42000"
   },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
