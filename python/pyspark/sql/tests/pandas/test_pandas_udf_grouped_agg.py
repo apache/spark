@@ -777,11 +777,19 @@ class GroupedAggPandasUDFTestsMixin:
         self.assertEqual(expected1.collect(), result1.collect())
 
         expected2 = (
-            df.groupby("k").agg(sf.max("id").alias("res1"), sf.lit(1).alias("res1")).sort("k")
+            df.groupby("k")
+            .agg(
+                sf.max("id").alias("res1"),
+                sf.lit(1).alias("res1"),
+            )
+            .sort("k")
         )
         result2 = (
             df.groupby("k")
-            .agg(pandas_max("id").alias("res1"), pandas_lit_1().alias("res1"))
+            .agg(
+                pandas_max("id").alias("res1"),
+                pandas_lit_1().alias("res1"),
+            )
             .sort("k")
         )
         self.assertEqual(expected2.collect(), result2.collect())
