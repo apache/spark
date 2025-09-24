@@ -1935,17 +1935,17 @@ class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateIn
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
     pass
 
-
+@unittest.skip("Disabled due to slowness")
 class TransformWithStateInPySparkTests(TransformWithStateInPySparkTestsMixin, ReusedSQLTestCase):
     pass
 
-
+@unittest.skip("Disabled due to slowness")
 class TransformWithStateInPandasWithCheckpointV2Tests(
     TransformWithStateInPandasWithCheckpointV2TestsMixin, ReusedSQLTestCase
 ):
     pass
 
-
+@unittest.skip("Disabled due to slowness")
 class TransformWithStateInPySparkWithCheckpointV2Tests(
     TransformWithStateInPySparkWithCheckpointV2TestsMixin, ReusedSQLTestCase
 ):

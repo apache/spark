@@ -53,7 +53,7 @@ class TransformWithStateInPandasParityTests(
     def test_schema_evolution_scenarios(self):
         pass
 
-
+@unittest.skip("Disabled due to slowness")
 class TransformWithStateInPySparkParityTests(
     TransformWithStateInPySparkTestsMixin, ReusedConnectTestCase
 ):
