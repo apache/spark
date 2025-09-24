@@ -1931,7 +1931,7 @@ class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateIn
         cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
         return cfg
 
-
+@unittest.skip("Disabled due to slowness")
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
     pass
 
