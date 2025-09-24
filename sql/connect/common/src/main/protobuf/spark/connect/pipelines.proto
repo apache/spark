@@ -154,11 +154,11 @@ message PipelineCommandResult {
     optional string dataflow_graph_id = 1;
   }
   message DefineDatasetResult {
-    // Resolved name of the dataset
+    // Resolved identifier of the dataset
     optional CatalogIdentifier resolved_identifier = 1;
   }
   message DefineFlowResult {
-    // Resolved name of the flow
+    // Resolved identifier of the flow
     optional CatalogIdentifier resolved_identifier = 1;
   }
 }
