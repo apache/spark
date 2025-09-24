@@ -134,12 +134,10 @@ class SparkSession:
             self._hook_factories: list["Callable[[SparkSession], SparkSession.Hook]"] = []
 
         @overload
-        def config(self, key: str, value: Any) -> "SparkSession.Builder":
-            ...
+        def config(self, key: str, value: Any) -> "SparkSession.Builder": ...
 
         @overload
-        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder":
-            ...
+        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder": ...
 
         def config(
             self,
@@ -603,17 +601,19 @@ class SparkSession:
             else:
                 # Any timestamps must be coerced to be compatible with Spark
                 spark_types = [
-                    TimestampType()
-                    if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                    else DayTimeIntervalType()
-                    if is_timedelta64_dtype(t)
-                    else None
+                    (
+                        TimestampType()
+                        if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
+                        else DayTimeIntervalType() if is_timedelta64_dtype(t) else None
+                    )
                     for t in data.dtypes
                 ]
                 arrow_types = [
-                    to_arrow_type(dt, prefers_large_types=prefers_large_types)
-                    if dt is not None
-                    else None
+                    (
+                        to_arrow_type(dt, prefers_large_types=prefers_large_types)
+                        if dt is not None
+                        else None
+                    )
                     for dt in spark_types
                 ]
 
