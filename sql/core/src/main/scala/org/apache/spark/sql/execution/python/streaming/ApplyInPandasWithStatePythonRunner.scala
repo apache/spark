@@ -113,7 +113,7 @@ class ApplyInPandasWithStatePythonRunner(
   // to let Python worker read the config properly.
   override protected val workerConf: Map[String, String] = initialWorkerConf +
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString) +
-    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
+    (SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
