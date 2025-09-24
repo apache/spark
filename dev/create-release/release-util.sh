@@ -106,7 +106,7 @@ function get_release_info {
   fi
 
   NEXT_VERSION="$VERSION"
-  if [ -z "$RELEASE_VERSION" ]; then
+  if [ -n "$RELEASE_VERSION" ]; then
     SPARK_RELEASE_VERSION="$RELEASE_VERSION"
   fi
   RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
