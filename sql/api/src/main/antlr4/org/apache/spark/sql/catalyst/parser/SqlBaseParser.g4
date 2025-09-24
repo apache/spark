@@ -1806,6 +1806,7 @@ ansiNonReserved
     | DEFAULT
     | DEFINED
     | DEFINER
+    | DELAY
     | DELETE
     | DELIMITED
     | DESC
@@ -2048,6 +2049,7 @@ ansiNonReserved
     | WEEK
     | WEEKS
     | WHILE
+    | WATERMARK
     | WINDOW
     | WITHOUT
     | YEAR
