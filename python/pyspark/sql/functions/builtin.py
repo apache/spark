@@ -13576,15 +13576,22 @@ def session_user() -> Column:
 
 
 @_try_remote_functions
-def uuid() -> Column:
+def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
     """Returns an universally unique identifier (UUID) string.
     The value is returned as a canonical UUID 36-character string.
 
     .. versionadded:: 4.1.0
 
+    Parameters
+    ----------
+    seed : :class:`~pyspark.sql.Column` or int
+        Optional random number seed to use.
+
     Examples
     --------
-    >>> import pyspark.sql.functions as sf
+    Example 1: Generate UUIDs with random seed
+
+    >>> from pyspark.sql import functions as sf
     >>> spark.range(5).select(sf.uuid()).show(truncate=False) # doctest: +SKIP
     +------------------------------------+
     |uuid()                              |
@@ -13595,8 +13602,27 @@ def uuid() -> Column:
     |fb1d6178-7676-4791-baa9-f2ddcc494515|
     |d48665e8-2657-4c6b-b7c8-8ae0cd646e41|
     +------------------------------------+
+
+    Example 2: Generate UUIDs with a specified seed
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 5, 1, 1).select(sf.uuid(seed=123)).show(truncate=False)
+    +------------------------------------+
+    |uuid()                              |
+    +------------------------------------+
+    |4c99192d-23d6-4d88-b814-a634398120f0|
+    |af506873-3c53-41e3-8354-a24856b8de8a|
+    |7b4b370e-e867-47e2-93c0-f6990463a12d|
+    |1c4d1733-ff1a-4a6c-b144-0b0345adf0d0|
+    |7478f235-f8bc-4112-8e59-a28f50e46890|
+    +------------------------------------+
     """
-    return _invoke_function("uuid")
+    from pyspark.sql.classic.column import _to_java_column
+
+    if seed is None:
+        return _invoke_function("uuid")
+    else:
+        return _invoke_function("uuid", _to_java_column(lit(seed)))
 
 
 @_try_remote_functions

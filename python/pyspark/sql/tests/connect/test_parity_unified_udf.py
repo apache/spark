@@ -15,17 +15,23 @@
 # limitations under the License.
 #
 
-ruby ">= 3.0.0"
-source "https://rubygems.org"
+import unittest
 
-# Keep these specifications as flexible as possible and leave it to Bundler
-# to pin versions in the lock file.
-# To update the lock file, run `bundle update`.
-# Version constraint reference: https://guides.rubygems.org/patterns/#declaring-dependencies
+from pyspark.sql.tests.test_unified_udf import UnifiedUDFTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
-gem "jekyll", "~> 4.4"
-gem "jekyll-redirect-from", "~> 0.16"
-# This resolves a build issue on Apple Silicon.
-# See: https://issues.apache.org/jira/browse/SPARK-38488
-gem "ffi", "~> 1.15"
-gem "rexml", "~> 3.4.4"
+
+class UnifiedUDFParityTests(UnifiedUDFTestsMixin, ReusedConnectTestCase):
+    pass
+
+
+if __name__ == "__main__":
+    from pyspark.sql.tests.connect.test_parity_unified_udf import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

@@ -496,7 +496,6 @@ class Expression(google.protobuf.message.Message):
 
             ELEMENT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
-            DATA_TYPE_FIELD_NUMBER: builtins.int
             @property
             def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
                 """(Deprecated) The element type of the array.
@@ -509,42 +508,20 @@ class Expression(google.protobuf.message.Message):
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
             ]:
-                """The literal values that make up the array elements.
-
-                For inferring the data_type.element_type, only the first element needs to
-                contain the type information.
-                """
-            @property
-            def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Array:
-                """The type of the array. You don't need to set this field if the type information is not needed.
-
-                If the element type can be inferred from the first element of the elements field,
-                then you don't need to set data_type.element_type to save space.
-
-                On the other hand, redundant type information is also acceptable.
-                """
+                """The literal values that make up the array elements."""
             def __init__(
                 self,
                 *,
                 element_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
                 elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
-                data_type: pyspark.sql.connect.proto.types_pb2.DataType.Array | None = ...,
             ) -> None: ...
             def HasField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "data_type", b"data_type", "element_type", b"element_type"
-                ],
+                self, field_name: typing_extensions.Literal["element_type", b"element_type"]
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "data_type",
-                    b"data_type",
-                    "element_type",
-                    b"element_type",
-                    "elements",
-                    b"elements",
+                    "element_type", b"element_type", "elements", b"elements"
                 ],
             ) -> None: ...
 
@@ -555,7 +532,6 @@ class Expression(google.protobuf.message.Message):
             VALUE_TYPE_FIELD_NUMBER: builtins.int
             KEYS_FIELD_NUMBER: builtins.int
             VALUES_FIELD_NUMBER: builtins.int
-            DATA_TYPE_FIELD_NUMBER: builtins.int
             @property
             def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
                 """(Deprecated) The key type of the map.
@@ -575,31 +551,14 @@ class Expression(google.protobuf.message.Message):
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
             ]:
-                """The literal keys that make up the map.
-
-                For inferring the data_type.key_type, only the first key needs to
-                contain the type information.
-                """
+                """The literal keys that make up the map."""
             @property
             def values(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
             ]:
-                """The literal values that make up the map.
-
-                For inferring the data_type.value_type, only the first value needs to
-                contain the type information.
-                """
-            @property
-            def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Map:
-                """The type of the map. You don't need to set this field if the type information is not needed.
-
-                If the key/value types can be inferred from the first element of the keys/values fields,
-                then you don't need to set data_type.key_type/data_type.value_type to save space.
-
-                On the other hand, redundant type information is also acceptable.
-                """
+                """The literal values that make up the map."""
             def __init__(
                 self,
                 *,
@@ -607,19 +566,16 @@ class Expression(google.protobuf.message.Message):
                 value_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
                 keys: collections.abc.Iterable[global___Expression.Literal] | None = ...,
                 values: collections.abc.Iterable[global___Expression.Literal] | None = ...,
-                data_type: pyspark.sql.connect.proto.types_pb2.DataType.Map | None = ...,
             ) -> None: ...
             def HasField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "data_type", b"data_type", "key_type", b"key_type", "value_type", b"value_type"
+                    "key_type", b"key_type", "value_type", b"value_type"
                 ],
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "data_type",
-                    b"data_type",
                     "key_type",
                     b"key_type",
                     "keys",
@@ -636,13 +592,12 @@ class Expression(google.protobuf.message.Message):
 
             STRUCT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
-            DATA_TYPE_STRUCT_FIELD_NUMBER: builtins.int
             @property
             def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
                 """(Deprecated) The type of the struct.
 
                 This field is deprecated since Spark 4.1+ because using DataType as the type of a struct
-                is ambiguous. Use data_type_struct field instead.
+                is ambiguous. Use data_type field instead.
                 """
             @property
             def elements(
@@ -650,36 +605,20 @@ class Expression(google.protobuf.message.Message):
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
             ]:
-                """(Required) The literal values that make up the struct elements."""
-            @property
-            def data_type_struct(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Struct:
-                """The type of the struct. You don't need to set this field if the type information is not needed.
-
-                Whether data_type_struct.fields.data_type should be set depends on
-                whether each field's type can be inferred from the elements field.
-                """
+                """The literal values that make up the struct elements."""
             def __init__(
                 self,
                 *,
                 struct_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
                 elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
-                data_type_struct: pyspark.sql.connect.proto.types_pb2.DataType.Struct | None = ...,
             ) -> None: ...
             def HasField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "data_type_struct", b"data_type_struct", "struct_type", b"struct_type"
-                ],
+                self, field_name: typing_extensions.Literal["struct_type", b"struct_type"]
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "data_type_struct",
-                    b"data_type_struct",
-                    "elements",
-                    b"elements",
-                    "struct_type",
-                    b"struct_type",
+                    "elements", b"elements", "struct_type", b"struct_type"
                 ],
             ) -> None: ...
 
@@ -811,6 +750,7 @@ class Expression(google.protobuf.message.Message):
         STRUCT_FIELD_NUMBER: builtins.int
         SPECIALIZED_ARRAY_FIELD_NUMBER: builtins.int
         TIME_FIELD_NUMBER: builtins.int
+        DATA_TYPE_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -844,6 +784,14 @@ class Expression(google.protobuf.message.Message):
         def specialized_array(self) -> global___Expression.Literal.SpecializedArray: ...
         @property
         def time(self) -> global___Expression.Literal.Time: ...
+        @property
+        def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+            """Data type information for the literal.
+            This field is required only in the root literal message for null values or
+            for data types (e.g., array, map, or struct) with non-trivial information.
+            If the data_type field is not set at the root level, the data type will be
+            inferred or retrieved from the deprecated data type fields using best efforts.
+            """
         def __init__(
             self,
             *,
@@ -869,6 +817,7 @@ class Expression(google.protobuf.message.Message):
             struct: global___Expression.Literal.Struct | None = ...,
             specialized_array: global___Expression.Literal.SpecializedArray | None = ...,
             time: global___Expression.Literal.Time | None = ...,
+            data_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -883,6 +832,8 @@ class Expression(google.protobuf.message.Message):
                 b"byte",
                 "calendar_interval",
                 b"calendar_interval",
+                "data_type",
+                b"data_type",
                 "date",
                 b"date",
                 "day_time_interval",
@@ -934,6 +885,8 @@ class Expression(google.protobuf.message.Message):
                 b"byte",
                 "calendar_interval",
                 b"calendar_interval",
+                "data_type",
+                b"data_type",
                 "date",
                 b"date",
                 "day_time_interval",

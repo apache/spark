@@ -15,25 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.pipelines.graph
+package org.apache.spark.sql.execution.datasources.parquet;
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import java.util.Optional;
 
-object ViewHelpers {
+import org.apache.parquet.hadoop.metadata.ParquetMetadata;
+import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.io.SeekableInputStream;
 
-  /** Map of view identifier to corresponding unresolved flow */
-  def persistedViewIdentifierToFlow(graph: DataflowGraph): Map[TableIdentifier, ResolvedFlow] = {
-    graph.persistedViews.map { v =>
-      require(
-        graph.flowsTo.get(v.identifier).isDefined,
-        s"No flows to view ${v.identifier} were found"
-      )
-      val flowsToView = graph.resolvedFlowsTo(v.identifier)
-      require(
-        flowsToView.size == 1,
-        s"Expected a single flow to the view, found ${flowsToView.size} flows to ${v.identifier}"
-      )
-      (v.identifier, flowsToView.head)
-    }.toMap
+public record OpenedParquetFooter(
+    ParquetMetadata footer,
+    HadoopInputFile inputFile,
+    Optional<SeekableInputStream> inputStreamOpt) {
+
+  public SeekableInputStream inputStream() {
+    return inputStreamOpt.get();
   }
 }

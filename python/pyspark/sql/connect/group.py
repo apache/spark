@@ -583,8 +583,12 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.group
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.connect.group.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.connect.group.GroupedData.agg.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.group tests")

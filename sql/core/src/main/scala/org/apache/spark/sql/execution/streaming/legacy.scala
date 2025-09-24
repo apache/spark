@@ -15,25 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.pipelines.graph
+package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import scala.reflect.ClassTag
 
-object ViewHelpers {
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.checkpointing.{HDFSMetadataLog => ActualHDFSMetadataLog}
+import org.apache.spark.sql.execution.streaming.runtime.{SerializedOffset => ActualSerializedOffset}
 
-  /** Map of view identifier to corresponding unresolved flow */
-  def persistedViewIdentifierToFlow(graph: DataflowGraph): Map[TableIdentifier, ResolvedFlow] = {
-    graph.persistedViews.map { v =>
-      require(
-        graph.flowsTo.get(v.identifier).isDefined,
-        s"No flows to view ${v.identifier} were found"
-      )
-      val flowsToView = graph.resolvedFlowsTo(v.identifier)
-      require(
-        flowsToView.size == 1,
-        s"Expected a single flow to the view, found ${flowsToView.size} flows to ${v.identifier}"
-      )
-      (v.identifier, flowsToView.head)
-    }.toMap
-  }
+@deprecated("use org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog")
+class HDFSMetadataLog[T <: AnyRef: ClassTag](sparkSession: SparkSession, path: String)
+  extends ActualHDFSMetadataLog[T](sparkSession, path)
+
+@deprecated("use org.apache.spark.sql.execution.streaming.runtime.SerializedOffset")
+object SerializedOffset {
+  def apply(offset: String): ActualSerializedOffset = ActualSerializedOffset(offset)
 }
