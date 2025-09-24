@@ -905,6 +905,8 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(session, executionId) {
+
+        println(s"karuppayyar: subquery started $executionId")
         val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val rows: Array[InternalRow] = if (maxNumRows.isDefined) {
@@ -912,6 +914,7 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
         } else {
           child.executeCollect()
         }
+        println(s"karuppayyar: subquery ended $executionId")
         val beforeBuild = System.nanoTime()
         longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum

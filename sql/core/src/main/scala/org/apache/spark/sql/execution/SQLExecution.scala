@@ -180,6 +180,7 @@ object SQLExecution extends Logging {
                 ex = Some(e)
                 throw e
             } finally {
+
               val endTime = System.nanoTime()
               val errorMessage = ex.map {
                 case e: SparkThrowable =>
@@ -196,6 +197,13 @@ object SQLExecution extends Logging {
                     extractShuffleIds(dataWritingCommand.child)
                   case plan =>
                     extractShuffleIds(plan)
+                }
+                if (shuffleIds.nonEmpty) {
+                  // the suite involves a join , so it is supposed have shuffle.
+                  // Otherwise we would have additional noise
+                  val toCleanIds = shuffleIds.mkString(",")
+                  println(s"karuppayyar: query ended $executionId")
+                  println(s"karuppayyar: removing shuffle ${toCleanIds}")
                 }
                 shuffleIds.foreach { shuffleId =>
                   queryExecution.shuffleCleanupMode match {
