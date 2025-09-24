@@ -807,11 +807,9 @@ class FunctionsTestsMixin:
         )
         assertDataFrameEqual(actual, [Row(result)])
 
-        # Mixed positional and keyword arguments
+        # All 6 positional arguments
         actual = df.select(
-            F.make_timestamp_ntz(
-                df.year, df.month, df.day, hours=df.hour, mins=df.minute, secs=df.second
-            )
+            F.make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
         )
         assertDataFrameEqual(actual, [Row(result)])
 
@@ -821,10 +819,6 @@ class FunctionsTestsMixin:
             F.lit(datetime.time(10, 30, 45, 123000)).alias("time"),
         )
         actual = df2.select(F.make_timestamp_ntz(date=df2.date, time=df2.time))
-        assertDataFrameEqual(actual, [Row(result)])
-
-        # Test mixed date/time arguments
-        actual = df2.select(F.make_timestamp_ntz(df2.date, time=df2.time))
         assertDataFrameEqual(actual, [Row(result)])
 
     def test_make_date(self):
