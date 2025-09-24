@@ -742,29 +742,29 @@ class FunctionsTestsMixin:
                 F.make_timestamp_ntz(years=df.year, date=df_dt.date, time=df_dt.time)
             ).collect()
         error_msg = str(context.exception)
-        self.assertIn("WRONG_NUM_ARGS", error_msg)
-        self.assertIn("keyword parameter(s): years, date, time", error_msg)
+        self.assertIn("CANNOT_SET_TOGETHER", error_msg)
+        self.assertIn("years|months|days|hours|mins|secs and date|time", error_msg)
 
         # Test 2: Incomplete keyword arguments
         with self.assertRaises(PySparkValueError) as context:
             df.select(F.make_timestamp_ntz(years=df.year, months=df.month, days=df.day)).collect()
         error_msg = str(context.exception)
-        self.assertIn("WRONG_NUM_ARGS", error_msg)
-        self.assertIn("keyword parameter(s): years, months, days", error_msg)
+        self.assertIn("CANNOT_SET_TOGETHER", error_msg)
+        self.assertIn("years|months|days|hours|mins|secs and date|time", error_msg)
 
         # Test 3: Only one keyword argument
         with self.assertRaises(PySparkValueError) as context:
             df.select(F.make_timestamp_ntz(years=df.year)).collect()
         error_msg = str(context.exception)
-        self.assertIn("WRONG_NUM_ARGS", error_msg)
-        self.assertIn("keyword parameter(s): years", error_msg)
+        self.assertIn("CANNOT_SET_TOGETHER", error_msg)
+        self.assertIn("years|months|days|hours|mins|secs and date|time", error_msg)
 
         # Test 4: Only date without time
         with self.assertRaises(PySparkValueError) as context:
             df_dt.select(F.make_timestamp_ntz(date=df_dt.date)).collect()
         error_msg = str(context.exception)
-        self.assertIn("WRONG_NUM_ARGS", error_msg)
-        self.assertIn("keyword parameter(s): date", error_msg)
+        self.assertIn("CANNOT_SET_TOGETHER", error_msg)
+        self.assertIn("years|months|days|hours|mins|secs and date|time", error_msg)
 
     def test_make_timestamp_ntz_with_keywords(self):
         # Test with fractional seconds

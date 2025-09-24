@@ -25246,8 +25246,6 @@ def make_timestamp_ntz(
         and date is None
         and time is None
     ):
-        from typing import cast
-
         return _invoke_function_over_columns(
             "make_timestamp_ntz",
             cast("ColumnOrName", years),
@@ -25264,8 +25262,6 @@ def make_timestamp_ntz(
         and date is not None
         and time is not None
     ):
-        from typing import cast
-
         return _invoke_function_over_columns(
             "make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
         )
@@ -25273,35 +25269,9 @@ def make_timestamp_ntz(
     # Error for invalid combinations
     from pyspark.errors import PySparkValueError
 
-    # Build specific description of what user provided
-    provided_parts = []
-
-    provided_kwargs = []
-    for name, value in [
-        ("years", years),
-        ("months", months),
-        ("days", days),
-        ("hours", hours),
-        ("mins", mins),
-        ("secs", secs),
-        ("date", date),
-        ("time", time),
-    ]:
-        if value is not None:
-            provided_kwargs.append(name)
-
-    if provided_kwargs:
-        provided_parts.append(f"keyword parameter(s): {', '.join(provided_kwargs)}")
-
-    actual_description = " and ".join(provided_parts)
-
     raise PySparkValueError(
-        errorClass="WRONG_NUM_ARGS",
-        messageParameters={
-            "func_name": "make_timestamp_ntz",
-            "expected_args": "6 timestamp parameters OR 2 date/time parameters",
-            "actual_args": actual_description,
-        },
+        errorClass="CANNOT_SET_TOGETHER",
+        messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
     )
 
 
@@ -25441,8 +25411,6 @@ def try_make_timestamp_ntz(
         and date is None
         and time is None
     ):
-        from typing import cast
-
         return _invoke_function_over_columns(
             "try_make_timestamp_ntz",
             cast("ColumnOrName", years),
@@ -25459,8 +25427,6 @@ def try_make_timestamp_ntz(
         and date is not None
         and time is not None
     ):
-        from typing import cast
-
         return _invoke_function_over_columns(
             "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
         )

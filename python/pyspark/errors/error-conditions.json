@@ -1369,11 +1369,6 @@
       "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
     ]
   },
-  "WRONG_NUM_ARGS": {
-    "message": [
-      "<func_name> expects <expected_args>, got <actual_args>."
-    ]
-  },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION": {
     "message": [
       "Function `<func_name>` should take between 1 and 3 arguments, but the provided function takes <num_args>."

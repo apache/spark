@@ -4082,35 +4082,11 @@ def make_timestamp_ntz(
         )
 
     # Error for invalid combinations
-    # Build specific description of what user provided
-    provided_parts = []
-
-    provided_kwargs = []
-    for name, value in [
-        ("years", years),
-        ("months", months),
-        ("days", days),
-        ("hours", hours),
-        ("mins", mins),
-        ("secs", secs),
-        ("date", date),
-        ("time", time),
-    ]:
-        if value is not None:
-            provided_kwargs.append(name)
-
-    if provided_kwargs:
-        provided_parts.append(f"keyword parameter(s): {', '.join(provided_kwargs)}")
-
-    actual_description = " and ".join(provided_parts)
+    from pyspark.errors import PySparkValueError
 
     raise PySparkValueError(
-        errorClass="WRONG_NUM_ARGS",
-        messageParameters={
-            "func_name": "make_timestamp_ntz",
-            "expected_args": "6 timestamp parameters OR 2 date/time parameters",
-            "actual_args": actual_description,
-        },
+        errorClass="CANNOT_SET_TOGETHER",
+        messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
     )
 
 
