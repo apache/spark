@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst;
 
-import java.io.Serializable;
-
 public class JavaTypeInferenceBeans {
 
   static class JavaBeanWithGenericsA<T> {
@@ -82,7 +80,7 @@ public class JavaTypeInferenceBeans {
   }
 
   // SPARK-46679: Test classes for nested parameterized types with multi-level inheritance
-  static class FooT<T> {
+  static class Foo<T> {
     private T t;
 
     public T getT() {
@@ -94,46 +92,46 @@ public class JavaTypeInferenceBeans {
     }
   }
 
-  static class InnerWrapperU<U> {
-    private FooT<U> foo;
+  static class FooWrapper<U> {
+    private Foo<U> foo;
 
-    public FooT<U> getFoo() {
+    public Foo<U> getFoo() {
       return foo;
     }
 
-    public void setFoo(FooT<U> foo) {
+    public void setFoo(Foo<U> foo) {
       this.foo = foo;
     }
   }
 
-  static class OuterWrapper extends InnerWrapperU<String> {
+  static class StringFooWrapper extends FooWrapper<String> {
   }
 
-  // Additional test classes for same type variable names at different levels
-  static class CompanyWrapperT extends CompanyWrapperGenericT<String> {
+  // SPARK-46679: Additional test classes for same type variable names at different levels
+  static class StringBarWrapper extends BarWrapper<String> {
   }
 
-  static class CompanyWrapperGenericT<T> {
-    private CompanyInfoGenericT<T> companyInfo;
+  static class BarWrapper<T> {
+    private Bar<T> bar;
 
-    public CompanyInfoGenericT<T> getCompanyInfo() {
-      return companyInfo;
+    public Bar<T> getBar() {
+      return bar;
     }
 
-    public void setCompanyInfo(CompanyInfoGenericT<T> companyInfo) {
-      this.companyInfo = companyInfo;
+    public void setBar(Bar<T> bar) {
+      this.bar = bar;
     }
   }
 
-  static class CompanyInfoGenericT<T> {
-    private T companyId;
+  static class Bar<T> {
+    private T t;
 
-    public T getCompanyId() {
-      return companyId;
+    public T getT() {
+      return t;
     }
 
-    public void setCompanyId(T companyId) {
-      this.companyId = companyId;
+    public void setT(T t) {
+      this.t = t;
     }
   }
 }

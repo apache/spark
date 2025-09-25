@@ -24,7 +24,7 @@ import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{CompanyWrapperT, JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC, OuterWrapper}
+import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{Bar, Foo, JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC, StringBarWrapper, StringFooWrapper}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, UDTCaseClass, UDTForCaseClass}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.types.{DecimalType, MapType, Metadata, StringType, StructField, StructType}
@@ -281,10 +281,10 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
   }
 
   test("SPARK-46679: resolve generics with multi-level inheritance") {
-    val encoder = JavaTypeInference.encoderFor(classOf[OuterWrapper])
-    val expected = JavaBeanEncoder(ClassTag(classOf[OuterWrapper]), Seq(
+    val encoder = JavaTypeInference.encoderFor(classOf[StringFooWrapper])
+    val expected = JavaBeanEncoder(ClassTag(classOf[StringFooWrapper]), Seq(
       encoderField("foo", JavaBeanEncoder(
-        ClassTag(classOf[JavaTypeInferenceBeans.FooT[String]]),
+        ClassTag(classOf[Foo[String]]),
         Seq(encoderField("t", StringEncoder))
       ))
     ))
@@ -292,11 +292,11 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
   }
 
   test("SPARK-46679: resolve generics with multi-level inheritance same type names") {
-    val encoder = JavaTypeInference.encoderFor(classOf[CompanyWrapperT])
-    val expected = JavaBeanEncoder(ClassTag(classOf[CompanyWrapperT]), Seq(
-      encoderField("companyInfo", JavaBeanEncoder(
-        ClassTag(classOf[JavaTypeInferenceBeans.CompanyInfoGenericT[String]]),
-        Seq(encoderField("companyId", StringEncoder))
+    val encoder = JavaTypeInference.encoderFor(classOf[StringBarWrapper])
+    val expected = JavaBeanEncoder(ClassTag(classOf[StringBarWrapper]), Seq(
+      encoderField("bar", JavaBeanEncoder(
+        ClassTag(classOf[Bar[String]]),
+        Seq(encoderField("t", StringEncoder))
       ))
     ))
     assert(encoder === expected)
