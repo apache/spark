@@ -363,7 +363,7 @@
 | org.apache.spark.sql.catalyst.expressions.TryDivide | try_divide | SELECT try_divide(3, 2) | struct<try_divide(3, 2):double> |
 | org.apache.spark.sql.catalyst.expressions.TryElementAt | try_element_at | SELECT try_element_at(array(1, 2, 3), 2) | struct<try_element_at(array(1, 2, 3), 2):int> |
 | org.apache.spark.sql.catalyst.expressions.TryMakeInterval | try_make_interval | SELECT try_make_interval(100, 11, 1, 1, 12, 30, 01.001001) | struct<try_make_interval(100, 11, 1, 1, 12, 30, 1.001001):interval> |
-| org.apache.spark.sql.catalyst.expressions.TryMakeTimestamp | try_make_timestamp | SELECT try_make_timestamp(2014, 12, 28, 6, 30, 45.887) | struct<try_make_timestamp(2014, 12, 28, 6, 30, 45.887):timestamp> |
+| org.apache.spark.sql.catalyst.expressions.TryMakeTimestampExpressionBuilder | try_make_timestamp | SELECT try_make_timestamp(2014, 12, 28, 6, 30, 45.887) | struct<try_make_timestamp(2014, 12, 28, 6, 30, 45.887):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.TryMakeTimestampLTZExpressionBuilder | try_make_timestamp_ltz | SELECT try_make_timestamp_ltz(2014, 12, 28, 6, 30, 45.887) | struct<try_make_timestamp_ltz(2014, 12, 28, 6, 30, 45.887):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.TryMakeTimestampNTZExpressionBuilder | try_make_timestamp_ntz | SELECT try_make_timestamp_ntz(2014, 12, 28, 6, 30, 45.887) | struct<try_make_timestamp_ntz(2014, 12, 28, 6, 30, 45.887):timestamp_ntz> |
 | org.apache.spark.sql.catalyst.expressions.TryMod | try_mod | SELECT try_mod(3, 2) | struct<try_mod(3, 2):int> |

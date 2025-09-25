@@ -3578,6 +3578,15 @@ object functions {
   def uuid(): Column = Column.fn("uuid", lit(SparkClassUtils.random.nextLong))
 
   /**
+   * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
+   * UUID 36-character string.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def uuid(seed: Column): Column = Column.fn("uuid", seed)
+
+  /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
    * Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`,
    * `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional initialization

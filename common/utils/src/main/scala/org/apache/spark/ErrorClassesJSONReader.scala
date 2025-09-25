@@ -75,6 +75,22 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     matches.map(m => m.stripSuffix(">").stripPrefix("<"))
   }
 
+  def getBreakingChangeInfo(errorClass: String): Option[BreakingChangeInfo] = {
+    val errorClasses = errorClass.split('.')
+    errorClasses match {
+      case Array(mainClass) =>
+        errorInfoMap.get(mainClass).flatMap(_.breakingChangeInfo)
+      case Array(mainClass, subClass) =>
+        errorInfoMap.get(mainClass).flatMap{
+          errorInfo =>
+            errorInfo.subClass.flatMap(_.get(subClass))
+              .flatMap(_.breakingChangeInfo)
+              .orElse(errorInfo.breakingChangeInfo)
+        }
+      case _ => None
+    }
+  }
+
   def getMessageTemplate(errorClass: String): String = {
     val errorClasses = errorClass.split("\\.")
     assert(errorClasses.length == 1 || errorClasses.length == 2)
@@ -128,7 +144,7 @@ private object ErrorClassesJsonReader {
     val map = mapper.readValue(url, new TypeReference[Map[String, ErrorInfo]]() {})
     val errorClassWithDots = map.collectFirst {
       case (errorClass, _) if errorClass.contains('.') => errorClass
-      case (_, ErrorInfo(_, Some(map), _)) if map.keys.exists(_.contains('.')) =>
+      case (_, ErrorInfo(_, Some(map), _, _)) if map.keys.exists(_.contains('.')) =>
         map.keys.collectFirst { case s if s.contains('.') => s }.get
     }
     if (errorClassWithDots.isEmpty) {
@@ -147,14 +163,17 @@ private object ErrorClassesJsonReader {
  * @param subClass SubClass associated with this class.
  * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
+ * @param breakingChangeInfo Additional metadata if the error is due to a breaking change.
  */
 private case class ErrorInfo(
     message: Seq[String],
     subClass: Option[Map[String, ErrorSubInfo]],
-    sqlState: Option[String]) {
+    sqlState: Option[String],
+    breakingChangeInfo: Option[BreakingChangeInfo] = None) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageTemplate: String = message.mkString("\n")
+  val messageTemplate: String = message.mkString("\n") +
+    breakingChangeInfo.map(_.migrationMessage.mkString(" ", "\n", "")).getOrElse("")
 }
 
 /**
@@ -162,12 +181,40 @@ private case class ErrorInfo(
  *
  * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
+ * @param breakingChangeInfo Additional metadata if the error is due to a breaking change.
  */
-private case class ErrorSubInfo(message: Seq[String]) {
+private case class ErrorSubInfo(
+    message: Seq[String],
+    breakingChangeInfo: Option[BreakingChangeInfo] = None) {
   // For compatibility with multi-line error messages
   @JsonIgnore
-  val messageTemplate: String = message.mkString("\n")
+  val messageTemplate: String = message.mkString("\n") +
+      breakingChangeInfo.map(_.migrationMessage.mkString(" ", "\n", "")).getOrElse("")
 }
+
+/**
+ * Additional information if the error was caused by a breaking change.
+ *
+ * @param migrationMessage A message explaining how the user can migrate their job to work
+ *                         with the breaking change.
+ * @param mitigationConfig A spark config flag that can be used to mitigate the
+ *                              breaking change.
+ * @param needsAudit If true, the breaking change should be inspected manually.
+ *                       If false, the spark job should be retried by setting the
+ *                       mitigationConfig.
+ */
+case class BreakingChangeInfo(
+    migrationMessage: Seq[String],
+    mitigationConfig: Option[MitigationConfig] = None,
+    needsAudit: Boolean = true
+)
+
+/**
+ * A spark config flag that can be used to mitigate a breaking change.
+ * @param key The spark config key.
+ * @param value The spark config value that mitigates the breaking change.
+ */
+case class MitigationConfig(key: String, value: String)
 
 /**
  * Information associated with an error state / SQLSTATE.

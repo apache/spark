@@ -4019,6 +4019,7 @@ def try_make_timestamp_ltz(
 try_make_timestamp_ltz.__doc__ = pysparkfuncs.try_make_timestamp_ltz.__doc__
 
 
+@overload
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -4027,14 +4028,59 @@ def make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
-    return _invoke_function_over_columns(
-        "make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    ...
+
+
+@overload
+def make_timestamp_ntz(
+    *,
+    date: "ColumnOrName",
+    time: "ColumnOrName",
+) -> Column:
+    ...
+
+
+def make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    *,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
+        )
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
 
 make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
 
 
+@overload
 def try_make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -4043,9 +4089,53 @@ def try_make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
-    return _invoke_function_over_columns(
-        "try_make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    ...
+
+
+@overload
+def try_make_timestamp_ntz(
+    *,
+    date: "ColumnOrName",
+    time: "ColumnOrName",
+) -> Column:
+    ...
+
+
+def try_make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    *,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
+        )
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
 
 try_make_timestamp_ntz.__doc__ = pysparkfuncs.try_make_timestamp_ntz.__doc__
@@ -4107,8 +4197,11 @@ def session_user() -> Column:
 session_user.__doc__ = pysparkfuncs.session_user.__doc__
 
 
-def uuid() -> Column:
-    return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
+def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
+    if seed is None:
+        return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
+    else:
+        return _invoke_function("uuid", lit(seed))
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:

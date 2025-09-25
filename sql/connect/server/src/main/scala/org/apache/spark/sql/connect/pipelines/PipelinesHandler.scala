@@ -183,7 +183,8 @@ private[connect] object PipelinesHandler extends Logging {
               objectType = Option(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
               language = Option(Python())),
-            properties = Map.empty))
+            properties = Map.empty,
+            sqlText = None))
       case _ =>
         throw new IllegalArgumentException(s"Unknown dataset type: ${dataset.getDatasetType}")
     }

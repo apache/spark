@@ -307,6 +307,8 @@ class PlanGenerationTestSuite
   private def temporals = createLocalRelation(temporalsSchemaString)
   private def boolean = createLocalRelation(booleanSchemaString)
 
+  private case class CaseClass(a: Int, b: String)
+
   /* Spark Session API */
   test("range") {
     session.range(1, 10, 1, 2)
@@ -3419,8 +3421,12 @@ class PlanGenerationTestSuite
       // Handle parameterized scala types e.g.: List, Seq and Map.
       fn.typedLit(Some(1)),
       fn.typedLit(Array(1, 2, 3)),
+      fn.typedLit[Array[Integer]](Array(null, null)),
+      fn.typedLit[Array[(Int, String)]](Array(null, null, (1, "a"), (2, null))),
+      fn.typedLit[Array[Option[(Int, String)]]](Array(None, None, Some((1, "a")))),
       fn.typedLit(Seq(1, 2, 3)),
       fn.typedLit(mutable.LinkedHashMap("a" -> 1, "b" -> 2)),
+      fn.typedLit(mutable.LinkedHashMap[String, Integer]("a" -> null, "b" -> null)),
       fn.typedLit(("a", 2, 1.0)),
       fn.typedLit[Option[Int]](None),
       fn.typedLit[Array[Option[Int]]](Array(Some(1))),
@@ -3429,6 +3435,8 @@ class PlanGenerationTestSuite
       fn.typedlit[collection.immutable.Map[Int, Option[Int]]](
         collection.immutable.Map(1 -> None)),
       fn.typedLit(Seq(Seq(1, 2, 3), Seq(4, 5, 6), Seq(7, 8, 9))),
+      fn.typedLit(Seq((1, "2", Seq("3", "4")), (5, "6", Seq.empty[String]))),
+      fn.typedLit(Seq(CaseClass(1, "2"), CaseClass(3, "4"), CaseClass(5, "6"))),
       fn.typedLit(
         Seq(
           mutable.LinkedHashMap("a" -> 1, "b" -> 2),
