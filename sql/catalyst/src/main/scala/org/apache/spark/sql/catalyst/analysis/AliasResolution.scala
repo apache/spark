@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.MultiAlias
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
@@ -69,7 +70,7 @@ object AliasResolution {
   private def extractOnly(e: Expression): Boolean = e match {
     case _: ExtractValue => e.children.forall(extractOnly)
     case _: Literal => true
-    case _: Attribute => true
+    case attr: Attribute if attr.getTagValue(ResolverTag.SINGLE_PASS_IS_LCA).isEmpty => true
     case _ => false
   }
 }

@@ -951,6 +951,41 @@ class GroupedAggArrowUDFTestsMixin:
                 def func_a(a: pa.Array) -> pa.Scalar:
                     return pa.compute.max(a)
 
+    def test_0_args(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10).withColumn("k", sf.col("id") % 3)
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_max(v) -> int:
+            return pa.compute.max(v).as_py()
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_lit_1() -> int:
+            return 1
+
+        expected1 = df.select(sf.max("id").alias("res1"), sf.lit(1).alias("res1"))
+        result1 = df.select(arrow_max("id").alias("res1"), arrow_lit_1().alias("res1"))
+        self.assertEqual(expected1.collect(), result1.collect())
+
+        expected2 = (
+            df.groupby("k")
+            .agg(
+                sf.max("id").alias("res1"),
+                sf.lit(1).alias("res1"),
+            )
+            .sort("k")
+        )
+        result2 = (
+            df.groupby("k")
+            .agg(
+                arrow_max("id").alias("res1"),
+                arrow_lit_1().alias("res1"),
+            )
+            .sort("k")
+        )
+        self.assertEqual(expected2.collect(), result2.collect())
+
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):
     pass

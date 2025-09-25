@@ -4107,8 +4107,11 @@ def session_user() -> Column:
 session_user.__doc__ = pysparkfuncs.session_user.__doc__
 
 
-def uuid() -> Column:
-    return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
+def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
+    if seed is None:
+        return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
+    else:
+        return _invoke_function("uuid", lit(seed))
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
