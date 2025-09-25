@@ -915,12 +915,13 @@ object MergeIntoTable {
       matchedActions: Iterable[MergeAction],
       notMatchedActions: Iterable[MergeAction],
       notMatchedBySourceActions: Iterable[MergeAction]): Seq[TableWritePrivilege] = {
-    val privileges = scala.collection.mutable.HashSet.empty[TableWritePrivilege]
-    (matchedActions.iterator ++ notMatchedActions ++ notMatchedBySourceActions).foreach {
-      case _: DeleteAction => privileges.add(TableWritePrivilege.DELETE)
-      case _: UpdateAction | _: UpdateStarAction => privileges.add(TableWritePrivilege.UPDATE)
-      case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
-    }
+    val privileges = (matchedActions ++ notMatchedActions ++ notMatchedBySourceActions)
+      .collect {
+        case _: DeleteAction => TableWritePrivilege.DELETE
+        case _: UpdateAction | _: UpdateStarAction => TableWritePrivilege.UPDATE
+        case _: InsertAction | _: InsertStarAction => TableWritePrivilege.INSERT
+      }
+      .toSet
     privileges.toSeq
   }
 
