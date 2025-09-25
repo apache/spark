@@ -516,7 +516,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     val dist3 = ClusteredDistribution(Seq($"e", $"b"))
     checkCompatible(
       p1.createShuffleSpec(dist3),
-      p2.createShuffleSpec(dist2),
+      p2.createShuffleSpec(dist),
       expected = false
     )
   }
