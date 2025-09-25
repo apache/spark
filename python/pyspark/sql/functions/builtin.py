@@ -27241,11 +27241,14 @@ def udf(
 
     For example, define a 'Series to Series' type pandas UDF.
 
+    >>> from pyspark.sql.functions import udf, PandasUDFType
     >>> import pandas as pd
     >>> @udf(returnType=IntegerType())
     ... def pd_calc(a: pd.Series, b: pd.Series) -> pd.Series:
     ...     return a + 10 * b
     ...
+    >>> pd_calc.evalType == PandasUDFType.SCALAR
+    True
     >>> spark.range(2).select(pd_calc(b=col("id") * 10, a="id")).show()
     +--------------------------------+
     |pd_calc(b => (id * 10), a => id)|
@@ -27255,11 +27258,15 @@ def udf(
     +--------------------------------+
 
     For another example, define a 'Array to Array' type arrow UDF.
+
+    >>> from pyspark.sql.functions import udf, ArrowUDFType
     >>> import pyarrow as pa
     >>> @udf(returnType=IntegerType())
     ... def pa_calc(a: pa.Array, b: pa.Array) -> pa.Array:
     ...     return pa.compute.add(a, pa.compute.multiply(b, 10))
     ...
+    >>> pa_calc.evalType == ArrowUDFType.SCALAR
+    True
     >>> spark.range(2).select(pa_calc(b=col("id") * 10, a="id")).show()
     +--------------------------------+
     |pa_calc(b => (id * 10), a => id)|
