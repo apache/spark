@@ -87,8 +87,15 @@ if TYPE_CHECKING:
 
 
 def _to_col(col: "ColumnOrName") -> Column:
-    assert isinstance(col, (Column, str))
-    return col if isinstance(col, Column) else column(col)
+    if isinstance(col, Column):
+        return col
+    elif isinstance(col, str):
+        return column(col)
+    else:
+        raise PySparkTypeError(
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
+        )
 
 
 def _sort_col(col: "ColumnOrName") -> Column:
