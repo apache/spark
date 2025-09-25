@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.analysis.{AliasResolution, UnresolvedAlias}
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
+  AliasHelper,
   Expression,
   NamedExpression,
   OuterReference
@@ -31,7 +32,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  */
 class AliasResolver(expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[UnresolvedAlias, Expression]
-    with ResolvesExpressionChildren {
+    with ResolvesExpressionChildren
+    with AliasHelper {
   private val scopes = expressionResolver.getNameScopes
   private val expressionResolutionContextStack =
     expressionResolver.getExpressionResolutionContextStack
@@ -115,30 +117,19 @@ class AliasResolver(expressionResolver: ExpressionResolver)
    *
    *   Project[
    *     Alias("alias_2")(
-   *       Alias("alias_1")(id)
-   *     )
+   *       Alias("alias_1")(id1)
+   *     )(id2)
    *   ]( ... )
    *
    * and after the `collapseAlias` call (removing the bottom one) it would be:
    *
    *   Project[
-   *     Alias("alias_2")(id)
+   *     Alias("alias_2")(id2)
    *   ]( ... )
    */
   private def collapseAlias(alias: Alias): Alias =
     alias.child match {
-      case innerAlias: Alias =>
-        val metadata = if (alias.metadata.isEmpty) {
-          None
-        } else {
-          Some(alias.metadata)
-        }
-        alias.copy(child = innerAlias.child)(
-          exprId = alias.exprId,
-          qualifier = alias.qualifier,
-          explicitMetadata = metadata,
-          nonInheritableMetadataKeys = alias.nonInheritableMetadataKeys
-        )
+      case _: Alias => mergeAliases(alias)
       case _ => alias
     }
 }
