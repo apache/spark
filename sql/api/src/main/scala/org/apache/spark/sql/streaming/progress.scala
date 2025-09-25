@@ -268,8 +268,7 @@ class SourceProgress protected[spark] (
           // Any metrics which is generated as double needs to be added in if condition
           // for converting it to fixed-point decimals in representation.
           JString(
-            if (metricsName == "avgOffsetsBehindLatest" ||
-              metricsName == "estimatedTotalBytesBehindLatest") {
+            if (metricsName == "avgOffsetsBehindLatest") {
               BigDecimal(s).setScale(1, RoundingMode.HALF_UP).toString
             } else {
               s

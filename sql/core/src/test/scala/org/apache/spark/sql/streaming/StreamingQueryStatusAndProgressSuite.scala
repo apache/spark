@@ -436,41 +436,30 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     processedRowsPerSecondJSON shouldBe processedRowsPerSecondExpected +- epsilon
   }
 
-  test("SPARK-53690: avgOffsetsBehindLatest and estimatedTotalBytesBehindLatest" +
-    " should never be in scientific notation") {
+  test("SPARK-53690: avgOffsetsBehindLatest should never be in scientific notation") {
     val progress = testProgress5.jsonValue
     val progressPretty = testProgress5.prettyJson
 
     // Actual values
     val avgOffsetsBehindLatest: Double = 2.8366294E8
-    val estimatedTotalBytesBehindLatest: Double = 7.187828359657416E11
 
     // Get values from progress metrics JSON and cast back to Double
     // for numeric comparison
     val metricsJSON = (progress \ "sources")(0) \ "metrics"
     val avgOffsetsBehindLatestJSON = (metricsJSON \ "avgOffsetsBehindLatest")
       .values.toString
-    val estimatedTotalBytesBehindLatestJSON = (metricsJSON \ "estimatedTotalBytesBehindLatest")
-      .values.toString
 
     // Get expected values after type casting
     val avgOffsetsBehindLatestExpected = BigDecimal(avgOffsetsBehindLatest)
-      .setScale(1, RoundingMode.HALF_UP).toDouble
-    val estimatedTotalBytesBehindLatestExpected = BigDecimal(estimatedTotalBytesBehindLatest)
       .setScale(1, RoundingMode.HALF_UP).toDouble
 
     // This should fail if avgOffsetsBehindLatest contains E notation
     avgOffsetsBehindLatestJSON should not include "E"
 
-    // This should fail if estimatedTotalBytesBehindLatest contains E notation
-    estimatedTotalBytesBehindLatestJSON should not include "E"
-
     // Value in progress metrics should be equal to the Decimal conversion of the same
     // Using epsilon to compare floating-point values
     val epsilon = 1e-6
     avgOffsetsBehindLatestJSON.toDouble shouldBe avgOffsetsBehindLatestExpected +- epsilon
-    (estimatedTotalBytesBehindLatestJSON.toDouble shouldBe estimatedTotalBytesBehindLatestExpected
-      +- epsilon)
 
     // Validating that the pretty JSON of metrics reported is same as defined
     progressPretty shouldBe
@@ -499,7 +488,6 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
          |    "processedRowsPerSecond" : 41622.0,
          |    "metrics" : {
          |      "avgOffsetsBehindLatest" : "283662940.0",
-         |      "estimatedTotalBytesBehindLatest" : "718782835965.7",
          |      "maxOffsetsBehindLatest" : "283662940",
          |      "minOffsetsBehindLatest" : "283662940"
          |    }
@@ -695,7 +683,6 @@ object StreamingQueryStatusAndProgressSuite {
         processedRowsPerSecond = 41622.0,
         metrics = new java.util.HashMap(Map(
           "avgOffsetsBehindLatest" -> "2.8366294E8",
-          "estimatedTotalBytesBehindLatest" -> "7.187828359657416E11", // from Spark in Databricks
           "minOffsetsBehindLatest" -> "283662940",
           "maxOffsetsBehindLatest" -> "283662940").asJava))),
     sink = SinkProgress("sink", None),
