@@ -101,3 +101,70 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "map_contains_key(map(1, 'a', 2, 'b'), '1')"
   } ]
 }
+
+
+-- !query
+select map_concat()
+-- !query analysis
+Project [map_concat() AS map_concat()#x]
++- OneRowRelation
+
+
+-- !query
+select map_concat(map_concat())
+-- !query analysis
+Project [map_concat(map_concat()) AS map_concat(map_concat())#x]
++- OneRowRelation
+
+
+-- !query
+select map_concat(map('a', 1))
+-- !query analysis
+Project [map_concat(map(a, 1)) AS map_concat(map(a, 1))#x]
++- OneRowRelation
+
+
+-- !query
+select map_concat(map('a', 1), map_concat())
+-- !query analysis
+Project [map_concat(cast(map(a, 1) as map<string,bigint>), cast(map_concat() as map<string,bigint>)) AS map_concat(map(a, 1), map_concat())#x]
++- OneRowRelation
+
+
+-- !query
+select map_concat(col1, map_concat(col2, col3), col4) col
+                 from (select map('a', id) col1, map('b', id) col2, map('c', id) col3, map('d', id) col4 from range(10))
+-- !query analysis
+Project [map_concat(col1#x, map_concat(col2#x, col3#x), col4#x) AS col#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [map(a, id#xL) AS col1#x, map(b, id#xL) AS col2#x, map(c, id#xL) AS col3#x, map(d, id#xL) AS col4#x]
+      +- Range (0, 10, step=1)
+
+
+-- !query
+explain extended select map_concat(col1, map_concat(col2, col3), col4) col
+                 from (select map('a', id) col1, map('b', id) col2, map('c', id) col3, map('d', id) col4 from range(10))
+-- !query analysis
+ExplainCommand 'Project ['map_concat('col1, 'map_concat('col2, 'col3), 'col4) AS col#x], ExtendedMode
+
+
+-- !query
+set spark.sql.mapKeyDedupPolicy = LAST_WIN
+-- !query analysis
+SetCommand (spark.sql.mapKeyDedupPolicy,Some(LAST_WIN))
+
+
+-- !query
+select map_concat(col1, map_concat(col2, col3), col4) col
+    from (select map('a', id) col1, map('a', id + 1) col2, map('a', id + 2) col3, map('a', id + 3) col4 from range(1))
+-- !query analysis
+Project [map_concat(col1#x, map_concat(col2#x, col3#x), col4#x) AS col#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [map(a, id#xL) AS col1#x, map(a, (id#xL + cast(1 as bigint))) AS col2#x, map(a, (id#xL + cast(2 as bigint))) AS col3#x, map(a, (id#xL + cast(3 as bigint))) AS col4#x]
+      +- Range (0, 1, step=1)
+
+
+-- !query
+set spark.sql.mapKeyDedupPolicy = EXCEPTION
+-- !query analysis
+SetCommand (spark.sql.mapKeyDedupPolicy,Some(EXCEPTION))

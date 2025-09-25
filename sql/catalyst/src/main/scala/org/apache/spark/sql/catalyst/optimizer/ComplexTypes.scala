@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable.{ArrayBuffer, Stack}
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -66,4 +68,49 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
       case GetMapValue(CreateMap(elems, _), key) => CaseKeyWhen(key, elems)
     }
   }
+}
+
+/**
+ * This rule optimizes MapConcat expressions in the following ways:
+ * 1. Flattens nested MapConcat expressions into a single MapConcat
+ *    Example: map_concat(map('a', 'a1'), map_concat(map('b', 'b1'), map('c', 'c1')))
+ *          => map_concat(map('a', 'a1'), map('b', 'b1'), map('c', 'c1'))
+ * 2. Extracts the child directly when MapConcat or nested MapConcat has only one child
+ *    Example: map_concat(map('a', 'a1')) => map('a', 'a1')
+ *             map_concat(map('a', 'a1'), map_concat()) => map('a', 'a1')
+ */
+object CombineMapConcats extends Rule[LogicalPlan] {
+
+  private def hasNestedMapConcats(mapConcat: MapConcat): Boolean = mapConcat.children.exists {
+    case _: MapConcat => true
+    case _ => false
+  }
+
+  private def flatten(mapConcat: MapConcat): Expression = {
+    val stack = Stack[Expression](mapConcat)
+    val flattened = ArrayBuffer.empty[Expression]
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case MapConcat(children) =>
+          stack.pushAll(children.reverse)
+        case child =>
+          flattened += child
+      }
+    }
+
+    flattened.size match {
+      case 1 => flattened.head
+      case _ => MapConcat(flattened.toSeq)
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformAllExpressionsWithPruning(_.containsPattern(MAP_CONCAT), ruleId) {
+      case mapConcat: MapConcat if hasNestedMapConcats(mapConcat) =>
+        flatten(mapConcat)
+      case mapConcat: MapConcat if mapConcat.children.size == 1 =>
+        // When map_concat has only one child, extract the child directly
+        // Example: map_concat(map('a', 'b')) => map('a', 'b')
+        mapConcat.children.head
+    }
 }

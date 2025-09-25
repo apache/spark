@@ -156,6 +156,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
         CombineConcats,
+        CombineMapConcats,
         PushdownPredicatesAndPruneColumnsForCTEDef) ++
         extendedOperatorOptimizationRules
 

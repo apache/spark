@@ -113,3 +113,106 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "map_contains_key(map(1, 'a', 2, 'b'), '1')"
   } ]
 }
+
+
+-- !query
+select map_concat()
+-- !query schema
+struct<map_concat():map<string,string>>
+-- !query output
+{}
+
+
+-- !query
+select map_concat(map_concat())
+-- !query schema
+struct<map_concat(map_concat()):map<string,string>>
+-- !query output
+{}
+
+
+-- !query
+select map_concat(map('a', 1))
+-- !query schema
+struct<map_concat(map(a, 1)):map<string,int>>
+-- !query output
+{"a":1}
+
+
+-- !query
+select map_concat(map('a', 1), map_concat())
+-- !query schema
+struct<map_concat(map(a, 1), map_concat()):map<string,bigint>>
+-- !query output
+{"a":1}
+
+
+-- !query
+select map_concat(col1, map_concat(col2, col3), col4) col
+                 from (select map('a', id) col1, map('b', id) col2, map('c', id) col3, map('d', id) col4 from range(10))
+-- !query schema
+struct<col:map<string,bigint>>
+-- !query output
+{"a":0,"b":0,"c":0,"d":0}
+{"a":1,"b":1,"c":1,"d":1}
+{"a":2,"b":2,"c":2,"d":2}
+{"a":3,"b":3,"c":3,"d":3}
+{"a":4,"b":4,"c":4,"d":4}
+{"a":5,"b":5,"c":5,"d":5}
+{"a":6,"b":6,"c":6,"d":6}
+{"a":7,"b":7,"c":7,"d":7}
+{"a":8,"b":8,"c":8,"d":8}
+{"a":9,"b":9,"c":9,"d":9}
+
+
+-- !query
+explain extended select map_concat(col1, map_concat(col2, col3), col4) col
+                 from (select map('a', id) col1, map('b', id) col2, map('c', id) col3, map('d', id) col4 from range(10))
+-- !query schema
+struct<plan:string>
+-- !query output
+== Parsed Logical Plan ==
+'Project ['map_concat('col1, 'map_concat('col2, 'col3), 'col4) AS col#x]
++- 'SubqueryAlias __auto_generated_subquery_name
+   +- 'Project ['map(a, 'id) AS col1#x, 'map(b, 'id) AS col2#x, 'map(c, 'id) AS col3#x, 'map(d, 'id) AS col4#x]
+      +- 'UnresolvedTableValuedFunction [range], [10], false
+
+== Analyzed Logical Plan ==
+col: map<string,bigint>
+Project [map_concat(col1#x, map_concat(col2#x, col3#x), col4#x) AS col#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [map(a, id#xL) AS col1#x, map(b, id#xL) AS col2#x, map(c, id#xL) AS col3#x, map(d, id#xL) AS col4#x]
+      +- Range (0, 10, step=1)
+
+== Optimized Logical Plan ==
+Project [map_concat(map(a, id#xL), map(b, id#xL), map(c, id#xL), map(d, id#xL)) AS col#x]
++- Range (0, 10, step=1)
+
+== Physical Plan ==
+*Project [map_concat(map(a, id#xL), map(b, id#xL), map(c, id#xL), map(d, id#xL)) AS col#x]
++- *Range (0, 10, step=1, splits=2)
+
+
+-- !query
+set spark.sql.mapKeyDedupPolicy = LAST_WIN
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.mapKeyDedupPolicy	LAST_WIN
+
+
+-- !query
+select map_concat(col1, map_concat(col2, col3), col4) col
+    from (select map('a', id) col1, map('a', id + 1) col2, map('a', id + 2) col3, map('a', id + 3) col4 from range(1))
+-- !query schema
+struct<col:map<string,bigint>>
+-- !query output
+{"a":3}
+
+
+-- !query
+set spark.sql.mapKeyDedupPolicy = EXCEPTION
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.mapKeyDedupPolicy	EXCEPTION
