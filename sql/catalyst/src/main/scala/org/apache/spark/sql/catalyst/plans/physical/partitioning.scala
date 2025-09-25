@@ -988,6 +988,8 @@ case class ShufflePartitionIdPassThroughSpec(
   }
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec =>
+      partitioning.numPartitions == 1
     case otherPassThroughSpec @ ShufflePartitionIdPassThroughSpec(
         otherPartitioning, otherDistribution) =>
       // As ShufflePartitionIdPassThrough only allows a single expression
