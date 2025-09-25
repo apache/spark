@@ -422,8 +422,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
           if (needTopLevelProject) newPlan else newPlan.child
         )
       case s: Exists =>
-        // Find all the references (columns / attributes) in the child plan that are needed
-        // by the EXISTS expression.
+        // For an EXISTS join, the subquery might be written as "SELECT * FROM ...".
+        // If we optimize the subquery directly, column pruning may not be applied
+        // effectively. To address this, we add an extra Project node that selects
+        // only the columns referenced in the EXISTS join condition.
+        // This ensures that column pruning can be performed correctly
+        // during subquery optimization.
         val selectedRefrences =
           s.plan.output.filter(s.joinCond.flatMap(_.references).contains)
         val newPlan = if (selectedRefrences.nonEmpty) {
