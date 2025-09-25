@@ -267,12 +267,11 @@ class SourceProgress protected[spark] (
           // instead of scientific notation to improving readability.
           // Any metrics which is generated as double needs to be added in if condition
           // for converting it to fixed-point decimals in representation.
-          JString(
-            if (metricsName == "avgOffsetsBehindLatest") {
-              BigDecimal(s).setScale(1, RoundingMode.HALF_UP).toString
-            } else {
-              s
-            })))
+          JString(if (metricsName == "avgOffsetsBehindLatest") {
+            BigDecimal(s).setScale(1, RoundingMode.HALF_UP).toString
+          } else {
+            s
+          })))
   }
 
   private def tryParse(json: String): JValue = try {
