@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst;
 
+import java.io.Serializable;
+
 public class JavaTypeInferenceBeans {
 
   static class JavaBeanWithGenericsA<T> {
@@ -77,6 +79,62 @@ public class JavaTypeInferenceBeans {
 
   static class JavaBeanWithGenericHierarchy extends JavaBeanWithGenericsABC<Integer> {
 
+  }
+
+  // SPARK-46679: Test classes for nested parameterized types with multi-level inheritance
+  static class FooT<T> {
+    private T t;
+
+    public T getT() {
+      return t;
+    }
+
+    public void setT(T t) {
+      this.t = t;
+    }
+  }
+
+  static class InnerWrapperU<U> {
+    private FooT<U> foo;
+
+    public FooT<U> getFoo() {
+      return foo;
+    }
+
+    public void setFoo(FooT<U> foo) {
+      this.foo = foo;
+    }
+  }
+
+  static class OuterWrapper extends InnerWrapperU<String> {
+  }
+
+  // Additional test classes for same type variable names at different levels
+  static class CompanyWrapperT extends CompanyWrapperGenericT<String> {
+  }
+
+  static class CompanyWrapperGenericT<T> {
+    private CompanyInfoGenericT<T> companyInfo;
+
+    public CompanyInfoGenericT<T> getCompanyInfo() {
+      return companyInfo;
+    }
+
+    public void setCompanyInfo(CompanyInfoGenericT<T> companyInfo) {
+      this.companyInfo = companyInfo;
+    }
+  }
+
+  static class CompanyInfoGenericT<T> {
+    private T companyId;
+
+    public T getCompanyId() {
+      return companyId;
+    }
+
+    public void setCompanyId(T companyId) {
+      this.companyId = companyId;
+    }
   }
 }
 

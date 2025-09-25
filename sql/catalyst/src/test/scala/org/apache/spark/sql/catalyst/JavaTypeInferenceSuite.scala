@@ -24,7 +24,7 @@ import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC}
+import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans.{CompanyWrapperT, JavaBeanWithGenericBase, JavaBeanWithGenericHierarchy, JavaBeanWithGenericsABC, OuterWrapper}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, UDTCaseClass, UDTForCaseClass}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.types.{DecimalType, MapType, Metadata, StringType, StructField, StructType}
@@ -277,6 +277,28 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
         encoderField("propertyB", BoxedLongEncoder),
         encoderField("propertyC", BoxedIntEncoder)
       ))
+    assert(encoder === expected)
+  }
+
+  test("SPARK-46679: resolve generics with multi-level inheritance") {
+    val encoder = JavaTypeInference.encoderFor(classOf[OuterWrapper])
+    val expected = JavaBeanEncoder(ClassTag(classOf[OuterWrapper]), Seq(
+      encoderField("foo", JavaBeanEncoder(
+        ClassTag(classOf[JavaTypeInferenceBeans.FooT[String]]),
+        Seq(encoderField("t", StringEncoder))
+      ))
+    ))
+    assert(encoder === expected)
+  }
+
+  test("SPARK-46679: resolve generics with multi-level inheritance same type names") {
+    val encoder = JavaTypeInference.encoderFor(classOf[CompanyWrapperT])
+    val expected = JavaBeanEncoder(ClassTag(classOf[CompanyWrapperT]), Seq(
+      encoderField("companyInfo", JavaBeanEncoder(
+        ClassTag(classOf[JavaTypeInferenceBeans.CompanyInfoGenericT[String]]),
+        Seq(encoderField("companyId", StringEncoder))
+      ))
+    ))
     assert(encoder === expected)
   }
 }
