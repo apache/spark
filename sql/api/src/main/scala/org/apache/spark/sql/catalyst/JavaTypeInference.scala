@@ -140,7 +140,7 @@ object JavaTypeInference {
 
     case pt: ParameterizedType =>
       val newTvs = JavaTypeUtils.getTypeArguments(pt).asScala.toMap
-      val allTvs = newTvs ++ typeVariables.removedAll(newTvs.keySet)
+      val allTvs = typeVariables ++ newTvs
       encoderFor(pt.getRawType, seenTypeSet, allTvs)
 
     case c: Class[_] =>
