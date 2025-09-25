@@ -152,11 +152,6 @@ class PythonUDFWithNamedArgumentsRunner(
     jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    dataOut.writeInt(workerConf.size)
-    for ((k, v) <- workerConf) {
-      PythonWorkerUtils.writeUTF(k, dataOut)
-      PythonWorkerUtils.writeUTF(v, dataOut)
-    }
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
   }
 }

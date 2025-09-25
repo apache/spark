@@ -102,14 +102,8 @@ class ArrowPythonRunner(
     funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
     pythonMetrics, jobArtifactUUID) {
 
-  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    dataOut.writeInt(workerConf.size)
-    for ((k, v) <- workerConf) {
-      PythonWorkerUtils.writeUTF(k, dataOut)
-      PythonWorkerUtils.writeUTF(v, dataOut)
-    }
+  override protected def writeUDF(dataOut: DataOutputStream): Unit =
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
-  }
 }
 
 /**
@@ -134,11 +128,6 @@ class ArrowPythonWithNamedArgumentRunner(
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
       PythonWorkerUtils.writeUTF(schema.json, dataOut)
-    }
-    dataOut.writeInt(workerConf.size)
-    for ((k, v) <- workerConf) {
-      PythonWorkerUtils.writeUTF(k, dataOut)
-      PythonWorkerUtils.writeUTF(v, dataOut)
     }
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
   }
