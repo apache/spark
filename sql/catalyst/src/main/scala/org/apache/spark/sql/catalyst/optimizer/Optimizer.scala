@@ -316,17 +316,37 @@ abstract class Optimizer(catalogManager: CatalogManager)
         case other => other
       }
     }
+
+    private def optimizeSubquery(s: SubqueryExpression): SubqueryExpression = {
+      val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
+      // At this point we have an optimized subquery plan that we are going to attach
+      // to this subquery expression. Here we can safely remove any top level sort
+      // in the plan as tuples produced by a subquery are un-ordered.
+      s.withNewPlan(removeTopLevelSort(newPlan))
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
       _.containsPattern(PLAN_EXPRESSION), ruleId) {
       // Do not optimize DPP subquery, as it was created from optimized plan and we should not
       // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
       case d: DynamicPruningSubquery => d
+      case s: Exists =>
+        // For an EXISTS join, the subquery might be written as "SELECT * FROM ...".
+        // If we optimize the subquery directly, column pruning may not be applied
+        // effectively. To address this, we add an extra Project node that selects
+        // only the columns referenced in the EXISTS join condition.
+        // This ensures that column pruning can be performed correctly
+        // during subquery optimization.
+        val selectedRefrences =
+          s.plan.output.filter(s.joinCond.flatMap(_.references).contains)
+        val newPlan = if (selectedRefrences.nonEmpty) {
+          s.withNewPlan(Project(selectedRefrences, s.plan))
+        } else {
+          s
+        }
+        optimizeSubquery(newPlan)
       case s: SubqueryExpression =>
-        val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
-        // At this point we have an optimized subquery plan that we are going to attach
-        // to this subquery expression. Here we can safely remove any top level sort
-        // in the plan as tuples produced by a subquery are un-ordered.
-        s.withNewPlan(removeTopLevelSort(newPlan))
+        optimizeSubquery(s)
     }
   }
 
