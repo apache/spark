@@ -40,7 +40,7 @@ class V1WriteHiveCommandSuite
       withPlannedWrite { enabled =>
         withTable("t") {
           executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
-            sql("CREATE TABLE t STORED AS Parquet AS SELECT * FROM t0")
+            sql("CREATE TABLE t STORED AS PARQUET AS SELECT * FROM t0")
           }
         }
       }
@@ -56,9 +56,8 @@ class V1WriteHiveCommandSuite
               hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
               sql(
                 """
-                  |CREATE TABLE t
+                  |CREATE TABLE t STORED AS PARQUET
                   |PARTITIONED BY (k)
-                  |STORED AS Parquet
                   |AS SELECT * FROM t0
                   |""".stripMargin)
             }
@@ -74,10 +73,9 @@ class V1WriteHiveCommandSuite
         withTable("t") {
           sql(
             """
-              |CREATE TABLE t (i INT, j INT)
+              |CREATE TABLE t (i INT, j INT) STORED AS PARQUET
               |PARTITIONED BY (k STRING)
               |CLUSTERED BY (i, j) SORTED BY (j) INTO 2 BUCKETS
-              |STORED AS Parquet
               |""".stripMargin)
           withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
             executeAndCheckOrdering(
@@ -97,9 +95,8 @@ class V1WriteHiveCommandSuite
           withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
             sql(
               """
-                |CREATE TABLE t
+                |CREATE TABLE t STORED AS PARQUET
                 |PARTITIONED BY (k)
-                |STORED AS Parquet
                 |AS SELECT * FROM t0
                 |""".stripMargin)
             executeAndCheckOrdering(
@@ -118,9 +115,8 @@ class V1WriteHiveCommandSuite
         withTable("t") {
           sql(
             """
-              |CREATE TABLE t (i INT, j INT)
+              |CREATE TABLE t (i INT, j INT) STORED AS PARQUET
               |PARTITIONED BY (k STRING)
-              |STORED AS Parquet
               |""".stripMargin)
           // No dynamic partition so no sort is needed.
           executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
