@@ -4113,6 +4113,11 @@ def try_make_timestamp_ntz(
     time: Optional["ColumnOrName"] = None,
 ) -> Column:
     if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
         return _invoke_function_over_columns(
             "try_make_timestamp_ntz",
             cast("ColumnOrName", years),
@@ -4123,6 +4128,11 @@ def try_make_timestamp_ntz(
             cast("ColumnOrName", secs),
         )
     else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
         return _invoke_function_over_columns(
             "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
         )

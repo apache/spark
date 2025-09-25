@@ -512,23 +512,19 @@ class FunctionsTestsMixin:
         expected = datetime.datetime(2024, 5, 22, 10, 30, 45)
         assertDataFrameEqual(actual, [Row(expected)])
 
-        # Test 5: Only year provided - should raise error for missing required parameters
+        # Test 5: Only year provided - should raise Exception for missing required parameters
         with self.assertRaises(Exception):
-            df_full.select(F.try_make_timestamp_ntz(years=df_full.year)).collect()
+            F.try_make_timestamp_ntz(years=df_full.year)
 
-        # Test 6: Partial parameters - should raise error for missing required parameters
+        # Test 6: Partial parameters - should raise Exception for missing required parameters
         with self.assertRaises(Exception):
-            df_full.select(
-                F.try_make_timestamp_ntz(years=df_full.year, months=df_full.month, days=df_full.day)
-            ).collect()
+            F.try_make_timestamp_ntz(years=df_full.year, months=df_full.month, days=df_full.day)
 
-        # Test 7: Partial parameters - should raise error for missing required parameters
+        # Test 7: Partial parameters - should raise Exception for missing required parameters
         with self.assertRaises(Exception):
-            df_full.select(
-                F.try_make_timestamp_ntz(
-                    years=df_full.year, months=df_full.month, days=df_full.day, hours=df_full.hour
-                )
-            ).collect()
+            F.try_make_timestamp_ntz(
+                years=df_full.year, months=df_full.month, days=df_full.day, hours=df_full.hour
+            )
 
         # Test 8: Fractional seconds
         df_frac = self.spark.createDataFrame(
@@ -639,11 +635,12 @@ class FunctionsTestsMixin:
         actual = df.select(F.try_make_timestamp_ntz(date=df.date, time=df.time))
         assertDataFrameEqual(actual, [Row(None)])
 
-        # Test 16: Mixed parameter usage should raise error
-        with self.assertRaises(Exception):
-            df_full.select(
-                F.try_make_timestamp_ntz(years=df_full.year, date=df_full.year)
-            ).collect()
+        # Test 16: Mixed parameter usage should raise PySparkValueError
+        with self.assertRaises(PySparkValueError) as context:
+            F.try_make_timestamp_ntz(years=df_full.year, date=df_full.year)
+        error_msg = str(context.exception)
+        self.assertIn("CANNOT_SET_TOGETHER", error_msg)
+        self.assertIn("years|months|days|hours|mins|secs and date|time", error_msg)
 
     def test_string_functions(self):
         string_functions = [
@@ -983,17 +980,17 @@ class FunctionsTestsMixin:
         self.assertIn("CANNOT_SET_TOGETHER", error_msg)
         self.assertIn("years|months|days|hours|mins|secs and date|time", error_msg)
 
-        # Test 14: Incomplete keyword arguments - should raise exception for None values
+        # Test 14: Incomplete keyword arguments - should raise Exception for None values
         with self.assertRaises(Exception):
-            df.select(F.make_timestamp_ntz(years=df.year, months=df.month, days=df.day)).collect()
+            F.make_timestamp_ntz(years=df.year, months=df.month, days=df.day)
 
-        # Test 15: Only one keyword argument - should raise exception for None values
+        # Test 15: Only one keyword argument - should raise Exception for None values
         with self.assertRaises(Exception):
-            df.select(F.make_timestamp_ntz(years=df.year)).collect()
+            F.make_timestamp_ntz(years=df.year)
 
-        # Test 16: Only date without time - should raise exception for None values
+        # Test 16: Only date without time - should raise Exception for None values
         with self.assertRaises(Exception):
-            df_dt.select(F.make_timestamp_ntz(date=df_dt.date)).collect()
+            F.make_timestamp_ntz(date=df_dt.date)
 
         # Test 17: Invalid data types - should raise exception for invalid string to int cast
         with self.assertRaises(Exception):
