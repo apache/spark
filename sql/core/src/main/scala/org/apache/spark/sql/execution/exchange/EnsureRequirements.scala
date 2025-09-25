@@ -609,17 +609,18 @@ case class EnsureRequirements(
   private def checkShufflePartitionIdPassThroughCompatible(
       left: SparkPlan,
       right: SparkPlan,
-    requiredChildDistribution: Seq[Distribution]): Boolean = {
-      (left.outputPartitioning, right.outputPartitioning) match {
-        case (p1: ShufflePartitionIdPassThrough, p2: ShufflePartitionIdPassThrough) =>
-          val leftSpec = p1.createShuffleSpec(
-            requiredChildDistribution.head.asInstanceOf[ClusteredDistribution])
-          val rightSpec = p2.createShuffleSpec(
-            requiredChildDistribution(1).asInstanceOf[ClusteredDistribution])
-          leftSpec.isCompatibleWith(rightSpec)
-        case _ =>
-          false
-      }
+      requiredChildDistribution: Seq[Distribution]): Boolean = {
+    (left.outputPartitioning, right.outputPartitioning) match {
+      case (p1: ShufflePartitionIdPassThrough, p2: ShufflePartitionIdPassThrough) =>
+        assert(requiredChildDistribution.length == 2)
+        val leftSpec = p1.createShuffleSpec(
+          requiredChildDistribution.head.asInstanceOf[ClusteredDistribution])
+        val rightSpec = p2.createShuffleSpec(
+          requiredChildDistribution(1).asInstanceOf[ClusteredDistribution])
+        leftSpec.isCompatibleWith(rightSpec)
+      case _ =>
+        false
+    }
   }
 
   // Similar to `OptimizeSkewedJoin.canSplitRightSide`

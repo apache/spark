@@ -449,7 +449,6 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       HashPartitioning(Seq($"a", $"b"), 10)
     )
   }
-  // TODO(shujing): canCreatePartitioning should always return false
 
   test("createPartitioning: other specs") {
     val distribution = ClusteredDistribution(Seq($"a", $"b"))
