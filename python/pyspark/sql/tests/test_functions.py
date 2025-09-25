@@ -468,7 +468,7 @@ class FunctionsTestsMixin:
         assertDataFrameEqual(actual, [Row(None)])
 
     def test_try_make_timestamp_ntz(self):
-        """Comprehensive test cases for try_make_timestamp_ntz with various arguments."""
+        """Test cases for try_make_timestamp_ntz with 6-parameter and date/time forms."""
 
         # Test 1: Valid 6 positional arguments
         data = [(2024, 5, 22, 10, 30, 0)]
@@ -512,26 +512,23 @@ class FunctionsTestsMixin:
         expected = datetime.datetime(2024, 5, 22, 10, 30, 45)
         assertDataFrameEqual(actual, [Row(expected)])
 
-        # Test 5: Only year provided - should use defaults (month=0, day=0, etc.)
-        # Note: This will likely result in NULL due to invalid date (month=0, day=0)
-        actual = df_full.select(F.try_make_timestamp_ntz(years=df_full.year))
-        assertDataFrameEqual(actual, [Row(None)])
+        # Test 5: Only year provided - should raise error for missing required parameters
+        with self.assertRaises(Exception):
+            df_full.select(F.try_make_timestamp_ntz(years=df_full.year)).collect()
 
-        # Test 6: Year and valid month/day
-        actual = df_full.select(
-            F.try_make_timestamp_ntz(years=df_full.year, months=df_full.month, days=df_full.day)
-        )
-        expected_partial = datetime.datetime(2024, 5, 22, 0, 0, 0)
-        assertDataFrameEqual(actual, [Row(expected_partial)])
+        # Test 6: Partial parameters - should raise error for missing required parameters
+        with self.assertRaises(Exception):
+            df_full.select(
+                F.try_make_timestamp_ntz(years=df_full.year, months=df_full.month, days=df_full.day)
+            ).collect()
 
-        # Test 7: Year, month, day, hour
-        actual = df_full.select(
-            F.try_make_timestamp_ntz(
-                years=df_full.year, months=df_full.month, days=df_full.day, hours=df_full.hour
-            )
-        )
-        expected_partial = datetime.datetime(2024, 5, 22, 10, 0, 0)
-        assertDataFrameEqual(actual, [Row(expected_partial)])
+        # Test 7: Partial parameters - should raise error for missing required parameters
+        with self.assertRaises(Exception):
+            df_full.select(
+                F.try_make_timestamp_ntz(
+                    years=df_full.year, months=df_full.month, days=df_full.day, hours=df_full.hour
+                )
+            ).collect()
 
         # Test 8: Fractional seconds
         df_frac = self.spark.createDataFrame(
@@ -550,27 +547,47 @@ class FunctionsTestsMixin:
         expected_frac = datetime.datetime(2024, 5, 22, 10, 30, 45, 123000)
         assertDataFrameEqual(actual, [Row(expected_frac)])
 
-        # Test 9: Edge case - February 29 in leap year
-        df_leap = self.spark.createDataFrame([(2024, 2, 29)], ["year", "month", "day"])
+        # Test 9: Edge case - February 29 in leap year (full 6 parameters)
+        df_leap = self.spark.createDataFrame(
+            [(2024, 2, 29, 0, 0, 0)], ["year", "month", "day", "hour", "minute", "second"]
+        )
         actual = df_leap.select(
-            F.try_make_timestamp_ntz(years=df_leap.year, months=df_leap.month, days=df_leap.day)
+            F.try_make_timestamp_ntz(
+                df_leap.year,
+                df_leap.month,
+                df_leap.day,
+                df_leap.hour,
+                df_leap.minute,
+                df_leap.second,
+            )
         )
         expected_leap = datetime.datetime(2024, 2, 29, 0, 0, 0)
         assertDataFrameEqual(actual, [Row(expected_leap)])
 
         # Test 10: Edge case - February 29 in non-leap year (should return NULL)
-        df_non_leap = self.spark.createDataFrame([(2023, 2, 29)], ["year", "month", "day"])
+        df_non_leap = self.spark.createDataFrame(
+            [(2023, 2, 29, 0, 0, 0)], ["year", "month", "day", "hour", "minute", "second"]
+        )
         actual = df_non_leap.select(
             F.try_make_timestamp_ntz(
-                years=df_non_leap.year, months=df_non_leap.month, days=df_non_leap.day
+                df_non_leap.year,
+                df_non_leap.month,
+                df_non_leap.day,
+                df_non_leap.hour,
+                df_non_leap.minute,
+                df_non_leap.second,
             )
         )
         assertDataFrameEqual(actual, [Row(None)])
 
-        # Test 11: Minimum valid values
-        df_min = self.spark.createDataFrame([(1, 1, 1)], ["year", "month", "day"])
+        # Test 11: Minimum valid values (full 6 parameters)
+        df_min = self.spark.createDataFrame(
+            [(1, 1, 1, 0, 0, 0)], ["year", "month", "day", "hour", "minute", "second"]
+        )
         actual = df_min.select(
-            F.try_make_timestamp_ntz(years=df_min.year, months=df_min.month, days=df_min.day)
+            F.try_make_timestamp_ntz(
+                df_min.year, df_min.month, df_min.day, df_min.hour, df_min.minute, df_min.second
+            )
         )
         expected_min = datetime.datetime(1, 1, 1, 0, 0, 0)
         assertDataFrameEqual(actual, [Row(expected_min)])
@@ -608,20 +625,25 @@ class FunctionsTestsMixin:
         )
         assertDataFrameEqual(actual, [Row(None)])
 
-        # Test 14: None date parameter should use default NULL and return NULL
-        df = self.spark.range(1).select(F.lit(datetime.time(10, 30, 0)).alias("time"))
-        actual = df.select(F.try_make_timestamp_ntz(date=None, time=df.time))
+        # Test 14: Valid date/time combination with NULL date
+        df = self.spark.range(1).select(
+            F.lit(None).cast("date").alias("date"), F.lit(datetime.time(10, 30, 0)).alias("time")
+        )
+        actual = df.select(F.try_make_timestamp_ntz(date=df.date, time=df.time))
         assertDataFrameEqual(actual, [Row(None)])
 
-        # Test 15: None time parameter should use default NULL and return NULL
-        df = self.spark.range(1).select(F.lit(datetime.date(2024, 5, 22)).alias("date"))
-        actual = df.select(F.try_make_timestamp_ntz(date=df.date, time=None))
+        # Test 15: Valid date/time combination with NULL time
+        df = self.spark.range(1).select(
+            F.lit(datetime.date(2024, 5, 22)).alias("date"), F.lit(None).cast("time").alias("time")
+        )
+        actual = df.select(F.try_make_timestamp_ntz(date=df.date, time=df.time))
         assertDataFrameEqual(actual, [Row(None)])
 
-        # Test 16: All None parameters should use default NULL values and return NULL
-        df = self.spark.range(1)
-        actual = df.select(F.try_make_timestamp_ntz())
-        assertDataFrameEqual(actual, [Row(None)])
+        # Test 16: Mixed parameter usage should raise error
+        with self.assertRaises(Exception):
+            df_full.select(
+                F.try_make_timestamp_ntz(years=df_full.year, date=df_full.year)
+            ).collect()
 
     def test_string_functions(self):
         string_functions = [

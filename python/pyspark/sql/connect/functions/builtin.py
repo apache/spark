@@ -4113,19 +4113,19 @@ def try_make_timestamp_ntz(
     time: Optional["ColumnOrName"] = None,
 ) -> Column:
     if years is not None:
-        _years = years
-        _months = lit(0) if months is None else months
-        _days = lit(0) if days is None else days
-        _hours = lit(0) if hours is None else hours
-        _mins = lit(0) if mins is None else mins
-        _secs = lit(0) if secs is None else secs
         return _invoke_function_over_columns(
-            "try_make_timestamp_ntz", _years, _months, _days, _hours, _mins, _secs
+            "try_make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
         )
     else:
-        _date = lit(None) if date is None else date
-        _time = lit(None) if time is None else time
-        return _invoke_function_over_columns("try_make_timestamp_ntz", _date, _time)
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
 
 try_make_timestamp_ntz.__doc__ = pysparkfuncs.try_make_timestamp_ntz.__doc__
