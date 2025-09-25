@@ -231,6 +231,10 @@ case class StreamingDataSourceV2ScanRelation(
   override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
 }
 
+object ExtractTable {
+  def unapply(relation: DataSourceV2Relation): Option[Table] = Some(relation.table)
+}
+
 object DataSourceV2Relation {
   def create(
       table: Table,
