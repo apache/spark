@@ -27177,6 +27177,10 @@ def udf(
     ----------
     f : function, optional
         python function if used as a standalone function
+
+        .. versionchanged:: 4.1.0
+           Supports vectorized function by specifiying the type hints.
+
     returnType : :class:`pyspark.sql.types.DataType` or str, optional
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
@@ -27220,6 +27224,54 @@ def udf(
     |                            0|
     |                          101|
     +-----------------------------+
+
+    Support vectorized function by specifiying the type hints.
+
+    To define a vectorized function, the function should meet following requirements:
+
+    1, have at least 1 argument. 0-arg is not supported;
+
+    2, the type hints should match one of the patterns of pandas UDFs and arrow UDFs;
+
+    3, argument `useArrow` should not be explictly set;
+
+    If a function doesn't meet the requirements, the function should be treated as a
+    vanilla python UDF or arrow-optimized python UDF (depending on argument `useArrow`,
+    configuration `spark.sql.execution.pythonUDF.arrow.enabled`, and dependency installations)
+
+    For example, define a 'Series to Series' type pandas UDF.
+
+    >>> import pandas as pd
+    >>> @udf(returnType=IntegerType())
+    ... def pd_calc(a: pd.Series, b: pd.Series) -> pd.Series:
+    ...     return a + 10 * b
+    ...
+    >>> spark.range(2).select(pd_calc(b=col("id") * 10, a="id")).show()
+    +--------------------------------+
+    |pd_calc(b => (id * 10), a => id)|
+    +--------------------------------+
+    |                               0|
+    |                             101|
+    +--------------------------------+
+
+    For another example, define a 'Array to Array' type arrow UDF.
+    >>> import pyarrow as pa
+    >>> @udf(returnType=IntegerType())
+    ... def pa_calc(a: pa.Array, b: pa.Array) -> pa.Array:
+    ...     return pa.compute.add(a, pa.compute.multiply(b, 10))
+    ...
+    >>> spark.range(2).select(pa_calc(b=col("id") * 10, a="id")).show()
+    +--------------------------------+
+    |pa_calc(b => (id * 10), a => id)|
+    +--------------------------------+
+    |                               0|
+    |                             101|
+    +--------------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.pandas_udf`
+    :meth:`pyspark.sql.functions.arrow_udf`
 
     Notes
     -----
