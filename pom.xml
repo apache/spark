@@ -130,7 +130,7 @@
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>4.29.3</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
-    <zookeeper.version>3.9.3</zookeeper.version>
+    <zookeeper.version>3.9.4</zookeeper.version>
     <curator.version>5.9.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
