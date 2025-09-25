@@ -185,7 +185,8 @@ case class EnsureRequirements(
           children.head, children(1), requiredChildDistributions)
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, _), idx) if isKeyGroupCompatible || isShufflePassThroughCompatible || !childrenIndexes.contains(idx) =>
+        case ((child, _), idx) if isKeyGroupCompatible || isShufflePassThroughCompatible ||
+            !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {

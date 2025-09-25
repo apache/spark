@@ -638,6 +638,7 @@ case class ShufflePartitionIdPassThrough(
     expr: DirectShufflePartitionID,
     numPartitions: Int) extends Expression with Partitioning with Unevaluable {
 
+  // We don't support creating partitioning for ShufflePartitionIdPassThrough.
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
     ShufflePartitionIdPassThroughSpec(this, distribution)
   }
@@ -987,8 +988,6 @@ case class ShufflePartitionIdPassThroughSpec(
   }
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
-    case SinglePartitionShuffleSpec =>
-      partitioning.numPartitions == 1
     case otherPassThroughSpec @ ShufflePartitionIdPassThroughSpec(
         otherPartitioning, otherDistribution) =>
       // As ShufflePartitionIdPassThrough only allows a single expression

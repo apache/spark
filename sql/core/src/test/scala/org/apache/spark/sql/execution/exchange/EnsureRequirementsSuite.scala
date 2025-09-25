@@ -1197,10 +1197,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     TransformExpression(BucketFunction, expr, Some(numBuckets))
   }
 
-  test("ShufflePartitionIdPassThrough - always shuffles due to canCreatePartitioning=false") {
+  test("ShufflePartitionIdPassThrough - avoid necessary shuffle when they are compatible") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
-      // Even with identical partitioning and join keys, shuffles are added
-      // because ShufflePartitionIdPassThroughSpec.canCreatePartitioning = false
       val plan1 = DummySparkPlan(
         outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
       val plan2 = DummySparkPlan(
@@ -1304,6 +1302,144 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
           // Both sides shuffled due to canCreatePartitioning = false
         case other => fail(s"Expected shuffles on both sides, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough - incompatible due to different expressions " +
+       "with same base column") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Even though both use exprA as base and have same numPartitions,
+      // different Pmod operations make them incompatible
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(
+          DirectShufflePartitionID(Pmod(exprA, Literal(10))), 5))
+      val plan2 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(
+          DirectShufflePartitionID(Pmod(exprA, Literal(5))), 5))
+      val smjExec = SortMergeJoinExec(exprA :: Nil, exprA :: Nil, Inner, None, plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _), _), _) =>
+          // Both sides should be shuffled due to expression mismatch
+          assert(p1.numPartitions == 10)
+          assert(p2.numPartitions == 10)
+          assert(p1.expressions == Seq(exprA))
+          assert(p2.expressions == Seq(exprA))
+        case other => fail(s"Expected shuffles on both sides, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough - compatible with multiple clustering keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Both partitioned by exprA, joined on (exprA, exprB)
+      // Should be compatible because exprA positions overlap
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val plan2 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val smjExec = SortMergeJoinExec(exprA :: exprB :: Nil, exprA :: exprB :: Nil, Inner, None,
+        plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(
+            leftKeys,
+            rightKeys,
+            _,
+            _,
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            _
+            ) =>
+          assert(leftKeys === Seq(exprA, exprB))
+          assert(rightKeys === Seq(exprA, exprB))
+        case other => fail(s"We don't expect shuffle on neither sides with multiple " +
+          s"clustering keys, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough - incompatible when partition key not in join keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Partitioned by exprA and exprB respectively, but joining on completely different keys
+      // Should require shuffles because partition keys don't match join keys
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val plan2 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprB), 5))
+      val smjExec = SortMergeJoinExec(exprC :: Nil, exprD :: Nil, Inner, None, plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _), _), _) =>
+          // Both sides should be shuffled because partition keys not in join keys
+          assert(p1.numPartitions == 10)
+          assert(p2.numPartitions == 10)
+          assert(p1.expressions == Seq(exprC))
+          assert(p2.expressions == Seq(exprD))
+        case other => fail(s"Expected shuffles on both sides due to key mismatch, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough - cross position matching behavior") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Left partitioned by exprA, right partitioned by exprB
+      // Both sides join on (exprA, exprB)
+      // Test if cross-position matching works: left partition key exprA matches right join key
+      // exprA (pos 0)
+      // and right partition key exprB matches left join key exprB (pos 1)
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val plan2 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprB), 5))
+      val smjExec = SortMergeJoinExec(exprA :: exprB :: Nil, exprA :: exprB :: Nil, Inner, None,
+        plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _), _), _) =>
+          assert(p1.numPartitions == 10)
+          assert(p2.numPartitions == 10)
+          assert(p1.expressions == Seq(exprA, exprB))
+          assert(p2.expressions == Seq(exprA, exprB))
+        case other => fail(s"Expected either no shuffles (if compatible) or shuffles on " +
+          s"both sides, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough - compatible when partition key matches at any position") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Both sides partitioned by exprB and join on (exprA, exprB)
+      // Should be compatible because partition key exprB matches at position 1 in join keys
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprB), 5))
+      val plan2 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprB), 5))
+      val smjExec = SortMergeJoinExec(exprA :: exprB :: Nil, exprA :: exprB :: Nil, Inner, None,
+        plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(
+            leftKeys,
+            rightKeys,
+            _,
+            _,
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            _
+            ) =>
+          // No shuffles because exprB (partition key) appears at position 1 in join keys
+          assert(leftKeys === Seq(exprA, exprB))
+          assert(rightKeys === Seq(exprA, exprB))
+        case other => fail(s"Expected no shuffles due to position overlap at position 1, " +
+          s"but got: $other")
       }
     }
   }
