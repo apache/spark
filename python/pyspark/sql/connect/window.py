@@ -69,6 +69,9 @@ class WindowSpec(ParentWindowSpec):
         self.__init__(partitionSpec, orderSpec, frame)  # type: ignore[misc]
         return self
 
+    def __getnewargs__(self):
+        return (self._partitionSpec, self._orderSpec, self._frame)
+
     def __init__(
         self,
         partitionSpec: Sequence[Expression],
