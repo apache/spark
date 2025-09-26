@@ -4047,7 +4047,6 @@ def make_timestamp_ntz(
     hours: Optional["ColumnOrName"] = None,
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
-    *,
     date: Optional["ColumnOrName"] = None,
     time: Optional["ColumnOrName"] = None,
 ) -> Column:
@@ -4108,7 +4107,6 @@ def try_make_timestamp_ntz(
     hours: Optional["ColumnOrName"] = None,
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
-    *,
     date: Optional["ColumnOrName"] = None,
     time: Optional["ColumnOrName"] = None,
 ) -> Column:
