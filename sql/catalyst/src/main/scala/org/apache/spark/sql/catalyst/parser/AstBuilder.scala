@@ -29,7 +29,6 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
@@ -2084,29 +2083,9 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: WatermarkClauseContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val expression = visitNamedExpression(ctx.namedExpression())
-
-    if (expression.isInstanceOf[MultiAlias]) {
-      throw new AnalysisException(
-        errorClass = "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE",
-        messageParameters = Map()
-      )
-    }
-
-    val namedExpression = expression match {
-      case e: NamedExpression => e
-      case e: Expression => UnresolvedAlias(e)
-    }
-
-    // TODO: This seems to need to find the new expression by index. We can't rely on exprId
-    //  due to UnresolvedAlias. Are there better ways to do?
-    val proj = Project(Seq(namedExpression, UnresolvedStar(None)), query)
-    val attrRef = proj.projectList.head.toAttribute
-
     val delayInterval = visitInterval(ctx.delay)
-    val delay = IntervalUtils.fromIntervalString(delayInterval.toString)
-    require(!IntervalUtils.isNegative(delay),
-      s"delay threshold (${delayInterval.toString}) should not be negative.")
-    EventTimeWatermark(java.util.UUID.randomUUID(), attrRef, delay, proj)
+
+    UnresolvedEventTimeWatermark(expression, delayInterval, query)
   }
 
   /**
