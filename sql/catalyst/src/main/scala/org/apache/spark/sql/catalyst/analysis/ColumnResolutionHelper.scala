@@ -454,6 +454,43 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   }
 
   /**
+   * If `spark.sql.analyzer.delayLastResortColumnResolution` is set to true, delay resolving a
+   * column with [[resolveColsLastResort]] until all [[UnresolvedAlias]]es and top-level
+   * [[UnresolvedAttribute]]s (top level [[UnresolvedAttribute]] also produces an implicit alias)
+   * that come before that column are resolved. This is necessary in order to allow that column to
+   * be resolved as a lateral column alias reference to an [[UnresolvedAlias]], if possible. For
+   * example, for a
+   * query like:
+   *
+   * {{{
+   * DECLARE a = 'aa';
+   * SELECT 'a', a;
+   * -- result is ('a', 'aa')
+   * }}}
+   *
+   * Without delaying [[resolveColsLastResort]], second 'a' column would be resolved as a
+   * variable instead of being resolved as a lateral column alias reference to
+   * [[UnresolvedAlias]] of literal 'a'. The intended behavior should be the same as for the
+   * following query without variable declaration:
+   *
+   * {{{ SELECT 'a', a; -- result is ('a', 'a') }}}
+   */
+  protected def resolveProjectListLastResort(projectList: Seq[Expression]): Seq[NamedExpression] = {
+    if (conf.getConf(SQLConf.DELAY_LAST_RESORT_COLUMN_RESOLUTION)) {
+      var hasUnresolvedImplicitAlias = false
+      projectList.map {
+        case col if hasUnresolvedImplicitAlias => col.asInstanceOf[NamedExpression]
+        case unresolved @ (_: UnresolvedAlias | _: UnresolvedAttribute) =>
+          hasUnresolvedImplicitAlias = true
+          resolveColsLastResort(unresolved).asInstanceOf[NamedExpression]
+        case col => resolveColsLastResort(col).asInstanceOf[NamedExpression]
+      }
+    } else {
+      projectList.map(col => resolveColsLastResort(col).asInstanceOf[NamedExpression])
+    }
+  }
+
+  /**
    * The last resort to resolve columns. Currently it does two things:
    *  - Try to resolve column names as outer references
    *  - Try to resolve column names as SQL variable

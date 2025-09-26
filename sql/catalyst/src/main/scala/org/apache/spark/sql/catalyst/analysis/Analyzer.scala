@@ -1655,8 +1655,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val resolvedBasic = p.projectList.map(resolveExpressionByPlanChildren(_, p))
         // Lateral column alias has higher priority than outer reference.
         val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
-        val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)
-        p.copy(projectList = resolvedFinal.map(_.asInstanceOf[NamedExpression]))
+        p.copy(projectList = resolveProjectListLastResort(resolvedWithLCA))
 
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
