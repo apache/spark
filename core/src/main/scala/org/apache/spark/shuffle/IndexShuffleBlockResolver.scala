@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -58,7 +58,7 @@ private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
     // var for testing
     var _blockManager: BlockManager,
-    val taskIdMapsForShuffle: ConcurrentHashMap[Int, OpenHashSet[Long]])
+    val taskIdMapsForShuffle: ConcurrentMap[Int, OpenHashSet[Long]])
   extends ShuffleBlockResolver
   with Logging with MigratableResolver {
 
