@@ -111,15 +111,17 @@ INSERT INTO cte_tbl2 SELECT col
 -- !query analysis
 Union false, false
 :- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/cte_tbl, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/cte_tbl], Append, `spark_catalog`.`default`.`cte_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/cte_tbl), [col]
-:  +- Project [col#x]
-:     +- SubqueryAlias s
-:        +- Project [45 AS col#x]
-:           +- OneRowRelation
+:  +- Project [col#x AS col#x]
+:     +- Project [col#x]
+:        +- SubqueryAlias s
+:           +- Project [45 AS col#x]
+:              +- OneRowRelation
 +- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/cte_tbl2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/cte_tbl2], Append, `spark_catalog`.`default`.`cte_tbl2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/cte_tbl2), [col]
-   +- Project [col#x]
-      +- SubqueryAlias s
-         +- Project [45 AS col#x]
-            +- OneRowRelation
+   +- Project [col#x AS col#x]
+      +- Project [col#x]
+         +- SubqueryAlias s
+            +- Project [45 AS col#x]
+               +- OneRowRelation
 
 
 -- !query

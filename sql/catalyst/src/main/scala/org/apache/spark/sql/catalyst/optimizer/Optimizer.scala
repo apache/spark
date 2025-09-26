@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -619,11 +620,28 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if (a.metadata == attr.metadata) &&
-        name == attr.name &&
-        !excludeList.contains(attr) &&
-        !excludeList.contains(a) =>
-      attr
+      if !excludeList.contains(attr) &&
+          !excludeList.contains(a) &&
+          name == attr.name =>
+
+      val metadata = a.metadata
+      var attrMetadata = attr.metadata
+      if (metadata == attrMetadata) {
+        // The alias is truly redundant, remove it.
+        attr
+      } else if (attr.metadata.contains(AUTO_GENERATED_ALIAS)) {
+        attrMetadata = attr.metadata.withKeyRemoved(AUTO_GENERATED_ALIAS)
+        if (metadata == attrMetadata) {
+          // The AUTO_GENERATED_ALIAS is not propagating to a view, so it is ok to remove it.
+          // With that key removed, the alias is now redundant, remove it.
+          attr.withMetadata(metadata)
+        } else {
+          a
+        }
+      } else {
+        a
+      }
+
     case a => a
   }
 

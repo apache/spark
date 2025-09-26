@@ -2012,12 +2012,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
-        sql("create table t (a struct<x: long> default struct(42), b int) using json")
-        sql("insert into t values (cast(null as struct<x: int>), null)")
-        // nulls should not be written for either field
-        checkAnswer(readTableAsText("t"), Row("{}"))
+        sql("""create table t (
+              |    a struct<x: long> default struct(43),
+              |    b int default 17,
+              |    c struct<y: long>)
+              | using json
+              |""".stripMargin)
+        sql("insert into t values (cast(null as struct<x: int>), null, struct(5 as z))")
+        // nulls should not be written for a or b fields
+        checkAnswer(readTableAsText("t"), Row("{\"c\":{\"y\":5}}"))
         // default value is filled in for missing fields.
-        checkAnswer(spark.table("t"), Row(Row(42), null))
+        checkAnswer(spark.table("t"), Row(Row(43), 17, Row(5)))
       }
     }
     // SPARK-52772 Should not pick up JSON DEFAULT from source

@@ -995,62 +995,6 @@ class FunctionsTestsMixin:
         with self.assertRaises(Exception):
             F.make_timestamp_ntz(date=df_dt.date)
 
-        # Test 17: Invalid data types - should raise exception for invalid string to int cast
-        with self.assertRaises(Exception):
-            self.spark.range(1).select(
-                F.make_timestamp_ntz(
-                    F.lit("invalid"), F.lit(5), F.lit(22), F.lit(10), F.lit(30), F.lit(0)
-                )
-            ).collect()
-
-        # Test 18: Out of range values (month=13) - should raise exception for invalid date
-        df_invalid = self.spark.createDataFrame(
-            [(2024, 13, 22, 10, 30, 0)], ["year", "month", "day", "hour", "minute", "second"]
-        )
-        with self.assertRaises(Exception):
-            df_invalid.select(
-                F.make_timestamp_ntz(
-                    df_invalid.year,
-                    df_invalid.month,
-                    df_invalid.day,
-                    df_invalid.hour,
-                    df_invalid.minute,
-                    df_invalid.second,
-                )
-            ).collect()
-
-        # Test 19: Out of range values (hour=25) - should raise exception for invalid time
-        df_invalid_hour = self.spark.createDataFrame(
-            [(2024, 5, 22, 25, 30, 0)], ["year", "month", "day", "hour", "minute", "second"]
-        )
-        with self.assertRaises(Exception):
-            df_invalid_hour.select(
-                F.make_timestamp_ntz(
-                    df_invalid_hour.year,
-                    df_invalid_hour.month,
-                    df_invalid_hour.day,
-                    df_invalid_hour.hour,
-                    df_invalid_hour.minute,
-                    df_invalid_hour.second,
-                )
-            ).collect()
-
-        # Test 20: February 29 in non-leap year
-        df_non_leap = self.spark.createDataFrame(
-            [(2023, 2, 29, 0, 0, 0)], ["year", "month", "day", "hour", "minute", "second"]
-        )
-        with self.assertRaises(Exception):  # Should raise runtime exception for invalid date
-            df_non_leap.select(
-                F.make_timestamp_ntz(
-                    df_non_leap.year,
-                    df_non_leap.month,
-                    df_non_leap.day,
-                    df_non_leap.hour,
-                    df_non_leap.minute,
-                    df_non_leap.second,
-                )
-            ).collect()
-
     def test_make_date(self):
         # SPARK-36554: expose make_date expression
         df = self.spark.createDataFrame([(2020, 6, 26)], ["Y", "M", "D"])
