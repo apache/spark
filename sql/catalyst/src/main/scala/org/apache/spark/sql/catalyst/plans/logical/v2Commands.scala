@@ -915,14 +915,14 @@ object MergeIntoTable {
       matchedActions: Iterable[MergeAction],
       notMatchedActions: Iterable[MergeAction],
       notMatchedBySourceActions: Iterable[MergeAction]): Seq[TableWritePrivilege] = {
-    val privileges = (matchedActions ++ notMatchedActions ++ notMatchedBySourceActions)
+    (matchedActions ++ notMatchedActions ++ notMatchedBySourceActions)
       .collect {
         case _: DeleteAction => TableWritePrivilege.DELETE
         case _: UpdateAction | _: UpdateStarAction => TableWritePrivilege.UPDATE
         case _: InsertAction | _: InsertStarAction => TableWritePrivilege.INSERT
       }
       .toSet
-    privileges.toSeq
+      .toSeq
   }
 
   def schemaChanges(
