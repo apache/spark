@@ -915,13 +915,14 @@ object MergeIntoTable {
       matchedActions: Iterable[MergeAction],
       notMatchedActions: Iterable[MergeAction],
       notMatchedBySourceActions: Iterable[MergeAction]): Seq[TableWritePrivilege] = {
-    val privileges = scala.collection.mutable.HashSet.empty[TableWritePrivilege]
-    (matchedActions.iterator ++ notMatchedActions ++ notMatchedBySourceActions).foreach {
-      case _: DeleteAction => privileges.add(TableWritePrivilege.DELETE)
-      case _: UpdateAction | _: UpdateStarAction => privileges.add(TableWritePrivilege.UPDATE)
-      case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
-    }
-    privileges.toSeq
+    (matchedActions ++ notMatchedActions ++ notMatchedBySourceActions)
+      .collect {
+        case _: DeleteAction => TableWritePrivilege.DELETE
+        case _: UpdateAction | _: UpdateStarAction => TableWritePrivilege.UPDATE
+        case _: InsertAction | _: InsertStarAction => TableWritePrivilege.INSERT
+      }
+      .toSet
+      .toSeq
   }
 
   def schemaChanges(
@@ -1837,12 +1838,19 @@ case class Call(
   }
 
   override def simpleString(maxFields: Int): String = {
-    val name = procedure match {
+    procedure match {
       case ResolvedProcedure(catalog, ident, _) =>
-        s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
+        val name = s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
+        simpleString(name, maxFields)
       case UnresolvedProcedure(nameParts) =>
-        nameParts.quoted
+        val name = nameParts.quoted
+        simpleString(name, maxFields)
+      case _ =>
+        super.simpleString(maxFields)
     }
+  }
+
+  private def simpleString(name: String, maxFields: Int): String = {
     val argsString = truncatedString(args, ", ", maxFields)
     s"Call $name($argsString)"
   }

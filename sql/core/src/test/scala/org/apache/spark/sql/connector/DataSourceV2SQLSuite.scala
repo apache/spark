@@ -79,6 +79,17 @@ abstract class DataSourceV2SQLSuite
   protected def analysisException(sqlText: String): AnalysisException = {
     intercept[AnalysisException](sql(sqlText))
   }
+
+  test("EXPLAIN") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id int, data string)")
+      val explain = spark.sql(s"EXPLAIN EXTENDED SELECT * FROM $t").head().getString(0)
+      val relationPattern = raw".*RelationV2\[[^\]]*]\s+$t\s*$$".r
+      val relations = explain.split("\n").filter(_.contains("RelationV2"))
+      assert(relations.nonEmpty && relations.forall(line => relationPattern.matches(line.trim)))
+    }
+  }
 }
 
 class DataSourceV2SQLSuiteV1Filter
