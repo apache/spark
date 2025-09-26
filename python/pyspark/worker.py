@@ -665,7 +665,7 @@ def verify_arrow_batch(batch, assign_cols_by_name, expected_cols_and_types):
     verify_arrow_result(batch, assign_cols_by_name, expected_cols_and_types)
 
 
-def wrap_grouped_map_arrow_udf(f, return_type, argspec, is_iterator, runner_conf):
+def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
     import pyarrow as pa
 
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
@@ -679,26 +679,33 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, is_iterator, runner_conf
             (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
         ]
 
-    if not is_iterator:
-        # Wrap a Table -> Table function to work with iterators of RecordBatches
-        table_func = f
-
-        def as_iterator(value_batches):
-            value_table = pa.Table.from_batches(value_batches)
-            result = table_func(value_table)
-            verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
-            yield from result.to_batches()
-
-        def as_iterator_with_key(key, value_batches):
-            value_table = pa.Table.from_batches(value_batches)
-            result = table_func(key, value_table)
-            verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
-            yield from result.to_batches()
-
+    def wrapped(key_batch, value_batches):
+        value_table = pa.Table.from_batches(value_batches)
         if len(argspec.args) == 1:
-            f = as_iterator
+            result = f(value_table)
         elif len(argspec.args) == 2:
-            f = as_iterator_with_key
+            key = tuple(c[0] for c in key_batch.columns)
+            result = f(key, value_table)
+
+        verify_arrow_table(result, _assign_cols_by_name, expected_cols_and_types)
+
+        yield from result.to_batches()
+
+    arrow_return_type = to_arrow_type(return_type, use_large_var_types(runner_conf))
+    return lambda k, v: (wrapped(k, v), arrow_return_type)
+
+
+def wrap_grouped_map_arrow_iter_udf(f, return_type, argspec, runner_conf):
+    _assign_cols_by_name = assign_cols_by_name(runner_conf)
+
+    if _assign_cols_by_name:
+        expected_cols_and_types = {
+            col.name: to_arrow_type(col.dataType) for col in return_type.fields
+        }
+    else:
+        expected_cols_and_types = [
+            (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
+        ]
 
     def wrapped(key_batch, value_batches):
         if len(argspec.args) == 1:
@@ -1256,12 +1263,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_map_arrow_udf(
-            func, return_type, argspec, False, runner_conf
+            func, return_type, argspec, runner_conf
         )
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        return args_offsets, wrap_grouped_map_arrow_udf(
-            func, return_type, argspec, True, runner_conf
+        return args_offsets, wrap_grouped_map_arrow_iter_udf(
+            func, return_type, argspec, runner_conf
         )
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type, runner_conf)

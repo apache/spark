@@ -720,6 +720,9 @@ class PandasGroupedOpsMixin:
 
         .. versionadded:: 4.0.0
 
+        .. versionchanged:: 4.1.0
+           Added support for an iterator of `pyarrow.RecordBatch` API.
+
         Parameters
         ----------
         func : function
@@ -755,6 +758,25 @@ class PandasGroupedOpsMixin:
         |  2|-0.2773500981126146|
         |  2| 1.1094003924504583|
         +---+-------------------+
+
+        The function can also take and return an iterator of `pyarrow.RecordBatch` using type hints.
+
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ...     ("id", "v"))  # doctest: +SKIP
+        >>> def sum_func(batches: Iterator[pyarrow.RecordBatch]) -> Iterator[pyarrow.RecordBatch]:
+        ...     total = 0
+        ...     for batch in batches:
+        ...         total += pc.sum(batch.column("v")).as_py()
+        ...     yield pyarrow.RecordBatch.from_pydict({"v": [total]})
+        >>> df.groupby("id").applyInArrow(
+        ...     sum_func, schema="v double").show()  # doctest: +SKIP
+        +----+
+        |   v|
+        +----+
+        | 3.0|
+        |18.0|
+        +----+
 
         Alternatively, the user can pass a function that takes two arguments.
         In this case, the grouping key(s) will be passed as the first argument and the data will
@@ -800,11 +822,26 @@ class PandasGroupedOpsMixin:
         |  2|          2| 3.0|
         +---+-----------+----+
 
+        >>> def sum_func(key: Tuple[pyarrow.Scalar, ...], batches: Iterator[pyarrow.RecordBatch]) -> Iterator[pyarrow.RecordBatch]:
+        ...     total = 0
+        ...     for batch in batches:
+        ...         total += pc.sum(batch.column("v")).as_py()
+        ...     yield pyarrow.RecordBatch.from_pydict({"id": [key[0].as_py()], "v": [total]})
+        >>> df.groupby("id").applyInArrow(
+        ...     sum_func, schema="id long, v double").show()  # doctest: +SKIP
+        +---+----+
+        | id|   v|
+        +---+----+
+        |  1| 3.0|
+        |  2|18.0|
+        +---+----+
+
         Notes
         -----
-        This function requires a full shuffle. All the data of a group will be loaded
-        into memory, so the user should be aware of the potential OOM risk if data is skewed
-        and certain groups are too large to fit in memory.
+        This function requires a full shuffle. If using the `pyarrow.Table` API, all data of a
+        group will be loaded into memory, so the user should be aware of the potential OOM risk
+        if data is skewed and certain groups are too large to fit in memory, and can use the
+        iterator of `pyarrow.RecordBatch` API to mitigate this.
 
         This API is unstable, and for developers.
 
