@@ -175,11 +175,12 @@ def write_read_func_and_partitions(
     data_source: DataSource,
     schema: StructType,
     max_arrow_batch_size: int,
+    binary_as_bytes: bool,
 ) -> None:
     is_streaming = isinstance(reader, DataSourceStreamReader)
 
     # Create input converter.
-    converter = ArrowTableToRowsConversion._create_converter(BinaryType())
+    converter = ArrowTableToRowsConversion._create_converter(BinaryType(), binary_as_bytes=binary_as_bytes)
 
     # Create output converter.
     return_type = schema
@@ -352,6 +353,7 @@ def main(infile: IO, outfile: IO) -> None:
         enable_pushdown = read_bool(infile)
 
         is_streaming = read_bool(infile)
+        binary_as_bytes = read_bool(infile)
 
         # Instantiate data source reader.
         if is_streaming:
@@ -390,6 +392,7 @@ def main(infile: IO, outfile: IO) -> None:
             data_source=data_source,
             schema=schema,
             max_arrow_batch_size=max_arrow_batch_size,
+            binary_as_bytes=binary_as_bytes,
         )
     except BaseException as e:
         handle_worker_exception(e, outfile)
