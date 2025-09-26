@@ -53,13 +53,6 @@ class GraphRegistrationContext(
     flows += flowDef.copy(sqlConf = defaultSqlConf ++ flowDef.sqlConf)
   }
 
-  /**
-   *  Collects all graph registered entities (tables, views, flows) into a DataflowGraph object,
-   *  for graph analysis/resolution/execution. Also responsible for fully qualifying any partially
-   *  qualified user-specified identifiers using the pipeline-level catalog and database. If
-   *  identifiers have already been qualified during graph element registration, that qualification
-   *  is respected.
-   */
   def toDataflowGraph: DataflowGraph = {
     if (tables.isEmpty && views.collect { case v: PersistedView =>
         v
