@@ -155,9 +155,12 @@ object ArrowPythonRunner {
     val intToDecimalCoercion = Seq(
       SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED.key ->
       conf.getConf(SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED, false).toString)
+    val binaryAsBytes = Seq(
+      SQLConf.ARROW_PYSPARK_BINARY_TYPE_AS_BYTES.key ->
+      conf.getConf(SQLConf.ARROW_PYSPARK_BINARY_TYPE_AS_BYTES).toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++
-      intToDecimalCoercion ++
+      intToDecimalCoercion ++ binaryAsBytes ++
       legacyPandasConversion ++ legacyPandasConversionUDF: _*)
   }
 }

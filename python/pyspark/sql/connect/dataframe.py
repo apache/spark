@@ -1823,7 +1823,7 @@ class DataFrame(ParentDataFrame):
 
         assert schema is not None and isinstance(schema, StructType)
 
-        return ArrowTableToRowsConversion.convert(table, schema)
+        return ArrowTableToRowsConversion.convert(table, schema, binary_as_bytes = False)
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
@@ -2075,7 +2075,7 @@ class DataFrame(ParentDataFrame):
                 table = schema_or_table
                 if schema is None:
                     schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
-                yield from ArrowTableToRowsConversion.convert(table, schema)
+                yield from ArrowTableToRowsConversion.convert(table, schema, binary_as_bytes = False)
 
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -2162,7 +2162,7 @@ class DataFrame(ParentDataFrame):
     def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
         schema = self._schema
         field_converters = [
-            ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
+            ArrowTableToRowsConversion._create_converter(f.dataType, binary_as_bytes = False) for f in schema.fields
         ]
 
         def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:

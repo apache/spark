@@ -3724,6 +3724,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ARROW_PYSPARK_BINARY_TYPE_AS_BYTES =
+    buildConf("spark.sql.execution.arrow.pyspark.binaryAsBytes")
+      .doc("To be added.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+
   val ARROW_LOCAL_RELATION_THRESHOLD =
     buildConf("spark.sql.execution.arrow.localRelationThreshold")
       .doc(
