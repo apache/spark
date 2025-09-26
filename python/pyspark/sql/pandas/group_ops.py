@@ -759,7 +759,8 @@ class PandasGroupedOpsMixin:
         |  2| 1.1094003924504583|
         +---+-------------------+
 
-        The function can also take and return an iterator of `pyarrow.RecordBatch` using type hints.
+        The function can also take and return an iterator of `pyarrow.RecordBatch` using type
+        hints.
 
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
@@ -822,7 +823,9 @@ class PandasGroupedOpsMixin:
         |  2|          2| 3.0|
         +---+-----------+----+
 
-        >>> def sum_func(key: Tuple[pyarrow.Scalar, ...], batches: Iterator[pyarrow.RecordBatch]) -> Iterator[pyarrow.RecordBatch]:
+        >>> def sum_func(
+        ...     key: Tuple[pyarrow.Scalar, ...], batches: Iterator[pyarrow.RecordBatch]
+        ... ) -> Iterator[pyarrow.RecordBatch]:
         ...     total = 0
         ...     for batch in batches:
         ...         total += pc.sum(batch.column("v")).as_py()
