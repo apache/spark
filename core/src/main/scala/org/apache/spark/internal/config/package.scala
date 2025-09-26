@@ -1679,15 +1679,6 @@ package object config {
       .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
       .createWithDefault("ADLER32")
 
-  private[spark] val SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED =
-    ConfigBuilder("spark.scheduler.checksumMismatchFullRetry.enabled")
-      .doc("Whether to retry all tasks of a consumer stage when we detect checksum mismatches " +
-        "with its producer stages. The checksum computation is controlled by another config " +
-        "called SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val SHUFFLE_COMPRESS =
     ConfigBuilder("spark.shuffle.compress")
       .doc("Whether to compress shuffle output. Compression will use " +

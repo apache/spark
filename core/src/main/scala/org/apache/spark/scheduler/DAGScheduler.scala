@@ -307,9 +307,6 @@ private[spark] class DAGScheduler(
 
   private val shuffleFinalizeRpcThreads = sc.conf.get(config.PUSH_SHUFFLE_FINALIZE_RPC_THREADS)
 
-  private val checksumMismatchFullRetryEnabled =
-    sc.getConf.get(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED)
-
   // Since SparkEnv gets initialized after DAGScheduler, externalShuffleClient needs to be
   // initialized lazily
   private lazy val externalShuffleClient: Option[BlockStoreClient] =
@@ -1555,7 +1552,7 @@ private[spark] class DAGScheduler(
     // `findMissingPartitions()` returns all partitions every time.
     stage match {
       case sms: ShuffleMapStage if !sms.isAvailable =>
-        if (checksumMismatchFullRetryEnabled) {
+        if (sms.shuffleDep.checksumMismatchFullRetryEnabled) {
           // When the parents of this stage are indeterminate (e.g., some parents are not
           // checkpointed and checksum mismatches are detected), the output data of the parents
           // may have changed due to task retries. For correctness reason, we need to
@@ -2065,7 +2062,8 @@ private[spark] class DAGScheduler(
                   // during the retry of stage1, we need to call abortUnrollbackableStages() again.
                   if (shuffleStage.maxChecksumMismatchedId < smt.stageAttemptId) {
                     shuffleStage.maxChecksumMismatchedId = smt.stageAttemptId
-                    if (checksumMismatchFullRetryEnabled && shuffleStage.isStageIndeterminate) {
+                    if (shuffleStage.shuffleDep.checksumMismatchFullRetryEnabled
+                      && shuffleStage.isStageIndeterminate) {
                       abortUnrollbackableStages(shuffleStage)
                     }
                   }
@@ -2194,7 +2192,7 @@ private[spark] class DAGScheduler(
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
-              if (mapStage.isIndeterminate && !checksumMismatchFullRetryEnabled) {
+              if (mapStage.isIndeterminate && !mapStage.shuffleDep.checksumMismatchFullRetryEnabled) {
                 abortUnrollbackableStages(mapStage)
               }
 

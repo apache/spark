@@ -890,6 +890,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED =
+    buildConf("spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch")
+      .doc("Whether to retry all tasks of a consumer stage when we detect checksum mismatches " +
+        "with its producer stages.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
       .internal()
@@ -6650,6 +6658,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def shuffleOrderIndependentChecksumEnabled: Boolean =
     getConf(SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)
+
+  def shuffleChecksumMismatchFullRetryEnabled: Boolean =
+    getConf(SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED)
 
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 

@@ -3483,11 +3483,19 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   private def constructChecksumMismatchStageFetchFailed(): (Int, Int) = {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
 
-    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
+    val shuffleDep1 = new ShuffleDependency(
+      shuffleMapRdd1,
+      new HashPartitioner(2),
+      checksumMismatchFullRetryEnabled = true
+    )
     val shuffleId1 = shuffleDep1.shuffleId
     val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
 
-    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
+    val shuffleDep2 = new ShuffleDependency(
+      shuffleMapRdd2,
+      new HashPartitioner(2),
+      checksumMismatchFullRetryEnabled = true
+    )
     val shuffleId2 = shuffleDep2.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
 
@@ -3515,7 +3523,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   // Construct the scenario of stages with checksum mismatches and FetchFailed.
   // This function assumes that the input `mapRdd` has a single stage with 2 partitions.
   private def constructChecksumMismatchStageFetchFailed(mapRdd: MyRDD): Unit = {
-    val shuffleDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
+    val shuffleDep = new ShuffleDependency(
+      mapRdd,
+      new HashPartitioner(2),
+      checksumMismatchFullRetryEnabled = true
+    )
     val shuffleId = shuffleDep.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
 
@@ -3569,7 +3581,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("SPARK-53575: abort stage while using old fetch protocol") {
     conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
-    conf.set(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key, "true")
     constructChecksumMismatchStageFetchFailed()
 
     scheduler.resubmitFailedStages()
@@ -3582,9 +3593,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-53575: retry all the succeeding stages when the map stage has checksum mismatches") {
-    conf.set(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key, "true")
-
-    val (shuffleId1, shuffleId2) = constructChecksumMismatchStageFetchFailed()
+    val (shuffleId1, shuffleId2) =
+      constructChecksumMismatchStageFetchFailed()
 
     // Check status for all failedStages.
     val failedStages = scheduler.failedStages.toSeq
@@ -3610,21 +3620,31 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-53575: continuous checksum mismatch stage roll back") {
-    conf.set(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key, "true")
-
     // shuffleMapRdd1/2 have checksum mismatches, and shuffleMapRdd2/3 requires full stage retries.
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
-    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
+    val shuffleDep1 = new ShuffleDependency(
+      shuffleMapRdd1,
+      new HashPartitioner(2),
+      checksumMismatchFullRetryEnabled = true
+    )
     val shuffleId1 = shuffleDep1.shuffleId
 
     val shuffleMapRdd2 = new MyRDD(
       sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
-    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
+    val shuffleDep2 = new ShuffleDependency(
+      shuffleMapRdd2,
+      new HashPartitioner(2),
+      checksumMismatchFullRetryEnabled = true
+    )
     val shuffleId2 = shuffleDep2.shuffleId
 
     val shuffleMapRdd3 = new MyRDD(
       sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
-    val shuffleDep3 = new ShuffleDependency(shuffleMapRdd3, new HashPartitioner(2))
+    val shuffleDep3 = new ShuffleDependency(
+      shuffleMapRdd3,
+      new HashPartitioner(2),
+      checksumMismatchFullRetryEnabled = true
+    )
     val shuffleId3 = shuffleDep3.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep3), tracker = mapOutputTracker)
 
@@ -3670,13 +3690,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-53575: cannot rollback a result stage") {
-    conf.set(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key, "true")
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     assertChecksumMismatchResultStageFailToRollback(shuffleMapRdd)
   }
 
   test("SPARK-53575: local checkpoint fail to rollback (checkpointed before)") {
-    conf.set(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key, "true")
     val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil)
     shuffleMapRdd.localCheckpoint()
     shuffleMapRdd.doCheckpoint()
@@ -3684,14 +3702,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-53575: local checkpoint fail to rollback (checkpointing now)") {
-    conf.set(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key, "true")
     val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil)
     shuffleMapRdd.localCheckpoint()
     assertChecksumMismatchResultStageFailToRollback(shuffleMapRdd)
   }
 
   test("SPARK-53575: reliable checkpoint can avoid rollback (checkpointed before)") {
-    conf.set(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key, "true")
     withTempDir { dir =>
       sc.setCheckpointDir(dir.getCanonicalPath)
       val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil)
@@ -3702,7 +3718,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-53575: reliable checkpoint fail to rollback (checkpointing now)") {
-    conf.set(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key, "true")
     withTempDir { dir =>
       sc.setCheckpointDir(dir.getCanonicalPath)
       val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil)

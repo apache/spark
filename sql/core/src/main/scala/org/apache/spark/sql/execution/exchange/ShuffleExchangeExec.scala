@@ -480,20 +480,22 @@ object ShuffleExchangeExec {
     // Now, we manually create a ShuffleDependency. Because pairs in rddWithPartitionIds
     // are in the form of (partitionId, row) and every partitionId is in the expected range
     // [0, part.numPartitions - 1]. The partitioner of this is a PartitionIdPassthrough.
-    val checksumSize =
+    val checksumSize = {
       if (SQLConf.get.shuffleOrderIndependentChecksumEnabled ||
-        SparkEnv.get.conf.get(config.SCHEDULER_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED)) {
+        SQLConf.get.shuffleChecksumMismatchFullRetryEnabled) {
         part.numPartitions
       } else {
         0
       }
+    }
     val dependency =
       new ShuffleDependency[Int, InternalRow, InternalRow](
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
         serializer,
         shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
-        rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
+        rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
+        checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled)
 
     dependency
   }
