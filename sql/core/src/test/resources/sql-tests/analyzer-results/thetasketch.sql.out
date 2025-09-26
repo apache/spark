@@ -998,7 +998,7 @@ WithCTE
 :  +- SubqueryAlias union_result
 :     +- Aggregate [theta_union_agg(sketch#x, 16, 0, 0) AS union_sketch#x]
 :        +- SubqueryAlias sketches
-:           +- CTERelationRef xxxx, true, [sketch_type#x, sketch#x], false, false, 4
+:           +- CTERelationRef xxxx, true, [sketch_type#x, sketch#x], false, false, 4, false
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias individual_sketches
 :     +- Aggregate [theta_sketch_agg(col1#x, 12, 0, 0) AS sketch1#x, theta_sketch_agg(col2#x, 12, 0, 0) AS sketch2#x]
@@ -1007,9 +1007,9 @@ WithCTE
 +- Project [theta_sketch_estimate(scalar-subquery#x []) AS union_estimate#xL, theta_sketch_estimate(theta_union(sketch1#x, sketch2#x, 15)) AS binary_union_estimate#xL, theta_sketch_estimate(theta_intersection(sketch1#x, sketch2#x)) AS intersection_estimate#xL, theta_sketch_estimate(theta_difference(sketch1#x, sketch2#x)) AS difference_estimate#xL]
    :  +- Project [union_sketch#x]
    :     +- SubqueryAlias union_result
-   :        +- CTERelationRef xxxx, true, [union_sketch#x], false, false, 1
+   :        +- CTERelationRef xxxx, true, [union_sketch#x], false, false, 1, false
    +- SubqueryAlias individual_sketches
-      +- CTERelationRef xxxx, true, [sketch1#x, sketch2#x], false, false, 1
+      +- CTERelationRef xxxx, true, [sketch1#x, sketch2#x], false, false, 1, false
 
 
 -- !query
