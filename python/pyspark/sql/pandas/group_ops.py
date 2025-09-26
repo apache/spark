@@ -765,7 +765,9 @@ class PandasGroupedOpsMixin:
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))  # doctest: +SKIP
-        >>> def sum_func(batches: Iterator[pyarrow.RecordBatch]) -> Iterator[pyarrow.RecordBatch]:
+        >>> def sum_func(
+        ...     batches: Iterator[pyarrow.RecordBatch]
+        ... ) -> Iterator[pyarrow.RecordBatch]:  # doctest: +SKIP
         ...     total = 0
         ...     for batch in batches:
         ...         total += pc.sum(batch.column("v")).as_py()
@@ -825,7 +827,7 @@ class PandasGroupedOpsMixin:
 
         >>> def sum_func(
         ...     key: Tuple[pyarrow.Scalar, ...], batches: Iterator[pyarrow.RecordBatch]
-        ... ) -> Iterator[pyarrow.RecordBatch]:
+        ... ) -> Iterator[pyarrow.RecordBatch]:  # doctest: +SKIP
         ...     total = 0
         ...     for batch in batches:
         ...         total += pc.sum(batch.column("v")).as_py()
