@@ -416,7 +416,7 @@ Aggregate [scalar-subquery#x []], [scalar-subquery#x [] AS subq1#x]
 :  :  :        +- OneRowRelation
 :  :  +- Project [1#x]
 :  :     +- SubqueryAlias cte
-:  :        +- CTERelationRef xxxx, true, [1#x], false, false, 1
+:  :        +- CTERelationRef xxxx, true, [1#x], false, false, 1, false
 :  +- WithCTE
 :     :- CTERelationDef xxxx, false
 :     :  +- SubqueryAlias cte
@@ -424,7 +424,7 @@ Aggregate [scalar-subquery#x []], [scalar-subquery#x [] AS subq1#x]
 :     :        +- OneRowRelation
 :     +- Project [1#x]
 :        +- SubqueryAlias cte
-:           +- CTERelationRef xxxx, true, [1#x], false, false, 1
+:           +- CTERelationRef xxxx, true, [1#x], false, false, 1, false
 +- LocalRelation [col1#x]
 
 

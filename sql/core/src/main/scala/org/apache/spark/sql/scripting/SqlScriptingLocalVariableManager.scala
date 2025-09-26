@@ -28,21 +28,21 @@ import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableErro
 class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
   extends VariableManager with DataTypeErrorsBase {
 
+  override def getVariableNameForError(variableName: String): String =
+    toSQLId(Seq(context.currentScope.label, variableName))
+
   override def create(
       nameParts: Seq[String],
       varDef: VariableDefinition,
       overrideIfExists: Boolean): Unit = {
     val name = nameParts.last
 
-    // overrideIfExists should not be supported because local variables don't support
-    // DECLARE OR REPLACE. However ForStatementExec currently uses this to handle local vars,
-    // so we support it for now.
-    // TODO [SPARK-50785]: Refactor ForStatementExec to use local variables properly.
-    if (!overrideIfExists && context.currentScope.variables.contains(name)) {
+    // Sanity check, this should already be thrown by CreateVariableExec.run
+    if (context.currentScope.variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
         messageParameters = Map(
-          "variableName" -> toSQLId(Seq(context.currentScope.label, name))))
+          "variableName" -> getVariableNameForError(name)))
     }
     context.currentScope.variables.put(name, varDef)
   }

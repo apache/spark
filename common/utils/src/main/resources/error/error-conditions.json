@@ -90,6 +90,30 @@
     ],
     "sqlState" : "42000"
   },
+  "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT" : {
+    "message" : [
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be less than or equal to <limit>."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K" : {
+    "message" : [
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be greater than or equal to `k`(<k>)."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_NON_POSITIVE_ARG" : {
+    "message" : [
+      "The value of <argName> in `approx_top_k` must be a positive integer, but got <argValue>."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_NULL_ARG" : {
+    "message" : [
+      "The value of <argName> in `approx_top_k` cannot be NULL."
+    ],
+    "sqlState" : "22004"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -249,6 +273,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER" : {
+    "message" : [
+      "Error loading streaming checkpoint file manager for path=<path>."
+    ],
+    "subClass" : {
+      "ERROR_LOADING_CLASS" : {
+        "message" : [
+          "Error instantiating streaming checkpoint file manager for path=<path> with className=<className>. msg=<msg>."
+        ]
+      },
+      "UNCATEGORIZED" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
       "Cannot load class <className> when registering the function <functionName>, please make sure it is on the classpath."
@@ -324,6 +366,11 @@
       "INVALID_CHANGE_LOG_WRITER_VERSION" : {
         "message" : [
           "The change log writer version cannot be <version>."
+        ]
+      },
+      "INVALID_CHECKPOINT_LINEAGE" : {
+        "message" : [
+          "Invalid checkpoint lineage: <lineage>. <message>"
         ]
       },
       "KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
@@ -926,6 +973,12 @@
     },
     "sqlState" : "21S01"
   },
+  "CYCLIC_FUNCTION_REFERENCE" : {
+    "message" : [
+      "Cyclic function reference detected: <path>."
+    ],
+    "sqlState" : "42887"
+  },
   "DATAFLOW_GRAPH_NOT_FOUND" : {
     "message" : [
       "Dataflow graph with id <graphId> could not be found"
@@ -1446,6 +1499,12 @@
     ],
     "sqlState" : "42711"
   },
+  "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
+    "message" : [
+      "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
       "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
@@ -1791,12 +1850,6 @@
       "An error occurred in the user provided function in foreach sink. Reason: <reason>"
     ],
     "sqlState" : "39000"
-  },
-  "FOUND_MULTIPLE_DATA_SOURCES" : {
-    "message" : [
-      "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
-    ],
-    "sqlState" : "42710"
   },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
@@ -2689,6 +2742,12 @@
     ],
     "sqlState" : "42001"
   },
+  "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Expression type must be string type but got <exprType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [
       "The external type <externalType> is not valid for the type <type> at the expression <expr>."
@@ -2717,6 +2776,34 @@
     "message" : [
       "Field name <fieldName> is invalid: <path> is not a struct."
     ],
+    "sqlState" : "42000"
+  },
+  "INVALID_FLOW_QUERY_TYPE" : {
+    "message" : [
+      "Flow <flowIdentifier> returns an invalid relation type."
+    ],
+    "subClass" : {
+      "BATCH_RELATION_FOR_STREAMING_TABLE" : {
+        "message" : [
+          "Streaming tables may only be defined by streaming relations, but the flow <flowIdentifier> attempts to write a batch relation to the streaming table <tableIdentifier>. Consider using the STREAM operator in Spark-SQL to convert the batch relation into a streaming relation, or populating the streaming table with an append once-flow instead."
+        ]
+      },
+      "STREAMING_RELATION_FOR_MATERIALIZED_VIEW" : {
+        "message" : [
+          "Materialized views may only be defined by a batch relation, but the flow <flowIdentifier> attempts to write a streaming relation to the materialized view <tableIdentifier>."
+        ]
+      },
+      "STREAMING_RELATION_FOR_ONCE_FLOW" : {
+        "message" : [
+          "<flowIdentifier> is an append once-flow that is defined by a streaming relation. Append once-flows may only be defined by or return a batch relation."
+        ]
+      },
+      "STREAMING_RELATION_FOR_PERSISTED_VIEW" : {
+        "message" : [
+          "Persisted views may only be defined by a batch relation, but the flow <flowIdentifier> attempts to write a streaming relation to the persisted view <viewIdentifier>."
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "INVALID_FORMAT" : {
@@ -3360,6 +3447,11 @@
           "expects a string literal, but got <invalidValue>."
         ]
       },
+      "TIME_UNIT" : {
+        "message" : [
+          "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."
@@ -3418,7 +3510,7 @@
   },
   "INVALID_RECURSIVE_CTE" : {
     "message" : [
-      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references. Any top level inner CTE must not contain self references."
     ],
     "sqlState" : "42836"
   },
@@ -3429,7 +3521,7 @@
     "subClass" : {
       "PLACE" : {
         "message" : [
-          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins and in aggregates"
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, window functions or sorts"
         ]
       }
     },
@@ -3556,6 +3648,12 @@
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42K08"
+  },
+  "INVALID_SQL_FUNCTION_DATA_ACCESS" : {
+    "message" : [
+      "Cannot create a SQL function with CONTAINS SQL that accesses a table/view or a SQL function that reads SQL data. Please use READS SQL DATA instead."
+    ],
+    "sqlState" : "42K0E"
   },
   "INVALID_SQL_FUNCTION_PLAN_STRUCTURE" : {
     "message" : [
@@ -3827,12 +3925,6 @@
     },
     "sqlState" : "42K0M"
   },
-  "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
-    "message" : [
-      "Variable type must be string type but got <varType>."
-    ],
-    "sqlState" : "42K09"
-  },
   "INVALID_VARIANT_CAST" : {
     "message" : [
       "The variant value `<value>` cannot be cast into `<dataType>`. Please use `try_variant_get` instead."
@@ -3947,7 +4039,7 @@
   },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
-      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>."
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. <externalEngineError>."
     ],
     "subClass" : {
       "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
@@ -3981,17 +4073,24 @@
     ],
     "sqlState" : "42K0L"
   },
-  "LABEL_ALREADY_EXISTS" : {
+  "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS" : {
     "message" : [
-      "The label <label> already exists. Choose another name or rename the existing label."
+      "The label or FOR variable <label> already exists. Choose another name or rename the existing one."
     ],
     "sqlState" : "42K0L"
   },
-  "LABEL_NAME_FORBIDDEN" : {
+  "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN" : {
     "message" : [
-      "The label name <label> is forbidden."
+      "The label or FOR variable name <label> is forbidden."
     ],
     "sqlState" : "42K0L"
+  },
+  "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED" : {
+    "message" : [
+      "LATERAL JOIN with Arrow-optimized user-defined table functions (UDTFs) is not supported. Arrow UDTFs cannot be used on the right-hand side of a lateral join.",
+      "Please use a regular UDTF instead, or restructure your query to avoid the lateral join."
+    ],
+    "sqlState" : "0A000"
   },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
@@ -4358,6 +4457,18 @@
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
     ],
     "sqlState" : "42809"
+  },
+  "NOT_A_SCALAR_FUNCTION" : {
+    "message" : [
+      "<functionName> appears as a scalar expression here, but the function was defined as a table function. Please update the query to move the function call into the FROM clause, or redefine <functionName> as a scalar function instead."
+    ],
+    "sqlState" : "42887"
+  },
+  "NOT_A_TABLE_FUNCTION" : {
+    "message" : [
+      "<functionName> appears as a table function here, but the function was defined as a scalar function. Please update the query to move the function call outside the FROM clause, or redefine <functionName> as a table function instead."
+    ],
+    "sqlState" : "42887"
   },
   "NOT_NULL_ASSERT_VIOLATION" : {
     "message" : [
@@ -4809,6 +4920,12 @@
     ],
     "sqlState" : "42601"
   },
+  "REMAINDER_BY_ZERO" : {
+    "message" : [
+      "Remainder by zero. Use `try_mod` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22012"
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
       "Failed to rename as <sourcePath> was not found."
@@ -4865,6 +4982,13 @@
       "Not found an id for the rule name \"<ruleName>\". Please modify RuleIdCollection.scala if you are adding a new rule."
     ],
     "sqlState" : "22023"
+  },
+  "RUN_EMPTY_PIPELINE" : {
+    "message" : [
+      "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
+      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
+    ],
+    "sqlState" : "42617"
   },
   "SCALAR_FUNCTION_NOT_COMPATIBLE" : {
     "message" : [
@@ -5049,11 +5173,34 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_CHECKPOINT_IDS_NOT_SUPPORTED" : {
+    "message" : [
+      "<msg>"
+    ],
+    "sqlState" : "KD002"
+  },
+  "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
+    "message" : [
+      "The checkpoint location <checkpointLocation> should be empty on batch 0",
+      "Please either use a new checkpoint location, or delete the existing data in the checkpoint location."
+    ],
+    "sqlState" : "42K03"
+  },
   "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
     "message" : [
       "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_COMMIT_VALIDATION_FAILED" : {
+    "message" : [
+      "State store commit validation failed for batch <batchId>.",
+      "Expected <expectedCommits> commits but got <actualCommits>.",
+      "Missing commits: <missingCommits>.",
+      "This error typically occurs when using operations like show() or limit() in foreachBatch that don't process all partitions, or if you are swallowing an exception and returning from the function early.",
+      "To fix: ensure your foreachBatch function processes the entire DataFrame."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
     "message" : [
@@ -5085,6 +5232,18 @@
       "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
     ],
     "sqlState" : "42K06"
+  },
+  "STATE_STORE_INVALID_STAMP" : {
+    "message" : [
+      "Invalid stamp <providedStamp>, current stamp: <currentStamp>."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STATE_STORE_INVALID_STATE_MACHINE_TRANSITION" : {
+    "message" : [
+      "Invalid state machine transition detected for state store <storeId>. Old state: <oldState>, New state: <newState>, Operation: <operation>."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION" : {
     "message" : [
@@ -5265,6 +5424,14 @@
     },
     "sqlState" : "42616"
   },
+  "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED" : {
+    "message" : [
+      "Reading state across different checkpoint format versions is not supported.",
+      "startBatchId=<startBatchId>, endBatchId=<endBatchId>.",
+      "startFormatVersion=<startFormatVersion>, endFormatVersion=<endFormatVersion>."
+    ],
+    "sqlState" : "KD002"
+  },
   "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
     "message" : [
       "The state does not have any partition. Please double check that the query points to the valid state. options: <sourceOptions>"
@@ -5437,6 +5604,18 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "THETA_INVALID_INPUT_SKETCH_BUFFER" : {
+    "message" : [
+      "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."
+    ],
+    "sqlState" : "22546"
+  },
+  "THETA_INVALID_LG_NOM_ENTRIES" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+    ],
+    "sqlState" : "22546"
   },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [
@@ -6496,12 +6675,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION" : {
-    "message" : [
-      "The function <funcName> does not support streaming. Please remove the STREAM keyword"
-    ],
-    "sqlState" : "42000"
-  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"
@@ -6596,6 +6769,12 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_TABLE_CHANGE_IN_AUTO_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "The table changes <changes> are not supported by the catalog on table <tableName>."
+    ],
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [
@@ -8293,11 +8472,6 @@
       "Failed to get outer pointer for <innerCls>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2155" : {
-    "message" : [
-      "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2163" : {
     "message" : [
       "Initial type <dataType> must be a <target>."
@@ -8629,7 +8803,7 @@
   },
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
-      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg> or apply the shuffle sort merge join hint as described in the Spark documentation: https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-hints.html#join-hints."
     ]
   },
   "_LEGACY_ERROR_TEMP_2251" : {

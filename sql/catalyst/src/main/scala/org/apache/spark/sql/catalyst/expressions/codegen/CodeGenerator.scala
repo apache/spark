@@ -33,7 +33,7 @@ import org.codehaus.janino.util.ClassFile.CodeAttribute
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1989,7 +1989,7 @@ object CodeGenerator extends Logging {
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
     case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
       java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE

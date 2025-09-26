@@ -930,14 +930,19 @@ class AdaptiveQueryExecSuite
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
           val joined = createJoinedDF()
-          joined.explain(true)
 
           val error = intercept[SparkException] {
             joined.collect()
           }
-          assert((Seq(error) ++ Option(error.getCause) ++ error.getSuppressed()).exists(
-            e => e.getMessage() != null && e.getMessage().contains("coalesce test error")))
+          val errMsgList = (error :: error.getCause :: error.getSuppressed.toList)
+            .filter(e => e != null && e.getMessage != null)
+            .map(_.getMessage)
 
+          assert(errMsgList.exists(_.contains("coalesce test error")),
+            s"""
+               |The error message should contain 'coalesce test error', but got:
+               |${errMsgList.mkString("======\n", "\n", "\n======")}
+               |""".stripMargin)
           val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
           // All QueryStages should be based on ShuffleQueryStageExec
@@ -1119,7 +1124,7 @@ class AdaptiveQueryExecSuite
         assert(reads.length == 1)
         val read = reads.head
         assert(read.isLocalRead)
-        assert(read.metrics.keys.toSeq == Seq("numPartitions"))
+        assert(read.metrics.keys.toSeq == Seq("numPartitions", "numEmptyPartitions"))
         assert(read.metrics("numPartitions").value == read.partitionSpecs.length)
       }
 
@@ -1866,7 +1871,9 @@ class AdaptiveQueryExecSuite
     }
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      // Disabling cleanup as the test assertions depend on them
+      SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "false") {
       val df = sql(
         """
           |SELECT * FROM (
@@ -2084,7 +2091,15 @@ class AdaptiveQueryExecSuite
               """.stripMargin),
             numUnion = if (combineUnionEnabled) 1 else 2,
             numShuffleReader = 3,
-            numPartition = 1 + 1 + 2)
+            // SPARK-52921
+            // If `combineUnionEnabled` is false, there are 2 unions.
+            // The inner union has 1 partition because its children have the same partitioning:
+            // CoalescedHashPartitioning(HashPartitioning(key, 10), CoalescedBoundary(0,10)).
+            // The outer union has 1 (inner union) + 2 (t1) partitions.
+            //
+            // If `combineUnionEnabled` is true, there is only 1 union. As the children have
+            // different partitioning, the union will have sum of children partitions.
+            numPartition = if (combineUnionEnabled) 1 + 1 + 2 else 1 + 2)
 
           // negative test
           checkResultPartition(
@@ -3188,6 +3203,82 @@ class AdaptiveQueryExecSuite
           s"Error message should contain first error details, got: $errorMessage")
         assert(errorMessage.contains("2. RuntimeException: Stage 2 materialization failed"),
           s"Error message should contain second error details, got: $errorMessage")
+      }
+    }
+  }
+
+  test("SPARK-52921: Specify outputPartitioning for UnionExec for same output partitoning") {
+    def checkResultPartition(
+        df: Dataset[Row],
+        numUnion: Int,
+        numShuffleReader: Int,
+        numPartition: Int): Unit = {
+      df.collect()
+      assert(collect(df.queryExecution.executedPlan) {
+        case u: UnionExec => u
+      }.size == numUnion)
+      assert(collect(df.queryExecution.executedPlan) {
+        case r: AQEShuffleReadExec => r
+      }.size === numShuffleReader)
+      assert(df.rdd.partitions.length === numPartition)
+    }
+
+    Seq(true, false).foreach { combineUnionEnabled =>
+      val combineUnionConfig = if (combineUnionEnabled) {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ""
+      } else {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.CombineUnions"
+      }
+      // advisory partition size 1048576 has no special meaning, just a big enough value
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+        combineUnionConfig) {
+        withTempView("t1", "t2") {
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
+            .toDF().createOrReplaceTempView("t1")
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)
+            .toDF().createOrReplaceTempView("t2")
+
+          val query =
+            """
+              |SELECT /*+ merge(t2) */ t1.key, t2.key FROM t1 JOIN t2 ON t1.key = t2.key
+              |UNION ALL
+              |SELECT key, count(*) FROM t2 GROUP BY key
+              |UNION ALL
+              |SELECT * FROM t1
+              |""".stripMargin
+
+          val correctResults = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+            checkResultPartition(
+              sql(query),
+              numUnion = if (combineUnionEnabled) 1 else 2,
+              numShuffleReader = 3,
+              numPartition = 1 + 1 + 2)
+
+            sql(query).collect()
+          }
+
+          withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+            checkResultPartition(
+              sql(query),
+              numUnion = if (combineUnionEnabled) 1 else 2,
+              numShuffleReader = 3,
+              // If `combineUnionEnabled` is false, there are 2 unions.
+              // The inner union has 1 partition because its children have the same partitioning:
+              // CoalescedHashPartitioning(HashPartitioning(key, 10), CoalescedBoundary(0,10)).
+              // The outer union has 1 (inner union) + 2 (t1) partitions.
+              //
+              // If `combineUnionEnabled` is true, there is only 1 union. As the children have
+              // different partitioning, the union will have sum of children partitions.
+              numPartition = if (combineUnionEnabled) 1 + 1 + 2 else 1 + 2)
+
+            checkAnswer(sql(query), correctResults)
+          }
+        }
       }
     }
   }

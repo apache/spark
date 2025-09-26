@@ -1316,4 +1316,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assert(ts1._1.getTime < ts2._1.getTime)
     }
   }
+
+  test("SPARK-52521: view with ANSI expressions") {
+    withView("v1") {
+      withSQLConf(ANSI_ENABLED.key -> "true") {
+        sql(
+          """
+            |CREATE VIEW v1 AS
+            |SELECT RIGHT(CAST(id AS STRING), 1) AS c
+            |FROM range(1)
+            |GROUP BY RIGHT(CAST(id AS STRING), 1)
+            |""".stripMargin)
+      }
+      withSQLConf(ANSI_ENABLED.key -> "false") {
+        checkAnswer(sql("SELECT * FROM v1"), Row("0"))
+      }
+    }
+  }
 }

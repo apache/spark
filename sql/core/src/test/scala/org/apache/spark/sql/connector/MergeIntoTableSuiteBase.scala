@@ -21,16 +21,21 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, ColumnDefaultValue, InMemoryTable, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 
-abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
+abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
+
+  protected def deltaMerge: Boolean = false
 
   test("merge into table with expression-based default values") {
     val columns = Array(
@@ -1771,6 +1776,1504 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("Merge metrics with matched clause") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 10).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | UPDATE SET salary = 1000
+           |""".stripMargin
+      }
+
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 2)
+      assertMetric(mergeExec, "numTargetRowsInserted", 0)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 1000, "hr"), // updated
+          Row(2, 200, "software"),
+          Row(3, 300, "hr")))
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "2"))
+      assert(commitProps("merge.numTargetRowsInserted") === "0")
+      assert(commitProps("merge.numTargetRowsUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
+    }
+  }
+
+  test("Merge metrics with matched and not matched clause") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(
+        (4, 100, "marketing"),
+        (5, 400, "executive"),
+        (6, 100, "hr")
+      ).toDF("pk", "salary", "dep")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET salary = 9999
+           |WHEN NOT MATCHED AND salary > 200 THEN
+           | INSERT *
+           |""".stripMargin
+      }
+
+      assertMetric(mergeExec, "numTargetRowsCopied", 0)
+      assertMetric(mergeExec, "numTargetRowsInserted", 1)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"),
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(5, 400, "executive"))) // inserted
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("merge.numTargetRowsCopied") === "0")
+      assert(commitProps("merge.numTargetRowsInserted") === "1")
+      assert(commitProps("merge.numTargetRowsUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
+    }
+  }
+
+  test("Merge metrics with matched and not matched by source clauses: update") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "marketing" }
+          |{ "pk": 5, "salary": 500, "dep": "executive" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 10).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | UPDATE SET salary = 1000
+           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+           | UPDATE SET salary = -1
+           |""".stripMargin
+      }
+
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsInserted", 0)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 2)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 1000, "hr"), // updated
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(4, 400, "marketing"),
+          Row(5, -1, "executive"))) // updated
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("merge.numTargetRowsInserted") === "0")
+      assert(commitProps("merge.numTargetRowsUpdated") === "2")
+      assert(commitProps("merge.numTargetRowsDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
+    }
+  }
+
+  test("Merge metrics with matched and not matched by source clauses: delete") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "marketing" }
+          |{ "pk": 5, "salary": 500, "dep": "executive" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 10).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | DELETE
+           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+           | DELETE
+           |""".stripMargin
+      }
+
+
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsInserted", 0)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 2)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 1)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 1)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          // Row(1, 100, "hr") deleted
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(4, 400, "marketing"))
+          // Row(5, 500, "executive") deleted
+      )
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("merge.numTargetRowsInserted") === "0")
+      assert(commitProps("merge.numTargetRowsUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsDeleted") === "2")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "1")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "1")
+    }
+  }
+
+  test("Merge metrics with matched, not matched, and not matched by source clauses: update") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "marketing" }
+          |{ "pk": 5, "salary": 500, "dep": "executive" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | UPDATE SET salary = 1000
+           |WHEN NOT MATCHED AND s.pk < 10 THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
+           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+           | UPDATE SET salary = -1
+           |""".stripMargin
+      }
+
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsInserted", 1)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 2)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 1)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 1000, "hr"), // updated
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(4, 400, "marketing"),
+          Row(5, -1, "executive"), // updated
+          Row(6, -1, "dummy"))) // inserted
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("merge.numTargetRowsInserted") === "1")
+      assert(commitProps("merge.numTargetRowsUpdated") === "2")
+      assert(commitProps("merge.numTargetRowsDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
+    }
+  }
+
+  test("Merge metrics with matched, not matched, and not matched by source clauses: delete") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "marketing" }
+          |{ "pk": 5, "salary": 500, "dep": "executive" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val mergeExec = findMergeExec {
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND salary < 200 THEN
+           | DELETE
+           |WHEN NOT MATCHED AND s.pk < 10 THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
+           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+           | DELETE
+           |""".stripMargin
+      }
+
+      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+      assertMetric(mergeExec, "numTargetRowsInserted", 1)
+      assertMetric(mergeExec, "numTargetRowsUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsDeleted", 2)
+      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 1)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 1)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          // Row(1, 100, "hr") deleted
+          Row(2, 200, "software"),
+          Row(3, 300, "hr"),
+          Row(4, 400, "marketing"),
+          // Row(5, 500, "executive") deleted
+          Row(6, -1, "dummy"))) // inserted
+
+      val table = catalog.loadTable(ident)
+      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("merge.numTargetRowsInserted") === "1")
+      assert(commitProps("merge.numTargetRowsUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsDeleted") === "2")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "1")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "1")
+    }
+  }
+
+  test("SPARK-52689: V2 write metrics for merge") {
+    Seq("true", "false").foreach { aqeEnabled: String =>
+      withTempView("source") {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled) {
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |{ "pk": 4, "salary": 400, "dep": "marketing" }
+              |{ "pk": 5, "salary": 500, "dep": "executive" }
+              |""".stripMargin)
+
+          val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
+          sourceDF.createOrReplaceTempView("source")
+
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED AND salary < 200 THEN
+               | DELETE
+               |WHEN NOT MATCHED AND s.pk < 10 THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
+               |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+               | DELETE
+               |""".stripMargin
+          )
+
+          val table = catalog.loadTable(ident)
+          val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+          assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+          assert(commitProps("merge.numTargetRowsInserted") === "1")
+          assert(commitProps("merge.numTargetRowsUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsDeleted") === "2")
+          assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsMatchedDeleted") === "1")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "1")
+
+          sql(s"DROP TABLE $tableNameAsString")
+        }
+      }
+    }
+  }
+
+  test("Merge schema evolution new column with set explicit column") {
+    Seq((true, true), (false, true), (true, false)).foreach {
+      case (withSchemaEvolution, schemaEvolutionEnabled) =>
+        withTempView("source") {
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |{ "pk": 4, "salary": 400, "dep": "marketing" }
+              |{ "pk": 5, "salary": 500, "dep": "executive" }
+              |""".stripMargin)
+
+          if (!schemaEvolutionEnabled) {
+            sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
+                   | ('auto-schema-evolution' = 'false')""".stripMargin)
+          }
+
+          val sourceDF = Seq((4, 150, "dummy", true),
+            (5, 250, "dummy", true),
+            (6, 350, "dummy", false)).toDF("pk", "salary", "dep", "active")
+          sourceDF.createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          val mergeStmt = s"""MERGE $schemaEvolutionClause
+                             |INTO $tableNameAsString t
+                             |USING source s
+                             |ON t.pk = s.pk
+                             |WHEN MATCHED THEN
+                             | UPDATE SET dep='software', active=s.active
+                             |WHEN NOT MATCHED THEN
+                             | INSERT (pk, salary, dep, active) VALUES (s.pk, 0, s.dep, s.active)
+                             |""".stripMargin
+
+          if (withSchemaEvolution && schemaEvolutionEnabled) {
+            sql(mergeStmt)
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(1, 100, "hr", null),
+                Row(2, 200, "software", null),
+                Row(3, 300, "hr", null),
+                Row(4, 400, "software", true),
+                Row(5, 500, "software", true),
+                Row(6, 0, "dummy", false)))
+          } else {
+            val e = intercept[org.apache.spark.sql.AnalysisException] {
+              sql(mergeStmt)
+            }
+            assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+            assert(e.getMessage.contains("A column, variable, or function parameter with name " +
+              "`active` cannot be resolved"))
+          }
+
+          sql(s"DROP TABLE $tableNameAsString")
+        }
+    }
+  }
+
+  test("Merge schema evolution new column with set all columns") {
+    Seq((true, true), (false, true), (true, false)).foreach {
+      case (withSchemaEvolution, schemaEvolutionEnabled) =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "marketing" }
+            |{ "pk": 5, "salary": 500, "dep": "executive" }
+            |""".stripMargin)
+
+
+        if (!schemaEvolutionEnabled) {
+          sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
+                 | ('auto-schema-evolution' = 'false')""".stripMargin)
+        }
+
+        val sourceDF = Seq((4, 150, "finance", true),
+          (5, 250, "finance", false),
+          (6, 350, "finance", true)).toDF("pk", "salary", "dep", "active")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        sql(
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET *
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin)
+
+        if (withSchemaEvolution && schemaEvolutionEnabled) {
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", null),
+              Row(2, 200, "software", null),
+              Row(3, 300, "hr", null),
+              Row(4, 150, "finance", true),
+              Row(5, 250, "finance", false),
+              Row(6, 350, "finance", true)))
+        } else {
+          // Without schema evolution, the new columns are not added
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr"),
+              Row(2, 200, "software"),
+              Row(3, 300, "hr"),
+              Row(4, 150, "finance"),
+              Row(5, 250, "finance"),
+              Row(6, 350, "finance")))
+        }
+      }
+      sql(s"DROP TABLE $tableNameAsString")
+    }
+  }
+
+  test("Merge schema evolution replacing column with set all column") {
+    Seq((true, true), (false, true), (true, false)).foreach {
+      case (withSchemaEvolution, schemaEvolutionEnabled) =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "marketing" }
+            |{ "pk": 5, "salary": 500, "dep": "executive" }
+            |""".stripMargin)
+
+        if (!schemaEvolutionEnabled) {
+          sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
+                 | ('auto-schema-evolution' = 'false')""".stripMargin)
+        }
+
+        val sourceDF = Seq((4, 150, true),
+          (5, 250, true),
+          (6, 350, false)).toDF("pk", "salary", "active")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        sql(s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED THEN
+                           | UPDATE SET *
+                           |WHEN NOT MATCHED THEN
+                           | INSERT *
+                           |""".stripMargin)
+        if (withSchemaEvolution && schemaEvolutionEnabled) {
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", null),
+              Row(2, 200, "software", null),
+              Row(3, 300, "hr", null),
+              Row(4, 150, "marketing", true),
+              Row(5, 250, "executive", true),
+              Row(6, 350, null, false)))
+        } else {
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr"),
+              Row(2, 200, "software"),
+              Row(3, 300, "hr"),
+              Row(4, 150, "marketing"),
+              Row(5, 250, "executive"),
+              Row(6, 350, null)))
+        }
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
+  test("Merge schema evolution replacing column with default value and set all column") {
+    Seq((true, true), (false, true), (true, false)).foreach {
+      case (withSchemaEvolution, schemaEvolutionEnabled) =>
+        withTempView("source") {
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |{ "pk": 4, "salary": 400, "dep": "marketing" }
+              |{ "pk": 5, "salary": 500, "dep": "executive" }
+              |""".stripMargin)
+
+          if (!schemaEvolutionEnabled) {
+            sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
+                   | ('auto-schema-evolution' = 'false')""".stripMargin)
+          }
+          sql(s"""ALTER TABLE $tableNameAsString ALTER COLUMN dep SET DEFAULT 'unknown'""")
+
+          val sourceDF = Seq((4, 150, true),
+            (5, 250, true),
+            (6, 350, false)).toDF("pk", "salary", "active")
+          sourceDF.createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          sql(s"""MERGE $schemaEvolutionClause
+                 |INTO $tableNameAsString t
+                 |USING source s
+                 |ON t.pk = s.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin)
+          if (withSchemaEvolution && schemaEvolutionEnabled) {
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(1, 100, "hr", null),
+                Row(2, 200, "software", null),
+                Row(3, 300, "hr", null),
+                Row(4, 150, "marketing", true),
+                Row(5, 250, "executive", true),
+                Row(6, 350, "unknown", false)))
+          } else {
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(1, 100, "hr"),
+                Row(2, 200, "software"),
+                Row(3, 300, "hr"),
+                Row(4, 150, "marketing"),
+                Row(5, 250, "executive"),
+                Row(6, 350, "unknown")))
+          }
+          sql(s"DROP TABLE $tableNameAsString")
+        }
+    }
+  }
+
+  test("Merge schema evolution replacing column with set explicit column") {
+    Seq((true, true), (false, true), (true, false)).foreach {
+      case (withSchemaEvolution, schemaEvolutionEnabled) =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "marketing" }
+            |{ "pk": 5, "salary": 500, "dep": "executive" }
+            |""".stripMargin)
+
+        if (!schemaEvolutionEnabled) {
+          sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
+                 | ('auto-schema-evolution' = 'false')""".stripMargin)
+        }
+
+        val sourceDF = Seq((4, 150, true),
+          (5, 250, true),
+          (6, 350, false)).toDF("pk", "salary", "active")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED THEN
+                           | UPDATE SET dep = 'finance', active = s.active
+                           |WHEN NOT MATCHED THEN
+                           | INSERT (pk, salary, dep, active) VALUES
+                           | (s.pk, s.salary, 'finance', s.active)
+                           |""".stripMargin
+
+        if (withSchemaEvolution && schemaEvolutionEnabled) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", null),
+              Row(2, 200, "software", null),
+              Row(3, 300, "hr", null),
+              Row(4, 400, "finance", true),
+              Row(5, 500, "finance", true),
+              Row(6, 350, "finance", false)))
+        } else {
+          val e = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+          assert(e.getMessage.contains("A column, variable, or function parameter with name " +
+            "`active` cannot be resolved"))
+        }
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge into schema evolution type widening from short to int") {
+    Seq((true, true), (false, true), (true, false)).foreach {
+      case (withSchemaEvolution, schemaEvolutionEnabled) =>
+        withTable(tableNameAsString) {
+          withTempView("source") {
+            createAndInitTable("pk INT NOT NULL, salary SMALLINT, dep STRING",
+              """{ "pk": 1, "salary": 100, "dep": "hr" }
+                |{ "pk": 2, "salary": 200, "dep": "finance" }
+                |{ "pk": 3, "salary": 300, "dep": "engineering" }
+                |""".stripMargin)
+
+            if (!schemaEvolutionEnabled) {
+              sql(
+                s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
+                   | ('auto-schema-evolution' = 'false')""".stripMargin)
+            }
+
+            // Source data with int salary values that would exceed short range
+            val sourceRows = Seq(
+              (1, 50000, "hr"),
+              (4, 40000, "sales"),
+              (5, 500, "marketing"))
+            sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+            val mergeStmt =
+              s"""MERGE $schemaEvolutionClause
+                 |INTO $tableNameAsString t
+                 |USING source s
+                 |ON t.pk = s.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET salary = s.salary
+                 |WHEN NOT MATCHED THEN
+                 | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)
+                 |""".stripMargin
+
+            if (withSchemaEvolution && schemaEvolutionEnabled) {
+              // Schema evolution should allow type widening from SMALLINT to INT for salary column
+              sql(mergeStmt)
+              checkAnswer(
+                sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+                Seq(
+                  Row(1, 50000, "hr"),
+                  Row(2, 200, "finance"),
+                  Row(3, 300, "engineering"),
+                  Row(4, 40000, "sales"),
+                  Row(5, 500, "marketing")))
+              val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+              val salaryField = tableSchema.find(_.name == "salary").get
+              assert(salaryField.dataType == IntegerType)
+            } else {
+              val exception = intercept[Exception] {
+                sql(mergeStmt)
+              }
+              assert(exception.getMessage.contains(
+                "Fail to assign a value of \"INT\" type to the \"SMALLINT\" " +
+                  "type column or variable `salary` due to an overflow"))
+            }
+          }
+        }
+    }
+  }
+
+  test("merge into schema evolution type widening nested struct from int to long") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTable(tableNameAsString) {
+        withTempView("source") {
+          // Create table with nested struct containing int field
+          createAndInitTable(
+            s"""pk INT NOT NULL,
+               |employee STRUCT<salary: INT, details: STRUCT<bonus: INT, years: INT>>,
+               |dep STRING""".stripMargin,
+            """{ "pk": 1, "employee": { "salary": 50000, "details":
+              |{ "bonus": 5000, "years": 2 } }, "dep": "hr" }""".stripMargin.replace("\n", "")
+              + "\n" +
+              """{ "pk": 2, "employee": { "salary": 60000, "details":
+                |{ "bonus": 6000, "years": 3 } }, "dep": "finance" }"""
+                .stripMargin.replace("\n", "")
+          )
+
+          // Source data with long values that exceed int range for nested fields
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("employee", StructType(Seq(
+              StructField("salary", IntegerType),
+              StructField("details", StructType(Seq(
+                StructField("bonus", LongType), // Changed from INT to LONG
+                StructField("years", IntegerType)
+              )))
+            ))),
+            StructField("dep", StringType)
+          ))
+
+          val data = Seq(
+            Row(1, Row(75000, Row(3000000000L, 5)), "hr"),
+            Row(3, Row(80000, Row(4000000000L, 1)), "engineering")
+          )
+
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          val mergeStmt =
+            s"""MERGE $schemaEvolutionClause
+               |INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, employee, dep) VALUES (s.pk, s.employee, s.dep)
+               |""".stripMargin
+
+          if (withSchemaEvolution) {
+            // Schema evolution should allow type widening from INT to LONG for nested bonus field
+            sql(mergeStmt)
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+              Seq(
+                Row(1, Row(75000, Row(3000000000L, 5)), "hr"),
+                Row(2, Row(60000, Row(6000, 3)), "finance"),
+                Row(3, Row(80000, Row(4000000000L, 1)), "engineering")
+              ))
+
+            val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+            val employeeField = tableSchema.find(_.name == "employee").get.dataType
+              .asInstanceOf[StructType]
+            val detailsField = employeeField.find(_.name == "details").get.dataType
+              .asInstanceOf[StructType]
+            val bonusField = detailsField.find(_.name == "bonus").get
+            assert(bonusField.dataType == LongType)
+          } else {
+            val exception = intercept[Exception] {
+              sql(mergeStmt)
+            }
+            assert(exception.getMessage.contains("Fail to assign a value of \"BIGINT\" type " +
+              "to the \"INT\" type column or variable `employee`.`details`.`bonus`" +
+              " due to an overflow"))
+          }
+        }
+      }
+    }
+  }
+
+  test("merge into schema evolution type widening in array from int to long") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTable(tableNameAsString) {
+        withTempView("source") {
+          // Create table with array of int values
+          createAndInitTable(
+            s"""pk INT NOT NULL,
+               |scores ARRAY<INT>,
+               |dep STRING""".stripMargin,
+            """{ "pk": 1, "scores": [1000, 2000, 3000], "dep": "hr" }
+              |{ "pk": 2, "scores": [4000, 5000, 6000], "dep": "finance" }
+              |""".stripMargin)
+
+          // Source data with array of long values that exceed int range
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("scores", ArrayType(LongType)), // Changed from INT to LONG
+            StructField("dep", StringType)
+          ))
+
+          val data = Seq(
+            Row(1, Array(3000000000L, 4000000000L), "hr"),
+            Row(3, Array(5000000000L, 6000000000L), "engineering")
+          )
+
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          val mergeStmt =
+            s"""MERGE $schemaEvolutionClause
+               |INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, scores, dep) VALUES (s.pk, s.scores, s.dep)
+               |""".stripMargin
+
+          if (withSchemaEvolution) {
+            // Schema evolution should allow type widening from ARRAY<INT> to ARRAY<LONG>
+            sql(mergeStmt)
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+              Seq(
+                Row(1, Array(3000000000L, 4000000000L), "hr"),
+                Row(2, Array(4000, 5000, 6000), "finance"),
+                Row(3, Array(5000000000L, 6000000000L), "engineering")
+              ))
+
+            val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+            val scoresField = tableSchema.find(_.name == "scores").get
+            val arrayElementType = scoresField.dataType.asInstanceOf[ArrayType].elementType
+            assert(arrayElementType == LongType)
+          } else {
+            val exception = intercept[Exception] {
+              sql(mergeStmt)
+            }
+            assert(exception.getMessage.contains("Fail to assign a value of \"BIGINT\" type " +
+              "to the \"INT\" type column or variable `scores`.`element`" +
+              " due to an overflow"))
+          }
+        }
+      }
+    }
+  }
+
+  test("merge into schema evolution type widening in map from int to long") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTable(tableNameAsString) {
+        withTempView("source") {
+          // Create table with map of string to int values
+          createAndInitTable(
+            s"""pk INT NOT NULL,
+               |metrics MAP<STRING, INT>,
+               |dep STRING""".stripMargin,
+            """{ "pk": 1, "metrics": {"revenue": 100000, "profit": 50000}, "dep": "hr" }
+              |{ "pk": 2, "metrics": {"revenue": 200000, "profit": 80000}, "dep": "finance" }
+              |""".stripMargin)
+
+          // Source data with map of string to long values that exceed int range
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("metrics", MapType(StringType, LongType)),
+            StructField("dep", StringType)
+          ))
+
+          val data = Seq(
+            Row(1, Map("revenue" -> 3000000000L, "profit" -> 1500000000L), "hr"),
+            Row(3, Map("revenue" -> 4000000000L, "profit" -> 2000000000L), "engineering")
+          )
+
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          val mergeStmt =
+            s"""MERGE $schemaEvolutionClause
+               |INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, metrics, dep) VALUES (s.pk, s.metrics, s.dep)
+               |""".stripMargin
+
+          if (withSchemaEvolution) {
+            // Schema evolution should allow type widening from MAP<_, INT> to MAP<_, LONG>
+            sql(mergeStmt)
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+              Seq(
+                Row(1, Map("revenue" -> 3000000000L, "profit" -> 1500000000L), "hr"),
+                Row(2, Map("revenue" -> 200000L, "profit" -> 80000L), "finance"),
+                Row(3, Map("revenue" -> 4000000000L, "profit" -> 2000000000L), "engineering")
+              ))
+
+            val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+            val metricsField = tableSchema.find(_.name == "metrics").get
+            val mapValueType = metricsField.dataType.asInstanceOf[MapType].valueType
+            assert(mapValueType == LongType)
+          } else {
+            val exception = intercept[Exception] {
+              sql(mergeStmt)
+            }
+            assert(exception.getMessage.contains("Fail to assign a value of \"BIGINT\" type " +
+              "to the \"INT\" type column or variable `metrics`.`value`" +
+              " due to an overflow"))
+          }
+        }
+      }
+    }
+  }
+
+  test("merge into schema evolution type widening two types and adding two columns") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTable(tableNameAsString) {
+        withTempView("source") {
+          createAndInitTable(
+            s"""pk INT NOT NULL,
+               |score INT,
+               |rating SHORT,
+               |dep STRING""".stripMargin,
+            """{ "pk": 1, "score": 100, "rating": 45, "dep": "premium" }
+              |{ "pk": 2, "score": 85, "rating": 38, "dep": "standard" }
+              |""".stripMargin)
+
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("score", LongType), // Widened from INT to LONG
+            StructField("rating", IntegerType), // Widened from SHORT to INT
+            StructField("dep", StringType),
+            StructField("priority", StringType), // New column 1
+            StructField("region", StringType) // New column 2
+          ))
+
+          val data = Seq(
+            Row(1, 5000000000L, 485, "premium", "high", "west"),
+            Row(3, 7500000000L, 495, "enterprise", "critical", "east")
+          )
+
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          val mergeStmt =
+            s"""MERGE $schemaEvolutionClause
+               |INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin
+
+          if (withSchemaEvolution) {
+            sql(mergeStmt)
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+              Seq(
+                Row(1, 5000000000L, 485, "premium", "high", "west"),
+                Row(2, 85L, 38, "standard", null, null),
+                Row(3, 7500000000L, 495, "enterprise", "critical", "east")
+              ))
+
+            val tableSchema = sql(s"SELECT * FROM $tableNameAsString").schema
+            val scoreField = tableSchema.find(_.name == "score").get
+            val ratingField = tableSchema.find(_.name == "rating").get
+            val priorityField = tableSchema.find(_.name == "priority")
+            val regionField = tableSchema.find(_.name == "region")
+
+            // Verify type widening
+            assert(scoreField.dataType == LongType)
+            assert(ratingField.dataType == IntegerType)
+
+            // Verify new columns added
+            assert(priorityField.isDefined)
+            assert(regionField.isDefined)
+            assert(priorityField.get.dataType == StringType)
+            assert(regionField.get.dataType == StringType)
+          } else {
+            val exception = intercept[Exception] {
+              sql(mergeStmt)
+            }
+            assert(exception.getMessage.contains("Fail to assign a value of \"BIGINT\" type " +
+              "to the \"INT\" type column or variable `score` due to an overflow."))
+          }
+        }
+      }
+    }
+  }
+
+  test("merge into schema evolution type promotion from int to struct not allowed") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTable(tableNameAsString) {
+        withTempView("source") {
+          createAndInitTable(
+            s"""pk INT NOT NULL,
+               |data INT,
+               |dep STRING""".stripMargin,
+            """{ "pk": 1, "data": 100, "dep": "test" }
+              |{ "pk": 2, "data": 200, "dep": "sample" }
+              |""".stripMargin)
+
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("data", StructType(Seq(
+              StructField("value", IntegerType),
+              StructField("timestamp", LongType)
+            ))),
+            StructField("dep", StringType)
+          ))
+
+          val data = Seq(
+            Row(1, Row(150, 1634567890L), "test"),
+            Row(3, Row(300, 1634567900L), "new")
+          )
+
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
+
+          val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+          val mergeStmt =
+            s"""MERGE $schemaEvolutionClause
+               |INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin
+
+          // Even with schema evolution, int to struct promotion should not be allowed
+          val exception = intercept[Exception] {
+            sql(mergeStmt)
+          }
+
+          if (withSchemaEvolution) {
+            assert(exception.getMessage.contains("Failed to merge incompatible schemas"))
+          } else {
+            assert(exception.getMessage.contains(
+              """Cannot write incompatible data for the table ``""".stripMargin))
+          }
+        }
+      }
+    }
+  }
+
+  test("merge into schema evolution add column with nested field and set explicit columns") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |s STRUCT<c1: INT, c2: STRUCT<a: ARRAY<INT>, m: MAP<STRING, STRING>>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "s": { "c1": 2, "c2": { "a": [1,2], "m": { "a": "b" } } }, "dep": "hr" }""")
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("s", StructType(Seq(
+            StructField("c1", IntegerType),
+            StructField("c2", StructType(Seq(
+              StructField("a", ArrayType(IntegerType)),
+              StructField("m", MapType(StringType, StringType)),
+              StructField("c3", BooleanType) // new column
+            )))
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(1, Row(10, Row(Array(3, 4), Map("c" -> "d"), false)), "sales"),
+          Row(2, Row(20, Row(Array(4, 5), Map("e" -> "f"), true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source src
+             |ON t.pk = src.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET s.c1 = -1, s.c2.m = map('k', 'v'), s.c2.a = array(-1),
+             | s.c2.c3 = src.s.c2.c3
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, s, dep) VALUES (src.pk,
+             |   named_struct('c1', src.s.c1,
+             |     'c2', named_struct('a', src.s.c2.a, 'm', map('g', 'h'), 'c3', true)), src.dep)
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(1, Row(-1, Row(Seq(-1), Map("k" -> "v"), false)), "hr"),
+              Row(2, Row(20, Row(Seq(4, 5), Map("g" -> "h"), true)), "engineering")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.errorClass.get == "FIELD_NOT_FOUND")
+          assert(exception.getMessage.contains("No such struct field `c3` in `a`, `m`. "))
+        }
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  test("merge into schema evolution add column with nested struct and set all columns") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |s STRUCT<c1: INT, c2: STRUCT<a: ARRAY<INT>, m: MAP<STRING, STRING>>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "s": { "c1": 2, "c2": { "a": [1,2], "m": { "a": "b" } } }, "dep": "hr" }""")
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("s", StructType(Seq(
+            StructField("c1", IntegerType),
+            StructField("c2", StructType(Seq(
+              StructField("a", ArrayType(IntegerType)),
+              StructField("m", MapType(StringType, StringType)),
+              StructField("c3", BooleanType) // new column
+            )))
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(1, Row(10, Row(Array(3, 4), Map("c" -> "d"), false)), "sales"),
+          Row(2, Row(20, Row(Array(4, 5), Map("e" -> "f"), true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source src
+             |ON t.pk = src.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET *
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(1, Row(10, Row(Seq(3, 4), Map("c" -> "d"), false)), "sales"),
+              Row(2, Row(20, Row(Seq(4, 5), Map("e" -> "f"), true)), "engineering")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+          assert(exception.getMessage.contains(
+            "Cannot write extra fields `c3` to the struct `s`.`c2`"))
+        }
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  test("merge into schema evolution replace column with nested struct and set explicit columns") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |s STRUCT<c1: INT, c2: STRUCT<a: ARRAY<INT>, m: MAP<STRING, STRING>>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "s": { "c1": 2, "c2": { "a": [1,2], "m": { "a": "b" } } }, "dep": "hr" }""")
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("s", StructType(Seq(
+            StructField("c1", IntegerType),
+            StructField("c2", StructType(Seq(
+              // removed column 'a'
+              StructField("m", MapType(StringType, StringType)),
+              StructField("c3", BooleanType) // new column
+            )))
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(1, Row(10, Row(Map("c" -> "d"), false)), "sales"),
+          Row(2, Row(20, Row(Map("e" -> "f"), true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source src
+             |ON t.pk = src.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET s.c1 = -1, s.c2.m = map('k', 'v'), s.c2.a = array(-1),
+             | s.c2.c3 = src.s.c2.c3
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, s, dep) VALUES (src.pk,
+             |   named_struct('c1', src.s.c1,
+             |     'c2', named_struct('a', array(-2), 'm', map('g', 'h'), 'c3', true)), src.dep)
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(1, Row(-1, Row(Seq(-1), Map("k" -> "v"), false)), "hr"),
+              Row(2, Row(20, Row(Seq(-2), Map("g" -> "h"), true)), "engineering")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.errorClass.get == "FIELD_NOT_FOUND")
+          assert(exception.getMessage.contains("No such struct field `c3` in `a`, `m`. "))
+        }
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  // currently the source struct needs to be fully compatible with target struct
+  // i.e. cannot remove a nested field
+  test("merge into schema evolution replace column with nested field and set all columns") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |s STRUCT<c1: INT, c2: STRUCT<a: ARRAY<INT>, m: MAP<STRING, STRING>>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "s": { "c1": 2, "c2": { "a": [1,2], "m": { "a": "b" } } }, "dep": "hr" }""")
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("s", StructType(Seq(
+            StructField("c1", IntegerType),
+            StructField("c2", StructType(Seq(
+              // removed column 'a'
+              StructField("m", MapType(StringType, StringType)),
+              StructField("c3", BooleanType) // new column
+            )))
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(1, Row(10, Row(Map("c" -> "d"), false)), "sales"),
+          Row(2, Row(20, Row(Map("e" -> "f"), true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val exception = intercept[org.apache.spark.sql.AnalysisException] {
+          sql(
+            s"""MERGE $schemaEvolutionClause
+               |INTO $tableNameAsString t
+               |USING source src
+               |ON t.pk = src.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin)
+        }
+
+        assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+        assert(exception.getMessage.contains("Cannot find data for the output column `s`.`c2`.`a`"))
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  test("merge into schema evolution add column for struct in array and set all columns") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |a ARRAY<STRUCT<c1: INT, c2: STRING>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 0, "a": [ { "c1": 1, "c2": "a" }, { "c1": 2, "c2": "b" } ], "dep": "sales"},
+             { "pk": 1, "a": [ { "c1": 1, "c2": "a" }, { "c1": 2, "c2": "b" } ], "dep": "hr" }"""
+            .stripMargin)
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("a", ArrayType(
+            StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StringType),
+              StructField("c3", BooleanType))))), // new column
+          StructField("dep", StringType)))
+        val data = Seq(
+          Row(1, Array(Row(10, "c", true), Row(20, "d", false)), "hr"),
+          Row(2, Array(Row(30, "d", false), Row(40, "e", true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source src
+             |ON t.pk = src.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET *
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(0, Array(Row(1, "a", null), Row(2, "b", null)), "sales"),
+              Row(1, Array(Row(10, "c", true), Row(20, "d", false)), "hr"),
+              Row(2, Array(Row(30, "d", false), Row(40, "e", true)), "engineering")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+          assert(exception.getMessage.contains(
+            "Cannot write extra fields `c3` to the struct `a`.`element`"))
+        }
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  test("merge into schema evolution add column for struct in map and set all columns") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        val schema =
+          StructType(Seq(
+            StructField("pk", IntegerType, nullable = false),
+            StructField("m", MapType(
+              StructType(Seq(StructField("c1", IntegerType))),
+              StructType(Seq(StructField("c2", StringType))))),
+            StructField("dep", StringType)))
+        createTable(CatalogV2Util.structTypeToV2Columns(schema))
+
+        val data = Seq(
+          Row(0, Map(Row(10) -> Row("c")), "hr"),
+          Row(1, Map(Row(20) -> Row("d")), "sales"))
+        spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+          .writeTo(tableNameAsString).append()
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType),
+          StructField("m", MapType(
+            StructType(Seq(StructField("c1", IntegerType), StructField("c3", BooleanType))),
+            StructType(Seq(StructField("c2", StringType), StructField("c4", BooleanType))))),
+          StructField("dep", StringType)))
+        val sourceData = Seq(
+          Row(1, Map(Row(10, true) -> Row("y", false)), "sales"),
+          Row(2, Map(Row(20, false) -> Row("z", true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(sourceData), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source src
+             |ON t.pk = src.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET *
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(0, Map(Row(10, null) -> Row("c", null)), "hr"),
+              Row(1, Map(Row(10, true) -> Row("y", false)), "sales"),
+              Row(2, Map(Row(20, false) -> Row("z", true)), "engineering")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+          assert(exception.getMessage.contains(
+            "Cannot write extra fields `c3` to the struct `m`.`key`"))
+        }
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  test("merge into empty table with NOT MATCHED clause schema evolution") {
+    Seq(true, false) foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createTable("pk INT NOT NULL, salary INT, dep STRING")
+
+        val sourceRows = Seq(
+          (1, 100, "hr", true),
+          (2, 200, "finance", false),
+          (3, 300, "hr", true))
+        sourceRows.toDF("pk", "salary", "dep", "active").createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+
+        sql(
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin)
+
+        if (withSchemaEvolution) {
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", true),
+              Row(2, 200, "finance", false),
+              Row(3, 300, "hr", true)))
+        } else {
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr"),
+              Row(2, 200, "finance"),
+              Row(3, 300, "hr")))
+        }
+        sql("DROP TABLE IF EXISTS " + tableNameAsString)
+      }
+    }
+  }
+
+  private def findMergeExec(query: String): MergeRowsExec = {
+    val plan = executeAndKeepPlan {
+      sql(query)
+    }
+    collectFirst(plan) {
+      case m: MergeRowsExec => m
+    } match {
+      case Some(m) => m
+      case None =>
+        fail("MergeRowsExec not found in the plan")
+    }
+  }
+
   private def assertNoLeftBroadcastOrReplication(query: String): Unit = {
     val plan = executeAndKeepPlan {
       sql(query)
@@ -1792,5 +3295,17 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
       sql(query)
     }
     assert(e.getMessage.contains("ON search condition of the MERGE statement"))
+  }
+
+  private def assertMetric(
+      mergeExec: MergeRowsExec,
+      metricName: String,
+      expected: Long): Unit = {
+    mergeExec.metrics.get(metricName) match {
+      case Some(metric) =>
+        assert(metric.value == expected,
+          s"Expected $metricName to be $expected, but got ${metric.value}")
+      case None => fail(s"$metricName metric not found")
+    }
   }
 }

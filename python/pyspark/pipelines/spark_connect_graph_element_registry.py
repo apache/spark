@@ -95,9 +95,8 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             dataflow_graph_id=self._dataflow_graph_id,
             flow_name=flow.name,
             target_dataset_name=flow.target,
-            plan=relation,
+            relation=relation,
             sql_conf=flow.spark_conf,
-            once=flow.once,
             source_code_location=source_code_location_to_proto(flow.source_code_location),
         )
         command = pb2.Command()

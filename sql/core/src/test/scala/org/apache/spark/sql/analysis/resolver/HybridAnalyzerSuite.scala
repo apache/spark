@@ -23,7 +23,8 @@ import org.scalatest.Tag
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.{
   ExtendedAnalysisException,
-  QueryPlanningTracker
+  QueryPlanningTracker,
+  TableIdentifier
 }
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
@@ -31,20 +32,11 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedAttribute,
   UnresolvedStar
 }
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  AnalyzerBridgeState,
-  ExplicitlyUnsupportedResolverFeature,
-  HybridAnalyzer,
-  Resolver,
-  ResolverGuard
-}
+import org.apache.spark.sql.catalyst.analysis.resolver._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
-import org.apache.spark.sql.catalyst.plans.logical.{
-  LocalRelation,
-  LogicalPlan,
-  Project
-}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -94,6 +86,13 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
         analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan = {
       validateSinglePassResolverBridgeState(bridgeRelations)
       throw ex
+    }
+  }
+
+  private class BrokenResolverGuard(catalogManager: CatalogManager)
+      extends ResolverGuard(catalogManager) {
+    override def apply(plan: LogicalPlan): Boolean = {
+      throw new Exception("Broken resolver guard")
     }
   }
 
@@ -300,13 +299,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Explicitly unsupported resolver feature") {
-    val plan: LogicalPlan = {
-      Project(
-        Seq(UnresolvedStar(None)),
-        LocalRelation(col1Integer)
-      )
-    }
-    checkAnswer(
+    assertPlansEqual(
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
         new ResolverGuard(spark.sessionState.catalogManager),
@@ -314,8 +307,8 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
           new ExplicitlyUnsupportedResolverFeature("FAILURE"),
           bridgeRelations = true
         )
-      ).apply(plan, new QueryPlanningTracker),
-      plan
+      ).apply(unresolvedPlan, new QueryPlanningTracker),
+      resolvedPlan
     )
   }
 
@@ -451,7 +444,43 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Tentative mode conf is not stored during view creation when explicitly set") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      validateConfStoredInView(
+        conf = SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
+        shouldStore = false
+      )
+    }
+  }
+
+  test("Dual-run mode conf is not stored during view creation when explicitly set") {
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true") {
+      validateConfStoredInView(
+        conf = SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
+        shouldStore = false
+      )
+    }
+  }
+
+  test("Single-pass result conf is stored during view creation when explicitly set") {
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key -> "true") {
+      validateConfStoredInView(
+        conf = SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key,
+        shouldStore = true
+      )
+    }
+  }
+
   private def assertPlansEqual(actualPlan: LogicalPlan, expectedPlan: LogicalPlan) = {
     assert(NormalizePlan(actualPlan) == NormalizePlan(expectedPlan))
+  }
+
+  private def validateConfStoredInView(conf: String, shouldStore: Boolean): Unit = {
+    withView("v1") {
+      sql("CREATE VIEW v1 AS SELECT 1")
+
+      val viewMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v1"))
+      assert(viewMetadata.properties.contains(s"view.sqlConfig.$conf") == shouldStore)
+    }
   }
 }

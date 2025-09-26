@@ -50,6 +50,7 @@ import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedExcept
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils.createArray
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -679,23 +680,24 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
     submit(reduceRdd, Array(0))
     // map stage1 completes successfully, with one task on each executor
+    val uncompressedSizes = createArray(1, 2L)
     complete(taskSets(0), Seq(
       (Success,
         MapStatus(
-          BlockManagerId("hostA-exec1", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 5)),
+          BlockManagerId("hostA-exec1", "hostA", 12345), uncompressedSizes, mapTaskId = 5)),
       (Success,
         MapStatus(
-          BlockManagerId("hostA-exec2", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 6)),
+          BlockManagerId("hostA-exec2", "hostA", 12345), uncompressedSizes, mapTaskId = 6)),
       (Success, makeMapStatus("hostB", 1, mapTaskId = 7))
     ))
     // map stage2 completes successfully, with one task on each executor
     complete(taskSets(1), Seq(
       (Success,
         MapStatus(
-          BlockManagerId("hostA-exec1", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 8)),
+          BlockManagerId("hostA-exec1", "hostA", 12345), uncompressedSizes, mapTaskId = 8)),
       (Success,
         MapStatus(
-          BlockManagerId("hostA-exec2", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 9)),
+          BlockManagerId("hostA-exec2", "hostA", 12345), uncompressedSizes, mapTaskId = 9)),
       (Success, makeMapStatus("hostB", 1, mapTaskId = 10))
     ))
     // make sure our test setup is correct
@@ -1164,7 +1166,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       stageId: Int,
       attemptIdx: Int,
       numShufflePartitions: Int,
-      hostNames: Seq[String] = Seq.empty[String]): Unit = {
+      hostNames: Seq[String] = Seq.empty[String],
+      checksumVal: Long = 0): Unit = {
     def compareStageAttempt(taskSet: TaskSet): Boolean = {
       taskSet.stageId == stageId && taskSet.stageAttemptId == attemptIdx
     }
@@ -1179,7 +1182,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         } else {
           s"host${('A' + idx).toChar}"
         }
-        (Success, makeMapStatus(hostName, numShufflePartitions))
+        (Success, makeMapStatus(hostName, numShufflePartitions, checksumVal = checksumVal))
     }.toSeq)
   }
 
@@ -4850,6 +4853,44 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
+  /**
+   * In this test, we simulate a job where some tasks in a stage fail, and it triggers the retry
+   * of the task in its previous stage. The two attempts of the same task in the previous stage
+   * produce different shuffle checksums.
+   */
+  test("Tasks that produce different checksum across retries") {
+    setupStageAbortTest(sc)
+
+    val parts = 8
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, (0 until parts).toArray)
+
+    // Complete stage 0 and then fail stage 1, and tasks in stage 0 produce a checksum of 100.
+    completeShuffleMapStageSuccessfully(0, 0, numShufflePartitions = parts, checksumVal = 100)
+    completeNextStageWithFetchFailure(1, 0, shuffleDep)
+
+    // Resubmit and confirm that now all is well.
+    scheduler.resubmitFailedStages()
+    assert(scheduler.runningStages.nonEmpty)
+    assert(!ended)
+
+    // Complete stage 0 and then stage 1, and the retried task in stage 0 produces a different
+    // checksum of 200.
+    completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = parts, checksumVal = 200)
+    completeNextResultStageWithSuccess(1, 1)
+
+    // Confirm job finished successfully.
+    sc.listenerBus.waitUntilEmpty()
+    assert(ended)
+    assert(results == (0 until parts).map { idx => idx -> 42 }.toMap)
+    assert(
+      mapOutputTracker.shuffleStatuses(shuffleDep.shuffleId).checksumMismatchIndices.size == 1)
+    assertDataStructuresEmpty()
+    mapOutputTracker.unregisterShuffle(shuffleDep.shuffleId)
+  }
+
   Seq(true, false).foreach { registerMergeResults =>
     test("SPARK-40096: Send finalize events even if shuffle merger blocks indefinitely " +
       s"with registerMergeResults is ${registerMergeResults}") {
@@ -4948,6 +4989,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
 
     // stage2`s task0 Fetch failed
+    val uncompressedSizes = createArray(2, 2L)
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0L, 0, 0,
@@ -4957,11 +4999,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // long running task complete
     runEvent(makeCompletionEvent(taskSets(1).tasks(1), Success,
       result = MapStatus(BlockManagerId("hostC-exec1", "hostC", 44399),
-        Array.fill[Long](2)(2), mapTaskId = taskIdCount),
+        uncompressedSizes, mapTaskId = taskIdCount),
       Seq.empty, Array.empty, createTaskInfo(false)))
     runEvent(makeCompletionEvent(taskSets(1).tasks(0), Success,
       result = MapStatus(BlockManagerId("hostD-exec1", "hostD", 44400),
-        Array.fill[Long](2)(2), mapTaskId = taskIdCount),
+        uncompressedSizes, mapTaskId = taskIdCount),
       Seq.empty, Array.empty, createTaskInfo(true)))
 
 
@@ -4984,7 +5026,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(stage0Retry.size === 1)
     runEvent(makeCompletionEvent(stage0Retry.head.tasks(0), Success,
       result = MapStatus(BlockManagerId("hostE-exec1", "hostE", 44401),
-        Array.fill[Long](2)(2), mapTaskId = taskIdCount)))
+        uncompressedSizes, mapTaskId = taskIdCount)))
 
     // wait stage2 resubmit
     sc.listenerBus.waitUntilEmpty()
@@ -5062,15 +5104,16 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         normalTask))
 
       // Make the speculative task succeed after initial task has failed
+      val uncompressedSizes = createArray(2, 2L)
       runEvent(makeCompletionEvent(taskSets(1).tasks(0), Success,
         result = MapStatus(BlockManagerId("hostD-exec1", "hostD", 34512),
-          Array.fill[Long](2)(2), mapTaskId = speculativeTask.taskId),
+          uncompressedSizes, mapTaskId = speculativeTask.taskId),
         taskInfo = speculativeTask))
 
       // The second task, for partition 1 succeeds as well.
       runEvent(makeCompletionEvent(taskSets(1).tasks(1), Success,
         result = MapStatus(BlockManagerId("hostE-exec2", "hostE", 23456),
-          Array.fill[Long](2)(2), mapTaskId = taskIdCount)))
+          createArray(2, 2L), mapTaskId = taskIdCount)))
       taskIdCount += 1
 
       sc.listenerBus.waitUntilEmpty()
@@ -5096,7 +5139,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       // make the original task succeed
       runEvent(makeCompletionEvent(stage0Retry.head.tasks(fetchFailParentPartition), Success,
         result = MapStatus(BlockManagerId("hostF-exec1", "hostF", 12345),
-          Array.fill[Long](2)(2), mapTaskId = taskIdCount)))
+          createArray(2, 2L), mapTaskId = taskIdCount)))
       Thread.sleep(DAGScheduler.RESUBMIT_TIMEOUT * 2)
       dagEventProcessLoopTester.runEvents()
 
@@ -5241,8 +5284,13 @@ class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {
 object DAGSchedulerSuite {
   val mergerLocs = ArrayBuffer[BlockManagerId]()
 
-  def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2, mapTaskId: Long = -1): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId)
+  def makeMapStatus(
+      host: String,
+      reduces: Int,
+      sizes: Byte = 2,
+      mapTaskId: Long = -1,
+      checksumVal: Long = 0): MapStatus =
+    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId, checksumVal)
 
   def makeBlockManagerId(host: String, execId: Option[String] = None): BlockManagerId = {
     BlockManagerId(execId.getOrElse(host + "-exec"), host, 12345)

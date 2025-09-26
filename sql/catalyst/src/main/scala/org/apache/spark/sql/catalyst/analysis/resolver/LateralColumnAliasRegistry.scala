@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
  *  LCA resolution is disabled by [[SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED]].
  */
 abstract class LateralColumnAliasRegistry {
-  def withNewLcaScope(body: => Alias): Alias
+  def withNewLcaScope(isTopLevelAlias: Boolean)(body: => Alias): Alias
 
   def getAttribute(attributeName: String): Option[Attribute]
 

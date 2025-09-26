@@ -115,6 +115,10 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     }.toMap
   }
 
+  /** The [[Flow]]s that write to a given destination. */
+  lazy val resolvedFlowsTo: Map[TableIdentifier, Seq[ResolvedFlow]] =
+    resolvedFlows.groupBy(_.destinationIdentifier)
+
   lazy val resolutionFailedFlows: Seq[ResolutionFailedFlow] = {
     flows.collect { case f: ResolutionFailedFlow => f }
   }
@@ -191,6 +195,7 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     validatePersistedViewSources()
     validateEveryDatasetHasFlow()
     validateTablesAreResettable()
+    validateFlowStreamingness()
     inferredSchema
   }.failed
 

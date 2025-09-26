@@ -292,7 +292,7 @@ object RandomDataGenerator {
         randomNumeric[LocalTime](
           rand,
           (rand: Random) => {
-            DateTimeUtils.nanosToLocalTime(rand.between(0, 24 * 60 * 60 * 1000 * 1000L))
+            DateTimeUtils.nanosToLocalTime(rand.between(0, 24 * 60 * 60 * 1000 * 1000L) * 1000L)
           },
           specialTimes.map(LocalTime.parse)
         )

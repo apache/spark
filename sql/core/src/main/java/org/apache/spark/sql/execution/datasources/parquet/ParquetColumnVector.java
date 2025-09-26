@@ -21,9 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import com.google.common.base.Preconditions;
-
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -131,7 +130,8 @@ final class ParquetColumnVector {
         definitionLevels = allocateLevelsVector(capacity, memoryMode);
       }
     } else {
-      Preconditions.checkArgument(column.children().size() == vector.getNumChildren());
+      JavaUtils.checkArgument(column.children().size() == vector.getNumChildren(),
+        "The number of column children is different from the number of vector children");
       boolean allChildrenAreMissing = true;
 
       for (int i = 0; i < column.children().size(); i++) {

@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.lang
+import java.util
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -34,6 +37,7 @@ import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -303,8 +307,6 @@ case class ReplaceDataExec(
     projections: ReplaceDataProjections,
     write: Write) extends V2ExistingTableWriteExec {
 
-  override val stringArgs: Iterator[Any] = Iterator(query, write)
-
   override def writingTask: WritingSparkTask[_] = {
     projections match {
       case ReplaceDataProjections(dataProj, Some(metadataProj)) =>
@@ -328,8 +330,6 @@ case class WriteDeltaExec(
     projections: WriteDeltaProjections,
     write: DeltaWrite) extends V2ExistingTableWriteExec {
 
-  override lazy val stringArgs: Iterator[Any] = Iterator(query, write)
-
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
       DeltaWithMetadataWritingSparkTask(projections)
@@ -349,6 +349,8 @@ case class WriteToDataSourceV2Exec(
     query: SparkPlan,
     writeMetrics: Seq[CustomMetric]) extends V2TableWriteExec {
 
+  override val stringArgs: Iterator[Any] = Iterator(batchWrite, query)
+
   override val customMetrics: Map[String, SQLMetric] = writeMetrics.map { customMetric =>
     customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
   }.toMap
@@ -366,6 +368,8 @@ case class WriteToDataSourceV2Exec(
 trait V2ExistingTableWriteExec extends V2TableWriteExec {
   def refreshCache: () => Unit
   def write: Write
+
+  override val stringArgs: Iterator[Any] = Iterator(query, write)
 
   override val customMetrics: Map[String, SQLMetric] =
     write.supportedCustomMetrics().map { customMetric =>
@@ -398,7 +402,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 /**
  * The base physical plan for writing data into data source v2.
  */
-trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
+trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSparkPlanHelper {
   def query: SparkPlan
   def writingTask: WritingSparkTask[_] = DataWritingSparkTask
 
@@ -432,7 +436,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
     logInfo(log"Start processing data source write support: " +
       log"${MDC(LogKeys.BATCH_WRITE, batchWrite)}. The input RDD has " +
-      log"${MDC(LogKeys.COUNT, messages.length)}} partitions.")
+      log"${MDC(LogKeys.COUNT, messages.length)} partitions.")
 
     // Avoid object not serializable issue.
     val writeMetrics: Map[String, SQLMetric] = customMetrics
@@ -451,8 +455,9 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
         }
       )
 
+      val operationMetrics = getOperationMetrics(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      batchWrite.commit(messages)
+      batchWrite.commit(messages, operationMetrics)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
@@ -473,6 +478,12 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
     }
 
     Nil
+  }
+
+  private def getOperationMetrics(query: SparkPlan): util.Map[String, lang.Long] = {
+    collectFirst(query) { case m: MergeRowsExec => m }.map{ n =>
+      n.metrics.map { case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value) }
+    }.getOrElse(Map.empty[String, lang.Long]).asJava
   }
 }
 

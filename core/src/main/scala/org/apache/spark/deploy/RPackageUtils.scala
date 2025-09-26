@@ -24,10 +24,8 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{ByteStreams, Files}
-
 import org.apache.spark.api.r.RUtils
-import org.apache.spark.internal.{LogEntry, Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{LogEntry, Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -153,11 +151,11 @@ private[deploy] object RPackageUtils extends Logging {
           if (verbose) {
             print(log"Creating directory: ${MDC(PATH, dir)}", printStream)
           }
-          dir.mkdirs
+          Utils.createDirectory(dir)
         } else {
           val inStream = jar.getInputStream(entry)
           val outPath = new File(tempDir, entryPath)
-          Files.createParentDirs(outPath)
+          Utils.createParentDirs(outPath)
           val outStream = new FileOutputStream(outPath)
           if (verbose) {
             print(log"Extracting ${MDC(JAR_ENTRY, entry)} to ${MDC(PATH, outPath)}", printStream)
@@ -251,7 +249,7 @@ private[deploy] object RPackageUtils extends Logging {
         val fis = new FileInputStream(file)
         val zipEntry = new ZipEntry(relPath)
         zipOutputStream.putNextEntry(zipEntry)
-        ByteStreams.copy(fis, zipOutputStream)
+        fis.transferTo(zipOutputStream)
         zipOutputStream.closeEntry()
         fis.close()
       }

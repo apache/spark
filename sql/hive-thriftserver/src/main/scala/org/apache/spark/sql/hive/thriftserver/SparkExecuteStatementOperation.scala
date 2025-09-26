@@ -30,7 +30,7 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TPrimitiveTypeEntry, TRowSet, TTableSchema, TTypeDesc, TTypeEntry, TTypeId, TTypeQualifiers, TTypeQualifierValue}
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -248,7 +248,7 @@ private[hive] class SparkExecuteStatementOperation(
         // then they may both call cleanup() before Spark Jobs are started. But before background
         // task interrupted, it may have started some spark job, so we need to cancel again to
         // make sure job was cancelled when background thread was interrupted
-        if (statementId != null) {
+        if (!sparkContext.isStopped && statementId != null) {
           sparkContext.cancelJobGroup(statementId,
             "The corresponding Thriftserver query has failed.")
         }
@@ -340,6 +340,7 @@ object SparkExecuteStatementOperation {
     case _: StringType => TTypeId.STRING_TYPE
     case _: DecimalType => TTypeId.DECIMAL_TYPE
     case DateType => TTypeId.DATE_TYPE
+    case _: TimeType => TTypeId.STRING_TYPE
     // TODO: Shall use TIMESTAMPLOCALTZ_TYPE, keep AS-IS now for
     // unnecessary behavior change
     case TimestampType => TTypeId.TIMESTAMP_TYPE

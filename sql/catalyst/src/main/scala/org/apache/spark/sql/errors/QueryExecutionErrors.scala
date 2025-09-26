@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, MapData}
+import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -200,6 +200,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def divideByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Map("config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = Array(context),
+      summary = getSummary(context))
+  }
+
+  def remainderByZeroError(context: QueryContext): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "REMAINDER_BY_ZERO",
       messageParameters = Map("config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array(context),
       summary = getSummary(context))
@@ -2106,9 +2114,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       oe: OutOfMemoryError, tables: Seq[TableIdentifier]): Throwable = {
     val analyzeTblMsg = if (tables.nonEmpty) {
       " or analyze these tables through: " +
-        s"${tables.map(t => s"ANALYZE TABLE $t COMPUTE STATISTICS;").mkString(" ")}."
+        s"`${tables.map(t => s"ANALYZE TABLE $t COMPUTE STATISTICS;").mkString(" ")}`"
     } else {
-      "."
+      ""
     }
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2250",
@@ -2534,6 +2542,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def timeAddIntervalOverflowError(
+      time: Long,
+      timePrecision: Int,
+      interval: Long,
+      intervalEndField: Byte): ArithmeticException = {
+    val i = toSQLValue(IntervalUtils.microsToDuration(interval),
+      DayTimeIntervalType(intervalEndField))
+    val t = toSQLValue(DateTimeUtils.nanosToLocalTime(time), TimeType(timePrecision))
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> s"add $i to the time value $t"),
+      context = Array.empty,
+      summary = "")
+  }
+
   def invalidBucketFile(path: String): Throwable = {
     new SparkException(
       errorClass = "INVALID_BUCKET_FILE",
@@ -2725,6 +2748,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def invalidCheckpointLineage(lineage: String, message: String): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHECKPOINT_LINEAGE",
+      messageParameters = Map(
+        "lineage" -> lineage,
+        "message" -> message
+      ),
+      cause = null
+    )
+  }
+
   def notEnoughMemoryToLoadStore(
       stateStoreId: String,
       stateStoreProviderName: String,
@@ -2767,6 +2801,36 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "left" -> toSQLValue(left, IntegerType),
         "right" -> toSQLValue(right, IntegerType),
         "function" -> toSQLId(function)))
+  }
+
+  def approxTopKNonPositiveValue(argName: String, argValue: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      messageParameters = Map(
+        "argName" -> toSQLId(argName),
+        "argValue" -> toSQLValue(argValue, IntegerType)))
+  }
+
+  def approxTopKNullArg(argName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_NULL_ARG",
+      messageParameters = Map("argName" -> toSQLId(argName)))
+  }
+
+  def approxTopKMaxItemsTrackedLessThanK(maxItemsTracked: Int, k: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
+      messageParameters = Map(
+        "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
+        "k" -> toSQLValue(k, IntegerType)))
+  }
+
+  def approxTopKMaxItemsTrackedExceedsLimit(maxItemsTracked: Int, limit: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
+      messageParameters = Map(
+        "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
+        "limit" -> toSQLValue(limit, IntegerType)))
   }
 
   def mergeCardinalityViolationError(): SparkRuntimeException = {
@@ -3022,6 +3086,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  // Throws a SparkIllegalArgumentException when an invalid time unit is specified.
+  // Note that the supported units are: HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND.
+  def invalidTimeUnitError(
+      functionName: String,
+      invalidValue: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.TIME_UNIT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("unit"),
+        "invalidValue" -> toSQLValue(invalidValue)
+      )
+    )
+  }
+
   // Throws a SparkRuntimeException when a CHECK constraint is violated, including details of the
   // violation. This is a Java-friendly version of the above method.
   def checkViolationJava(
@@ -3040,5 +3119,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "tableName" -> tableName
       )
     )
+  }
+
+  def thetaInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def thetaInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_LG_NOM_ENTRIES",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "min" -> toSQLValue(min, IntegerType),
+        "max" -> toSQLValue(max, IntegerType),
+        "value" -> toSQLValue(value, IntegerType)))
   }
 }

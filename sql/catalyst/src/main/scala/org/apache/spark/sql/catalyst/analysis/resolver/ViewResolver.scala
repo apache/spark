@@ -165,6 +165,7 @@ class ViewResolver(resolver: Resolver, catalogManager: CatalogManager)
  *
  * @param nestedViewDepth Current nested view depth. Cannot exceed the `maxNestedViewDepth`.
  * @param maxNestedViewDepth Maximum allowed nested view depth. Configured in the upper context
+ *   based on [[SQLConf.MAX_NESTED_VIEW_DEPTH]].
  * @param collation View's default collation if explicitly set.
  * @param catalogAndNamespace Catalog and camespace under which the [[View]] was created.
  */

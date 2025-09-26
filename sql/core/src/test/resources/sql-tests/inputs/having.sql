@@ -62,3 +62,37 @@ SELECT 1 + SUM(v) FROM hav HAVING SUM(v) + 1;
 SELECT SUM(v) + 1 FROM hav HAVING 1 + SUM(v);
 SELECT MAX(v) + SUM(v) FROM hav HAVING SUM(v) + MAX(v);
 SELECT SUM(v) + 1 + MIN(v) FROM hav HAVING 1 + 1 + 1 + MIN(v) + 1 + SUM(v);
+
+-- HAVING with outer reference to alias in outer project list
+SELECT col1 AS alias
+FROM values(1)
+GROUP BY col1
+HAVING (
+    SELECT col1 = 1
+);
+
+SELECT col1 AS alias
+FROM values(named_struct('a', 1))
+GROUP BY col1
+HAVING (
+    SELECT col1.a = 1
+);
+
+SELECT col1 AS alias
+FROM values(array(1))
+GROUP BY col1
+HAVING (
+    SELECT col1[0] = 1
+);
+
+SELECT col1 AS alias
+FROM values(map('a', 1))
+GROUP BY col1
+HAVING (
+    SELECT col1[0] = 1
+);
+
+-- Missing attribute (col2) in HAVING is added only once
+
+SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2;
+SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2;

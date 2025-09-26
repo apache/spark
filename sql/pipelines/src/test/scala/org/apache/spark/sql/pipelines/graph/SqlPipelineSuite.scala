@@ -17,24 +17,16 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.Utils
 
-class SqlPipelineSuite extends PipelineTest with SQLTestUtils {
-  private val externalTable1Ident = TableIdentifier(
-    table = "external_t1",
-    database = Option(TestGraphRegistrationContext.DEFAULT_DATABASE),
-    catalog = Option(TestGraphRegistrationContext.DEFAULT_CATALOG)
-  )
-  private val externalTable2Ident = TableIdentifier(
-    table = "external_t2",
-    database = Option(TestGraphRegistrationContext.DEFAULT_DATABASE),
-    catalog = Option(TestGraphRegistrationContext.DEFAULT_CATALOG)
-  )
+class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
+  private val externalTable1Ident = fullyQualifiedIdentifier("external_t1")
+  private val externalTable2Ident = fullyQualifiedIdentifier("external_t2")
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -139,7 +131,6 @@ class SqlPipelineSuite extends PipelineTest with SQLTestUtils {
       resolvedDataflowGraph.resolvedFlows
         .filter(_.identifier == fullyQualifiedIdentifier("a"))
         .head
-    assert(flowA.comment.contains("this is a comment"))
     checkAnswer(flowA.df, Seq(Row(1), Row(2), Row(3)))
   }
 
@@ -276,6 +267,47 @@ class SqlPipelineSuite extends PipelineTest with SQLTestUtils {
     )
   }
 
+  test("MV/ST with partition columns works") {
+    withTable("mv", "st") {
+      val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+        sqlText =
+          """
+            |CREATE MATERIALIZED VIEW mv
+            |PARTITIONED BY (id_mod)
+            |AS
+            |SELECT
+            |  id,
+            |  id % 2 AS id_mod
+            |FROM range(3);
+            |
+            |CREATE STREAMING TABLE st
+            |PARTITIONED BY (id_mod)
+            |AS
+            |SELECT * FROM STREAM(mv);
+            |""".stripMargin
+      )
+      startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
+      val expected = Seq(
+        Row(0, 0),
+        Row(1, 1),
+        Row(2, 0)
+      )
+      val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+
+      Seq("mv", "st").foreach { tableName =>
+        // check table partition columns
+        val table = catalog.loadTable(Identifier.of(Array("test_db"), tableName))
+        assert(table.partitioning().map(_.references().head.fieldNames().head) === Array("id_mod"))
+
+        // check table data
+        checkAnswer(
+          spark.sql(s"SELECT * FROM ${fullyQualifiedIdentifier(tableName)}"),
+          expected
+        )
+      }
+    }
+  }
+
   test("Exception is thrown when non-identity partition columns are used") {
     val graphRegistrationContext = new TestGraphRegistrationContext(spark)
     val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
@@ -402,32 +434,41 @@ class SqlPipelineSuite extends PipelineTest with SQLTestUtils {
   gridTest(s"Pipeline dataset can read from file based data sources")(
     Seq("parquet", "orc", "json", "csv")
   ) { fileFormat =>
+    // TODO: streaming file data sources in SQL is not currently supported. If and when it is,
+    //  streaming tables should also be able to directly stream from file based data sources. Until
+    //  then, users must stream from a regular table that has loaded the file data. A streaming
+    //  table reading from a materialized view or temp view is not supported.
     val tmpDir = Utils.createTempDir().getAbsolutePath
     spark.sql("SELECT * FROM RANGE(3)").write.format(fileFormat).mode("overwrite").save(tmpDir)
 
-    val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
-      sqlText = s"""
-                   |CREATE MATERIALIZED VIEW a AS SELECT * FROM $fileFormat.`$tmpDir`;
-                   |CREATE STREAMING TABLE b AS SELECT * FROM STREAM($fileFormat.`$tmpDir`)
-                   |""".stripMargin
-    )
+    val externalTableIdent = fullyQualifiedIdentifier("t")
+    spark.sql(s"CREATE TABLE $externalTableIdent AS SELECT * FROM $fileFormat.`$tmpDir`")
 
-    startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
-
-    Seq("a", "b").foreach { datasetName =>
-      val datasetFullyQualifiedName =
-        fullyQualifiedIdentifier(datasetName).quotedString
-      spark.sql(s"REFRESH TABLE $datasetFullyQualifiedName")
-      val expectedRows = if (fileFormat == "csv") {
-        // CSV values are read as strings
-        Seq("0", "1", "2")
-      } else {
-        Seq(0, 1, 2)
-      }
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $datasetFullyQualifiedName"),
-        expectedRows.map(Row(_))
+    withTable(externalTableIdent.quotedString) {
+      val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+        sqlText =
+          s"""
+             |CREATE MATERIALIZED VIEW a AS SELECT * FROM $fileFormat.`$tmpDir`;
+             |CREATE STREAMING TABLE b AS SELECT * FROM STREAM $externalTableIdent
+             |""".stripMargin
       )
+
+      startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
+
+      Seq("a", "b").foreach { datasetName =>
+        val datasetFullyQualifiedName =
+          fullyQualifiedIdentifier(datasetName).quotedString
+        val expectedRows = if (fileFormat == "csv") {
+          // CSV values are read as strings
+          Set("0", "1", "2")
+        } else {
+          Set(0, 1, 2)
+        }
+        assert(
+          spark.sql(s"SELECT * FROM $datasetFullyQualifiedName").collect().toSet ==
+            expectedRows.map(Row(_))
+        )
+      }
     }
   }
 
@@ -571,6 +612,23 @@ class SqlPipelineSuite extends PipelineTest with SQLTestUtils {
     }
 
     assert(ex.errorClass.contains("TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS"))
+  }
+
+  test("create view syntax for persisted views") {
+    val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+      sqlText = s"CREATE VIEW b COMMENT 'my persisted comment' AS SELECT * FROM range(1, 4);"
+    )
+    val graph = unresolvedDataflowGraph.resolve().validate()
+
+    val view = graph.views.last
+
+    // view identifier should be multipart for persisted views
+    assert(view.identifier == fullyQualifiedIdentifier("b"))
+    assert(view.isInstanceOf[PersistedView])
+    assert(
+      view.sqlText.isDefined && view.sqlText.get == "SELECT * FROM range(1, 4)"
+    )
+    assert(view.comment.get == "my persisted comment")
   }
 
   test("Use database and set catalog works") {
@@ -744,6 +802,41 @@ class SqlPipelineSuite extends PipelineTest with SQLTestUtils {
     )
   }
 
+  test("groupby and rollup works with internal datasets") {
+    val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE MATERIALIZED VIEW src AS
+                   |    SELECT id
+                   |    FROM range(3);
+                   |
+                   |CREATE MATERIALIZED VIEW groupby_result AS
+                   |    SELECT id, SUM(id) AS sum_id, COUNT(*) AS cnt
+                   |    FROM src
+                   |    GROUP BY id;
+                   |
+                   |CREATE MATERIALIZED VIEW rollup_result AS
+                   |    SELECT id, SUM(id) AS sum_id, COUNT(*) AS cnt
+                   |    FROM src
+                   |    GROUP BY ROLLUP(id);
+                   |""".stripMargin
+    )
+
+    startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
+
+    val groupbyDf = spark.table(fullyQualifiedIdentifier("groupby_result"))
+    val rollupDf = spark.table(fullyQualifiedIdentifier("rollup_result"))
+
+    // groupBy should have exactly one row per id [0,1,2]
+    assert(groupbyDf.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
+
+    // rollup should have all groupBy rows + one extra (the total row)
+    assert(rollupDf.count() == groupbyDf.count() + 1)
+
+    // verify the rollup total row: id IS NULL, sum_id=3, cnt=3
+    val totalRow = rollupDf.filter("id IS NULL").collect().head
+    assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
+  }
+
   test("Empty streaming table definition is disallowed") {
     val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
       sqlText = "CREATE STREAMING TABLE st;"
@@ -850,6 +943,67 @@ class SqlPipelineSuite extends PipelineTest with SQLTestUtils {
         "datasetNames" -> Seq(fullyQualifiedIdentifier("st").quotedString,
           fullyQualifiedIdentifier("st2").quotedString).mkString(",")
       )
+    )
+  }
+
+  test("No table defined pipeline fails with RUN_EMPTY_PIPELINE") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(sqlText = "", sqlFilePath = "a.sql", spark = spark)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty
+    )
+  }
+
+  test("Pipeline with only temp views fails with RUN_EMPTY_PIPELINE") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(
+      sqlText = s"""
+                   |CREATE TEMPORARY VIEW a AS SELECT id FROM range(1,3);
+                   |""".stripMargin,
+      sqlFilePath = "a.sql",
+      spark = spark
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty
+    )
+  }
+
+  test("Pipeline with only flow fails with RUN_EMPTY_PIPELINE") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(
+      sqlText = s"""
+                   |CREATE FLOW f AS INSERT INTO a BY NAME
+                   |SELECT 1;
+                   |""".stripMargin,
+      sqlFilePath = "a.sql",
+      spark = spark
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty
     )
   }
 }

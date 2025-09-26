@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-abstract class BaseArrowPythonRunner(
+abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
@@ -37,10 +37,10 @@ abstract class BaseArrowPythonRunner(
     protected override val workerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
+  extends BasePythonRunner[IN, OUT](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
-  with BasicPythonArrowInput
-  with BasicPythonArrowOutput {
+  with PythonArrowInput[IN]
+  with PythonArrowOutput[OUT] {
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
@@ -49,6 +49,8 @@ abstract class BaseArrowPythonRunner(
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
   override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
+  override val tracebackDumpIntervalSeconds: Long =
+    SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
@@ -66,6 +68,22 @@ abstract class BaseArrowPythonRunner(
       s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
 }
 
+abstract class RowInputArrowPythonRunner(
+    funcs: Seq[(ChainedPythonFunctions, Long)],
+    evalType: Int,
+    argOffsets: Array[Array[Int]],
+    _schema: StructType,
+    _timeZoneId: String,
+    largeVarTypes: Boolean,
+    workerConf: Map[String, String],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BaseArrowPythonRunner[Iterator[InternalRow], ColumnarBatch](
+    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
+    pythonMetrics, jobArtifactUUID)
+  with BasicPythonArrowInput
+  with BasicPythonArrowOutput
+
 /**
  * Similar to `PythonUDFRunner`, but exchange data with Python worker via Arrow stream.
  */
@@ -80,7 +98,7 @@ class ArrowPythonRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
-  extends BaseArrowPythonRunner(
+  extends RowInputArrowPythonRunner(
     funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
     pythonMetrics, jobArtifactUUID) {
 
@@ -103,7 +121,7 @@ class ArrowPythonWithNamedArgumentRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
-  extends BaseArrowPythonRunner(
+  extends RowInputArrowPythonRunner(
     funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes, workerConf,
     pythonMetrics, jobArtifactUUID) {
 
@@ -131,7 +149,15 @@ object ArrowPythonRunner {
     val legacyPandasConversion = Seq(
       SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
       conf.legacyPandasConversion.toString)
+    val legacyPandasConversionUDF = Seq(
+      SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
+      conf.legacyPandasConversionUDF.toString)
+    val intToDecimalCoercion = Seq(
+      SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED.key ->
+      conf.getConf(SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED, false).toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
-      arrowAyncParallelism ++ useLargeVarTypes ++ legacyPandasConversion: _*)
+      arrowAyncParallelism ++ useLargeVarTypes ++
+      intToDecimalCoercion ++
+      legacyPandasConversion ++ legacyPandasConversionUDF: _*)
   }
 }

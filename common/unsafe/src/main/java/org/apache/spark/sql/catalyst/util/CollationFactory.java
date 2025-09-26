@@ -22,7 +22,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.BiFunction;
-import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 
 import com.ibm.icu.text.CollationKey;
@@ -125,10 +124,19 @@ public final class CollationFactory {
     public final String version;
 
     /**
-     * Collation sensitive hash function. Output for two UTF8Strings will be the same if they are
-     * equal according to the collation.
+     * Returns the sort key of the input UTF8String. Two UTF8String values are equal iff their
+     * sort keys are equal (compared as byte arrays).
+     * The sort key is defined as follows for collations without the RTRIM modifier:
+     * - UTF8_BINARY: It is the bytes of the string.
+     * - UTF8_LCASE: It is byte array we get by replacing all invalid UTF8 sequences with the
+     *   Unicode replacement character and then converting all characters of the replaced string
+     *   with their lowercase equivalents (the Greek capital and Greek small sigma both map to
+     *   the Greek final sigma).
+     * - ICU collations: It is the byte array returned by the ICU library for the collated string.
+     *   For strings with the RTRIM modifier, we right-trim the string and return the collation key
+     *   of the resulting right-trimmed string.
      */
-    public final ToLongFunction<UTF8String> hashFunction;
+    public final Function<UTF8String, byte[]> sortKeyFunction;
 
     /**
      * Potentially faster way than using comparator to compare two UTF8Strings for equality.
@@ -182,7 +190,7 @@ public final class CollationFactory {
         Collator collator,
         Comparator<UTF8String> comparator,
         String version,
-        ToLongFunction<UTF8String> hashFunction,
+        Function<UTF8String, byte[]> sortKeyFunction,
         BiFunction<UTF8String, UTF8String, Boolean> equalsFunction,
         boolean isUtf8BinaryType,
         boolean isUtf8LcaseType,
@@ -192,7 +200,7 @@ public final class CollationFactory {
       this.collator = collator;
       this.comparator = comparator;
       this.version = version;
-      this.hashFunction = hashFunction;
+      this.sortKeyFunction = sortKeyFunction;
       this.isUtf8BinaryType = isUtf8BinaryType;
       this.isUtf8LcaseType = isUtf8LcaseType;
       this.equalsFunction = equalsFunction;
@@ -581,18 +589,18 @@ public final class CollationFactory {
       protected Collation buildCollation() {
         if (caseSensitivity == CaseSensitivity.UNSPECIFIED) {
           Comparator<UTF8String> comparator;
-          ToLongFunction<UTF8String> hashFunction;
+          Function<UTF8String, byte[]> sortKeyFunction;
           BiFunction<UTF8String, UTF8String, Boolean> equalsFunction;
           boolean supportsSpaceTrimming = spaceTrimming != SpaceTrimming.NONE;
 
           if (spaceTrimming == SpaceTrimming.NONE) {
             comparator = UTF8String::binaryCompare;
-            hashFunction = s -> (long) s.hashCode();
+            sortKeyFunction = s -> s.getBytes();
             equalsFunction = UTF8String::equals;
           } else {
             comparator = (s1, s2) -> applyTrimmingPolicy(s1, spaceTrimming).binaryCompare(
               applyTrimmingPolicy(s2, spaceTrimming));
-            hashFunction = s -> (long) applyTrimmingPolicy(s, spaceTrimming).hashCode();
+            sortKeyFunction = s -> applyTrimmingPolicy(s, spaceTrimming).getBytes();
             equalsFunction = (s1, s2) -> applyTrimmingPolicy(s1, spaceTrimming).equals(
               applyTrimmingPolicy(s2, spaceTrimming));
           }
@@ -603,25 +611,25 @@ public final class CollationFactory {
             null,
             comparator,
             CollationSpecICU.ICU_VERSION,
-            hashFunction,
+            sortKeyFunction,
             equalsFunction,
             /* isUtf8BinaryType = */ true,
             /* isUtf8LcaseType = */ false,
             spaceTrimming != SpaceTrimming.NONE);
         } else {
           Comparator<UTF8String> comparator;
-          ToLongFunction<UTF8String> hashFunction;
+          Function<UTF8String, byte[]> sortKeyFunction;
 
           if (spaceTrimming == SpaceTrimming.NONE) {
             comparator = CollationAwareUTF8String::compareLowerCase;
-            hashFunction = s ->
-              (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode();
+            sortKeyFunction = s ->
+              CollationAwareUTF8String.lowerCaseCodePoints(s).getBytes();
           } else {
             comparator = (s1, s2) -> CollationAwareUTF8String.compareLowerCase(
               applyTrimmingPolicy(s1, spaceTrimming),
               applyTrimmingPolicy(s2, spaceTrimming));
-            hashFunction = s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(
-              applyTrimmingPolicy(s, spaceTrimming)).hashCode();
+            sortKeyFunction = s -> CollationAwareUTF8String.lowerCaseCodePoints(
+              applyTrimmingPolicy(s, spaceTrimming)).getBytes();
           }
 
           return new Collation(
@@ -630,7 +638,7 @@ public final class CollationFactory {
             null,
             comparator,
             CollationSpecICU.ICU_VERSION,
-            hashFunction,
+            sortKeyFunction,
             (s1, s2) -> comparator.compare(s1, s2) == 0,
             /* isUtf8BinaryType = */ false,
             /* isUtf8LcaseType = */ true,
@@ -1013,19 +1021,18 @@ public final class CollationFactory {
         collator.freeze();
 
         Comparator<UTF8String> comparator;
-        ToLongFunction<UTF8String> hashFunction;
+        Function<UTF8String, byte[]> sortKeyFunction;
 
         if (spaceTrimming == SpaceTrimming.NONE) {
-          hashFunction = s -> (long) collator.getCollationKey(
-            s.toValidString()).hashCode();
           comparator = (s1, s2) ->
             collator.compare(s1.toValidString(), s2.toValidString());
+          sortKeyFunction = s -> collator.getCollationKey(s.toValidString()).toByteArray();
         } else {
           comparator = (s1, s2) -> collator.compare(
             applyTrimmingPolicy(s1, spaceTrimming).toValidString(),
             applyTrimmingPolicy(s2, spaceTrimming).toValidString());
-          hashFunction = s -> (long) collator.getCollationKey(
-            applyTrimmingPolicy(s, spaceTrimming).toValidString()).hashCode();
+          sortKeyFunction = s -> collator.getCollationKey(
+            applyTrimmingPolicy(s, spaceTrimming).toValidString()).toByteArray();
         }
 
         return new Collation(
@@ -1034,7 +1041,7 @@ public final class CollationFactory {
           collator,
           comparator,
           ICU_VERSION,
-          hashFunction,
+          sortKeyFunction,
           (s1, s2) -> comparator.compare(s1, s2) == 0,
           /* isUtf8BinaryType = */ false,
           /* isUtf8LcaseType = */ false,

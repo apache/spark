@@ -24,7 +24,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for the Parquet data source.
@@ -74,16 +74,15 @@ class ParquetOptions(
   /**
    * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
-  def datetimeRebaseModeInRead: LegacyBehaviorPolicy.Value = parameters
+  def datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
-    .map(LegacyBehaviorPolicy.withName)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ))
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ).toString)
   /**
    * The rebasing mode for INT96 timestamp values in reads.
    */
-  def int96RebaseModeInRead: LegacyBehaviorPolicy.Value = parameters
-    .get(INT96_REBASE_MODE).map(LegacyBehaviorPolicy.withName)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ))
+  def int96RebaseModeInRead: String = parameters
+    .get(INT96_REBASE_MODE)
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ).toString)
 }
 
 

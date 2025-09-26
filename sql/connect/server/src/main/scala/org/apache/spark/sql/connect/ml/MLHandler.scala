@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.connect.ml
 
+import java.io.{PrintWriter, StringWriter}
 import java.lang.ThreadLocal
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, EstimatorUtils, Model, Transformer}
@@ -121,6 +124,9 @@ private[connect] object MLHandler extends Logging {
     override def initialValue: SessionHolder = null
   }
 
+  // A map of thread-id -> handler execution start time (UNIX timestamp)
+  val handlerExecutionStartTimeMap = new ConcurrentHashMap[Long, Long]()
+
   private val allowlistedMLClasses = {
     val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
     val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
@@ -150,7 +156,43 @@ private[connect] object MLHandler extends Logging {
     }
   }
 
-  def handleMlCommand(
+  def startHangingHandlerReaper(): Unit = {
+    val handlerInterruptionTimeoutMinutes = {
+      try {
+        val envValue = System.getenv("SPARK_CONNECT_ML_HANDLER_INTERRUPTION_TIMEOUT_MINUTES")
+        if (envValue != null) {
+          envValue.toInt
+        } else { 0 }
+      } catch {
+        case _: Exception => 0
+      }
+    }
+
+    if (handlerInterruptionTimeoutMinutes > 0) {
+      val handlerInterruptionTimeoutMillis = handlerInterruptionTimeoutMinutes * 60 * 1000
+      val thread = new Thread(() => {
+        while (true) {
+          handlerExecutionStartTimeMap.forEach { (threadId, startTime) =>
+            val execTime = System.currentTimeMillis() - startTime
+            if (execTime > handlerInterruptionTimeoutMillis) {
+              for (t <- Thread.getAllStackTraces().keySet().asScala) {
+                if (t.getId() == threadId) {
+                  t.interrupt()
+                }
+              }
+            }
+          }
+          Thread.sleep(60 * 1000)
+        }
+      })
+      thread.setDaemon(true)
+      thread.start()
+    }
+  }
+
+  startHangingHandlerReaper()
+
+  def _handleMlCommand(
       sessionHolder: SessionHolder,
       mlCommand: proto.MlCommand): proto.MlCommandResult = {
 
@@ -406,26 +448,76 @@ private[connect] object MLHandler extends Logging {
         val createSummaryCmd = mlCommand.getCreateSummary
         createModelSummary(sessionHolder, createSummaryCmd)
 
+      case proto.MlCommand.CommandCase.GET_MODEL_SIZE =>
+        val modelRefId = mlCommand.getGetModelSize.getModelRef.getId
+        val model = mlCache.get(modelRefId)
+        val modelSize = model.asInstanceOf[Model[_]].estimatedSize
+        proto.MlCommandResult
+          .newBuilder()
+          .setParam(LiteralValueProtoConverter.toLiteralProto(modelSize))
+          .build()
+
       case other => throw MlUnsupportedException(s"$other not supported")
     }
   }
 
-  private def createModelSummary(
-      sessionHolder: SessionHolder,
-      createSummaryCmd: proto.MlCommand.CreateSummary): proto.MlCommandResult = {
-    val refId = createSummaryCmd.getModelRef.getId
-    val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
-    val dataset = MLUtils.parseRelationProto(createSummaryCmd.getDataset, sessionHolder)
-    val modelPath = sessionHolder.mlCache.getModelOffloadingPath(refId)
-    val summaryPath = modelPath.resolve("summary").toString
-    model.loadSummary(summaryPath, dataset)
-    proto.MlCommandResult
-      .newBuilder()
-      .setParam(LiteralValueProtoConverter.toLiteralProto(true))
-      .build()
+  def wrapHandler(
+      originHandler: () => Any,
+      reqProto: com.google.protobuf.GeneratedMessage): Any = {
+    val threadId = Thread.currentThread().getId
+    val startTime = System.currentTimeMillis()
+    handlerExecutionStartTimeMap.put(threadId, startTime)
+    try {
+      originHandler()
+    } catch {
+      case e: InterruptedException =>
+        val stackTrace = {
+          val sw = new StringWriter()
+          val pw = new PrintWriter(sw)
+          e.printStackTrace(pw)
+          sw.toString
+        }
+        val execTime = (System.currentTimeMillis() - startTime) / (60 * 1000)
+        throw SparkException.internalError(
+          s"The Spark Connect ML handler thread is interrupted after executing for " +
+            s"$execTime minutes.\nThe request proto message is:\n${reqProto.toString}\n, " +
+            s"the current stack trace is:\n$stackTrace\n")
+    } finally {
+      handlerExecutionStartTimeMap.remove(threadId)
+    }
   }
 
-  def transformMLRelation(relation: proto.MlRelation, sessionHolder: SessionHolder): DataFrame = {
+  def handleMlCommand(
+      sessionHolder: SessionHolder,
+      mlCommand: proto.MlCommand): proto.MlCommandResult = {
+    wrapHandler(() => _handleMlCommand(sessionHolder, mlCommand), mlCommand)
+      .asInstanceOf[proto.MlCommandResult]
+  }
+
+  private def createModelSummary(
+      sessionHolder: SessionHolder,
+      createSummaryCmd: proto.MlCommand.CreateSummary): proto.MlCommandResult =
+    sessionHolder.mlCache.synchronized {
+      val refId = createSummaryCmd.getModelRef.getId
+      val model = sessionHolder.mlCache.get(refId).asInstanceOf[HasTrainingSummary[_]]
+      val isCreated = if (!model.hasSummary) {
+        val dataset = MLUtils.parseRelationProto(createSummaryCmd.getDataset, sessionHolder)
+        val modelPath = sessionHolder.mlCache.getModelOffloadingPath(refId)
+        val summaryPath = modelPath.resolve("summary").toString
+        model.loadSummary(summaryPath, dataset)
+        true
+      } else {
+        false
+      }
+      proto.MlCommandResult
+        .newBuilder()
+        .setParam(LiteralValueProtoConverter.toLiteralProto(isCreated))
+        .build()
+    }
+
+  def _transformMLRelation(
+      relation: proto.MlRelation,
+      sessionHolder: SessionHolder): DataFrame = {
     relation.getMlTypeCase match {
       // Ml transform
       case proto.MlRelation.MlTypeCase.TRANSFORM =>
@@ -457,19 +549,21 @@ private[connect] object MLHandler extends Logging {
         val objRefId = relation.getFetch.getObjRef.getId
         val methods = relation.getFetch.getMethodsList.asScala.toArray
         val obj = sessionHolder.mlCache.get(objRefId)
-        if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
-          && methods(0).getMethod == "summary"
-          && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+        sessionHolder.mlCache.synchronized {
+          if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
+            && methods(0).getMethod == "summary"
+            && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
 
-          if (relation.hasModelSummaryDataset) {
-            val dataset =
-              MLUtils.parseRelationProto(relation.getModelSummaryDataset, sessionHolder)
-            val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
-            val summaryPath = modelPath.resolve("summary").toString
-            obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(summaryPath, dataset)
-          } else {
-            // For old Spark client backward compatibility.
-            throw MLModelSummaryLostException(objRefId)
+            if (relation.hasModelSummaryDataset) {
+              val dataset =
+                MLUtils.parseRelationProto(relation.getModelSummaryDataset, sessionHolder)
+              val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
+              val summaryPath = modelPath.resolve("summary").toString
+              obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(summaryPath, dataset)
+            } else {
+              // For old Spark client backward compatibility.
+              throw MLModelSummaryLostException(objRefId)
+            }
           }
         }
 
@@ -478,5 +572,10 @@ private[connect] object MLHandler extends Logging {
 
       case other => throw MlUnsupportedException(s"$other not supported")
     }
+  }
+
+  def transformMLRelation(relation: proto.MlRelation, sessionHolder: SessionHolder): DataFrame = {
+    wrapHandler(() => _transformMLRelation(relation, sessionHolder), relation)
+      .asInstanceOf[DataFrame]
   }
 }

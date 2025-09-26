@@ -23,7 +23,7 @@ import json
 import threading
 import os
 import warnings
-from collections.abc import Sized
+from collections.abc import Callable, Sized
 import functools
 from threading import RLock
 from typing import (
@@ -106,6 +106,7 @@ from pyspark.errors import (
 )
 
 if TYPE_CHECKING:
+    import pyspark.sql.connect.proto as pb2
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
@@ -130,6 +131,7 @@ class SparkSession:
         def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
             self._channel_builder: Optional[DefaultChannelBuilder] = None
+            self._hook_factories: list["Callable[[SparkSession], SparkSession.Hook]"] = []
 
         @overload
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
@@ -191,6 +193,13 @@ class SparkSession:
                 self._channel_builder = channelBuilder
                 return self
 
+        def _registerHook(
+            self, hook_factory: "Callable[[SparkSession], SparkSession.Hook]"
+        ) -> "SparkSession.Builder":
+            with self._lock:
+                self._hook_factories.append(hook_factory)
+                return self
+
         def enableHiveSupport(self) -> "SparkSession.Builder":
             raise PySparkNotImplementedError(
                 errorClass="NOT_IMPLEMENTED", messageParameters={"feature": "enableHiveSupport"}
@@ -235,11 +244,13 @@ class SparkSession:
 
             if has_channel_builder:
                 assert self._channel_builder is not None
-                session = SparkSession(connection=self._channel_builder)
+                session = SparkSession(
+                    connection=self._channel_builder, hook_factories=self._hook_factories
+                )
             else:
                 spark_remote = to_str(self._options.get("spark.remote"))
                 assert spark_remote is not None
-                session = SparkSession(connection=spark_remote)
+                session = SparkSession(connection=spark_remote, hook_factories=self._hook_factories)
 
             SparkSession._set_default_and_active_session(session)
             self._apply_options(session)
@@ -255,6 +266,16 @@ class SparkSession:
                 self._apply_options(session)
                 return session
 
+    class Hook:
+        """A Hook can be used to inject behavior into the session."""
+
+        def on_execute_plan(self, request: "pb2.ExecutePlanRequest") -> "pb2.ExecutePlanRequest":
+            """Called before sending an ExecutePlanRequest.
+
+            The request is replaced with the one returned by this method.
+            """
+            return request
+
     _client: SparkConnectClient
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
@@ -262,7 +283,12 @@ class SparkSession:
     builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
     builder.__doc__ = PySparkSession.builder.__doc__
 
-    def __init__(self, connection: Union[str, DefaultChannelBuilder], userId: Optional[str] = None):
+    def __init__(
+        self,
+        connection: Union[str, DefaultChannelBuilder],
+        userId: Optional[str] = None,
+        hook_factories: Optional[list["Callable[[SparkSession], Hook]"]] = None,
+    ) -> None:
         """
         Creates a new SparkSession for the Spark Connect interface.
 
@@ -277,8 +303,15 @@ class SparkSession:
             isolate their Spark Sessions. If the `user_id` is not set, will default to
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
+        hook_factories: list[Callable[[SparkSession], Hook]], optional
+            Optional list of hook factories for hooks that should be registered for this session.
         """
-        self._client = SparkConnectClient(connection=connection, user_id=userId)
+        hook_factories = hook_factories or []
+        self._client = SparkConnectClient(
+            connection=connection,
+            user_id=userId,
+            session_hooks=[factory(self) for factory in hook_factories],
+        )
         self._session_id = self._client._session_id
 
         # Set to false to prevent client.release_session on close() (testing only)
@@ -586,7 +619,7 @@ class SparkSession:
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
+            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true", False)
 
             _table = pa.Table.from_batches(
                 [

@@ -91,7 +91,6 @@ class CategoricalTestsMixin:
         self.assert_eq(pser.cat.add_categories([4, 5]), psser.cat.add_categories([4, 5]))
         self.assert_eq(pser.cat.add_categories([]), psser.cat.add_categories([]))
 
-        pser = pser.cat.add_categories(4)
         psser = psser.cat.add_categories(4)
 
         self.assertRaises(ValueError, lambda: psser.cat.add_categories(4))

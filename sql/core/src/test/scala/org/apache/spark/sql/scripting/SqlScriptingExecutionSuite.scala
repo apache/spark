@@ -40,7 +40,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.ANSI_ENABLED.key, "true")
-      .set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   // Helpers
@@ -2743,6 +2742,101 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("local variable - multiple variables declared at once") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE localVar1, localVar2, localVar3, localVar4 = 1;
+        |    SELECT localVar1;
+        |    SELECT lbl1.localVar1;
+        |    SELECT localVar2;
+        |    SELECT lbl1.localVar2;
+        |    SELECT localVar3;
+        |    SELECT lbl1.localVar3;
+        |    SELECT localVar4;
+        |    SELECT lbl1.localVar4;
+        |  END;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)), // select localVar1
+      Seq(Row(1)), // select lbl1.localVar1
+      Seq(Row(1)), // select localVar2
+      Seq(Row(1)), // select lbl1.localVar2
+      Seq(Row(1)), // select localVar3
+      Seq(Row(1)), // select lbl1.localVar3
+      Seq(Row(1)), // select localVar4
+      Seq(Row(1)) // select lbl1.localVar4
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - same variable declared twice within same DECLARE statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE var1, vAr1 = 23;
+        |  END;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+    checkError(
+      exception = e,
+      condition = "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+      parameters = Map("variableName" -> toSQLId("lbl1.var1"))
+    )
+  }
+
+  test("local variable - same variable declared twice within same DECLARE OR REPLACE statement") {
+    val sqlScript =
+      """
+        |DECLARE OR REPLACE var1, vAr1 = 23
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      spark.sql(sqlScript)
+    }
+    checkError(
+      exception = e,
+      condition = "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+      parameters = Map("variableName" -> toSQLId("system.session.var1"))
+    )
+  }
+
+  test("local variable - variable declared via IDENTIFIER construct," +
+    "as well as a regular variable within the same DECLARE") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE proxy = "var1";
+        |    DECLARE IDENTIFIER(proxy), var2 = 3;
+        |    SELECT proxy;
+        |    SELECT lbl1.proxy;
+        |    SELECT var1;
+        |    SELECT lbl1.var1;
+        |    SELECT var2;
+        |    SELECT lbl1.var2;
+        |  END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row("var1")), // select proxy
+      Seq(Row("var1")), // select lbl1.proxy
+      Seq(Row(3)), // select var1
+      Seq(Row(3)), // select lbl1.var1
+      Seq(Row(3)), // select var2
+      Seq(Row(3)) // select lbl1.var2
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
   test("Exception handler in a FOR loop - with condition") {
     withTable("t") {
       withView("v") {
@@ -2937,5 +3031,77 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1))     // select 1
     )
     verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Integer literal column in FOR query") {
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript1, Seq(Seq(Row(2))))
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 DO
+        |    SELECT x.`1`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, Seq(Seq(Row(1))))
+  }
+
+  test("Column with space in FOR query") {
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT 1 AS `Space Column` DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(sqlScript1, expected)
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 AS `Space Column` DO
+        |    SELECT x.`Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, expected)
+  }
+
+  test("FOR query referencing table with space") {
+    withTable("test_tbl") {
+      sql("CREATE TABLE test_tbl (`Space Column` INT) USING parquet")
+      sql("INSERT INTO test_tbl VALUES (1)")
+      val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT * FROM test_tbl DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      val expected = Seq(Seq(Row(1)))
+      verifySqlScriptResult(sqlScript1, expected)
+
+      val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT * FROM test_tbl DO
+        |    SELECT x.`Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      verifySqlScriptResult(sqlScript2, expected)
+    }
   }
 }

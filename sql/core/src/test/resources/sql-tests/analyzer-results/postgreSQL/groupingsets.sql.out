@@ -33,7 +33,7 @@ insert into gstest2 values
   (2, 2, 2, 2, 2, 2, 2, 2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/gstest2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/gstest2], Append, `spark_catalog`.`default`.`gstest2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/gstest2), [a, b, c, d, e, f, g, h]
-+- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS c#x, cast(col4#x as int) AS d#x, cast(col5#x as int) AS e#x, cast(col6#x as int) AS f#x, cast(col7#x as int) AS g#x, cast(col8#x as int) AS h#x]
++- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x, col4#x AS d#x, col5#x AS e#x, col6#x AS f#x, col7#x AS g#x, col8#x AS h#x]
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x, col6#x, col7#x, col8#x]
 
 
@@ -49,7 +49,7 @@ insert into gstest3 values
   (2, 2, 2, 2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/gstest3, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/gstest3], Append, `spark_catalog`.`default`.`gstest3`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/gstest3), [a, b, c, d]
-+- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS c#x, cast(col4#x as int) AS d#x]
++- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x, col4#x AS d#x]
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x]
 
 
@@ -68,7 +68,7 @@ values (1,1,tinyint('0'),1), (2,2,tinyint('1'),1),
        (7,64,tinyint('2'),1), (8,128,tinyint('3'),1)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/gstest4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/gstest4], Append, `spark_catalog`.`default`.`gstest4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/gstest4), [id, v, unhashable_col, unsortable_col]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS v#x, cast(col3#x as tinyint) AS unhashable_col#x, cast(col4#x as int) AS unsortable_col#x]
++- Project [col1#x AS id#x, col2#x AS v#x, col3#x AS unhashable_col#x, col4#x AS unsortable_col#x]
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x]
 
 
@@ -401,13 +401,12 @@ group by grouping sets(ten) having grouping(ten) >= 0
 order by 2,1
 -- !query analysis
 Sort [grouping(ten)#x ASC NULLS FIRST, ten#x ASC NULLS FIRST], true
-+- Project [ten#x, grouping(ten)#x]
-   +- Filter (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) >= 0)
-      +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
-         +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, 0]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, spark_grouping_id#xL]
-            +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x]
-               +- SubqueryAlias spark_catalog.default.onek
-                  +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
++- Filter (cast(grouping(ten)#x as int) >= 0)
+   +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(ten)#x]
+      +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, 0]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, spark_grouping_id#xL]
+         +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x]
+            +- SubqueryAlias spark_catalog.default.onek
+               +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
 
 
 -- !query
@@ -416,13 +415,12 @@ group by grouping sets(ten, four) having grouping(ten) > 0
 order by 2,1
 -- !query analysis
 Sort [grouping(ten)#x ASC NULLS FIRST, ten#x ASC NULLS FIRST], true
-+- Project [ten#x, grouping(ten)#x]
-   +- Filter (cast(cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) as int) > 0)
-      +- Aggregate [ten#x, four#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
-         +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, null, 1], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, null, four#x, 2]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, four#x, spark_grouping_id#xL]
-            +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x, four#x AS four#x]
-               +- SubqueryAlias spark_catalog.default.onek
-                  +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
++- Filter (cast(grouping(ten)#x as int) > 0)
+   +- Aggregate [ten#x, four#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(ten)#x]
+      +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, null, 1], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, null, four#x, 2]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, four#x, spark_grouping_id#xL]
+         +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x, four#x AS four#x]
+            +- SubqueryAlias spark_catalog.default.onek
+               +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
 
 
 -- !query
@@ -431,13 +429,12 @@ group by rollup(ten) having grouping(ten) > 0
 order by 2,1
 -- !query analysis
 Sort [grouping(ten)#x ASC NULLS FIRST, ten#x ASC NULLS FIRST], true
-+- Project [ten#x, grouping(ten)#x]
-   +- Filter (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) > 0)
-      +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
-         +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, 0], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, null, 1]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, spark_grouping_id#xL]
-            +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x]
-               +- SubqueryAlias spark_catalog.default.onek
-                  +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
++- Filter (cast(grouping(ten)#x as int) > 0)
+   +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(ten)#x]
+      +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, 0], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, null, 1]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, spark_grouping_id#xL]
+         +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x]
+            +- SubqueryAlias spark_catalog.default.onek
+               +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
 
 
 -- !query
@@ -446,13 +443,12 @@ group by cube(ten) having grouping(ten) > 0
 order by 2,1
 -- !query analysis
 Sort [grouping(ten)#x ASC NULLS FIRST, ten#x ASC NULLS FIRST], true
-+- Project [ten#x, grouping(ten)#x]
-   +- Filter (cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) > 0)
-      +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(ten)#x, spark_grouping_id#xL]
-         +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, 0], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, null, 1]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, spark_grouping_id#xL]
-            +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x]
-               +- SubqueryAlias spark_catalog.default.onek
-                  +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
++- Filter (cast(grouping(ten)#x as int) > 0)
+   +- Aggregate [ten#x, spark_grouping_id#xL], [ten#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(ten)#x]
+      +- Expand [[unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, 0], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, null, 1]], [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x, spark_grouping_id#xL]
+         +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x, ten#x AS ten#x]
+            +- SubqueryAlias spark_catalog.default.onek
+               +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
 
 
 -- !query

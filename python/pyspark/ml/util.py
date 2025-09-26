@@ -40,7 +40,6 @@ from typing import (
 from contextlib import contextmanager
 
 from pyspark import since
-from pyspark.errors.exceptions.connect import SparkException
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
@@ -279,46 +278,47 @@ def try_remote_call(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper", name: str, *args: Any) -> Any:
-        import pyspark.sql.connect.proto as pb2
-        from pyspark.sql.connect.session import SparkSession
-
-        session = SparkSession.getActiveSession()
-
-        def remote_call() -> Any:
-            from pyspark.ml.connect.util import _extract_id_methods
-            from pyspark.ml.connect.serialize import serialize, deserialize
-            from pyspark.ml.wrapper import JavaModel
-
-            assert session is not None
-            if self._java_obj == ML_CONNECT_HELPER_ID:
-                obj_id = ML_CONNECT_HELPER_ID
-            else:
-                if isinstance(self, JavaModel):
-                    assert isinstance(self._java_obj, RemoteModelRef)
-                    obj_id = self._java_obj.ref_id
-                else:
-                    # model summary
-                    obj_id = self._java_obj  # type: ignore
-            methods, obj_ref = _extract_id_methods(obj_id)
-            methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
-            command = pb2.Command()
-            command.ml_command.fetch.CopyFrom(
-                pb2.Fetch(obj_ref=pb2.ObjectRef(id=obj_ref), methods=methods)
-            )
-            (_, properties, _) = session.client.execute_command(command)
-            ml_command_result = properties["ml_command_result"]
-            if ml_command_result.HasField("summary"):
-                summary = ml_command_result.summary
-                return summary
-            elif ml_command_result.HasField("operator_info"):
-                model_info = deserialize(properties)
-                # get a new model ref id from the existing model,
-                # it is up to the caller to build the model
-                return model_info.obj_ref.id
-            else:
-                return deserialize(properties)
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.errors.exceptions.connect import SparkException
+            import pyspark.sql.connect.proto as pb2
+            from pyspark.sql.connect.session import SparkSession
+
+            session = SparkSession.getActiveSession()
+
+            def remote_call() -> Any:
+                from pyspark.ml.connect.util import _extract_id_methods
+                from pyspark.ml.connect.serialize import serialize, deserialize
+                from pyspark.ml.wrapper import JavaModel
+
+                assert session is not None
+                if self._java_obj == ML_CONNECT_HELPER_ID:
+                    obj_id = ML_CONNECT_HELPER_ID
+                else:
+                    if isinstance(self, JavaModel):
+                        assert isinstance(self._java_obj, RemoteModelRef)
+                        obj_id = self._java_obj.ref_id
+                    else:
+                        # model summary
+                        obj_id = self._java_obj  # type: ignore
+                methods, obj_ref = _extract_id_methods(obj_id)
+                methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
+                command = pb2.Command()
+                command.ml_command.fetch.CopyFrom(
+                    pb2.Fetch(obj_ref=pb2.ObjectRef(id=obj_ref), methods=methods)
+                )
+                (_, properties, _) = session.client.execute_command(command)
+                ml_command_result = properties["ml_command_result"]
+                if ml_command_result.HasField("summary"):
+                    summary = ml_command_result.summary
+                    return summary
+                elif ml_command_result.HasField("operator_info"):
+                    model_info = deserialize(properties)
+                    # get a new model ref id from the existing model,
+                    # it is up to the caller to build the model
+                    return model_info.obj_ref.id
+                else:
+                    return deserialize(properties)
+
             try:
                 return remote_call()
             except SparkException as e:
@@ -339,6 +339,9 @@ def try_remote_call(f: FuncT) -> FuncT:
                     session.client.execute_command(create_summary_command)  # type: ignore
 
                     return remote_call()
+
+                # for other unexpected error, re-raise it.
+                raise
         else:
             return f(self, name, *args)
 

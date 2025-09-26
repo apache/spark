@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{spy, times, verify}
 import org.scalatest.BeforeAndAfterEach
@@ -2650,7 +2651,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-21216: join with a streaming DataFrame") {
-    import org.apache.spark.sql.execution.streaming.MemoryStream
+    import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
     import testImplicits._
 
     implicit val _sqlContext = spark.sqlContext
@@ -2710,8 +2711,9 @@ class HiveDDLSuite
         OrcFileOperator.getFileReader(maybeFile.get.toPath.toString).get.getCompression.name
 
       case "parquet" =>
+        val hadoopConf = sparkContext.hadoopConfiguration
         val footer = ParquetFooterReader.readFooter(
-          sparkContext.hadoopConfiguration, new Path(maybeFile.get.getPath), NO_FILTER)
+          HadoopInputFile.fromPath(new Path(maybeFile.get.getPath), hadoopConf), NO_FILTER)
         footer.getBlocks.get(0).getColumns.get(0).getCodec.toString
     }
 
@@ -3418,7 +3420,7 @@ class HiveDDLSuite
       assert(loaded.properties().get("foo") == "bar")
 
       verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
-      verify(spyCatalog, times(0)).alterTableDataSchema(
+      verify(spyCatalog, times(0)).alterTableSchema(
         any[String], any[String], any[StructType])
 
       v2SessionCatalog.alterTable(identifier,
@@ -3428,7 +3430,7 @@ class HiveDDLSuite
       assert(loaded2.columns.head.comment() == "comment2")
 
       verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
-      verify(spyCatalog, times(1)).alterTableDataSchema(
+      verify(spyCatalog, times(1)).alterTableSchema(
         any[String], any[String], any[StructType])
     }
   }

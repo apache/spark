@@ -39,6 +39,7 @@ import numpy as np
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.types import (
+    _create_row,
     _from_numpy_type,
     DateType,
     ArrayType,
@@ -54,9 +55,12 @@ from pyspark.sql.types import (
     DecimalType,
     StringType,
     DataType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
+    MapType,
+    StructType,
 )
 
 import pyspark.sql.connect.proto as proto
@@ -248,6 +252,7 @@ class LiteralExpression(Expression):
                 DecimalType,
                 StringType,
                 DateType,
+                TimeType,
                 TimestampType,
                 TimestampNTZType,
                 DayTimeIntervalType,
@@ -298,6 +303,9 @@ class LiteralExpression(Expression):
                     value = DateType().toInternal(value)
                 else:
                     value = DateType().toInternal(value.date())
+            elif isinstance(dataType, TimeType):
+                assert isinstance(value, datetime.time)
+                value = TimeType().toInternal(value)
             elif isinstance(dataType, TimestampType):
                 assert isinstance(value, datetime.datetime)
                 value = TimestampType().toInternal(value)
@@ -352,6 +360,8 @@ class LiteralExpression(Expression):
             return TimestampNTZType() if is_timestamp_ntz_preferred() else TimestampType()
         elif isinstance(value, datetime.date):
             return DateType()
+        elif isinstance(value, datetime.time):
+            return TimeType()
         elif isinstance(value, datetime.timedelta):
             return DayTimeIntervalType()
         elif isinstance(value, np.generic):
@@ -416,6 +426,9 @@ class LiteralExpression(Expression):
         elif literal.HasField("date"):
             assert dataType is None or isinstance(dataType, DataType)
             return DateType().fromInternal(literal.date)
+        elif literal.HasField("time"):
+            assert dataType is None or isinstance(dataType, TimeType)
+            return TimeType().fromInternal(literal.time.nano)
         elif literal.HasField("timestamp"):
             assert dataType is None or isinstance(dataType, TimestampType)
             return TimestampType().fromInternal(literal.timestamp)
@@ -431,6 +444,29 @@ class LiteralExpression(Expression):
                 assert isinstance(dataType, ArrayType)
                 assert elementType == dataType.elementType
             return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
+        elif literal.HasField("map"):
+            keyType = proto_schema_to_pyspark_data_type(literal.map.key_type)
+            valueType = proto_schema_to_pyspark_data_type(literal.map.value_type)
+            if dataType is not None:
+                assert isinstance(dataType, MapType)
+                assert keyType == dataType.keyType
+                assert valueType == dataType.valueType
+            return {
+                LiteralExpression._to_value(k, keyType): LiteralExpression._to_value(v, valueType)
+                for k, v in zip(literal.map.keys, literal.map.values)
+            }
+        elif literal.HasField("struct"):
+            struct_type = cast(
+                StructType, proto_schema_to_pyspark_data_type(literal.struct.struct_type)
+            )
+            if dataType is not None:
+                assert isinstance(dataType, StructType)
+                assert struct_type == dataType
+            values = [
+                LiteralExpression._to_value(v, f.dataType)
+                for v, f in zip(literal.struct.elements, struct_type.fields)
+            ]
+            return _create_row(struct_type.names, values)
 
         raise PySparkTypeError(
             errorClass="UNSUPPORTED_LITERAL",
@@ -468,6 +504,9 @@ class LiteralExpression(Expression):
             expr.literal.string = str(self._value)
         elif isinstance(self._dataType, DateType):
             expr.literal.date = int(self._value)
+        elif isinstance(self._dataType, TimeType):
+            expr.literal.time.precision = self._dataType.precision
+            expr.literal.time.nano = int(self._value)
         elif isinstance(self._dataType, TimestampType):
             expr.literal.timestamp = int(self._value)
         elif isinstance(self._dataType, TimestampNTZType):
@@ -496,6 +535,10 @@ class LiteralExpression(Expression):
             dt = DateType().fromInternal(self._value)
             if dt is not None and isinstance(dt, datetime.date):
                 return dt.strftime("%Y-%m-%d")
+        elif isinstance(self._dataType, TimeType):
+            t = TimeType().fromInternal(self._value)
+            if t is not None and isinstance(t, datetime.time):
+                return t.strftime("%H:%M:%S.%f")
         elif isinstance(self._dataType, TimestampType):
             ts = TimestampType().fromInternal(self._value)
             if ts is not None and isinstance(ts, datetime.datetime):
@@ -1300,3 +1343,24 @@ class SubqueryExpression(Expression):
             repr_parts.append(f"values={self._in_subquery_values}")
 
         return f"SubqueryExpression({', '.join(repr_parts)})"
+
+
+class DirectShufflePartitionID(Expression):
+    """
+    Expression that takes a partition ID value and passes it through directly for use in
+    shuffle partitioning. This is used with RepartitionByExpression to allow users to
+    directly specify target partition IDs.
+    """
+
+    def __init__(self, child: Expression):
+        super().__init__()
+        assert child is not None and isinstance(child, Expression)
+        self._child = child
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = self._create_proto_expression()
+        expr.direct_shuffle_partition_id.child.CopyFrom(self._child.to_plan(session))
+        return expr
+
+    def __repr__(self) -> str:
+        return f"DirectShufflePartitionID(child={self._child})"

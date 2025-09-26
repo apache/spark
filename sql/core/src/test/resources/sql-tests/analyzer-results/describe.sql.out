@@ -214,6 +214,41 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+DROP SCHEMA IF EXISTS test_schema
+-- !query analysis
+DropNamespace true, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [test_schema]
+
+
+-- !query
+CREATE SCHEMA test_schema DEFAULT COLLATION UNICODE
+-- !query analysis
+CreateNamespace false, [collation=UNICODE]
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [test_schema]
+
+
+-- !query
+DESCRIBE SCHEMA EXTENDED test_schema
+-- !query analysis
+DescribeNamespace true, [info_name#x, info_value#x]
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [test_schema]
+
+
+-- !query
+ALTER SCHEMA test_schema DEFAULT COLLATION UTF8_LCASE
+-- !query analysis
+SetNamespaceCollationCommand UTF8_LCASE
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [test_schema]
+
+
+-- !query
+DESCRIBE SCHEMA EXTENDED test_schema
+-- !query analysis
+DescribeNamespace true, [info_name#x, info_value#x]
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [test_schema]
+
+
+-- !query
 DESC temp_v
 -- !query analysis
 DescribeTableCommand `temp_v`, false, [col_name#x, data_type#x, comment#x]

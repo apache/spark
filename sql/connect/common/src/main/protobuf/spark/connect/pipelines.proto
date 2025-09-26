@@ -20,6 +20,7 @@ syntax = "proto3";
 package spark.connect;
 
 import "google/protobuf/timestamp.proto";
+import "spark/connect/common.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -48,11 +49,6 @@ message PipelineCommand {
 
     // SQL configurations for all flows in this graph.
     map<string, string> sql_conf = 5;
-
-    message Response {
-      // The ID of the created graph.
-      optional string dataflow_graph_id = 1;
-    }
   }
 
   // Drops the graph and stops any running attached flows.
@@ -105,16 +101,13 @@ message PipelineCommand {
     optional string target_dataset_name = 3;
 
     // An unresolved relation that defines the dataset's flow.
-    optional spark.connect.Relation plan = 4;
+    optional spark.connect.Relation relation = 4;
 
     // SQL configurations set when running this flow.
     map<string, string> sql_conf = 5;
 
-    // If true, this flow will only be run once per full refresh.
-    optional bool once = 6;
-
     // The location in source code that this flow was defined.
-    optional SourceCodeLocation source_code_location = 7;
+    optional SourceCodeLocation source_code_location = 6;
   }
 
   // Resolves all datasets and flows and start a pipeline update. Should be called after all
@@ -122,6 +115,19 @@ message PipelineCommand {
   message StartRun {
     // The graph to start.
     optional string dataflow_graph_id = 1;
+
+    // List of dataset to reset and recompute.
+    repeated string full_refresh_selection = 2;
+    
+    // Perform a full graph reset and recompute.
+    optional bool full_refresh_all = 3;
+    
+    // List of dataset to update.
+    repeated string refresh_selection = 4;
+
+    // If true, the run will not actually execute any flows, but will only validate the graph and
+    // check for any errors. This is useful for testing and validation purposes.
+    optional bool dry = 5;
   }
 
   // Parses the SQL file and registers all datasets and flows.
@@ -142,10 +148,20 @@ message PipelineCommand {
 message PipelineCommandResult {
   oneof result_type {
     CreateDataflowGraphResult create_dataflow_graph_result = 1;
+    DefineDatasetResult define_dataset_result = 2;
+    DefineFlowResult define_flow_result = 3;
   }
   message CreateDataflowGraphResult {
     // The ID of the created graph.
     optional string dataflow_graph_id = 1;
+  }
+  message DefineDatasetResult {
+    // Resolved identifier of the dataset
+    optional ResolvedIdentifier resolved_identifier = 1;
+  }
+  message DefineFlowResult {
+    // Resolved identifier of the flow
+    optional ResolvedIdentifier resolved_identifier = 1;
   }
 }
 

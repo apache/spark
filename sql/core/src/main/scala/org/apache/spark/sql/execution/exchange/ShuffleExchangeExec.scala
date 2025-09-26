@@ -30,7 +30,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow, UnsafeRowChecksum}
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -344,6 +344,10 @@ object ShuffleExchangeExec {
         // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
         new PartitionIdPassthrough(n)
+      case ShufflePartitionIdPassThrough(_, n) =>
+        // For ShufflePartitionIdPassThrough, the DirectShufflePartitionID expression directly
+        // produces partition IDs, so we use PartitionIdPassthrough to pass them through directly.
+        new PartitionIdPassthrough(n)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Extract only fields used for sorting to avoid collecting large fields that does not
         // affect sorting result when deciding partition bounds in RangePartitioner
@@ -399,6 +403,11 @@ object ShuffleExchangeExec {
       case SinglePartition => identity
       case KeyGroupedPartitioning(expressions, _, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
+      case s: ShufflePartitionIdPassThrough =>
+        // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID
+        // If the value is null, `InternalRow#getInt` returns 0.
+        val projection = UnsafeProjection.create(s.partitionIdExpression :: Nil, outputAttributes)
+        row => projection(row).getInt(0)
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
     }
 
@@ -471,12 +480,19 @@ object ShuffleExchangeExec {
     // Now, we manually create a ShuffleDependency. Because pairs in rddWithPartitionIds
     // are in the form of (partitionId, row) and every partitionId is in the expected range
     // [0, part.numPartitions - 1]. The partitioner of this is a PartitionIdPassthrough.
+    val checksumSize =
+      if (SQLConf.get.shuffleOrderIndependentChecksumEnabled) {
+        part.numPartitions
+      } else {
+        0
+      }
     val dependency =
       new ShuffleDependency[Int, InternalRow, InternalRow](
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
         serializer,
-        shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics))
+        shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
+        rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
 
     dependency
   }

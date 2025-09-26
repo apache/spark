@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
-import org.apache.spark.sql.pipelines.{Language, QueryOriginType}
+import org.apache.spark.sql.pipelines.Language
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -199,7 +199,7 @@ class SqlGraphRegistrationContext(
           ),
           format = cst.tableSpec.provider,
           normalizedPath = None,
-          isStreamingTableOpt = None
+          isStreamingTable = true
         )
       )
     }
@@ -230,7 +230,7 @@ class SqlGraphRegistrationContext(
           ),
           format = cst.tableSpec.provider,
           normalizedPath = None,
-          isStreamingTableOpt = None
+          isStreamingTable = true
         )
       )
 
@@ -246,7 +246,6 @@ class SqlGraphRegistrationContext(
             currentCatalog = context.getCurrentCatalogOpt,
             currentDatabase = context.getCurrentDatabaseOpt
           ),
-          comment = cst.tableSpec.comment,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
             objectType = Option(QueryOriginType.Flow.toString)
@@ -281,7 +280,7 @@ class SqlGraphRegistrationContext(
           ),
           format = cmv.tableSpec.provider,
           normalizedPath = None,
-          isStreamingTableOpt = None
+          isStreamingTable = false
         )
       )
 
@@ -297,7 +296,6 @@ class SqlGraphRegistrationContext(
             currentCatalog = context.getCurrentCatalogOpt,
             currentDatabase = context.getCurrentDatabaseOpt
           ),
-          comment = cmv.tableSpec.comment,
           origin = queryOrigin.copy(
             objectName = Option(mvIdentifier.unquotedString),
             objectType = Option(QueryOriginType.Flow.toString)
@@ -324,7 +322,8 @@ class SqlGraphRegistrationContext(
             objectName = Option(viewIdentifier.unquotedString),
             objectType = Option(QueryOriginType.View.toString)
           ),
-          properties = cv.properties
+          properties = cv.properties,
+          sqlText = cv.originalText
         )
       )
 
@@ -343,8 +342,7 @@ class SqlGraphRegistrationContext(
           origin = queryOrigin.copy(
             objectName = Option(viewIdentifier.unquotedString),
             objectType = Option(QueryOriginType.Flow.toString)
-          ),
-          comment = None
+          )
         )
       )
     }
@@ -368,7 +366,8 @@ class SqlGraphRegistrationContext(
             objectName = Option(viewIdentifier.unquotedString),
             objectType = Option(QueryOriginType.View.toString)
           ),
-          properties = Map.empty
+          properties = Map.empty,
+          sqlText = cvc.originalText
         )
       )
 
@@ -387,8 +386,7 @@ class SqlGraphRegistrationContext(
           origin = queryOrigin.copy(
             objectName = Option(viewIdentifier.unquotedString),
             objectType = Option(QueryOriginType.Flow.toString)
-          ),
-          comment = None
+          )
         )
       )
     }
@@ -454,7 +452,6 @@ class SqlGraphRegistrationContext(
         UnresolvedFlow(
           identifier = flowIdentifier,
           destinationIdentifier = qualifiedDestinationIdentifier,
-          comment = cf.comment,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(flowQueryLogicalPlan),
           sqlConf = context.getSqlConf,
           once = isOnce,

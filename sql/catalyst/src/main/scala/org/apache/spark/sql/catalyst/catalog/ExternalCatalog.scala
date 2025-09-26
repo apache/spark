@@ -120,8 +120,20 @@ trait ExternalCatalog {
    * @param db Database that table to alter schema for exists in
    * @param table Name of table to alter schema for
    * @param newDataSchema Updated data schema to be used for the table.
+   * @deprecated since 4.1.0 use `alterTableSchema` instead.
    */
   def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
+
+  /**
+   * Alter the schema of a table identified by the provided database and table name.
+   *
+   * All partition columns must be preserved.
+   *
+   * @param db Database that table to alter schema for exists in
+   * @param table Name of table to alter schema for
+   * @param newSchema Updated data schema to be used for the table.
+   */
+  def alterTableSchema(db: String, table: String, newSchema: StructType): Unit
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
   def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit

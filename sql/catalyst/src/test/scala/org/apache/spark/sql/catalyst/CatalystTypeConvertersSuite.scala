@@ -449,8 +449,9 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       43200999999L,
       86399000000L,
       86399999999L).foreach { us =>
-      val localTime = DateTimeUtils.nanosToLocalTime(us)
-      assert(CatalystTypeConverters.createToScalaConverter(TimeType())(us) === localTime)
+      val nanos = us * 1000L
+      val localTime = DateTimeUtils.nanosToLocalTime(nanos)
+      assert(CatalystTypeConverters.createToScalaConverter(TimeType())(nanos) === localTime)
     }
   }
 }

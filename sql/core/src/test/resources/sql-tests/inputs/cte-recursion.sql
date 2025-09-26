@@ -97,6 +97,37 @@ SELECT * FROM t LIMIT 60;
 
 DROP VIEW ZeroAndOne;
 
+-- limited recursion allowed to stop from failing by putting LIMIT ALL
+WITH RECURSIVE t(n) MAX RECURSION LEVEL 100 AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+SELECT * FROM t LIMIT ALL;
+
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+SELECT * FROM t LIMIT ALL;
+
+-- One reference is limit all but other isn't. Should fail.
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+   (SELECT n FROM t LIMIT ALL) UNION ALL (SELECT n FROM t);
+
+-- One references are limit all.
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+   (SELECT n FROM t LIMIT ALL) UNION ALL (SELECT n FROM t LIMIT ALL);
+
 -- terminate recursion with LIMIT
 WITH RECURSIVE r(level) AS (
   VALUES 0
@@ -683,6 +714,20 @@ WITH RECURSIVE randoms(val) AS (
 )
 SELECT val FROM randoms LIMIT 5;
 
+-- Type coercion where the anchor is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, CAST(1 AS BIGINT)
+    UNION ALL
+    SELECT n+1, n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Type coercion where the recursion is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
 -- Recursive CTE with nullable recursion and non-recursive anchor
 WITH RECURSIVE t1(n) AS (
     SELECT 1
@@ -725,4 +770,57 @@ WITH RECURSIVE t1(n) AS (
     UNION ALL
     SELECT n + 1 FROM t1
 )
-    ((SELECT n FROM t1) UNION ALL (SELECT n FROM t1)) LIMIT 20
+    ((SELECT n FROM t1) UNION ALL (SELECT n FROM t1)) LIMIT 20;
+
+-- Recursive CTE with self reference inside Window function
+WITH RECURSIVE win(id, val) AS (
+    SELECT 1, CAST(10 AS BIGINT)
+    UNION ALL
+    SELECT id + 1, SUM(val) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+    FROM win WHERE id < 3
+)
+SELECT * FROM win;
+
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    (SELECT n + 1 FROM t1 WHERE n < 5 ORDER BY n)
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n) AS (
+    SELECT 1 FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1 AS (
+    SELECT 1 AS n FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n) AS (
+    WITH t2(m) AS (SELECT 1)
+    SELECT 1 FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1 AS (
+    WITH t2(m) AS (SELECT 1)
+    SELECT 1 AS n FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Query with recursion that gets optimized to empty relation
+WITH RECURSIVE t AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + m
+    FROM (SELECT 2 as m) subq
+             JOIN t ON n = m
+    WHERE n <> m
+)
+SELECT * FROM t;

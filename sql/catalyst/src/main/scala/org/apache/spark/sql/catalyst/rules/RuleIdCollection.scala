@@ -97,7 +97,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveOrderByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveRowLevelCommandAssignments" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveSetVariable" ::
-      "org.apache.spark.sql.catalyst.analysis.SubstituteExecuteImmediate" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveExecuteImmediate" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableSpec" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
@@ -113,6 +113,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.expressions.ValidateAndStripPipeExpressions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnresolvedHaving" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::
+      "org.apache.spark.sql.catalyst.expressions.ExtractSemiStructuredFields" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::

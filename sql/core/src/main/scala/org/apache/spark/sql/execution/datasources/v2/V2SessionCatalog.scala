@@ -126,7 +126,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       }
     } catch {
       case _: NoSuchNamespaceException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
   }
 
@@ -284,7 +284,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalog.getTableMetadata(ident.asTableIdentifier)
     } catch {
       case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
@@ -309,11 +309,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
             collation = collation, storage = storage))
       }
       if (changes.exists(_.isInstanceOf[TableChange.ColumnChange])) {
-        catalog.alterTableDataSchema(ident.asTableIdentifier, schema)
+        catalog.alterTableSchema(ident.asTableIdentifier, schema)
       }
     } catch {
       case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
 
     null // Return null to save the `loadTable` call for ALTER TABLE.

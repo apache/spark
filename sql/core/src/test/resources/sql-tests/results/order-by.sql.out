@@ -443,6 +443,22 @@ struct<(sum(b) + 1):bigint>
 
 
 -- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+1	1
+
+
+-- !query
 DROP VIEW IF EXISTS testData
 -- !query schema
 struct<>

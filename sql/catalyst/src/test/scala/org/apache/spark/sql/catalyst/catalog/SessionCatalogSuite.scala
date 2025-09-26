@@ -564,7 +564,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
-  test("alter table add columns") {
+  test("alter data schema add columns") {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
@@ -577,6 +577,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val expectedTableSchema = StructType(oldTab.dataSchema.fields ++
         Seq(StructField("c3", IntegerType)) ++ oldTab.partitionSchema)
       assert(newTab.schema == expectedTableSchema)
+    }
+  }
+
+  test("alter schema add columns") {
+    withBasicCatalog { sessionCatalog =>
+      sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
+      val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      val newSchema = StructType(oldTab.dataSchema.fields ++
+        Seq(StructField("c3", IntegerType)) ++ oldTab.partitionSchema)
+
+      sessionCatalog.alterTableSchema(
+        TableIdentifier("t1", Some("default")),
+        newSchema)
+
+      val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      assert(newTab.schema == newSchema)
     }
   }
 
@@ -834,14 +850,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1"))
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`default`.`view1`")
+        parameters = Map("relationName" ->
+          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
       checkError(
         exception = intercept[NoSuchTableException] {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`default`.`view1`")
+        parameters = Map("relationName" ->
+          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
 
       createTempView(catalog, "view1", tempTable, overrideIfExists = false)
@@ -855,7 +873,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`default`.`view1`")
+        parameters = Map("relationName" ->
+          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
     }
   }

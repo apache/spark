@@ -45,6 +45,10 @@ class GraphRegistrationContext(
     views += viewDef
   }
 
+  def getViews(): Seq[View] = {
+    return views.toSeq
+  }
+
   def registerFlow(flowDef: UnresolvedFlow): Unit = {
     flows += flowDef.copy(sqlConf = defaultSqlConf ++ flowDef.sqlConf)
   }
@@ -57,95 +61,24 @@ class GraphRegistrationContext(
    *  is respected.
    */
   def toDataflowGraph: DataflowGraph = {
-    val qualifiedTables = tables.toSeq.map { t =>
-      val fullyQualifiedTableIdentifier = GraphIdentifierManager
-        .parseAndQualifyTableIdentifier(
-          rawTableIdentifier = t.identifier,
-          currentCatalog = Some(defaultCatalog),
-          currentDatabase = Some(defaultDatabase)
-        )
-        .identifier
-      t.copy(
-        identifier = fullyQualifiedTableIdentifier,
-        baseOrigin = t.baseOrigin.copy(
-          objectName = Option(fullyQualifiedTableIdentifier.unquotedString)
-        )
-      )
-    }
-
-    val validatedViews = views.toSeq.collect {
-      case v: TemporaryView =>
-        val parsedAndValidatedTemporaryViewIdentifier = GraphIdentifierManager
-          .parseAndValidateTemporaryViewIdentifier(
-            rawViewIdentifier = v.identifier
-          )
-        v.copy(
-          identifier = parsedAndValidatedTemporaryViewIdentifier,
-          origin = v.origin.copy(
-            objectName = Option(parsedAndValidatedTemporaryViewIdentifier.unquotedString)
-          )
-        )
-      case v: PersistedView =>
-        val fullyQualifiedPersistedViewIdentifier = GraphIdentifierManager
-          .parseAndValidatePersistedViewIdentifier(
-            rawViewIdentifier = v.identifier,
-            currentCatalog = Some(defaultCatalog),
-            currentDatabase = Some(defaultDatabase)
-          )
-        v.copy(
-          identifier = fullyQualifiedPersistedViewIdentifier,
-          origin = v.origin.copy(
-            objectName = Option(fullyQualifiedPersistedViewIdentifier.unquotedString)
-          )
-        )
-    }
-
-    val qualifiedFlows = flows.toSeq.map { f =>
-      val isImplicitFlow = f.identifier == f.destinationIdentifier
-      val flowWritesToView =
-        validatedViews
-          .filter(_.isInstanceOf[TemporaryView])
-          .exists(_.identifier == f.destinationIdentifier)
-
-      // If the flow is created implicitly as part of defining a view, then we do not
-      // qualify the flow identifier and the flow destination. This is because views are
-      // not permitted to have multipart
-      if (isImplicitFlow && flowWritesToView) {
-        f
-      } else {
-        val fullyQualifiedFlowIdentifier = GraphIdentifierManager
-          .parseAndQualifyFlowIdentifier(
-            rawFlowIdentifier = f.identifier,
-            currentCatalog = Some(defaultCatalog),
-            currentDatabase = Some(defaultDatabase)
-          )
-          .identifier
-        f.copy(
-          identifier = fullyQualifiedFlowIdentifier,
-          destinationIdentifier = GraphIdentifierManager
-            .parseAndQualifyFlowIdentifier(
-              rawFlowIdentifier = f.destinationIdentifier,
-              currentCatalog = Some(defaultCatalog),
-              currentDatabase = Some(defaultDatabase)
-            )
-            .identifier,
-          origin = f.origin.copy(
-            objectName = Option(fullyQualifiedFlowIdentifier.unquotedString)
-          )
-        )
-      }
+    if (tables.isEmpty && views.collect { case v: PersistedView =>
+        v
+      }.isEmpty) {
+      throw new AnalysisException(
+        errorClass = "RUN_EMPTY_PIPELINE",
+        messageParameters = Map.empty)
     }
 
     assertNoDuplicates(
-      qualifiedTables = qualifiedTables,
-      validatedViews = validatedViews,
-      qualifiedFlows = qualifiedFlows
+      qualifiedTables = tables.toSeq,
+      validatedViews = views.toSeq,
+      qualifiedFlows = flows.toSeq
     )
 
     new DataflowGraph(
-      tables = qualifiedTables,
-      views = validatedViews,
-      flows = qualifiedFlows
+      tables = tables.toSeq,
+      views = views.toSeq,
+      flows = flows.toSeq
     )
   }
 

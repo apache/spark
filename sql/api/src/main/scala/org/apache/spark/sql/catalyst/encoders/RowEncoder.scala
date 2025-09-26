@@ -22,7 +22,7 @@ import scala.reflect.classTag
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.errors.{DataTypeErrorsBase, ExecutionErrors}
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -99,16 +99,7 @@ object RowEncoder extends DataTypeErrorsBase {
       case p: PythonUserDefinedType =>
         // TODO check if this works.
         encoderForDataType(p.sqlType, lenient)
-      case udt: UserDefinedType[_] =>
-        val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
-        val udtClass: Class[_] = if (annotation != null) {
-          annotation.udt()
-        } else {
-          UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-            throw ExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
-          }
-        }
-        UDTEncoder(udt, udtClass.asInstanceOf[Class[_ <: UserDefinedType[_]]])
+      case udt: UserDefinedType[_] => UDTEncoder(udt, udt.getClass)
       case ArrayType(elementType, containsNull) =>
         IterableEncoder(
           classTag[mutable.ArraySeq[_]],

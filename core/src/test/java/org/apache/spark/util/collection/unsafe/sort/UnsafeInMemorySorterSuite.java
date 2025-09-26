@@ -172,7 +172,7 @@ public class UnsafeInMemorySorterSuite {
             recordComparator, prefixComparator, 100, shouldUseRadixSort());
 
     // Ensure that the sorter does not OOM while freeing its memory.
-    testMemoryManager.markconsequentOOM(Integer.MAX_VALUE);
+    testMemoryManager.markConsequentOOM(Integer.MAX_VALUE);
     sorter.freeMemory();
     testMemoryManager.resetConsequentOOM();
     Assertions.assertFalse(sorter.hasSpaceForAnotherRecord());
@@ -182,7 +182,7 @@ public class UnsafeInMemorySorterSuite {
     sorter.expandPointerArray(array);
 
     // Ensure that it is safe to call freeMemory() multiple times.
-    testMemoryManager.markconsequentOOM(Integer.MAX_VALUE);
+    testMemoryManager.markConsequentOOM(Integer.MAX_VALUE);
     sorter.freeMemory();
     sorter.freeMemory();
     testMemoryManager.resetConsequentOOM();
