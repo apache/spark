@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * the number of rows a node should return, Limit All stops being a no-op node semantically, and
  * should be used to enable unlimited looping in recursive CTEs.
  */
-
 object ApplyLimitAll extends Rule[LogicalPlan] {
   private def applyLimitAllToPlan(plan: LogicalPlan, isInLimitAll: Boolean = false): LogicalPlan = {
     plan match {
