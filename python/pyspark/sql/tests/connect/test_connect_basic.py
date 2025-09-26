@@ -136,7 +136,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf.collect(), cdf2.collect())
 
     def test_window_spec_serialization(self):
-        from pyspark.sql.connect.window import Window, WindowSpec
+        from pyspark.sql.connect.window import Window
         from pyspark.serializers import CPickleSerializer
 
         pickle_ser = CPickleSerializer()
