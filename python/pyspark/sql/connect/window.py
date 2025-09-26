@@ -18,7 +18,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import TYPE_CHECKING, Union, Sequence, List, Optional, Tuple, cast, Iterable
+from typing import TYPE_CHECKING, Any, Union, Sequence, List, Optional, Tuple, cast, Iterable
 
 from pyspark.sql.column import Column
 from pyspark.sql.window import (
@@ -69,7 +69,7 @@ class WindowSpec(ParentWindowSpec):
         self.__init__(partitionSpec, orderSpec, frame)  # type: ignore[misc]
         return self
 
-    def __getnewargs__(self):
+    def __getnewargs__(self) -> Tuple[Any, ...]:
         return (self._partitionSpec, self._orderSpec, self._frame)
 
     def __init__(
