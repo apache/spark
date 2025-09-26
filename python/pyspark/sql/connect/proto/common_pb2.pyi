@@ -599,7 +599,7 @@ class StackTraceElement(google.protobuf.message.Message):
 
 global___StackTraceElement = StackTraceElement
 
-class CatalogIdentifier(google.protobuf.message.Message):
+class ResolvedIdentifier(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     CATALOG_NAME_FIELD_NUMBER: builtins.int
@@ -625,7 +625,7 @@ class CatalogIdentifier(google.protobuf.message.Message):
         ],
     ) -> None: ...
 
-global___CatalogIdentifier = CatalogIdentifier
+global___ResolvedIdentifier = ResolvedIdentifier
 
 class Bools(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

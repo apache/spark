@@ -151,11 +151,11 @@ message PipelineCommandResult {
   }
   message DefineDatasetResult {
     // Resolved identifier of the dataset
-    optional CatalogIdentifier resolved_identifier = 1;
+    optional ResolvedIdentifier resolved_identifier = 1;
   }
   message DefineFlowResult {
     // Resolved identifier of the flow
-    optional CatalogIdentifier resolved_identifier = 1;
+    optional ResolvedIdentifier resolved_identifier = 1;
   }
 }
 

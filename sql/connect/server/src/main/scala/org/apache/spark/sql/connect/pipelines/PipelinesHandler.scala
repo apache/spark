@@ -23,7 +23,7 @@ import scala.util.Using
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{CatalogIdentifier, ExecutePlanResponse, PipelineCommandResult, Relation}
+import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation, ResolvedIdentifier}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -83,7 +83,7 @@ private[connect] object PipelinesHandler extends Logging {
         logInfo(s"Define pipelines dataset cmd received: $cmd")
         val resolvedDataset =
           defineDataset(cmd.getDefineDataset, sessionHolder)
-        val identifierBuilder = CatalogIdentifier.newBuilder()
+        val identifierBuilder = ResolvedIdentifier.newBuilder()
         resolvedDataset.resolvedCatalog.foreach(identifierBuilder.setCatalogName)
         resolvedDataset.resolvedDb.foreach { ns =>
           identifierBuilder.addNamespace(ns)
@@ -102,7 +102,7 @@ private[connect] object PipelinesHandler extends Logging {
         logInfo(s"Define pipelines flow cmd received: $cmd")
         val resolvedFlow =
           defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
-        val identifierBuilder = CatalogIdentifier.newBuilder()
+        val identifierBuilder = ResolvedIdentifier.newBuilder()
         resolvedFlow.resolvedCatalog.foreach(identifierBuilder.setCatalogName)
         resolvedFlow.resolvedDb.foreach { ns =>
           identifierBuilder.addNamespace(ns)

@@ -759,12 +759,12 @@ class PipelineCommandResult(google.protobuf.message.Message):
 
         RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
         @property
-        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.CatalogIdentifier:
+        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
             """Resolved identifier of the dataset"""
         def __init__(
             self,
             *,
-            resolved_identifier: pyspark.sql.connect.proto.common_pb2.CatalogIdentifier
+            resolved_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
             | None = ...,
         ) -> None: ...
         def HasField(
@@ -795,12 +795,12 @@ class PipelineCommandResult(google.protobuf.message.Message):
 
         RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
         @property
-        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.CatalogIdentifier:
+        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
             """Resolved identifier of the flow"""
         def __init__(
             self,
             *,
-            resolved_identifier: pyspark.sql.connect.proto.common_pb2.CatalogIdentifier
+            resolved_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
             | None = ...,
         ) -> None: ...
         def HasField(
