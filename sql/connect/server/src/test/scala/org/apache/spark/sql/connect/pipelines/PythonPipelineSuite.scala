@@ -135,19 +135,18 @@ class PythonPipelineSuite
       updateContext.eventBuffer,
       identifier = graphIdentifier("table1"),
       expectedFlowStatus = FlowStatus.FAILED,
-      cond = flowProgressEvent => flowProgressEvent.origin.sourceCodeLocation == Option(
-        QueryOrigin(
-          language = Option(Python()),
-          filePath = Option("<string>"),
-          line = Option(28),
-          objectName = Option("spark_catalog.default.table1"),
-          objectType = Option(QueryOriginType.Flow.toString)
-        )
-      ),
-      errorChecker = ex => ex.getMessage.contains(
-        "A column, variable, or function parameter with name `name` cannot be resolved."),
-      expectedEventLevel = EventLevel.WARN
-    )
+      cond = flowProgressEvent =>
+        flowProgressEvent.origin.sourceCodeLocation == Option(
+          QueryOrigin(
+            language = Option(Python()),
+            filePath = Option("<string>"),
+            line = Option(28),
+            objectName = Option("spark_catalog.default.table1"),
+            objectType = Option(QueryOriginType.Flow.toString))),
+      errorChecker = ex =>
+        ex.getMessage.contains(
+          "A column, variable, or function parameter with name `name` cannot be resolved."),
+      expectedEventLevel = EventLevel.WARN)
   }
 
   test("flow progress events have correct python source code location") {
@@ -178,76 +177,72 @@ class PythonPipelineSuite
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
-    Seq(FlowStatus.QUEUED, FlowStatus.STARTING,
-      FlowStatus.PLANNING, FlowStatus.RUNNING, FlowStatus.COMPLETED).foreach { flowStatus =>
+    Seq(
+      FlowStatus.QUEUED,
+      FlowStatus.STARTING,
+      FlowStatus.PLANNING,
+      FlowStatus.RUNNING,
+      FlowStatus.COMPLETED).foreach { flowStatus =>
       assertFlowProgressEvent(
         updateContext.eventBuffer,
         identifier = graphIdentifier("mv2"),
         expectedFlowStatus = flowStatus,
-        cond = flowProgressEvent => flowProgressEvent.origin.sourceCodeLocation == Option(
-          QueryOrigin(
-            language = Option(Python()),
-            filePath = Option("<string>"),
-            line = Option(34),
-            objectName = Option("spark_catalog.default.mv2"),
-            objectType = Option(QueryOriginType.Flow.toString)
-          )
-        ),
-        expectedEventLevel = EventLevel.INFO
-      )
+        cond = flowProgressEvent =>
+          flowProgressEvent.origin.sourceCodeLocation == Option(
+            QueryOrigin(
+              language = Option(Python()),
+              filePath = Option("<string>"),
+              line = Option(34),
+              objectName = Option("spark_catalog.default.mv2"),
+              objectType = Option(QueryOriginType.Flow.toString))),
+        expectedEventLevel = EventLevel.INFO)
 
       assertFlowProgressEvent(
         updateContext.eventBuffer,
         identifier = graphIdentifier("mv"),
         expectedFlowStatus = flowStatus,
-        cond = flowProgressEvent => flowProgressEvent.origin.sourceCodeLocation == Option(
-          QueryOrigin(
-            language = Option(Python()),
-            filePath = Option("<string>"),
-            line = Option(38),
-            objectName = Option("spark_catalog.default.mv"),
-            objectType = Option(QueryOriginType.Flow.toString)
-          )
-        ),
-        expectedEventLevel = EventLevel.INFO
-      )
+        cond = flowProgressEvent =>
+          flowProgressEvent.origin.sourceCodeLocation == Option(
+            QueryOrigin(
+              language = Option(Python()),
+              filePath = Option("<string>"),
+              line = Option(38),
+              objectName = Option("spark_catalog.default.mv"),
+              objectType = Option(QueryOriginType.Flow.toString))),
+        expectedEventLevel = EventLevel.INFO)
     }
 
     // Note that streaming flows do not have a PLANNING phase.
-    Seq(FlowStatus.QUEUED, FlowStatus.STARTING, FlowStatus.RUNNING, FlowStatus.COMPLETED).foreach {
-      flowStatus =>
+    Seq(FlowStatus.QUEUED, FlowStatus.STARTING, FlowStatus.RUNNING, FlowStatus.COMPLETED)
+      .foreach { flowStatus =>
         assertFlowProgressEvent(
           updateContext.eventBuffer,
           identifier = graphIdentifier("table1"),
           expectedFlowStatus = flowStatus,
-          cond = flowProgressEvent => flowProgressEvent.origin.sourceCodeLocation == Option(
-            QueryOrigin(
-              language = Option(Python()),
-              filePath = Option("<string>"),
-              line = Option(28),
-              objectName = Option("spark_catalog.default.table1"),
-              objectType = Option(QueryOriginType.Flow.toString)
-            )
-          ),
-          expectedEventLevel = EventLevel.INFO
-        )
+          cond = flowProgressEvent =>
+            flowProgressEvent.origin.sourceCodeLocation == Option(
+              QueryOrigin(
+                language = Option(Python()),
+                filePath = Option("<string>"),
+                line = Option(28),
+                objectName = Option("spark_catalog.default.table1"),
+                objectType = Option(QueryOriginType.Flow.toString))),
+          expectedEventLevel = EventLevel.INFO)
 
-      assertFlowProgressEvent(
-        updateContext.eventBuffer,
-        identifier = graphIdentifier("standalone_flow1"),
-        expectedFlowStatus = flowStatus,
-        cond = flowProgressEvent => flowProgressEvent.origin.sourceCodeLocation == Option(
-          QueryOrigin(
-            language = Option(Python()),
-            filePath = Option("<string>"),
-            line = Option(43),
-            objectName = Option("spark_catalog.default.standalone_flow1"),
-            objectType = Option(QueryOriginType.Flow.toString)
-          )
-        ),
-        expectedEventLevel = EventLevel.INFO
-      )
-    }
+        assertFlowProgressEvent(
+          updateContext.eventBuffer,
+          identifier = graphIdentifier("standalone_flow1"),
+          expectedFlowStatus = flowStatus,
+          cond = flowProgressEvent =>
+            flowProgressEvent.origin.sourceCodeLocation == Option(
+              QueryOrigin(
+                language = Option(Python()),
+                filePath = Option("<string>"),
+                line = Option(43),
+                objectName = Option("spark_catalog.default.standalone_flow1"),
+                objectType = Option(QueryOriginType.Flow.toString))),
+          expectedEventLevel = EventLevel.INFO)
+      }
   }
 
   test("basic with inverted topological order") {
