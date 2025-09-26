@@ -542,7 +542,9 @@ class ArrowTableToRowsConversion:
             dedup_field_names = _dedup_names(field_names)
 
             field_convs = [
-                ArrowTableToRowsConversion._create_converter(f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes)
+                ArrowTableToRowsConversion._create_converter(
+                    f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                )
                 for f in dataType.fields
             ]
 
@@ -735,7 +737,11 @@ class ArrowTableToRowsConversion:
 
     @staticmethod  # type: ignore[misc]
     def convert(
-        table: "pa.Table", schema: StructType, *, return_as_tuples: bool = False, binary_as_bytes: bool = True
+        table: "pa.Table",
+        schema: StructType,
+        *,
+        return_as_tuples: bool = False,
+        binary_as_bytes: bool = True,
     ) -> List[Union[Row, tuple]]:
         require_minimum_pyarrow_version()
         import pyarrow as pa
@@ -748,7 +754,9 @@ class ArrowTableToRowsConversion:
 
         if len(fields) > 0:
             field_converters = [
-                ArrowTableToRowsConversion._create_converter(f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes)
+                ArrowTableToRowsConversion._create_converter(
+                    f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                )
                 for f in schema.fields
             ]
 

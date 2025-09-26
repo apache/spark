@@ -891,7 +891,9 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
             List of columns containing list of Python values.
         """
         converters = [
-            ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True, binary_as_bytes=self._binary_as_bytes)
+            ArrowTableToRowsConversion._create_converter(
+                dt, none_on_identity=True, binary_as_bytes=self._binary_as_bytes
+            )
             for dt in self._input_types
         ]
 

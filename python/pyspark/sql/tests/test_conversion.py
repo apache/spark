@@ -164,10 +164,7 @@ class ConversionTests(unittest.TestCase):
         for bytes_row, bytearray_row in zip(actual_bytes, actual_bytearray):
             self.assertEqual(bytes_row.b, bytes(bytearray_row.b))
             self.assertEqual([bytes(ba) for ba in bytearray_row.arr_b], bytes_row.arr_b)
-            self.assertEqual(
-                {k: bytes(v) for k, v in bytearray_row.map_b.items()},
-                bytes_row.map_b
-            )
+            self.assertEqual({k: bytes(v) for k, v in bytearray_row.map_b.items()}, bytes_row.map_b)
             self.assertEqual(bytes(bytearray_row.struct_b.b), bytes_row.struct_b.b)
 
 

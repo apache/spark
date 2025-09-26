@@ -180,7 +180,9 @@ def write_read_func_and_partitions(
     is_streaming = isinstance(reader, DataSourceStreamReader)
 
     # Create input converter.
-    converter = ArrowTableToRowsConversion._create_converter(BinaryType(), binary_as_bytes=binary_as_bytes)
+    converter = ArrowTableToRowsConversion._create_converter(
+        BinaryType(), binary_as_bytes=binary_as_bytes
+    )
 
     # Create output converter.
     return_type = schema

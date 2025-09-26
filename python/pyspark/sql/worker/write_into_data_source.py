@@ -206,7 +206,10 @@ def main(infile: IO, outfile: IO) -> None:
         import pyarrow as pa
 
         converters = [
-            ArrowTableToRowsConversion._create_converter(f.dataType, binary_as_bytes=binary_as_bytes) for f in schema.fields
+            ArrowTableToRowsConversion._create_converter(
+                f.dataType, binary_as_bytes=binary_as_bytes
+            )
+            for f in schema.fields
         ]
         fields = schema.fieldNames()
 

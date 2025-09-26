@@ -304,18 +304,18 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         """
 
         # Test with binary_as_bytes=True (default)
-        self.connect.conf.set("spark.sql.execution.arrow.pyspark.binaryAsBytes", "true")
-        crows = self.connect.sql(query).collect()
-        for row in crows:
-            self.assertIsInstance(row.b, bytes)
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "true"}):
+            crows = self.connect.sql(query).collect()
+            for row in crows:
+                self.assertIsInstance(row.b, bytes)
 
         # Test with binary_as_bytes=False
-        self.connect.conf.set("spark.sql.execution.arrow.pyspark.binaryAsBytes", "false")
-        crows = self.connect.sql(query).collect()
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "false"}):
+            crows = self.connect.sql(query).collect()
 
-        # Connect should return bytearray when configured
-        for row in crows:
-            self.assertIsInstance(row.b, bytearray)
+            # Connect should return bytearray when configured
+            for row in crows:
+                self.assertIsInstance(row.b, bytearray)
 
     def test_to_local_iterator_binary_type(self):
         """Test that df.toLocalIterator() respects binary_as_bytes configuration"""
@@ -328,14 +328,14 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         """
 
         # Test with binary_as_bytes=True
-        self.connect.conf.set("spark.sql.execution.arrow.pyspark.binaryAsBytes", "true")
-        for row in self.connect.sql(query).toLocalIterator():
-            self.assertIsInstance(row.b, bytes)
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "true"}):
+            for row in self.connect.sql(query).toLocalIterator():
+                self.assertIsInstance(row.b, bytes)
 
         # Test with binary_as_bytes=False
-        self.connect.conf.set("spark.sql.execution.arrow.pyspark.binaryAsBytes", "false")
-        for row in self.connect.sql(query).toLocalIterator():
-            self.assertIsInstance(row.b, bytearray)
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "false"}):
+            for row in self.connect.sql(query).toLocalIterator():
+                self.assertIsInstance(row.b, bytearray)
 
     def test_foreach_partition_binary_type(self):
         """Test that df.foreachPartition() respects binary_as_bytes configuration"""
@@ -355,22 +355,22 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                 collected_types.append(type(row.b).__name__)
 
         # Test with binary_as_bytes=True
-        self.connect.conf.set("spark.sql.execution.arrow.pyspark.binaryAsBytes", "true")
-        collected_types.clear()
-        self.connect.sql(query).foreachPartition(collect_binary_types)
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "true"}):
+            collected_types.clear()
+            self.connect.sql(query).foreachPartition(collect_binary_types)
 
-        # All should be bytes
-        for type_name in collected_types:
-            self.assertEqual(type_name, "bytes")
+            # All should be bytes
+            for type_name in collected_types:
+                self.assertEqual(type_name, "bytes")
 
         # Test with binary_as_bytes=False
-        self.connect.conf.set("spark.sql.execution.arrow.pyspark.binaryAsBytes", "false")
-        collected_types.clear()
-        self.connect.sql(query).foreachPartition(collect_binary_types)
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "false"}):
+            collected_types.clear()
+            self.connect.sql(query).foreachPartition(collect_binary_types)
 
-        # All should be bytearray
-        for type_name in collected_types:
-            self.assertEqual(type_name, "bytearray")
+            # All should be bytearray
+            for type_name in collected_types:
+                self.assertEqual(type_name, "bytearray")
 
 
 if __name__ == "__main__":
