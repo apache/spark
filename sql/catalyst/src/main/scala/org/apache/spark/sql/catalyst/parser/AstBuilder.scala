@@ -23,8 +23,8 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 
-import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
-import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
+import org.sparkproject.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
+import org.sparkproject.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
