@@ -61,7 +61,19 @@ trait TestPipelineUpdateContextMixin {
   ) extends PipelineUpdateContext {
     val eventBuffer = new PipelineRunEventBuffer()
 
-    override val eventCallback: PipelineEvent => Unit = eventBuffer.addEvent
+    override val eventCallback: PipelineEvent => Unit = { event =>
+      eventBuffer.addEvent(event)
+      // For debugging purposes, print the event to the console.
+      // Most tests expects pipeline to succeed, this makes it easier to see
+      // the error when it happens.
+      if (event.error.nonEmpty) {
+        // scalastyle:off println
+        println("\n=== Received Pipeline Event with Error ===")
+        println(event.messageWithError)
+        println("=================================")
+        // scalastyle:on println
+      }
+    }
 
     override def flowProgressEventLogger: FlowProgressEventLogger = {
       new FlowProgressEventLogger(eventCallback = eventCallback)
