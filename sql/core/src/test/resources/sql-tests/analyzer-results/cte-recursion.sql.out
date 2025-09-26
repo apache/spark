@@ -1076,20 +1076,21 @@ WITH RECURSIVE r(level) AS (
 INSERT INTO rt SELECT * FROM r
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/rt, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/rt], Append, `spark_catalog`.`default`.`rt`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/rt), [level]
-+- WithCTE
-   :- CTERelationDef xxxx, false
-   :  +- SubqueryAlias r
-   :     +- Project [col1#x AS level#x]
-   :        +- UnionLoop xxxx
-   :           :- LocalRelation [col1#x]
-   :           +- Project [(level#x + 1) AS (level + 1)#x]
-   :              +- Filter (level#x < 9)
-   :                 +- SubqueryAlias r
-   :                    +- Project [col1#x AS level#x]
-   :                       +- UnionLoopRef xxxx, [col1#x], false
-   +- Project [level#x]
-      +- SubqueryAlias r
-         +- CTERelationRef xxxx, true, [level#x], false, false
++- Project [level#x AS level#x]
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias r
+      :     +- Project [col1#x AS level#x]
+      :        +- UnionLoop xxxx
+      :           :- LocalRelation [col1#x]
+      :           +- Project [(level#x + 1) AS (level + 1)#x]
+      :              +- Filter (level#x < 9)
+      :                 +- SubqueryAlias r
+      :                    +- Project [col1#x AS level#x]
+      :                       +- UnionLoopRef xxxx, [col1#x], false
+      +- Project [level#x]
+         +- SubqueryAlias r
+            +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
@@ -1136,13 +1137,15 @@ WithCTE
 :                       +- UnionLoopRef xxxx, [col1#x], false
 +- Union false, false
    :- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/rt2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/rt2], Append, `spark_catalog`.`default`.`rt2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/rt2), [level]
-   :  +- Project [level#x]
-   :     +- SubqueryAlias r
-   :        +- CTERelationRef xxxx, true, [level#x], false, false
+   :  +- Project [level#x AS level#x]
+   :     +- Project [level#x]
+   :        +- SubqueryAlias r
+   :           +- CTERelationRef xxxx, true, [level#x], false, false
    +- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/rt2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/rt2], Append, `spark_catalog`.`default`.`rt2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/rt2), [level]
-      +- Project [level#x]
-         +- SubqueryAlias r
-            +- CTERelationRef xxxx, true, [level#x], false, false
+      +- Project [level#x AS level#x]
+         +- Project [level#x]
+            +- SubqueryAlias r
+               +- CTERelationRef xxxx, true, [level#x], false, false
 
 
 -- !query
