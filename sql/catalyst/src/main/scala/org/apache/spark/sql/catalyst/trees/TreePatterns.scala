@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.trees
 
 // Enums for commonly encountered tree patterns in rewrite rules.
-object TreePattern extends Enumeration  {
+object TreePattern extends Enumeration {
   type TreePattern = Value
 
   // !!! DO NOT add any operator pattern before `OPERATOR_START`.
@@ -65,6 +65,7 @@ object TreePattern extends Enumeration  {
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value
+  val MAP_CONCAT: Value = Value
   val MAP_OBJECTS: Value = Value
   val MULTI_ALIAS: Value = Value
   val NEW_INSTANCE: Value = Value
