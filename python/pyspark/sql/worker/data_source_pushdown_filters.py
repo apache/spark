@@ -27,7 +27,7 @@ from typing import IO, Type, Union
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkValueError
 from pyspark.errors.exceptions.base import PySparkNotImplementedError
-from pyspark.serializers import SpecialLengths, UTF8Deserializer, read_int, write_int
+from pyspark.serializers import SpecialLengths, UTF8Deserializer, read_int, read_bool, write_int
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceReader,
@@ -232,6 +232,7 @@ def main(infile: IO, outfile: IO) -> None:
             "The maximum arrow batch size should be greater than 0, but got "
             f"'{max_arrow_batch_size}'"
         )
+        binary_as_bytes = read_bool(infile)
 
         # Return the read function and partitions. Doing this in the same worker as filter pushdown
         # helps reduce the number of Python worker calls.
@@ -241,6 +242,7 @@ def main(infile: IO, outfile: IO) -> None:
             data_source=data_source,
             schema=schema,
             max_arrow_batch_size=max_arrow_batch_size,
+            binary_as_bytes=binary_as_bytes,
         )
 
         # Return the supported filter indices.
