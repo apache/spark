@@ -35,7 +35,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x, regexp_count(col#x, c) AS regexp_count(col, c)#x, regexp_count(col#x, d) AS regexp_count(col, d)#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, false
+      +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -54,7 +54,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x, regexp_count(col#x, c) AS regexp_count(col, c)#x, regexp_count(col#x, d) AS regexp_count(col, d)#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, false
+      +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -73,7 +73,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x, regexp_count(col#x, c) AS regexp_count(col, c)#x, regexp_count(col#x, d) AS regexp_count(col, d)#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, false
+      +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -105,7 +105,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x, regexp_count(col#x, c) AS regexp_count(col, c)#x, regexp_count(col#x, d) AS regexp_count(col, d)#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, false
+      +- CTERelationRef xxxx, true, [col#x], false, false
 
 
 -- !query
@@ -124,7 +124,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, 1, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -143,7 +143,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(col#x, a) AS regexp_count(col, a)#x, regexp_count(col#x, b) AS regexp_count(col, b)#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, 1, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -213,7 +213,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [concat(cast((col#x = baba) as string), cast((col#x = bbaa) as string)) AS concat((col = baba), (col = bbaa))#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, 1, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -232,7 +232,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [concat(cast((col#x = b|a|b|a) as string), cast((col#x = b|b|a|a) as string)) AS concat((col = b|a|b|a), (col = b|b|a|a))#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, 1, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -283,7 +283,7 @@ WithCTE
 :              +- LocalRelation [col1#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(cast(col#x as string), cast(0xDEAD as string)) AS regexp_count(col, X'DEAD')#x, regexp_count(cast(col#x as string), cast(0xBEEF as string)) AS regexp_count(col, X'BEEF')#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, 1, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -298,7 +298,7 @@ WithCTE
 :              +- LocalRelation [col1#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(cast(col#x as string), cast(0xDEAD as string)) AS regexp_count(col, X'DEAD')#x, regexp_count(cast(col#x as string), cast(0xBEEF as string)) AS regexp_count(col, X'BEEF')#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, 1, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -313,7 +313,7 @@ WithCTE
 :              +- LocalRelation [col1#x]
 +- Project [len(col#x) AS len(col)#x, regexp_count(cast(col#x as string), cast(0x42 as string)) AS regexp_count(col, X'42')#x, regexp_count(cast(col#x as string), cast(0xDEAD as string)) AS regexp_count(col, X'DEAD')#x, regexp_count(cast(col#x as string), cast(0xBEEF as string)) AS regexp_count(col, X'BEEF')#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col#x], false, false, 1, false
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
 
 
 -- !query
@@ -332,7 +332,7 @@ WithCTE
 :                          +- LocalRelation [col1#x, col2#x]
 +- Project [len(col1#x) AS len(col1)#x, regexp_count(col1#x, 1) AS regexp_count(col1, 1)#x, regexp_count(col1#x, 2) AS regexp_count(col1, 2)#x, regexp_count(col1#x, 3) AS regexp_count(col1, 3)#x, len(col2#x) AS len(col2)#x, regexp_count(col2#x, true) AS regexp_count(col2, true)#x, regexp_count(col1#x, false) AS regexp_count(col1, false)#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [col1#x, col2#x], false, false, 1, false
+      +- CTERelationRef xxxx, true, [col1#x, col2#x], false, false, 1
 
 
 -- !query
