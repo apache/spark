@@ -20,6 +20,7 @@ package org.apache.spark.sql.pipelines.graph
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -261,8 +262,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
   test("invalid schema merge") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
-    implicit def sqlContext: org.apache.spark.sql.classic.SQLContext = spark.sqlContext
 
     val streamInts = MemoryStream[Int]
     streamInts.addData(1, 2)
@@ -329,8 +330,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
   test("specified schema incompatible with existing table") {
     val session = spark
+    implicit val sparkSession: SparkSession = spark
     import session.implicits._
-    implicit def sqlContext: org.apache.spark.sql.classic.SQLContext = spark.sqlContext
 
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t6(x BOOLEAN)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
@@ -628,8 +629,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       s"Streaming tables should evolve schema only if not full refresh = $isFullRefresh"
     ) {
       val session = spark
+      implicit val sparkSession: SparkSession = spark
       import session.implicits._
-      implicit def sqlContext: org.apache.spark.sql.classic.SQLContext = spark.sqlContext
 
       val streamInts = MemoryStream[Int]
       streamInts.addData(1 until 5: _*)
