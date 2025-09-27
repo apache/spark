@@ -334,6 +334,9 @@ message ExecutePlanRequest {
     oneof request_option {
       ReattachOptions reattach_options = 1;
       ResultChunkingOptions result_chunking_options = 2;
+      // Options to describe what responses (e.g. using a new field in the response)
+      // can be accepted.
+      AcceptResponseOptions accept_response_options = 3;
       // Extension type for request options
       google.protobuf.Any extension = 999;
     }
@@ -844,6 +847,12 @@ message ResultChunkingOptions {
   // The server will attempt to use this size if it is set and within the valid range
   // ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
   optional int64 preferred_arrow_chunk_size = 2;
+}
+
+message AcceptResponseOptions {
+  // When true, the client indicates it can handle Literal messages in responses
+  // that include the data_type field.
+  bool accept_literal_data_type_field = 1;
 }
 
 message ReattachExecuteRequest {

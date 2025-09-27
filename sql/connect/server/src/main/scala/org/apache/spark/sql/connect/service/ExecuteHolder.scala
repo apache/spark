@@ -104,6 +104,15 @@ private[connect] class ExecuteHolder(
     }
   }
 
+  /**
+   * If the client can handle Literal messages in responses that include the data_type field.
+   */
+  lazy val acceptLiteralDataTypeFieldInResponses: Boolean = {
+    request.getRequestOptionsList.asScala.exists { option =>
+      option.getAcceptResponseOptions.getAcceptLiteralDataTypeField
+    }
+  }
+
   val responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse] =
     new ExecuteResponseObserver[proto.ExecutePlanResponse](this)
 

@@ -257,7 +257,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
               executeHolder.sessionHolder.sessionId,
               executeHolder.sessionHolder.serverSessionId,
               executeHolder.allObservationAndPlanIds,
-              observedMetrics ++ accumulatedInPython))
+              observedMetrics ++ accumulatedInPython,
+              executeHolder.acceptLiteralDataTypeFieldInResponses))
       }
 
       // State transition should be atomic to prevent a situation in which a client of reattachable
