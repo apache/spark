@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.util.UUID
+
 /**
  * Trait which provides an interface extension for SQL scripting execution context.
  */
-trait SqlScriptingExecutionContextExtension {}
+trait SqlScriptingExecutionContextExtension {
+  def scriptId: UUID
+}
