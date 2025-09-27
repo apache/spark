@@ -336,7 +336,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       result
 
     case s @ StreamingRelationV2(
-        _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
+        _, _, table, extraOptions,
+    _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true)), _) =>
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       val v1Relation = getStreamingRelation(tableMeta, extraOptions)
       if (table.isInstanceOf[SupportsRead]
