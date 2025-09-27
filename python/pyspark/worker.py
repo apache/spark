@@ -2646,11 +2646,17 @@ def read_udfs(pickleSer, infile, eval_type):
             )
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
+            arrow_max_bytes_per_batch = runner_conf.get(
+                "spark.sql.execution.arrow.maxBytesPerBatch", 2**31 - 1
+            )
+            arrow_max_bytes_per_batch = int(arrow_max_bytes_per_batch)
+
             ser = TransformWithStateInPandasSerializer(
                 timezone,
                 safecheck,
                 _assign_cols_by_name,
                 arrow_max_records_per_batch,
+                arrow_max_bytes_per_batch,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
@@ -2659,11 +2665,17 @@ def read_udfs(pickleSer, infile, eval_type):
             )
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
+            arrow_max_bytes_per_batch = runner_conf.get(
+                "spark.sql.execution.arrow.maxBytesPerBatch", 2**31 - 1
+            )
+            arrow_max_bytes_per_batch = int(arrow_max_bytes_per_batch)
+
             ser = TransformWithStateInPandasInitStateSerializer(
                 timezone,
                 safecheck,
                 _assign_cols_by_name,
                 arrow_max_records_per_batch,
+                arrow_max_bytes_per_batch,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
