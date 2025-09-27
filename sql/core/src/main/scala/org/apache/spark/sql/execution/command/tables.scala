@@ -838,6 +838,13 @@ case class DescribeColumnCommand(
       Row("data_type", dataType),
       Row("comment", comment.getOrElse("NULL"))
     )
+
+    // show default value if present
+    val defaultKey = CURRENT_DEFAULT_COLUMN_METADATA_KEY
+    if (field.metadata.contains(defaultKey)) {
+      buffer += Row("default", field.metadata.getString(defaultKey))
+    }
+
     if (isExtended) {
       // Show column stats when EXTENDED or FORMATTED is specified.
       buffer += Row("min", cs.flatMap(_.min.map(
@@ -854,10 +861,6 @@ case class DescribeColumnCommand(
         hist <- c.histogram
       } yield histogramDescription(hist)
       buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
-      val defaultKey = CURRENT_DEFAULT_COLUMN_METADATA_KEY
-      if (field.metadata.contains(defaultKey)) {
-        buffer += Row("default", field.metadata.getString(defaultKey))
-      }
     }
     buffer.toSeq
   }
