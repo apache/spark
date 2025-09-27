@@ -18,8 +18,9 @@ package org.apache.spark.sql.internal
 
 import java.util.TimeZone
 
-import scala.util.Try
+import scala.util.control.NonFatal
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.{AtomicType, TimestampType}
 import org.apache.spark.util.SparkClassUtils
 
@@ -52,7 +53,7 @@ private[sql] trait SqlApiConf {
   def parserDfaCacheFlushRatio: Double
 }
 
-private[sql] object SqlApiConf {
+private[sql] object SqlApiConf extends Logging {
   // Shared keys.
   val ANSI_ENABLED_KEY: String = SqlApiConfHelper.ANSI_ENABLED_KEY
   val LEGACY_TIME_PARSER_POLICY_KEY: String = SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY
@@ -72,7 +73,23 @@ private[sql] object SqlApiConf {
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
   // Force load SQLConf. This will trigger the installation of a confGetter that points to SQLConf.
-  Try(SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$"))
+  private def hasInitializerError(t: Throwable): Boolean = {
+    var cause = t
+    while (cause != null) {
+      if (cause.isInstanceOf[ExceptionInInitializerError]) return true
+      cause = cause.getCause
+    }
+    false
+  }
+
+  try {
+    SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$")
+  } catch {
+    case e if hasInitializerError(e) =>
+      logDebug("Failed to load SQLConf due to ExceptionInInitializerError", e)
+    case NonFatal(e) =>
+      logDebug("Failed to load SQLConf, using DefaultSqlApiConf", e)
+  }
 }
 
 /**
