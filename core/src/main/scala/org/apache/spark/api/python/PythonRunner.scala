@@ -120,11 +120,10 @@ private[spark] object BasePythonRunner extends Logging {
   }
 
   private[spark] def pythonWorkerStatusMessageWithContext(
-      handle: Option[ProcessHandle],
       worker: PythonWorker,
       hasInputs: Boolean): MessageWithContext = {
     log"handle.map(_.isAlive) = " +
-    log"${MDC(LogKeys.PYTHON_WORKER_IS_ALIVE, handle.map(_.isAlive))}, " +
+    log"${MDC(LogKeys.PYTHON_WORKER_IS_ALIVE, worker.processHandle.map(_.isAlive))}, " +
     log"channel.isConnected = " +
     log"${MDC(LogKeys.PYTHON_WORKER_CHANNEL_IS_CONNECTED, worker.channel.isConnected)}, " +
     log"channel.isBlocking = " +
@@ -284,8 +283,15 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
-    val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(
-      pythonExec, workerModule, daemonModule, envVars.asScala.toMap)
+    val workerArgs = PythonWorkerArgs(
+      pythonExec,
+      workerModule,
+      envVars.asScala.toMap,
+      conf.get(PYTHON_USE_DAEMON),
+      daemonModule
+    )
+    val worker = env.pythonWorkerManager
+      .createPythonWorker(workerArgs)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
     // sure there is only one winner that is going to release or close the worker.
@@ -318,10 +324,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     // Return an iterator that read lines from the process's stdout
     val dataIn = new DataInputStream(new BufferedInputStream(
-      new ReaderInputStream(worker, writer, handle, idleTimeoutSeconds, killOnIdleTimeout),
+      new ReaderInputStream(worker, writer, idleTimeoutSeconds, killOnIdleTimeout),
       bufferSize))
     val stdoutIterator = newReaderIterator(
-      dataIn, writer, startTime, env, worker, handle.map(_.pid.toInt), releasedOrClosed, context)
+      dataIn, writer, startTime, env, worker, worker.processHandle.map(_.pid.toInt),
+      releasedOrClosed, context)
     new InterruptibleIterator(context, stdoutIterator)
   }
 
@@ -631,8 +638,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
         if (reuseWorker && releasedOrClosed.compareAndSet(false, true)) {
-          env.releasePythonWorker(
-            pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
+          env.pythonWorkerManager.releasePythonWorker(worker)
         }
       }
       eos = true
@@ -695,8 +701,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
               s"in stage ${context.stageId()} (TID ${context.taskAttemptId()})"
             logWarning(log"Incomplete task ${MDC(TASK_NAME, taskName)} " +
               log"interrupted: Attempting to kill Python Worker")
-            env.destroyPythonWorker(
-              pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
+            env.pythonWorkerManager.destroyPythonWorker(worker, exception = None)
           } catch {
             case e: Exception =>
               logError("Exception when trying to kill worker", e)
@@ -720,7 +725,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   class ReaderInputStream(
       worker: PythonWorker,
       writer: Writer,
-      handle: Option[ProcessHandle],
       idleTimeoutSeconds: Long,
       killOnIdleTimeout: Boolean) extends InputStream {
     private[this] var writerIfbhThreadLocalValue: Object = null
@@ -794,15 +798,15 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           if (pythonWorkerKilled) {
             logWarning(
               log"Waiting for Python worker process to terminate after idle timeout: " +
-              pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
+              pythonWorkerStatusMessageWithContext(worker, hasInput || buffer.hasRemaining))
           } else {
             logWarning(
               log"Idle timeout reached for Python worker (timeout: " +
               log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
               log"No data received from the worker process: " +
-              pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
+              pythonWorkerStatusMessageWithContext(worker, hasInput || buffer.hasRemaining))
             if (killOnIdleTimeout) {
-              handle.foreach { handle =>
+              worker.processHandle.foreach { handle =>
                 if (handle.isAlive) {
                   logWarning(
                     log"Terminating Python worker process due to idle timeout (timeout: " +
