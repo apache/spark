@@ -241,6 +241,18 @@ object SQLConf {
     }
   }
 
+  val DELAY_LAST_RESORT_COLUMN_RESOLUTION =
+    buildConf("spark.sql.analyzer.delayLastResortColumnResolution")
+    .internal()
+    .doc(
+      "When true, delay resolution of a column to a local/session variable or outer reference " +
+      "until all unresolved aliases that come before the column in the project list are " +
+      "resolved. This is needed in order to prevent incorrectly resolving a column to a " +
+      "variable or outer reference instead of a lateral column reference (see SPARK-53733)."
+    )
+    .booleanConf
+    .createWithDefault(true)
+
   val DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT =
     buildConf("spark.sql.analyzer.dontDeduplicateExpressionIfExprIdInOutput")
     .internal()
