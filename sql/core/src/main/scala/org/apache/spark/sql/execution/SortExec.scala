@@ -42,11 +42,16 @@ case class SortExec(
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
-  extends UnaryExecNode with BlockingOperatorWithCodegen {
+  extends UnaryExecNode with BlockingOperatorWithCodegen with OrderPreservingUnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override def outputExpressions: Seq[NamedExpression] = child match {
+    case o: OrderPreservingUnaryExecNode => o.outputExpressions
+    case _ => child.output
+  }
+
+  override def orderingExpressions: Seq[SortOrder] = sortOrder
 
   // sort performed is local within a given partition so will retain
   // child operator's partitioning

@@ -633,13 +633,21 @@ object WholeStageCodegenExec {
  * used to generated code for [[BoundReference]].
  */
 case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
-    extends UnaryExecNode with CodegenSupport {
+    extends UnaryExecNode with CodegenSupport with OrderPreservingUnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputExpressions: Seq[NamedExpression] = child match {
+    case o: OrderPreservingUnaryExecNode => o.outputExpressions
+    case _ => child.output
+  }
+
+  override def orderingExpressions: Seq[SortOrder] = child match {
+    case o: OrderPreservingUnaryExecNode => o.orderingExpressions
+    case _ => child.outputOrdering
+  }
 
   // This is not strictly needed because the codegen transformation happens after the columnar
   // transformation but just for consistency
