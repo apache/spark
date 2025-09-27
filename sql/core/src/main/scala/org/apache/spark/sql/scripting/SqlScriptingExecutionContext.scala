@@ -59,7 +59,8 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
     }
 
     // If the last frame is a handler, try to find a handler in its body first.
-    if (frames.last.frameType == SqlScriptingFrameType.HANDLER) {
+    if (frames.last.frameType == SqlScriptingFrameType.EXIT_HANDLER
+        || frames.last.frameType == SqlScriptingFrameType.CONTINUE_HANDLER) {
       val handler = frames.last.findHandler(condition, sqlState, firstHandlerScopeLabel)
       if (handler.isDefined) {
         return handler
@@ -83,7 +84,7 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
 
 object SqlScriptingFrameType extends Enumeration {
   type SqlScriptingFrameType = Value
-  val SQL_SCRIPT, HANDLER = Value
+  val SQL_SCRIPT, EXIT_HANDLER, CONTINUE_HANDLER = Value
 }
 
 /**
@@ -141,7 +142,9 @@ class SqlScriptingExecutionFrame(
       sqlState: String,
       firstHandlerScopeLabel: Option[String]): Option[ExceptionHandlerExec] = {
 
-    val searchScopes = if (frameType == SqlScriptingFrameType.HANDLER) {
+    val searchScopes =
+      if (frameType == SqlScriptingFrameType.EXIT_HANDLER
+          || frameType == SqlScriptingFrameType.CONTINUE_HANDLER) {
       // If the frame is a handler, search for the handler in its body. Don't skip any scopes.
       scopes.reverseIterator
     } else if (firstHandlerScopeLabel.isEmpty) {
