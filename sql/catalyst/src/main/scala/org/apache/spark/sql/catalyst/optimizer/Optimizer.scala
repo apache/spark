@@ -137,6 +137,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ConstantFolding,
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
+        ReplaceArrayContainsWithInSet,
         LikeSimplification,
         BooleanSimplification,
         SimplifyConditionals,
