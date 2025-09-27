@@ -436,6 +436,70 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     processedRowsPerSecondJSON shouldBe processedRowsPerSecondExpected +- epsilon
   }
 
+  test("SPARK-53690: avgOffsetsBehindLatest should never be in scientific notation") {
+    val progress = testProgress5.jsonValue
+    val progressPretty = testProgress5.prettyJson
+
+    // Actual values
+    val avgOffsetsBehindLatest: Double = 2.8366294E8
+
+    // Get values from progress metrics JSON and cast back to Double
+    // for numeric comparison
+    val metricsJSON = (progress \ "sources")(0) \ "metrics"
+    val avgOffsetsBehindLatestJSON = (metricsJSON \ "avgOffsetsBehindLatest")
+      .values.toString
+
+    // Get expected values after type casting
+    val avgOffsetsBehindLatestExpected = BigDecimal(avgOffsetsBehindLatest)
+      .setScale(1, RoundingMode.HALF_UP).toDouble
+
+    // This should fail if avgOffsetsBehindLatest contains E notation
+    avgOffsetsBehindLatestJSON should not include "E"
+
+    // Value in progress metrics should be equal to the Decimal conversion of the same
+    // Using epsilon to compare floating-point values
+    val epsilon = 1e-6
+    avgOffsetsBehindLatestJSON.toDouble shouldBe avgOffsetsBehindLatestExpected +- epsilon
+
+    // Validating that the pretty JSON of metrics reported is same as defined
+    progressPretty shouldBe
+      s"""
+         |{
+         |  "id" : "${testProgress5.id.toString}",
+         |  "runId" : "${testProgress5.runId.toString}",
+         |  "name" : "KafkaMetricsTest",
+         |  "timestamp" : "2025-09-23T06:00:00.000Z",
+         |  "batchId" : 1,
+         |  "batchDuration" : 100,
+         |  "numInputRows" : 800000,
+         |  "inputRowsPerSecond" : 78886.1,
+         |  "processedRowsPerSecond" : 41622.0,
+         |  "durationMs" : {
+         |    "total" : 100
+         |  },
+         |  "stateOperators" : [ ],
+         |  "sources" : [ {
+         |    "description" : "kafkaSource",
+         |    "startOffset" : 100,
+         |    "endOffset" : 200,
+         |    "latestOffset" : 300,
+         |    "numInputRows" : 800000,
+         |    "inputRowsPerSecond" : 78886.1,
+         |    "processedRowsPerSecond" : 41622.0,
+         |    "metrics" : {
+         |      "avgOffsetsBehindLatest" : "283662940.0",
+         |      "maxOffsetsBehindLatest" : "283662940",
+         |      "minOffsetsBehindLatest" : "283662940"
+         |    }
+         |  } ],
+         |  "sink" : {
+         |    "description" : "sink",
+         |    "numOutputRows" : -1
+         |  }
+         |}
+  """.stripMargin.trim
+  }
+
   def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>
     eventually(Timeout(streamingTimeout)) {
       if (q.exception.isEmpty) {
@@ -595,6 +659,34 @@ object StreamingQueryStatusAndProgressSuite {
       "event1" -> row(schema1, 1L, 3.0d),
       "event2" -> row(schema2, 1L, "hello", "world")).asJava)
   )
+
+  val testProgress5 = new StreamingQueryProgress(
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
+    name = "KafkaMetricsTest",
+    timestamp = "2025-09-23T06:00:00.000Z",
+    batchId = 1L,
+    batchDuration = 100L,
+    durationMs = new java.util.HashMap(
+      Map("total" -> 100L).transform((_, v) => long2Long(v)).asJava
+    ),
+    eventTime = new java.util.HashMap(),
+    stateOperators = Array.empty,
+    sources = Array(
+      new SourceProgress(
+        description = "kafkaSource",
+        startOffset = "100",
+        endOffset = "200",
+        latestOffset = "300",
+        numInputRows = 800000L,
+        inputRowsPerSecond = 78886.1,
+        processedRowsPerSecond = 41622.0,
+        metrics = new java.util.HashMap(Map(
+          "avgOffsetsBehindLatest" -> "2.8366294E8",
+          "minOffsetsBehindLatest" -> "283662940",
+          "maxOffsetsBehindLatest" -> "283662940").asJava))),
+    sink = SinkProgress("sink", None),
+    observedMetrics = new java.util.HashMap())
 
   val testStatus = new StreamingQueryStatus("active", true, false)
 }
