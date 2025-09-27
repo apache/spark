@@ -46,13 +46,15 @@ object FlowAnalysis {
           allInputs: Set[TableIdentifier],
           availableInputs: Seq[Input],
           confs: Map[String, String],
-          queryContext: QueryContext
+          queryContext: QueryContext,
+          queryOrigin: QueryOrigin
       ): FlowFunctionResult = {
         val ctx = FlowAnalysisContext(
           allInputs = allInputs,
           availableInputs = availableInputs,
           queryContext = queryContext,
-          spark = SparkSession.active
+          spark = SparkSession.active,
+          queryOrigin = queryOrigin
         )
         val df = try {
           confs.foreach { case (k, v) => ctx.setConf(k, v) }

@@ -31,7 +31,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
+import org.apache.spark.sql.pipelines.Language.Python
+import org.apache.spark.sql.pipelines.common.FlowStatus
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
+import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 
 /**
@@ -114,6 +117,132 @@ class PythonPipelineSuite
       .validate()
     assert(graph.flows.size == 1)
     assert(graph.tables.size == 1)
+  }
+
+  test("failed flow progress event has correct python source code location") {
+    // Note that pythonText will be inserted into line 26 of the python script that is run.
+    val unresolvedGraph = buildGraph(pythonText = """
+        |@dp.table()
+        |def table1():
+        |    df = spark.createDataFrame([(25,), (30,), (45,)], ["age"])
+        |    return df.select("name")
+        |""".stripMargin)
+
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    updateContext.pipelineExecution.runPipeline()
+
+    assertFlowProgressEvent(
+      updateContext.eventBuffer,
+      identifier = graphIdentifier("table1"),
+      expectedFlowStatus = FlowStatus.FAILED,
+      cond = flowProgressEvent =>
+        flowProgressEvent.origin.sourceCodeLocation == Option(
+          QueryOrigin(
+            language = Option(Python()),
+            filePath = Option("<string>"),
+            line = Option(28),
+            objectName = Option("spark_catalog.default.table1"),
+            objectType = Option(QueryOriginType.Flow.toString))),
+      errorChecker = ex =>
+        ex.getMessage.contains(
+          "A column, variable, or function parameter with name `name` cannot be resolved."),
+      expectedEventLevel = EventLevel.WARN)
+  }
+
+  test("flow progress events have correct python source code location") {
+    val unresolvedGraph = buildGraph(pythonText = """
+        |@dp.table(
+        | comment = 'my table'
+        |)
+        |def table1():
+        |    return spark.readStream.table('mv')
+        |
+        |@dp.materialized_view
+        |def mv2():
+        |   return spark.range(26, 29)
+        |
+        |@dp.materialized_view
+        |def mv():
+        |   df = spark.createDataFrame([(25,), (30,), (45,)], ["age"])
+        |   return df.select("age")
+        |
+        |@dp.append_flow(
+        | target = 'table1'
+        |)
+        |def standalone_flow1():
+        |   return spark.readStream.table('mv2')
+        |""".stripMargin)
+
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+
+    Seq(
+      FlowStatus.QUEUED,
+      FlowStatus.STARTING,
+      FlowStatus.PLANNING,
+      FlowStatus.RUNNING,
+      FlowStatus.COMPLETED).foreach { flowStatus =>
+      assertFlowProgressEvent(
+        updateContext.eventBuffer,
+        identifier = graphIdentifier("mv2"),
+        expectedFlowStatus = flowStatus,
+        cond = flowProgressEvent =>
+          flowProgressEvent.origin.sourceCodeLocation == Option(
+            QueryOrigin(
+              language = Option(Python()),
+              filePath = Option("<string>"),
+              line = Option(34),
+              objectName = Option("spark_catalog.default.mv2"),
+              objectType = Option(QueryOriginType.Flow.toString))),
+        expectedEventLevel = EventLevel.INFO)
+
+      assertFlowProgressEvent(
+        updateContext.eventBuffer,
+        identifier = graphIdentifier("mv"),
+        expectedFlowStatus = flowStatus,
+        cond = flowProgressEvent =>
+          flowProgressEvent.origin.sourceCodeLocation == Option(
+            QueryOrigin(
+              language = Option(Python()),
+              filePath = Option("<string>"),
+              line = Option(38),
+              objectName = Option("spark_catalog.default.mv"),
+              objectType = Option(QueryOriginType.Flow.toString))),
+        expectedEventLevel = EventLevel.INFO)
+    }
+
+    // Note that streaming flows do not have a PLANNING phase.
+    Seq(FlowStatus.QUEUED, FlowStatus.STARTING, FlowStatus.RUNNING, FlowStatus.COMPLETED)
+      .foreach { flowStatus =>
+        assertFlowProgressEvent(
+          updateContext.eventBuffer,
+          identifier = graphIdentifier("table1"),
+          expectedFlowStatus = flowStatus,
+          cond = flowProgressEvent =>
+            flowProgressEvent.origin.sourceCodeLocation == Option(
+              QueryOrigin(
+                language = Option(Python()),
+                filePath = Option("<string>"),
+                line = Option(28),
+                objectName = Option("spark_catalog.default.table1"),
+                objectType = Option(QueryOriginType.Flow.toString))),
+          expectedEventLevel = EventLevel.INFO)
+
+        assertFlowProgressEvent(
+          updateContext.eventBuffer,
+          identifier = graphIdentifier("standalone_flow1"),
+          expectedFlowStatus = flowStatus,
+          cond = flowProgressEvent =>
+            flowProgressEvent.origin.sourceCodeLocation == Option(
+              QueryOrigin(
+                language = Option(Python()),
+                filePath = Option("<string>"),
+                line = Option(43),
+                objectName = Option("spark_catalog.default.standalone_flow1"),
+                objectType = Option(QueryOriginType.Flow.toString))),
+          expectedEventLevel = EventLevel.INFO)
+      }
   }
 
   test("basic with inverted topological order") {

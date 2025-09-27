@@ -123,7 +123,8 @@ private class FlowResolver(rawGraph: DataflowGraph) {
       allInputs = allInputs,
       availableInputs = availableResolvedInputs.values.toList,
       configuration = flowToResolve.sqlConf,
-      queryContext = flowToResolve.queryContext
+      queryContext = flowToResolve.queryContext,
+      queryOrigin = flowToResolve.origin
     )
     val result =
       flowFunctionResult match {
@@ -169,7 +170,8 @@ private class FlowResolver(rawGraph: DataflowGraph) {
               allInputs = allInputs,
               availableInputs = availableResolvedInputs.values.toList,
               configuration = newSqlConf,
-              queryContext = flowToResolve.queryContext
+              queryContext = flowToResolve.queryContext,
+              queryOrigin = flowToResolve.origin
             )
           } else {
             f
