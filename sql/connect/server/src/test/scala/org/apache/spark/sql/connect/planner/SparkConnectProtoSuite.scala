@@ -597,7 +597,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("Write fails with unknown table - AnalysisException") {
-    val cmd = readRel.write(tableName = Some("dest"))
+    val cmd = readRel().write(tableName = Some("dest"))
     assertThrows[AnalysisException] {
       transform(cmd)
     }

@@ -49,7 +49,7 @@ class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column
   private val builder = MergeIntoTableCommand
     .newBuilder()
     .setTargetTableName(table)
-    .setSourceTablePlan(ds.plan.getRoot)
+    .setSourceTablePlan(ds.optimizedPlan.getRoot)
     .setMergeCondition(toExpr(on))
 
   /**
