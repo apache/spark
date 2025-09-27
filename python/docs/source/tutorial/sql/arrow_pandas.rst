@@ -34,7 +34,7 @@ Ensure PyArrow Installed
 To use Apache Arrow in PySpark, `the recommended version of PyArrow <arrow_pandas.rst#recommended-pandas-and-pyarrow-versions>`_
 should be installed.
 If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
-SQL module with the command ``pip install pyspark[sql]``. Otherwise, you must ensure that PyArrow
+SQL module with the command ``pip install pyspark[sql]``. Additionally, you must ensure that PyArrow
 is installed and available on all cluster nodes.
 You can install it using pip or conda from the conda-forge channel. See PyArrow
 `installation <https://arrow.apache.org/docs/python/install.html>`_ for details.
