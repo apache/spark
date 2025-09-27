@@ -1127,6 +1127,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.range(1, 10).select(CF.col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
 
+    def test_alias_metadata(self):
+        df = self.connect.createDataFrame([("",)], ["a"])
+        df = df.withMetadata("a", {"foo": "bar"})
+        self.assertEqual(df.schema["a"].metadata, {"foo": "bar"})
+
+        # SPARK-51426: Ensure setting metadata to `{}` clears it
+        df = df.select([CF.col("a").alias("a", metadata={})])
+        self.assertEqual(df.schema["a"].metadata, {})
+
+        df = df.withMetadata("a", {"baz": "burr"})
+        self.assertEqual(df.schema["a"].metadata, {"baz": "burr"})
+
+        df = df.withMetadata("a", {})
+        self.assertEqual(df.schema["a"].metadata, {})
+
     def test_column_regexp(self) -> None:
         # SPARK-41438: test dataframe.colRegex()
         ndf = self.connect.read.table(self.tbl_name3)
