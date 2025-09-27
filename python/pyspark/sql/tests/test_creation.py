@@ -17,6 +17,7 @@
 
 from decimal import Decimal
 import os
+import platform
 import time
 import unittest
 from typing import cast
@@ -259,6 +260,9 @@ class DataFrameCreationTestsMixin:
                 assertDataFrameEqual(sdf, data)
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class DataFrameCreationTests(
     DataFrameCreationTestsMixin,
     ReusedSQLTestCase,
