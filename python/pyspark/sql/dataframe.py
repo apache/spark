@@ -5651,7 +5651,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def withColumn(self, colName: str, col: Column) -> "DataFrame":
+    def withColumn(self, colName: str, col: "ColumnOrName") -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
@@ -5668,8 +5668,8 @@ class DataFrame:
         ----------
         colName : str
             string, name of the new column.
-        col : :class:`Column`
-            a :class:`Column` expression for the new column.
+        cols: str or :class:`Column`
+            A name of a column, or a :class:`Column` expression for the new column.
 
         Returns
         -------
