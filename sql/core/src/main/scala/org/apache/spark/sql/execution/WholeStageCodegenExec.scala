@@ -639,6 +639,16 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
+  override def outputExpressions: Seq[NamedExpression] = child match {
+    case o: OrderPreservingUnaryExecNode => o.outputExpressions
+    case _ => child.output
+  }
+
+  override def orderingExpressions: Seq[SortOrder] = child match {
+    case o: OrderPreservingUnaryExecNode => o.orderingExpressions
+    case _ => child.outputOrdering
+  }
+
   // This is not strictly needed because the codegen transformation happens after the columnar
   // transformation but just for consistency
   override def supportsColumnar: Boolean = child.supportsColumnar

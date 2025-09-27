@@ -75,7 +75,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
       orderingMatched: Boolean,
       hasEmpty2Null: Boolean = false)(query: => Unit)(
       customValidate: LogicalPlan => Unit): Unit = {
-    var optimizedPlan: LogicalPlan = null
+    @volatile var optimizedPlan: LogicalPlan = null
 
     val listener = new QueryExecutionListener {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
