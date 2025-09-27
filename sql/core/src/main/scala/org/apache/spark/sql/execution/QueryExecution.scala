@@ -80,10 +80,8 @@ class QueryExecution(
     try {
       analyzed
     } catch {
-      case e: AnalysisException =>
-        // Because we do eager analysis for Dataframe, there will be no execution created after
-        // AnalysisException occurs. So we need to explicitly create a new execution to post
-        // start/end events to notify the listener and UI components.
+      case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+        // exceptions with origin information
         SQLExecution.withNewExecutionIdOnError(this, Some("analyze"))(e)
     }
   }

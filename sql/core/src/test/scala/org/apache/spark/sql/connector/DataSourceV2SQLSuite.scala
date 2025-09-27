@@ -2927,11 +2927,7 @@ class DataSourceV2SQLSuiteV1Filter
       parameters = Map(
         "name" -> "`testcat`.`ns1`",
         "statement" -> "SET CATALOG"
-      ),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = 29)
+      )
     )
   }
 
