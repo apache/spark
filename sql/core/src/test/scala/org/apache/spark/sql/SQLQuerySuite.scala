@@ -5079,6 +5079,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     checkAnswer(df, Row(1))
   }
+
+  test("SPARK-53734: Prefer table column over LCA when resolving array index") {
+    val query = "SELECT 1 AS col1, col2[col1] FROM VALUES(0, ARRAY(1, 2));"
+    withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "true") {
+      checkAnswer(sql(query), Row(1, 1))
+    }
+
+    withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "false") {
+      checkAnswer(sql(query), Row(1, 2))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
