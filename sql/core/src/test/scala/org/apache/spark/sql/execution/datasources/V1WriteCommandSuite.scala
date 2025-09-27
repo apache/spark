@@ -79,9 +79,10 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
 
     val listener = new QueryExecutionListener {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        val conf = qe.sparkSession.sessionState.conf
         qe.optimizedPlan match {
           case w: V1WriteCommand =>
-            if (hasLogicalSort && w.conf.getConf(SQLConf.PLANNED_WRITE_ENABLED)) {
+            if (hasLogicalSort && conf.getConf(SQLConf.PLANNED_WRITE_ENABLED)) {
               assert(w.query.isInstanceOf[WriteFiles])
               assert(w.partitionColumns == w.query.asInstanceOf[WriteFiles].partitionColumns)
               optimizedPlan = w.query.asInstanceOf[WriteFiles].child
