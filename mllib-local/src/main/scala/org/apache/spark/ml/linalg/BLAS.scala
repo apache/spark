@@ -19,13 +19,10 @@ package org.apache.spark.ml.linalg
 
 import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS, JavaBLAS => NetlibJavaBLAS, NativeBLAS => NetlibNativeBLAS}
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.SparkEnvUtils
-
 /**
  * BLAS routines for MLlib's vectors and matrices.
  */
-private[spark] object BLAS extends Serializable with Logging {
+private[spark] object BLAS extends Serializable {
 
   @transient private var _javaBLAS: NetlibBLAS = _
   @transient private var _nativeBLAS: NetlibBLAS = _
@@ -42,10 +39,10 @@ private[spark] object BLAS extends Serializable with Logging {
   // For level-3 routines, we use the native BLAS.
   private[spark] def nativeBLAS: NetlibBLAS = {
     if (_nativeBLAS == null) {
-      _nativeBLAS = if (SparkEnvUtils.allowNativeBlas) {
+      // Replica SparkEnvUtils.allowNativeBlas to avoid pulling commons/utils as dependency
+      _nativeBLAS = if ("true".equals(System.getProperty("netlib.allowNativeBlas", "true"))) {
         try { NetlibNativeBLAS.getInstance } catch { case _: Throwable => javaBLAS }
       } else {
-        logInfo("Disable native BLAS because netlib.allowNativeBlas is false.")
         javaBLAS
       }
     }
