@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -1227,4 +1228,22 @@ case class UnresolvedExecuteImmediate(
   extends UnresolvedLeafNode with SupportsSubquery {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
+}
+
+case class UnresolvedEventTimeWatermark(
+    eventTimeColExpr: Expression,
+    delayInterval: Literal,
+    child: LogicalPlan)
+  extends UnresolvedUnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_EVENT_TIME_WATERMARK)
+
+  private val delay = IntervalUtils.fromIntervalString(delayInterval.toString)
+  require(!IntervalUtils.isNegative(delay),
+    s"delay threshold (${delayInterval.toString}) should not be negative.")
+
+  def getDelay: CalendarInterval = delay
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): UnresolvedEventTimeWatermark = copy(child = newChild)
 }

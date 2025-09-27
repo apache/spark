@@ -565,6 +565,12 @@
     ],
     "sqlState" : "22KD3"
   },
+  "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE" : {
+    "message" : [
+      "Multiple aliases are not supported in watermark clause."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
