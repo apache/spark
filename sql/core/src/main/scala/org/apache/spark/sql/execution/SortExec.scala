@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.plans.AliasAwareQueryOutputOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -42,12 +43,13 @@ case class SortExec(
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
-  extends UnaryExecNode with BlockingOperatorWithCodegen with OrderPreservingUnaryExecNode {
+  extends UnaryExecNode with BlockingOperatorWithCodegen
+    with AliasAwareQueryOutputOrdering[SparkPlan] {
 
   override def output: Seq[Attribute] = child.output
 
   override def outputExpressions: Seq[NamedExpression] = child match {
-    case o: OrderPreservingUnaryExecNode => o.outputExpressions
+    case o: AliasAwareQueryOutputOrdering[_] => o.outputExpressions
     case _ => child.output
   }
 
