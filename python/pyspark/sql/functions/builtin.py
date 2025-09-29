@@ -25149,8 +25149,7 @@ def make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25158,8 +25157,7 @@ def make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25306,8 +25304,7 @@ def try_make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25315,8 +25312,7 @@ def try_make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
