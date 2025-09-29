@@ -165,9 +165,11 @@ private class ShuffleStatus(
 
   /**
    * Register a map output. If there is already a registered location for the map output then it
-   * will be replaced by the new location.
+   * will be replaced by the new location. Returns true if the checksum in the new MapStatus is
+   * different from a previous registered MapStatus. Otherwise, returns false.
    */
-  def addMapOutput(mapIndex: Int, status: MapStatus): Unit = withWriteLock {
+  def addMapOutput(mapIndex: Int, status: MapStatus): Boolean = withWriteLock {
+    var isChecksumMismatch: Boolean = false
     val currentMapStatus = mapStatuses(mapIndex)
     if (currentMapStatus == null) {
       _numAvailableMapOutputs += 1
@@ -183,9 +185,11 @@ private class ShuffleStatus(
       logInfo(s"Checksum of map output changes from ${preStatus.checksumValue} to " +
         s"${status.checksumValue} for task ${status.mapId}.")
       checksumMismatchIndices.add(mapIndex)
+      isChecksumMismatch = true
     }
     mapStatuses(mapIndex) = status
     mapIdToMapIndex(status.mapId) = mapIndex
+    isChecksumMismatch
   }
 
   /**
@@ -853,7 +857,7 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Unit = {
+  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Boolean = {
     shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
   }
 
