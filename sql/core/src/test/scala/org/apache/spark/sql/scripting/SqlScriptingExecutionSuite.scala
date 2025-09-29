@@ -1252,6 +1252,40 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("continue handler - continue when select fails in REPEAT statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    REPEAT
+        |      SELECT 3;
+        |    UNTIL
+        |      1 = 1/0
+        |    END REPEAT;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
   test("exit handler - exit resolve when select fails in FOR statement") {
     val sqlScript =
       """
@@ -1294,6 +1328,35 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |      SELECT 10;
         |    END FOR;
         |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when select fails inside FOR statement body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    FOR iter AS SELECT 1 DO
+        |      SELECT 1/0;
+        |      SELECT 4;
+        |    END FOR;
         |    SELECT 5;
         |  END;
         |  SELECT flag;

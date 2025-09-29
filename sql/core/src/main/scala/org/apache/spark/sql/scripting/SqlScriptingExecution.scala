@@ -87,10 +87,10 @@ class SqlScriptingExecution(
   }
 
   /**
-   * Helper method to skip a conditional statement in the execution plan.
-   * @param executionPlan Execution plan to skip a conditional statement in.
+   * Helper method to execute interrupts to ConditionalStatements.
+   * @param executionPlan Execution plan.
    */
-  private def skipConditionalStatement(executionPlan: NonLeafStatementExec): Unit = {
+  private def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {
     // Go as deep as possible, to find a leaf node. Instead of a statement that
     //   should be executed next, skip a conditional statement in.
     var currExecPlan = executionPlan
@@ -99,16 +99,8 @@ class SqlScriptingExecution(
     }
 
     currExecPlan match {
-      case exec: IfElseStatementExec =>
-        exec.curr = None
-      case exec: SimpleCaseStatementExec =>
-        exec.skipSimpleCaseStatement()
-      case exec: SearchedCaseStatementExec =>
-        exec.curr = None
-      case exec: WhileStatementExec =>
-        exec.curr = None
-      case exec: ForStatementExec =>
-        exec.skipForStatement()
+      case exec: ConditionalStatementExec =>
+        exec.interrupted = true
       case _ =>
     }
   }
@@ -146,7 +138,7 @@ class SqlScriptingExecution(
 
         if (lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER
             && context.frames.nonEmpty) {
-            skipConditionalStatement(context.frames.last.executionPlan)
+            interruptConditionalStatements(context.frames.last.executionPlan)
         }
       }
     }
