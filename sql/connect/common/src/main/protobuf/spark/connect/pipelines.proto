@@ -88,27 +88,6 @@ message PipelineCommand {
     optional string format = 8;
   }
 
-  // Metadata about why a query function failed to be executed successfully.
-  message QueryFunctionFailure {
-    oneof reason {
-      // The logical plan that the query function needed to eagerly analyze in order to know
-      // the schema / isStreaming / etc of the plan it produced, but could not because it has
-      // unresolved dependencies.
-      spark.connect.Relation unresolved_dependency_plan = 1;
-    }
-  }
-
-  // The result of executing a user-defined query function.
-  message QueryFunctionResult {
-    oneof flow_function_evaluation_result {
-      // If the query function executed successfully, the unresolved logical plan produced by it.
-      spark.connect.Relation analyzed_plan = 1;
-
-      // If the query function failed, metadata about the failure.
-      QueryFunctionFailure failure = 2;
-    }
-  }
-
   // Request to define a flow targeting a dataset.
   message DefineFlow {
     // The graph to attach this flow to.
@@ -120,11 +99,9 @@ message PipelineCommand {
     // Name of the dataset this flow writes to. Can be partially or fully qualified.
     optional string target_dataset_name = 3;
 
-    // [Deprecated] An unresolved relation that defines the dataset's flow.
-    optional spark.connect.Relation relation = 4 [deprecated = true];
-
-    // The result of executing the flow's query function
-    optional QueryFunctionResult result = 7;
+    // An unresolved relation that defines the dataset's flow. Empty if the query function
+    // that defines the flow cannot be analyzed at the time of flow definition.
+    optional spark.connect.Relation relation = 4;
 
     // SQL configurations set when running this flow.
     map<string, string> sql_conf = 5;
@@ -182,7 +159,7 @@ message PipelineCommand {
   }
 
   // Request from the client to update the flow function evaluation result
-  // for a previously unanalyzed flow.
+  // for a previously un-analyzed flow.
   message DefineFlowQueryFunctionResult {
     // The fully qualified name of the flow being updated.
     optional string flow_name = 1;
@@ -190,8 +167,8 @@ message PipelineCommand {
     // The ID of the graph this flow belongs to.
     optional string dataflow_graph_id = 2;
 
-    // The result of executing the flow's query function
-    optional QueryFunctionResult result = 3;
+    // An unresolved relation that defines the dataset's flow.
+    optional spark.connect.Relation relation = 3;
   }
 }
 
