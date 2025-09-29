@@ -1046,7 +1046,8 @@ class RowListStateLargeListProcessor(StatefulProcessor):
             ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
 
             expected_elements_in_state = [(i, None) for i in range(list_size)]
-            assert elements == expected_elements_in_state
+            assert elements == expected_elements_in_state, \
+                f"expected {expected_elements_in_state} but got {elements}"
 
             if key == ("0",):
                 # Use the operation `put`
