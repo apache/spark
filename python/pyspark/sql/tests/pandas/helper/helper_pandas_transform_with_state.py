@@ -1041,7 +1041,7 @@ class RowListStateLargeListProcessor(StatefulProcessor):
                 elements
             ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
 
-            expected_elements_in_state = [(i,) for i in range(list_size)]
+            expected_elements_in_state = [(i, None) for i in range(list_size)]
             assert elements == expected_elements_in_state
 
             if key == ("0",):
