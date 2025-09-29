@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEProp
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.util.Utils
 
 class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -49,6 +48,9 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       Seq(4, 0, 86, null, 96, 14),
       Seq(28, 16, 58, null, null, null),
       Seq(1, 88, null, 8, null, 79),
+      Seq(5, 88, 62, 8, null, 79),
+      Seq(62, 88, 40, 8, null, 79),
+      // Seq(67, 88, 73, 8, null, 79),
       Seq(59, null, null, null, 20, 25),
       Seq(1, 50, null, 94, 94, null),
       Seq(null, null, null, 67, 51, 57),
@@ -93,6 +95,8 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       Seq(53, null, 6, 68, 28, 13),
       Seq(null, null, null, null, 89, 23),
       Seq(36, 73, 40, null, 8, null),
+      Seq(62, 40, 40, null, 8, 100),
+      Seq(5, 73, 40, null, 8, null),
       Seq(24, null, null, 40, null, null))
     val rdd2 = spark.sparkContext.parallelize(data2)
     val rddRow2 = rdd2.map(s => Row.fromSeq(s))
@@ -189,7 +193,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       Seq(75, null, 15, null, 81, null),
       Seq(53, null, 6, 68, 28, 13),
       Seq(null, null, null, null, 89, 23),
-      Seq(36, 73, 40, null, 8, null),
+      Seq(36, 73, 40, null, 8, 100),
       Seq(24, null, null, 40, null, null))
     val rdd5part = spark.sparkContext.parallelize(data5part)
     val rddRow5part = rdd5part.map(s => Row.fromSeq(s))
@@ -206,9 +210,6 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     sql("analyze table bf5part compute statistics for columns a5, b5, c5, d5, e5, f5")
     sql("analyze table bf5filtered compute statistics for columns a5, b5, c5, d5, e5, f5")
 
-    // Tests depend on intermediate results that would otherwise be cleaned up when
-    // shuffle clean up is enabled, causing test failures.
-    conf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
     // `MergeScalarSubqueries` can duplicate subqueries in the optimized plan and would make testing
     // complicated.
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, MergeScalarSubqueries.ruleName)
@@ -217,7 +218,6 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
   protected override def afterAll(): Unit = try {
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
       SQLConf.OPTIMIZER_EXCLUDED_RULES.defaultValueString)
-    conf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, Utils.isTesting)
 
     sql("DROP TABLE IF EXISTS bf1")
     sql("DROP TABLE IF EXISTS bf2")
