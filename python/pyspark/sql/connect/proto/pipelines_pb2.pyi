@@ -128,6 +128,7 @@ class PipelineCommand(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """SQL configurations for all flows in this graph."""
+
         def __init__(
             self,
             *,
@@ -1168,8 +1169,9 @@ class PipelineCommandResult(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            resolved_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
-            | None = ...,
+            resolved_identifier: (
+                pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier | None
+            ) = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -1201,11 +1203,13 @@ class PipelineCommandResult(google.protobuf.message.Message):
         @property
         def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
             """Resolved identifier of the flow"""
+
         def __init__(
             self,
             *,
-            resolved_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
-            | None = ...,
+            resolved_identifier: (
+                pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier | None
+            ) = ...,
         ) -> None: ...
         def HasField(
             self,
