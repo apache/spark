@@ -4039,7 +4039,7 @@
   },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
-      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>."
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. <externalEngineError>."
     ],
     "subClass" : {
       "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
@@ -4920,6 +4920,12 @@
     ],
     "sqlState" : "42601"
   },
+  "REMAINDER_BY_ZERO" : {
+    "message" : [
+      "Remainder by zero. Use `try_mod` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22012"
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
       "Failed to rename as <sourcePath> was not found."
@@ -5598,6 +5604,18 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
+  },
+  "THETA_INVALID_INPUT_SKETCH_BUFFER" : {
+    "message" : [
+      "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."
+    ],
+    "sqlState" : "22546"
+  },
+  "THETA_INVALID_LG_NOM_ENTRIES" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+    ],
+    "sqlState" : "22546"
   },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [

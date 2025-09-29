@@ -40,6 +40,7 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import google.protobuf.timestamp_pb2
+import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -109,40 +110,6 @@ class PipelineCommand(google.protobuf.message.Message):
             def ClearField(
                 self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
             ) -> None: ...
-
-        class Response(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-            dataflow_graph_id: builtins.str
-            """The ID of the created graph."""
-            def __init__(
-                self,
-                *,
-                dataflow_graph_id: builtins.str | None = ...,
-            ) -> None: ...
-            def HasField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_dataflow_graph_id",
-                    b"_dataflow_graph_id",
-                    "dataflow_graph_id",
-                    b"dataflow_graph_id",
-                ],
-            ) -> builtins.bool: ...
-            def ClearField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_dataflow_graph_id",
-                    b"_dataflow_graph_id",
-                    "dataflow_graph_id",
-                    b"dataflow_graph_id",
-                ],
-            ) -> None: ...
-            def WhichOneof(
-                self,
-                oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-            ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
 
         DEFAULT_CATALOG_FIELD_NUMBER: builtins.int
         DEFAULT_DATABASE_FIELD_NUMBER: builtins.int
@@ -787,22 +754,106 @@ class PipelineCommandResult(google.protobuf.message.Message):
             oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
         ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
 
+    class DefineDatasetResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
+        @property
+        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
+            """Resolved identifier of the dataset"""
+        def __init__(
+            self,
+            *,
+            resolved_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
+            | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_resolved_identifier",
+                b"_resolved_identifier",
+                "resolved_identifier",
+                b"resolved_identifier",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_resolved_identifier",
+                b"_resolved_identifier",
+                "resolved_identifier",
+                b"resolved_identifier",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_resolved_identifier", b"_resolved_identifier"],
+        ) -> typing_extensions.Literal["resolved_identifier"] | None: ...
+
+    class DefineFlowResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
+        @property
+        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
+            """Resolved identifier of the flow"""
+        def __init__(
+            self,
+            *,
+            resolved_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
+            | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_resolved_identifier",
+                b"_resolved_identifier",
+                "resolved_identifier",
+                b"resolved_identifier",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_resolved_identifier",
+                b"_resolved_identifier",
+                "resolved_identifier",
+                b"resolved_identifier",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_resolved_identifier", b"_resolved_identifier"],
+        ) -> typing_extensions.Literal["resolved_identifier"] | None: ...
+
     CREATE_DATAFLOW_GRAPH_RESULT_FIELD_NUMBER: builtins.int
+    DEFINE_DATASET_RESULT_FIELD_NUMBER: builtins.int
+    DEFINE_FLOW_RESULT_FIELD_NUMBER: builtins.int
     @property
     def create_dataflow_graph_result(
         self,
     ) -> global___PipelineCommandResult.CreateDataflowGraphResult: ...
+    @property
+    def define_dataset_result(self) -> global___PipelineCommandResult.DefineDatasetResult: ...
+    @property
+    def define_flow_result(self) -> global___PipelineCommandResult.DefineFlowResult: ...
     def __init__(
         self,
         *,
         create_dataflow_graph_result: global___PipelineCommandResult.CreateDataflowGraphResult
         | None = ...,
+        define_dataset_result: global___PipelineCommandResult.DefineDatasetResult | None = ...,
+        define_flow_result: global___PipelineCommandResult.DefineFlowResult | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "create_dataflow_graph_result",
             b"create_dataflow_graph_result",
+            "define_dataset_result",
+            b"define_dataset_result",
+            "define_flow_result",
+            b"define_flow_result",
             "result_type",
             b"result_type",
         ],
@@ -812,13 +863,22 @@ class PipelineCommandResult(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "create_dataflow_graph_result",
             b"create_dataflow_graph_result",
+            "define_dataset_result",
+            b"define_dataset_result",
+            "define_flow_result",
+            b"define_flow_result",
             "result_type",
             b"result_type",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["create_dataflow_graph_result"] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "create_dataflow_graph_result", "define_dataset_result", "define_flow_result"
+        ]
+        | None
+    ): ...
 
 global___PipelineCommandResult = PipelineCommandResult
 

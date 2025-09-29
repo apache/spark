@@ -24,8 +24,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.spark.SparkUnsupportedOperationException;
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns;
 import scala.Option;
 import scala.jdk.javaapi.CollectionConverters;
 
@@ -35,11 +33,15 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
+import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.io.SeekableInputStream;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
@@ -190,9 +192,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public void initialize(
       InputSplit inputSplit,
       TaskAttemptContext taskAttemptContext,
+      Option<HadoopInputFile> inputFile,
+      Option<SeekableInputStream> inputStream,
       Option<ParquetMetadata> fileFooter)
       throws IOException, InterruptedException, UnsupportedOperationException {
-    super.initialize(inputSplit, taskAttemptContext, fileFooter);
+    super.initialize(inputSplit, taskAttemptContext, inputFile, inputStream, fileFooter);
     initializeInternal();
   }
 

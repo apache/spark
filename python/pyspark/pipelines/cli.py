@@ -23,6 +23,7 @@ Example usage:
 """
 from contextlib import contextmanager
 import argparse
+import glob
 import importlib.util
 import os
 import yaml
@@ -58,6 +59,32 @@ class LibrariesGlob:
     include: str
 
 
+def validate_patch_glob_pattern(glob_pattern: str) -> str:
+    """Validates that a glob pattern is allowed.
+
+    Only allows:
+    - File paths (paths without wildcards except for the filename)
+    - Folder paths ending with /** (recursive directory patterns)
+
+    Disallows complex glob patterns like transformations/**/*.py
+    """
+    # Check if it's a simple file path (no wildcards at all)
+    if not glob.has_magic(glob_pattern):
+        return glob_pattern
+
+    # Check if it's a folder path ending with /**
+    if glob_pattern.endswith("/**"):
+        prefix = glob_pattern[:-3]
+        if not glob.has_magic(prefix):
+            # append "/*" to match everything under the directory recursively
+            return glob_pattern + "/*"
+
+    raise PySparkException(
+        errorClass="PIPELINE_SPEC_INVALID_GLOB_PATTERN",
+        messageParameters={"glob_pattern": glob_pattern},
+    )
+
+
 @dataclass(frozen=True)
 class PipelineSpec:
     """Spec for a pipeline.
@@ -74,6 +101,16 @@ class PipelineSpec:
     database: Optional[str]
     configuration: Mapping[str, str]
     libraries: Sequence[LibrariesGlob]
+
+    def __post_init__(self) -> None:
+        """Validate libraries automatically after instantiation."""
+        validated = [
+            LibrariesGlob(validate_patch_glob_pattern(lib.include)) for lib in self.libraries
+        ]
+
+        # If normalization changed anything, patch into frozen dataclass
+        if tuple(validated) != tuple(self.libraries):
+            object.__setattr__(self, "libraries", tuple(validated))
 
 
 def find_pipeline_spec(current_dir: Path) -> Path:
@@ -180,7 +217,11 @@ def register_definitions(
             log_with_curr_timestamp(f"Loading definitions. Root directory: '{path}'.")
             for libraries_glob in spec.libraries:
                 glob_expression = libraries_glob.include
-                matching_files = [p for p in path.glob(glob_expression) if p.is_file()]
+                matching_files = [
+                    p
+                    for p in path.glob(glob_expression)
+                    if p.is_file() and "__pycache__" not in p.parts  # ignore generated python cache
+                ]
                 log_with_curr_timestamp(
                     f"Found {len(matching_files)} files matching glob '{glob_expression}'"
                 )

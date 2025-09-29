@@ -311,7 +311,8 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapGroupsInArrow(column: Column): DataFrame = {
     val expr = column.expr.asInstanceOf[PythonUDF]
-    require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+    require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF ||
+      expr.evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
       "Must pass a grouped map arrow udf")
     require(expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")

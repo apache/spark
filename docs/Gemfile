@@ -28,4 +28,4 @@ gem "jekyll-redirect-from", "~> 0.16"
 # This resolves a build issue on Apple Silicon.
 # See: https://issues.apache.org/jira/browse/SPARK-38488
 gem "ffi", "~> 1.15"
-gem "rexml", "~> 3.3.9"
+gem "rexml", "~> 3.4.4"

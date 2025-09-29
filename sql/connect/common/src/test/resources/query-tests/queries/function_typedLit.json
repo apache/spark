@@ -77,6 +77,10 @@
     }, {
       "literal": {
         "null": {
+          "null": {
+          }
+        },
+        "dataType": {
           "string": {
             "collation": "UTF8_BINARY"
           }
@@ -408,8 +412,14 @@
             "integer": 8
           }, {
             "integer": 6
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "integer": {
+              }
+            }
           }
         }
       },
@@ -433,6 +443,10 @@
     }, {
       "literal": {
         "null": {
+          "null": {
+          }
+        },
+        "dataType": {
           "null": {
           }
         }
@@ -703,22 +717,44 @@
               "days": 20,
               "microseconds": "100"
             }
-          }],
-          "dataTypeStruct": {
+          }]
+        },
+        "dataType": {
+          "struct": {
             "fields": [{
               "name": "_1",
+              "dataType": {
+                "date": {
+                }
+              },
               "nullable": true
             }, {
               "name": "_2",
+              "dataType": {
+                "timestamp": {
+                }
+              },
               "nullable": true
             }, {
               "name": "_3",
+              "dataType": {
+                "timestamp": {
+                }
+              },
               "nullable": true
             }, {
               "name": "_4",
+              "dataType": {
+                "timestampNtz": {
+                }
+              },
               "nullable": true
             }, {
               "name": "_5",
+              "dataType": {
+                "date": {
+                }
+              },
               "nullable": true
             }, {
               "name": "_6",
@@ -748,6 +784,10 @@
               "nullable": true
             }, {
               "name": "_9",
+              "dataType": {
+                "calendarInterval": {
+                }
+              },
               "nullable": true
             }]
           }
@@ -800,8 +840,14 @@
             "integer": 2
           }, {
             "integer": 3
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "integer": {
+              }
+            }
           }
         }
       },
@@ -827,7 +873,7 @@
         "array": {
           "elements": [{
             "null": {
-              "integer": {
+              "null": {
               }
             }
           }, {
@@ -835,8 +881,14 @@
               "null": {
               }
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "integer": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -863,22 +915,7 @@
         "array": {
           "elements": [{
             "null": {
-              "struct": {
-                "fields": [{
-                  "name": "_1",
-                  "dataType": {
-                    "integer": {
-                    }
-                  }
-                }, {
-                  "name": "_2",
-                  "dataType": {
-                    "string": {
-                      "collation": "UTF8_BINARY"
-                    }
-                  },
-                  "nullable": true
-                }]
+              "null": {
               }
             }
           }, {
@@ -892,20 +929,7 @@
                 "integer": 1
               }, {
                 "string": "a"
-              }],
-              "dataTypeStruct": {
-                "fields": [{
-                  "name": "_1"
-                }, {
-                  "name": "_2",
-                  "dataType": {
-                    "string": {
-                      "collation": "UTF8_BINARY"
-                    }
-                  },
-                  "nullable": true
-                }]
-              }
+              }]
             }
           }, {
             "struct": {
@@ -913,22 +937,34 @@
                 "integer": 2
               }, {
                 "null": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
+                  "null": {
                   }
                 }
-              }],
-              "dataTypeStruct": {
+              }]
+            }
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "struct": {
                 "fields": [{
-                  "name": "_1"
+                  "name": "_1",
+                  "dataType": {
+                    "integer": {
+                    }
+                  }
                 }, {
                   "name": "_2",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
                   "nullable": true
                 }]
               }
-            }
-          }],
-          "dataType": {
+            },
             "containsNull": true
           }
         }
@@ -955,6 +991,27 @@
         "array": {
           "elements": [{
             "null": {
+              "null": {
+              }
+            }
+          }, {
+            "null": {
+              "null": {
+              }
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 1
+              }, {
+                "string": "a"
+              }]
+            }
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
               "struct": {
                 "fields": [{
                   "name": "_1",
@@ -972,35 +1029,7 @@
                   "nullable": true
                 }]
               }
-            }
-          }, {
-            "null": {
-              "null": {
-              }
-            }
-          }, {
-            "struct": {
-              "elements": [{
-                "integer": 1
-              }, {
-                "string": "a"
-              }],
-              "dataTypeStruct": {
-                "fields": [{
-                  "name": "_1"
-                }, {
-                  "name": "_2",
-                  "dataType": {
-                    "string": {
-                      "collation": "UTF8_BINARY"
-                    }
-                  },
-                  "nullable": true
-                }]
-              }
-            }
-          }],
-          "dataType": {
+            },
             "containsNull": true
           }
         }
@@ -1031,8 +1060,14 @@
             "integer": 2
           }, {
             "integer": 3
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "integer": {
+              }
+            }
           }
         }
       },
@@ -1065,11 +1100,17 @@
             "integer": 1
           }, {
             "integer": 2
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "map": {
             "keyType": {
               "string": {
                 "collation": "UTF8_BINARY"
+              }
+            },
+            "valueType": {
+              "integer": {
               }
             }
           }
@@ -1102,7 +1143,7 @@
           }],
           "values": [{
             "null": {
-              "integer": {
+              "null": {
               }
             }
           }, {
@@ -1110,11 +1151,17 @@
               "null": {
               }
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "map": {
             "keyType": {
               "string": {
                 "collation": "UTF8_BINARY"
+              }
+            },
+            "valueType": {
+              "integer": {
               }
             },
             "valueContainsNull": true
@@ -1147,8 +1194,10 @@
             "integer": 2
           }, {
             "double": 1.0
-          }],
-          "dataTypeStruct": {
+          }]
+        },
+        "dataType": {
+          "struct": {
             "fields": [{
               "name": "_1",
               "dataType": {
@@ -1158,9 +1207,17 @@
               },
               "nullable": true
             }, {
-              "name": "_2"
+              "name": "_2",
+              "dataType": {
+                "integer": {
+                }
+              }
             }, {
-              "name": "_3"
+              "name": "_3",
+              "dataType": {
+                "double": {
+                }
+              }
             }]
           }
         }
@@ -1185,6 +1242,10 @@
     }, {
       "literal": {
         "null": {
+          "null": {
+          }
+        },
+        "dataType": {
           "integer": {
           }
         }
@@ -1211,8 +1272,14 @@
         "array": {
           "elements": [{
             "integer": 1
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "integer": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -1242,11 +1309,21 @@
           }],
           "values": [{
             "null": {
-              "integer": {
+              "null": {
               }
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "map": {
+            "keyType": {
+              "integer": {
+              }
+            },
+            "valueType": {
+              "integer": {
+              }
+            },
             "valueContainsNull": true
           }
         }
@@ -1276,11 +1353,21 @@
           }],
           "values": [{
             "null": {
-              "integer": {
+              "null": {
               }
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "map": {
+            "keyType": {
+              "integer": {
+              }
+            },
+            "valueType": {
+              "integer": {
+              }
+            },
             "valueContainsNull": true
           }
         }
@@ -1310,11 +1397,21 @@
           }],
           "values": [{
             "null": {
-              "integer": {
+              "null": {
               }
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "map": {
+            "keyType": {
+              "integer": {
+              }
+            },
+            "valueType": {
+              "integer": {
+              }
+            },
             "valueContainsNull": true
           }
         }
@@ -1347,9 +1444,7 @@
                 "integer": 2
               }, {
                 "integer": 3
-              }],
-              "dataType": {
-              }
+              }]
             }
           }, {
             "array": {
@@ -1371,8 +1466,176 @@
                 "integer": 9
               }]
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "array": {
+                "elementType": {
+                  "integer": {
+                  }
+                }
+              }
+            },
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
+            "struct": {
+              "elements": [{
+                "integer": 1
+              }, {
+                "string": "2"
+              }, {
+                "array": {
+                  "elements": [{
+                    "string": "3"
+                  }, {
+                    "string": "4"
+                  }]
+                }
+              }]
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 5
+              }, {
+                "string": "6"
+              }, {
+                "array": {
+                }
+              }]
+            }
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "struct": {
+                "fields": [{
+                  "name": "_1",
+                  "dataType": {
+                    "integer": {
+                    }
+                  }
+                }, {
+                  "name": "_2",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }, {
+                  "name": "_3",
+                  "dataType": {
+                    "array": {
+                      "elementType": {
+                        "string": {
+                          "collation": "UTF8_BINARY"
+                        }
+                      },
+                      "containsNull": true
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            },
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
+            "struct": {
+              "elements": [{
+                "integer": 1
+              }, {
+                "string": "2"
+              }]
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 3
+              }, {
+                "string": "4"
+              }]
+            }
+          }, {
+            "struct": {
+              "elements": [{
+                "integer": 5
+              }, {
+                "string": "6"
+              }]
+            }
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "struct": {
+                "fields": [{
+                  "name": "a",
+                  "dataType": {
+                    "integer": {
+                    }
+                  }
+                }, {
+                  "name": "b",
+                  "dataType": {
+                    "string": {
+                      "collation": "UTF8_BINARY"
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            },
             "containsNull": true
           }
         }
@@ -1408,14 +1671,7 @@
                 "integer": 1
               }, {
                 "integer": 2
-              }],
-              "dataType": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                }
-              }
+              }]
             }
           }, {
             "map": {
@@ -1443,8 +1699,23 @@
                 "integer": 6
               }]
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "map": {
+                "keyType": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                },
+                "valueType": {
+                  "integer": {
+                  }
+                }
+              }
+            },
             "containsNull": true
           }
         }
@@ -1482,15 +1753,7 @@
                     "string": "1"
                   }, {
                     "string": "2"
-                  }],
-                  "dataType": {
-                    "elementType": {
-                      "string": {
-                        "collation": "UTF8_BINARY"
-                      }
-                    },
-                    "containsNull": true
-                  }
+                  }]
                 }
               }, {
                 "array": {
@@ -1500,15 +1763,7 @@
                     "string": "4"
                   }]
                 }
-              }],
-              "dataType": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueContainsNull": true
-              }
+              }]
             }
           }, {
             "map": {
@@ -1550,8 +1805,30 @@
                 }
               }]
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "map": {
+                "keyType": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                },
+                "valueType": {
+                  "array": {
+                    "elementType": {
+                      "string": {
+                        "collation": "UTF8_BINARY"
+                      }
+                    },
+                    "containsNull": true
+                  }
+                },
+                "valueContainsNull": true
+              }
+            },
             "containsNull": true
           }
         }
@@ -1592,14 +1869,7 @@
                 "integer": 1
               }, {
                 "integer": 2
-              }],
-              "dataType": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                }
-              }
+              }]
             }
           }, {
             "map": {
@@ -1614,8 +1884,27 @@
                 "integer": 4
               }]
             }
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "map": {
+            "keyType": {
+              "integer": {
+              }
+            },
+            "valueType": {
+              "map": {
+                "keyType": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                },
+                "valueType": {
+                  "integer": {
+                  }
+                }
+              }
+            },
             "valueContainsNull": true
           }
         }
@@ -1648,9 +1937,7 @@
                 "integer": 2
               }, {
                 "integer": 3
-              }],
-              "dataType": {
-              }
+              }]
             }
           }, {
             "map": {
@@ -1663,14 +1950,7 @@
                 "integer": 1
               }, {
                 "integer": 2
-              }],
-              "dataType": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                }
-              }
+              }]
             }
           }, {
             "struct": {
@@ -1687,42 +1967,73 @@
                     "string": "a"
                   }, {
                     "string": "b"
-                  }],
-                  "dataType": {
-                    "valueType": {
-                      "string": {
-                        "collation": "UTF8_BINARY"
-                      }
-                    },
-                    "valueContainsNull": true
+                  }]
+                }
+              }]
+            }
+          }]
+        },
+        "dataType": {
+          "struct": {
+            "fields": [{
+              "name": "_1",
+              "dataType": {
+                "array": {
+                  "elementType": {
+                    "integer": {
+                    }
                   }
                 }
-              }],
-              "dataTypeStruct": {
-                "fields": [{
-                  "name": "_1",
-                  "dataType": {
+              },
+              "nullable": true
+            }, {
+              "name": "_2",
+              "dataType": {
+                "map": {
+                  "keyType": {
                     "string": {
                       "collation": "UTF8_BINARY"
                     }
                   },
-                  "nullable": true
-                }, {
-                  "name": "_2",
-                  "nullable": true
-                }]
-              }
-            }
-          }],
-          "dataTypeStruct": {
-            "fields": [{
-              "name": "_1",
-              "nullable": true
-            }, {
-              "name": "_2",
+                  "valueType": {
+                    "integer": {
+                    }
+                  }
+                }
+              },
               "nullable": true
             }, {
               "name": "_3",
+              "dataType": {
+                "struct": {
+                  "fields": [{
+                    "name": "_1",
+                    "dataType": {
+                      "string": {
+                        "collation": "UTF8_BINARY"
+                      }
+                    },
+                    "nullable": true
+                  }, {
+                    "name": "_2",
+                    "dataType": {
+                      "map": {
+                        "keyType": {
+                          "integer": {
+                          }
+                        },
+                        "valueType": {
+                          "string": {
+                            "collation": "UTF8_BINARY"
+                          }
+                        },
+                        "valueContainsNull": true
+                      }
+                    },
+                    "nullable": true
+                  }]
+                }
+              },
               "nullable": true
             }]
           }
