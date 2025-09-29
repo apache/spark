@@ -942,10 +942,12 @@ class RowListStateProcessor(StatefulProcessor):
 
 class PandasListStateLargeListProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
-        list_state_schema = StructType([
-            StructField("value", IntegerType(), True),
-            StructField("valueNull", IntegerType(), True),
-        ])
+        list_state_schema = StructType(
+            [
+                StructField("value", IntegerType(), True),
+                StructField("valueNull", IntegerType(), True),
+            ]
+        )
         value_state_schema = StructType([StructField("size", IntegerType(), True)])
         self.list_state = handle.getListState("listState", list_state_schema)
         self.list_size_state = handle.getValueState("listSizeState", value_state_schema)
@@ -1004,10 +1006,12 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
 
 class RowListStateLargeListProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
-        list_state_schema = StructType([
-            StructField("value", IntegerType(), True),
-            StructField("valueNull", IntegerType(), True),
-        ])
+        list_state_schema = StructType(
+            [
+                StructField("value", IntegerType(), True),
+                StructField("valueNull", IntegerType(), True),
+            ]
+        )
         value_state_schema = StructType([StructField("size", IntegerType(), True)])
         self.list_state = handle.getListState("listState", list_state_schema)
         self.list_size_state = handle.getValueState("listSizeState", value_state_schema)

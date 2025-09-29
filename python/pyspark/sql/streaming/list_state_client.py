@@ -135,9 +135,7 @@ class ListStateClient:
             values,
         )
 
-        append_list_call = stateMessage.AppendList(
-            value=values_as_bytes, fetchWithArrow=False
-        )
+        append_list_call = stateMessage.AppendList(value=values_as_bytes, fetchWithArrow=False)
         list_state_call = stateMessage.ListStateCall(
             stateName=state_name, appendList=append_list_call
         )
@@ -160,9 +158,7 @@ class ListStateClient:
             values,
         )
 
-        put_call = stateMessage.ListStatePut(
-            value=values_as_bytes, fetchWithArrow=False
-        )
+        put_call = stateMessage.ListStatePut(value=values_as_bytes, fetchWithArrow=False)
 
         list_state_call = stateMessage.ListStateCall(stateName=state_name, listStatePut=put_call)
         state_variable_request = stateMessage.StateVariableRequest(listStateCall=list_state_call)
