@@ -514,6 +514,21 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       conf.validateSettings()
     }
   }
+
+  test("SPARK-53747: spark.app.name should escape HTML characters") {
+    val conf = new SparkConf()
+    conf.setAppName("<script>alert('hello')</script>")
+    conf.validateSettings()
+    assert(conf.get("spark.app.name") == "&lt;script&gt;alert('hello')&lt;/script&gt;")
+  }
+
+  test("SPARK-53747: spark.app.name should escape HTML characters (using set directly)") {
+    val conf = new SparkConf()
+    conf.set("spark.app.name", "<script>alert('hello')</script>")
+    conf.validateSettings()
+    assert(conf.get("spark.app.name") == "&lt;script&gt;alert('hello')&lt;/script&gt;")
+  }
+
 }
 
 class Class1 {}
