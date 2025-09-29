@@ -88,6 +88,7 @@ class SqlScriptingExecution(
 
   /**
    * Helper method to execute interrupts to ConditionalStatements.
+   * This method should only interrupt when the statement that throws is a conditional statement.
    * @param executionPlan Execution plan.
    */
   private def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {

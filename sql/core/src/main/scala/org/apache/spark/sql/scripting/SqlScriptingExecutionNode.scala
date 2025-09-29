@@ -1035,6 +1035,7 @@ class ForStatementExec(
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
 
+      // Variable interrupted is being used by both EXIT and CONTINUE handlers
       override def hasNext: Boolean = !interrupted && (state match {
         // `firstIteration` NEEDS to be the first condition! This is to handle edge-cases when
         //   query fails with an exception. If the `cachedQueryResult().hasNext` is first, this

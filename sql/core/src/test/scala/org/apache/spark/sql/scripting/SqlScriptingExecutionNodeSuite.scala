@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, LeafNode, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -33,16 +32,6 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  * It is then checked if the leaf statements have been iterated in the expected order.
  */
 class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSession {
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    conf.setConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED, true)
-  }
-
-  protected override def afterAll(): Unit = {
-    conf.unsetConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key)
-    super.afterAll()
-  }
-
   // Helpers
   case class TestCompoundBody(
       override val statements: Seq[CompoundStatementExec],
