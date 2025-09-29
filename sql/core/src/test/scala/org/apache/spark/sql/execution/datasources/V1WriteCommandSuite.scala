@@ -100,7 +100,8 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
 
     // Check whether the output ordering is matched before FileFormatWriter executes rdd.
     assert(FileFormatWriter.outputOrderingMatched == orderingMatched,
-      s"Expect: $orderingMatched, Actual: ${FileFormatWriter.outputOrderingMatched}")
+      s"Expect orderingMatched: $orderingMatched, " +
+        s"Actual: ${FileFormatWriter.outputOrderingMatched}")
 
     sparkContext.listenerBus.waitUntilEmpty()
 

@@ -906,18 +906,13 @@ case class Sort(
     order: Seq[SortOrder],
     global: Boolean,
     child: LogicalPlan,
-    hint: Option[SortHint] = None) extends UnaryNode
-    with AliasAwareQueryOutputOrdering[LogicalPlan] {
+    hint: Option[SortHint] = None) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def orderingExpressions: Seq[SortOrder] = order
-  override def outputExpressions: Seq[NamedExpression] = child match {
-    case aliasAware: AliasAwareQueryOutputOrdering[_] => aliasAware.outputExpressions
-    case _ => child.output
-  }
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = {
     if (global) maxRows else child.maxRowsPerPartition
   }
+  override def outputOrdering: Seq[SortOrder] = order
   final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
