@@ -19,6 +19,7 @@ package org.apache.spark.internal.io
 
 import java.io.IOException
 import java.util.{Date, UUID}
+import java.util.concurrent.{Callable, ExecutionException}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -29,9 +30,12 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.spark.util.ThreadUtils
 
 /**
  * An [[FileCommitProtocol]] implementation backed by an underlying Hadoop OutputCommitter
@@ -197,34 +201,76 @@ class HadoopMapReduceCommitProtocol(
       }
       logDebug(s"Create absolute parent directories: $absParentPaths")
       absParentPaths.foreach(fs.mkdirs)
-      for ((src, dst) <- filesToMove) {
-        if (!fs.rename(new Path(src), new Path(dst))) {
-          throw new IOException(s"Failed to rename $src to $dst when committing files staged for " +
-            s"absolute locations")
+
+      val numThreads = SparkContext.getActive match {
+        case Some(sc) => sc.conf.get(FILES_RENAME_NUM_THREADS)
+        case None => FILES_RENAME_NUM_THREADS.defaultValue.get
+      }
+      val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "file-rename")
+      try {
+        val renameTasks = filesToMove.map { case (src, dst) =>
+          pool.submit(new Callable[Unit] {
+            override def call(): Unit = {
+              if (!fs.rename(new Path(src), new Path(dst))) {
+                throw new IOException(s"Failed to rename $src to $dst when committing files " +
+                  s"staged for absolute locations")
+              }
+            }
+          })
         }
+        renameTasks.foreach { future =>
+          try {
+            future.get()
+          } catch {
+            case ee: ExecutionException =>
+              throw Option(ee.getCause).getOrElse(ee)
+          }
+        }
+      } finally {
+        pool.shutdown()
       }
 
       if (dynamicPartitionOverwrite) {
         val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
         logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
-        for (part <- partitionPaths) {
-          val finalPartPath = new Path(path, part)
-          if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
-            // According to the official hadoop FileSystem API spec, delete op should assume
-            // the destination is no longer present regardless of return value, thus we do not
-            // need to double check if finalPartPath exists before rename.
-            // Also in our case, based on the spec, delete returns false only when finalPartPath
-            // does not exist. When this happens, we need to take action if parent of finalPartPath
-            // also does not exist(e.g. the scenario described on SPARK-23815), because
-            // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
-            // a parent that exists, otherwise we may get unexpected result on the rename.
-            fs.mkdirs(finalPartPath.getParent)
+
+        val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "partition-rename")
+        try {
+          val renameTasks = partitionPaths.map { part =>
+            pool.submit(new Callable[Unit] {
+              override def call(): Unit = {
+                val finalPartPath = new Path(path, part)
+                if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
+                  // According to the official hadoop FileSystem API spec, delete op should assume
+                  // the destination is no longer present regardless of return value, thus we do not
+                  // need to double check if finalPartPath exists before rename.
+                  // Also in our case, based on the spec, delete returns false only when
+                  // finalPartPath does not exist. When this happens, we need to
+                  // take action if parent of finalPartPath
+                  // also does not exist(e.g. the scenario described on SPARK-23815), because
+                  // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
+                  // a parent that exists, otherwise we may get unexpected result on the rename.
+                  fs.mkdirs(finalPartPath.getParent)
+                }
+                val stagingPartPath = new Path(stagingDir, part)
+                if (!fs.rename(stagingPartPath, finalPartPath)) {
+                  throw new IOException(s"Failed to rename $stagingPartPath " +
+                    s"to $finalPartPath when committing files staged " +
+                    s"for overwriting dynamic partitions")
+                }
+              }
+            })
           }
-          val stagingPartPath = new Path(stagingDir, part)
-          if (!fs.rename(stagingPartPath, finalPartPath)) {
-            throw new IOException(s"Failed to rename $stagingPartPath to $finalPartPath when " +
-              s"committing files staged for overwriting dynamic partitions")
+          renameTasks.foreach { future =>
+            try {
+              future.get()
+            } catch {
+              case ee: ExecutionException =>
+                throw Option(ee.getCause).getOrElse(ee)
+            }
           }
+        } finally {
+          pool.shutdown()
         }
       }
 

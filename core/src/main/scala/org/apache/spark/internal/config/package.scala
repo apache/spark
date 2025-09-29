@@ -1240,6 +1240,13 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val FILES_RENAME_NUM_THREADS = ConfigBuilder("spark.files.rename.numThreads")
+    .doc("This configuration controls the number of threads used for concurrent file " +
+      "rename operations during INSERT operations.")
+    .version("3.3.4-mdh")
+    .intConf
+    .createWithDefault(10)
+
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .version("2.2.0")
     .stringConf
