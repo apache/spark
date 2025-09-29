@@ -1552,37 +1552,42 @@ private[spark] class DAGScheduler(
     // `findMissingPartitions()` returns all partitions every time.
     stage match {
       case sms: ShuffleMapStage if !sms.isAvailable =>
-        if (sms.shuffleDep.checksumMismatchFullRetryEnabled) {
+        val needFullStageRetry = if (sms.shuffleDep.checksumMismatchFullRetryEnabled) {
           // When the parents of this stage are indeterminate (e.g., some parents are not
           // checkpointed and checksum mismatches are detected), the output data of the parents
           // may have changed due to task retries. For correctness reason, we need to
           // retry all tasks of the current stage. The legacy way of using current stage's
           // deterministic level to trigger full stage retry is not accurate.
-          if (stage.isParentIndeterminate) {
-            mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
-            sms.shuffleDep.newShuffleMergeState()
-          }
-        } else if (stage.isIndeterminate) {
-          // already executed at least once
-          if (sms.getNextAttemptId > 0) {
-            // While we previously validated possible rollbacks during the handling of a FetchFailure,
-            // where we were fetching from an indeterminate source map stages, this later check
-            // covers additional cases like recalculating an indeterminate stage after an executor
-            // loss. Moreover, because this check occurs later in the process, if a result stage task
-            // has successfully completed, we can detect this and abort the job, as rolling back a
-            // result stage is not possible.
-            val stagesToRollback = collectSucceedingStages(sms)
-            abortStageWithInvalidRollBack(stagesToRollback)
-            // stages which cannot be rolled back were aborted which leads to removing the
-            // the dependant job(s) from the active jobs set
-            val numActiveJobsWithStageAfterRollback =
-              activeJobs.count(job => stagesToRollback.contains(job.finalStage))
-            if (numActiveJobsWithStageAfterRollback == 0) {
-              logInfo(log"All jobs depending on the indeterminate stage " +
-                log"(${MDC(STAGE_ID, stage.id)}) were aborted so this stage is not needed anymore.")
-              return
+          stage.isParentIndeterminate
+        } else {
+          if (stage.isIndeterminate) {
+            // already executed at least once
+            if (sms.getNextAttemptId > 0) {
+              // While we previously validated possible rollbacks during the handling of a FetchFailure,
+              // where we were fetching from an indeterminate source map stages, this later check
+              // covers additional cases like recalculating an indeterminate stage after an executor
+              // loss. Moreover, because this check occurs later in the process, if a result stage task
+              // has successfully completed, we can detect this and abort the job, as rolling back a
+              // result stage is not possible.
+              val stagesToRollback = collectSucceedingStages(sms)
+              abortStageWithInvalidRollBack(stagesToRollback)
+              // stages which cannot be rolled back were aborted which leads to removing the
+              // the dependant job(s) from the active jobs set
+              val numActiveJobsWithStageAfterRollback =
+                activeJobs.count(job => stagesToRollback.contains(job.finalStage))
+              if (numActiveJobsWithStageAfterRollback == 0) {
+                logInfo(log"All jobs depending on the indeterminate stage " +
+                  log"(${MDC(STAGE_ID, stage.id)}) were aborted so this stage is not needed anymore.")
+                return
+              }
             }
+            true
+          } else {
+            false
           }
+        }
+
+        if (needFullStageRetry) {
           mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
           sms.shuffleDep.newShuffleMergeState()
         }

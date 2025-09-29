@@ -38,18 +38,19 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("Propagate checksum from executor to driver") {
-    assert(spark.sparkContext.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
-    assert(spark.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
-    assert(spark.sparkContext.conf.get("spark.sql.classic.shuffleDependency.fileCleanup.enabled")
+    assert(spark.sparkContext.conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key) == "5")
+    assert(spark.conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key) == "5")
+    assert(spark.sparkContext.conf.get(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key)
       == "false")
-    assert(spark.conf.get("spark.sql.classic.shuffleDependency.fileCleanup.enabled") == "false")
+    assert(spark.conf.get(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key) == "false")
 
     var shuffleId = 0
     Seq(("true", "false"), ("false", "true"), ("true", "true")).foreach {
       case (orderIndependentChecksumEnabled: String, checksumMismatchFullRetryEnabled: String) =>
         withSQLConf(
-          "spark.sql.shuffle.orderIndependentChecksum.enabled" -> orderIndependentChecksumEnabled,
-          "spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch" ->
+          SQLConf.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.key ->
+            orderIndependentChecksumEnabled,
+          SQLConf.SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key ->
             checksumMismatchFullRetryEnabled) {
           assert(SQLConf.get.shuffleOrderIndependentChecksumEnabled ===
             orderIndependentChecksumEnabled.toBoolean)
