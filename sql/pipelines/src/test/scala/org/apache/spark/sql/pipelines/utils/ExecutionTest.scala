@@ -58,6 +58,7 @@ trait TestPipelineUpdateContextMixin {
   case class TestPipelineUpdateContext(
       spark: SparkSession,
       unresolvedGraph: DataflowGraph,
+      storageRootOpt: Option[String] = None,
       fullRefreshTables: TableFilter = NoTables,
       refreshTables: TableFilter = AllTables,
       resetCheckpointFlows: FlowFilter = AllFlows,

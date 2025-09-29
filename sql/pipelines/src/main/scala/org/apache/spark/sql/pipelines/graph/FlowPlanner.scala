@@ -50,6 +50,7 @@ class FlowPlanner(
           updateContext = updateContext
         )
       case sf: StreamingFlow =>
+        val flowMetadata = FlowSystemMetadata(updateContext, sf, graph)
         output match {
           case o: Table =>
             new StreamingTableWrite(
@@ -60,7 +61,7 @@ class FlowPlanner(
               updateContext = updateContext,
               sqlConf = sf.sqlConf,
               trigger = triggerFor(sf),
-              checkpointPath = output.path
+              checkpointPath = flowMetadata.latestCheckpointLocation
             )
           case _ =>
             throw new UnsupportedOperationException(

@@ -46,7 +46,12 @@ class PipelineExecution(context: PipelineUpdateContext) {
   def startPipeline(): Unit = synchronized {
     // Initialize the graph.
     val resolvedGraph = resolveGraph()
-    val initializedGraph = DatasetManager.materializeDatasets(resolvedGraph, context)
+    val initializedGraph = createTables(resolvedGraph)
+    if (context.fullRefreshTables.nonEmpty) {
+      State.reset(initializedGraph, context)
+    }
+
+    DatasetManager.materializeDatasets(initializedGraph, context)
 
     // Execute the graph.
     graphExecution = Option(
@@ -164,5 +169,17 @@ class PipelineExecution(context: PipelineUpdateContext) {
         )
       )
       .stop()
+  }
+
+  /**
+   * @return a graph where all tables have their `path` attribute filled out.
+   */
+  def createTables(resolvedGraph: DataflowGraph): DataflowGraph = {
+    DataflowGraphTransformer
+      .withDataflowGraphTransformer(resolvedGraph) { transformer =>
+        transformer.transformTables { table =>
+          DatasetManager.ensureTableCreated(context.spark, table, resolvedGraph)
+        }
+      }.getDataflowGraph
   }
 }

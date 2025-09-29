@@ -27,6 +27,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.common.DatasetType
 import org.apache.spark.sql.pipelines.util.{
@@ -72,6 +73,9 @@ trait Input extends GraphElement {
    * @return Streaming or batch DataFrame of this Input's data.
    */
   def load(readOptions: InputReadOptions): DataFrame
+
+  def catalogV2Identifier: Identifier =
+    Identifier.of(Array(identifier.database.get), identifier.identifier)
 }
 
 /**

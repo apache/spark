@@ -24,7 +24,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.PersistedView
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
@@ -34,11 +33,11 @@ import org.apache.spark.sql.connector.catalog.{
   TableInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
-import org.apache.spark.sql.connector.expressions.Expressions
-import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.connector.expressions.{Expressions, Transform}
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
 import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
+import org.apache.spark.sql.types.StructType
 
 /**
  * `DatasetManager` is responsible for materializing tables in the catalog based on the given
@@ -64,6 +63,40 @@ object DatasetManager extends Logging {
       with NoStackTrace
 
   /**
+   * Creates the table in the catalog if it doesn't already exist.
+   * @return A Table with its `path` attribute filled out.
+   */
+  def ensureTableCreated(
+      spark: SparkSession,
+      table: Table,
+      resolvedDataflowGraph: DataflowGraph): Table = {
+    val catalog = getTableCatalogForTable(spark, table.identifier)
+
+    val identifier = table.catalogV2Identifier
+    val properties = resolveTableProperties(table, identifier)
+
+    // Create the table if we need to
+    if (!catalog.tableExists(identifier)) {
+      catalog.createTable(
+        identifier,
+        new TableInfo.Builder()
+          .withProperties(properties.asJava)
+          .withColumns(
+            CatalogV2Util.structTypeToV2Columns(tableOutputSchema(table, resolvedDataflowGraph))
+          )
+          .withPartitions(tablePartitioning(table).toArray)
+          .build()
+      )
+    }
+
+    table.copy(
+      normalizedPath = Option(
+        catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION)
+      )
+    )
+  }
+
+  /**
    * Materializes the tables in the given graph. This method will create or update the tables
    * in the catalog based on the given graph and context.
    *
@@ -75,7 +108,7 @@ object DatasetManager extends Logging {
   def materializeDatasets(
       resolvedDataflowGraph: DataflowGraph,
       context: PipelineUpdateContext
-  ): DataflowGraph = {
+  ): Unit = {
     val (_, refreshTableIdentsSet, fullRefreshTableIdentsSet) = {
       DatasetManager.constructFullRefreshSet(resolvedDataflowGraph.tables, context)
     }
@@ -94,150 +127,36 @@ object DatasetManager extends Logging {
       tablesToMatz(resolvedDataflowGraph).map(t => t.table.identifier -> t).toMap
     }
 
-    // materialized [[DataflowGraph]] where each table has been materialized and each table
-    // has metadata (e.g., normalized table storage path) populated
-    val materializedGraph: DataflowGraph = try {
-      DataflowGraphTransformer
-        .withDataflowGraphTransformer(resolvedDataflowGraph) { transformer =>
-          transformer.transformTables { table =>
-            if (tablesToMaterialize.keySet.contains(table.identifier)) {
-              try {
-                materializeTable(
-                  resolvedDataflowGraph = resolvedDataflowGraph,
-                  table = table,
-                  isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh,
-                  context = context
-                )
-              } catch {
-                case NonFatal(e) =>
-                  throw TableMaterializationException(
-                    table.displayName,
-                    cause = e.addOrigin(table.origin)
-                  )
-              }
-            } else {
-              table
-            }
+    try {
+      resolvedDataflowGraph.tables.foreach { table =>
+        if (tablesToMaterialize.contains(table.identifier)) {
+          try {
+            materializeTable(
+              resolvedDataflowGraph = resolvedDataflowGraph,
+              table = table,
+              isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh,
+              context = context
+            )
+          } catch {
+            case NonFatal(e) =>
+              throw TableMaterializationException(
+                table.displayName,
+                cause = e.addOrigin(table.origin)
+              )
           }
-
         }
-        .getDataflowGraph
+      }
     } catch {
       case e: SparkException if e.getCause != null => throw e.getCause
     }
-
-    materializeViews(materializedGraph, context)
-    materializedGraph
   }
 
   /**
-   * Publish or refresh all the [[PersistedView]]s in the specified [[DataflowGraph]]
+   * Materializes metadata for a table in the catalog, i.e. updates the metadata in the catalog to
+   * match the metadata on the table's definition in the graph.
    *
-   * @param virtualizedConnectedGraphWithTables virtualizedConnectedGraph that has table information
-   *                                            from the graph.
-   */
-  private def materializeViews(
-      virtualizedConnectedGraphWithTables: DataflowGraph,
-      context: PipelineUpdateContext): Unit = {
-    var viewsToPublish: Set[PersistedView] =
-      virtualizedConnectedGraphWithTables.persistedViews.toSet
-    var publishedViews: Set[TableIdentifier] = Set.empty
-    var failedViews: Set[TableIdentifier] = Set.empty
-
-    // To publish a view, it is required that all the input sources must exists in the metastore.
-    //  Thereby, if a Persisted View target reads another Persisted View source, the source must be
-    //  published first.
-    //  Here we make sure all the persisted views are published in correct order
-    val persistedViewIdentifiers =
-      virtualizedConnectedGraphWithTables.persistedViews.map(_.identifier).toSet
-    val viewToFlowMap =
-      ViewHelpers.persistedViewIdentifierToFlow(graph = virtualizedConnectedGraphWithTables)
-    val materializationDependencies =
-      virtualizedConnectedGraphWithTables.persistedViews.map { v =>
-        val flow = viewToFlowMap(v.identifier)
-        val inputs = flow.inputs.intersect(persistedViewIdentifiers)
-        (v.identifier, inputs)
-      }.toMap
-
-    // As long as all views are not materialized, we try to materialize them
-    while (viewsToPublish.nonEmpty) {
-      // Mark any views with failed inputs as skipped
-      viewsToPublish
-        .filter { v =>
-          materializationDependencies(v.identifier)
-            .exists(failedViews.contains)
-        }
-        .foreach { v =>
-          val flowToView = viewToFlowMap(v.identifier)
-          context.flowProgressEventLogger.recordSkipped(flowToView)
-
-          failedViews += v.identifier
-          viewsToPublish -= v
-        }
-
-      // Persist any views without pending inputs
-      viewsToPublish
-        .filter { v =>
-          val pendingInputs =
-            materializationDependencies(v.identifier).diff(publishedViews)
-
-          pendingInputs.isEmpty
-        }
-        .foreach { v =>
-          val flowToView = viewToFlowMap(v.identifier)
-          try {
-            materializeView(v, flowToView, context.spark)
-            publishedViews += v.identifier
-            viewsToPublish -= v
-          } catch {
-            case NonFatal(ex) =>
-              context.flowProgressEventLogger.recordFailed(
-                flowToView,
-                ex,
-                logAsWarn = false
-              )
-              failedViews += v.identifier
-              viewsToPublish -= v
-          }
-        }
-    }
-  }
-
-  private def materializeView(view: View, flow: ResolvedFlow, spark: SparkSession): Unit = {
-    val command = CreateViewCommand(
-      name = view.identifier,
-      userSpecifiedColumns = Nil,
-      viewType = PersistedView,
-      comment = view.comment,
-      collation = None,
-      properties = view.properties,
-      originalText = view.sqlText,
-      plan = flow.df.logicalPlan,
-      allowExisting = true,
-      replace = true,
-      isAnalyzed = true
-    )
-
-    val queryContext = flow.queryContext
-
-    val catalogManager = spark.sessionState.catalogManager
-    val currentCatalogName = catalogManager.currentCatalog.name()
-    val currentNamespace = catalogManager.currentNamespace
-    try {
-      // Using the catalog and database from the flow ensures that reads within the view are
-      // directed to the right catalog/database.
-      catalogManager.setCurrentCatalog(queryContext.currentCatalog.get)
-      queryContext.currentDatabase.foreach { d => catalogManager.setCurrentNamespace(Array(d))}
-      command.run(spark)
-    } finally {
-      catalogManager.setCurrentCatalog(currentCatalogName)
-      catalogManager.setCurrentNamespace(currentNamespace)
-    }
-  }
-
-  /**
-   * Materializes a table in the catalog. This method will create or update the table in the
-   * catalog based on the given table and context.
+   * Expects that the table already exists.
+   *
    * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used to infer the table schema.
    * @param table The table to be materialized.
    * @param isFullRefresh Whether this table should be full refreshed or not.
@@ -249,23 +168,16 @@ object DatasetManager extends Logging {
       table: Table,
       isFullRefresh: Boolean,
       context: PipelineUpdateContext
-  ): Table = {
+  ): Unit = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
-    val catalogManager = context.spark.sessionState.catalogManager
-    val catalog = (table.identifier.catalog match {
-      case Some(catalogName) =>
-        catalogManager.catalog(catalogName)
-      case None =>
-        catalogManager.currentCatalog
-    }).asInstanceOf[TableCatalog]
+    val catalog = getTableCatalogForTable(context.spark, table.identifier)
 
-    val identifier =
-      Identifier.of(Array(table.identifier.database.get), table.identifier.identifier)
+    val identifier = table.catalogV2Identifier
     val outputSchema = table.specifiedSchema.getOrElse(
       resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
     )
     val mergedProperties = resolveTableProperties(table, identifier)
-    val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
+    val partitioning = tablePartitioning(table)
 
     val existingTableOpt = if (catalog.tableExists(identifier)) {
       Some(catalog.loadTable(identifier))
@@ -288,7 +200,7 @@ object DatasetManager extends Logging {
     }
 
     // Wipe the data if we need to
-    if ((isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined) {
+    if (!table.isStreamingTable && existingTableOpt.isDefined) {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
@@ -306,24 +218,6 @@ object DatasetManager extends Logging {
       val setProperties = mergedProperties.map { case (k, v) => TableChange.setProperty(k, v) }
       catalog.alterTable(identifier, (columnChanges ++ setProperties).toArray: _*)
     }
-
-    // Create the table if we need to
-    if (existingTableOpt.isEmpty) {
-      catalog.createTable(
-        identifier,
-        new TableInfo.Builder()
-          .withProperties(mergedProperties.asJava)
-          .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
-          .withPartitions(partitioning.toArray)
-          .build()
-      )
-    }
-
-    table.copy(
-      normalizedPath = Option(
-        catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION)
-      )
-    )
   }
 
   /**
@@ -401,4 +295,25 @@ object DatasetManager extends Logging {
     val fullRefreshTableIdentsSet = fullRefreshTablesSet.map(_.identifier)
     (allRefreshTables, refreshTableIdentsSet, fullRefreshTableIdentsSet)
   }
+
+  def getTableCatalogForTable(
+      spark: SparkSession,
+      tableIdentifier: TableIdentifier): TableCatalog = {
+    val catalogManager = spark.sessionState.catalogManager
+    (tableIdentifier.catalog match {
+      case Some(catalogName) =>
+        catalogManager.catalog(catalogName)
+      case None =>
+        catalogManager.currentCatalog
+    }).asInstanceOf[TableCatalog]
+  }
+
+  private def tablePartitioning(table: Table): Seq[Transform] = {
+    table.partitionCols.toSeq.flatten.map(Expressions.identity)
+  }
+
+  private def tableOutputSchema(table: Table, resolvedDataflowGraph: DataflowGraph): StructType =
+    table.specifiedSchema.getOrElse(
+      resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
+    )
 }

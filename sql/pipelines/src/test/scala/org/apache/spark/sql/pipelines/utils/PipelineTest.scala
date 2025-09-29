@@ -47,11 +47,15 @@ abstract class PipelineTest
 
   final protected val storageRoot = createTempDir()
 
-  protected def startPipelineAndWaitForCompletion(unresolvedDataflowGraph: DataflowGraph): Unit = {
-    val updateContext = new PipelineUpdateContextImpl(
-      unresolvedDataflowGraph, eventCallback = _ => ())
-    updateContext.pipelineExecution.runPipeline()
-    updateContext.pipelineExecution.awaitCompletion()
+  protected def startPipelineAndWaitForCompletion(
+       unresolvedDataflowGraph: DataflowGraph): Unit = {
+    withTempDir { storageRoot =>
+      val updateContext = new PipelineUpdateContextImpl(
+        unresolvedDataflowGraph, eventCallback = _ => (),
+        storageRootOpt = Option(storageRoot.toString))
+      updateContext.pipelineExecution.runPipeline()
+      updateContext.pipelineExecution.awaitCompletion()
+    }
   }
 
   /** Returns the dataset name in the event log. */
