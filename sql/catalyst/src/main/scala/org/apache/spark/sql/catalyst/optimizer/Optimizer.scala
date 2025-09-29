@@ -174,6 +174,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
 
     val batches: Seq[Batch] = flattenBatches(Seq(
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
+    Batch("Push down Count_if filter", FixedPoint(1), CountIfExpressionPushDown),
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
     Batch("Rewrite With expression", fixedPoint, RewriteWithExpression),
@@ -2775,6 +2776,71 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
       }
   }
 }
+
+/**
+ * To optimize performance, filter conditions should be pushed down in [[CountIf]] queries
+ * to reduce the volume of data being processed.
+ *
+ * Input Query :
+ * {{{
+ *     SELECT count_if(c1 > 1) FROM ut1
+ *  }}}
+ *
+ * Rewritten Query:
+ * {{{
+ *     SELECT count_if(c1 > 1) FROM ut1 where c1 > 1
+ *  }}}
+ */
+object CountIfExpressionPushDown extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(AGGREGATE), ruleId) {
+    case p @ Aggregate(_, a @ _, f @ Filter(cond @ _, _), _)  if a.nonEmpty =>
+      var expressions = ExpressionSet()
+      val expSize = a.size
+      var countif = 0
+      a.foreach {
+        case Alias(AggregateExpression(Count(exp @ _ ), _, _, _, _), _)
+          if exp.sizeIs == 1 =>
+          exp.head match {
+            case With(If(_, _, _), commonExprs @ _)
+              if commonExprs.sizeIs == 1 =>
+              expressions += commonExprs.head.child
+              countif += 1
+            case _ =>
+          }
+        case _ =>
+      }
+      if (expressions.nonEmpty && expSize == countif) {
+        val newFilter = Filter(And(cond, expressions.toSeq.reduce(Or)), f.child)
+        p.copy(child = newFilter)
+      } else {
+        p
+      }
+     case p @ Aggregate(_, a @ _, child, _)  if a.nonEmpty =>
+       var expressions = ExpressionSet()
+       val expSize = a.size
+       var countif = 0
+       a.foreach {
+         case Alias(AggregateExpression(Count(exp @ _ ), _, _, _, _), _)
+           if exp.sizeIs == 1 =>
+           exp.head match {
+             case With(If(_, _, _), commonExprs @ _)
+               if commonExprs.sizeIs == 1 =>
+               expressions += commonExprs.head.child
+               countif += 1
+             case _ =>
+           }
+         case _ =>
+       }
+       if (expressions.nonEmpty && expSize == countif) {
+         val newFilter = Filter(expressions.toSeq.reduce(Or), child)
+         p.copy(child = newFilter)
+       } else {
+         p
+       }
+  }
+}
+
 
 /**
  * Prunes unnecessary fields from a [[Generate]] if it is under a project which does not refer

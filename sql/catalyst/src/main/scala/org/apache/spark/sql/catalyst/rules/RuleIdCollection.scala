@@ -115,6 +115,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::
       "org.apache.spark.sql.catalyst.expressions.ExtractSemiStructuredFields" ::
       // Catalyst Optimizer rules
+      "org.apache.spark.sql.catalyst.optimizer.CountIfExpressionPushDown" ::
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseRepartition" ::
