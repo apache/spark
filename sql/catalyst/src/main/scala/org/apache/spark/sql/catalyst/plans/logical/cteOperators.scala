@@ -186,6 +186,8 @@ object CTERelationDef {
  * @param statsOpt             The optional statistics inferred from the corresponding CTE
  *                             definition.
  * @param recursive            If this is a recursive reference.
+ * @param isUnlimitedRecursion If the node is a (non-recursive) reference to a recursive CTE that
+ *                             should be executed without a limit to the number of rows it returns.
  */
 case class CTERelationRef(
     cteId: Long,
@@ -200,6 +202,11 @@ case class CTERelationRef(
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
   override lazy val resolved: Boolean = _resolved
+
+  override def stringArgs: Iterator[Any] = {
+    // We omit the false value of isUnlimitedRecursion in golden files.
+    if (isUnlimitedRecursion) super.stringArgs else super.stringArgs.toArray.init.iterator
+  }
 
   override def newInstance(): LogicalPlan = {
     // CTERelationRef inherits the output attributes from a query, which may contain duplicated

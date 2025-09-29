@@ -423,6 +423,22 @@ class UnifiedUDFTestsMixin:
             result = self.spark.range(10).select(f("id").alias("res")).collect()
             self.assertEqual(result, expected)
 
+    def test_0_args(self):
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": False}):
+
+            @udf()
+            def f1() -> int:
+                return 1
+
+            @udf(returnType=LongType())
+            def f2() -> int:
+                return 1
+
+            for f in [f1, f2]:
+                self.assertEqual(f.evalType, PythonEvalType.SQL_BATCHED_UDF)
+                result = self.spark.range(10).select(f().alias("res")).collect()
+                self.assertEqual(len(result), 10)
+
 
 class UnifiedUDFTests(UnifiedUDFTestsMixin, ReusedSQLTestCase):
     pass

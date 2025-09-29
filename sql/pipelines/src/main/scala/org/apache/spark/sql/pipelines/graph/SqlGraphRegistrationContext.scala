@@ -322,7 +322,8 @@ class SqlGraphRegistrationContext(
             objectName = Option(viewIdentifier.unquotedString),
             objectType = Option(QueryOriginType.View.toString)
           ),
-          properties = cv.properties
+          properties = cv.properties,
+          sqlText = cv.originalText
         )
       )
 
@@ -365,7 +366,8 @@ class SqlGraphRegistrationContext(
             objectName = Option(viewIdentifier.unquotedString),
             objectType = Option(QueryOriginType.View.toString)
           ),
-          properties = Map.empty
+          properties = Map.empty,
+          sqlText = cvc.originalText
         )
       )
 

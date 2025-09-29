@@ -29,6 +29,9 @@ if TYPE_CHECKING:
         ArrowScalarUDFType,
         ArrowScalarIterUDFType,
         ArrowGroupedAggUDFType,
+        ArrowGroupedMapIterUDFType,
+        ArrowGroupedMapUDFType,
+        ArrowGroupedMapFunction,
     )
 
 
@@ -278,7 +281,8 @@ def infer_eval_type(
     return eval_type
 
 
-def infer_eval_type_from_func(  # type: ignore[no-untyped-def]
+# infer the eval type for @udf
+def infer_eval_type_for_udf(  # type: ignore[no-untyped-def]
     f,
 ) -> Optional[
     Union[
@@ -291,12 +295,101 @@ def infer_eval_type_from_func(  # type: ignore[no-untyped-def]
     ]
 ]:
     argspec = getfullargspec(f)
-    if len(argspec.annotations) > 0:
+    # different from inference of @pandas_udf/@arrow_udf, 0-arg is not allowed here
+    if len(argspec.args) > 0 and len(argspec.annotations) > 0:
         try:
             type_hints = get_type_hints(f)
         except NameError:
             type_hints = {}
         return infer_eval_type(signature(f), type_hints)
+    else:
+        return None
+
+
+def infer_group_arrow_eval_type(
+    sig: Signature,
+    type_hints: Dict[str, Any],
+) -> Optional[Union["ArrowGroupedMapUDFType", "ArrowGroupedMapIterUDFType"]]:
+    from pyspark.sql.pandas.functions import PythonEvalType
+
+    require_minimum_pyarrow_version()
+
+    import pyarrow as pa
+
+    annotations = {}
+    for param in sig.parameters.values():
+        if param.annotation is not param.empty:
+            annotations[param.name] = type_hints.get(param.name, param.annotation)
+
+    # Check if all arguments have type hints
+    parameters_sig = [
+        annotations[parameter] for parameter in sig.parameters if parameter in annotations
+    ]
+    if len(parameters_sig) != len(sig.parameters):
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "all parameters", "sig": str(sig)},
+        )
+
+    # Check if the return has a type hint
+    return_annotation = type_hints.get("return", sig.return_annotation)
+    if sig.empty is return_annotation:
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "the return type", "sig": str(sig)},
+        )
+
+    # Iterator[pa.RecordBatch] -> Iterator[pa.RecordBatch]
+    is_iterator_batch = (
+        len(parameters_sig) == 1
+        and check_iterator_annotation(  # Iterator
+            parameters_sig[0],
+            parameter_check_func=lambda t: t == pa.RecordBatch,
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda t: t == pa.RecordBatch
+        )
+    )
+    # Tuple[pa.Scalar, ...], Iterator[pa.RecordBatch] -> Iterator[pa.RecordBatch]
+    is_iterator_batch_with_keys = (
+        len(parameters_sig) == 2
+        and check_iterator_annotation(  # Iterator
+            parameters_sig[1],
+            parameter_check_func=lambda t: t == pa.RecordBatch,
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda t: t == pa.RecordBatch
+        )
+    )
+
+    if is_iterator_batch or is_iterator_batch_with_keys:
+        return PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
+
+    # pa.Table -> pa.Table
+    is_table = (
+        len(parameters_sig) == 1 and parameters_sig[0] == pa.Table and return_annotation == pa.Table
+    )
+    # Tuple[pa.Scalar, ...], pa.Table -> pa.Table
+    is_table_with_keys = (
+        len(parameters_sig) == 2 and parameters_sig[1] == pa.Table and return_annotation == pa.Table
+    )
+    if is_table or is_table_with_keys:
+        return PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+
+    return None
+
+
+def infer_group_arrow_eval_type_from_func(
+    f: "ArrowGroupedMapFunction",
+) -> Optional[Union["ArrowGroupedMapUDFType", "ArrowGroupedMapIterUDFType"]]:
+    argspec = getfullargspec(f)
+    if len(argspec.annotations) > 0:
+        try:
+            type_hints = get_type_hints(f)
+        except NameError:
+            type_hints = {}
+
+        return infer_group_arrow_eval_type(signature(f), type_hints)
     else:
         return None
 

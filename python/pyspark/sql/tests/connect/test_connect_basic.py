@@ -135,6 +135,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         cdf2 = loads(data)
         self.assertEqual(cdf.collect(), cdf2.collect())
 
+    def test_window_spec_serialization(self):
+        from pyspark.sql.connect.window import Window
+        from pyspark.serializers import CPickleSerializer
+
+        pickle_ser = CPickleSerializer()
+        w = Window.partitionBy("some_string").orderBy("value")
+        b = pickle_ser.dumps(w)
+        w2 = pickle_ser.loads(b)
+        self.assertEqual(str(w), str(w2))
+
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
         sdf = self.spark.range(10)

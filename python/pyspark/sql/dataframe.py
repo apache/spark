@@ -1888,6 +1888,67 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def repartitionById(self, numPartitions: int, partitionIdCol: "ColumnOrName") -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` partitioned by the given partition ID expression.
+        Each row's target partition is determined directly by the value of the partition ID column.
+
+        .. versionadded:: 4.1.0
+
+        .. versionchanged:: 4.1.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        numPartitions : int
+            target number of partitions
+        partitionIdCol : str or :class:`Column`
+            column expression that evaluates to the target partition ID for each row.
+            Must be an integer type. Values are taken modulo numPartitions to determine
+            the final partition. Null values are sent to partition 0.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Repartitioned DataFrame.
+
+        Notes
+        -----
+        The partition ID expression must evaluate to an integer type.
+        Partition IDs are taken modulo numPartitions, so values outside the range [0, numPartitions)
+        are automatically mapped to valid partition IDs. If the partition ID expression evaluates to
+        a NULL value, the row is sent to partition 0.
+
+        This method provides direct control over partition placement, similar to RDD's
+        partitionBy with custom partitioners, but at the DataFrame level.
+
+        Examples
+        --------
+        Partition rows based on a computed partition ID:
+
+        >>> from pyspark.sql import functions as sf
+        >>> from pyspark.sql.functions import col
+        >>> df = spark.range(10).withColumn("partition_id", (col("id") % 3).cast("int"))
+        >>> repartitioned = df.repartitionById(3, "partition_id")
+        >>> repartitioned.select("id", "partition_id", sf.spark_partition_id()).orderBy("id").show()
+        +---+------------+--------------------+
+        | id|partition_id|SPARK_PARTITION_ID()|
+        +---+------------+--------------------+
+        |  0|           0|                   0|
+        |  1|           1|                   1|
+        |  2|           2|                   2|
+        |  3|           0|                   0|
+        |  4|           1|                   1|
+        |  5|           2|                   2|
+        |  6|           0|                   0|
+        |  7|           1|                   1|
+        |  8|           2|                   2|
+        |  9|           0|                   0|
+        +---+------------+--------------------+
+        """
+        ...
+
+    @dispatch_df_method
     def distinct(self) -> "DataFrame":
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
 

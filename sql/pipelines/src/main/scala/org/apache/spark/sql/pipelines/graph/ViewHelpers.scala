@@ -22,13 +22,13 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 object ViewHelpers {
 
   /** Map of view identifier to corresponding unresolved flow */
-  def persistedViewIdentifierToFlow(graph: DataflowGraph): Map[TableIdentifier, Flow] = {
+  def persistedViewIdentifierToFlow(graph: DataflowGraph): Map[TableIdentifier, ResolvedFlow] = {
     graph.persistedViews.map { v =>
       require(
         graph.flowsTo.get(v.identifier).isDefined,
         s"No flows to view ${v.identifier} were found"
       )
-      val flowsToView = graph.flowsTo(v.identifier)
+      val flowsToView = graph.resolvedFlowsTo(v.identifier)
       require(
         flowsToView.size == 1,
         s"Expected a single flow to the view, found ${flowsToView.size} flows to ${v.identifier}"
