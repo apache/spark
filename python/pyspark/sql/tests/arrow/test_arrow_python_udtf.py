@@ -36,13 +36,14 @@ class ArrowPythonUDTFTests(ReusedSQLTestCase):
                 # Check the type of the binary input and return type name as string
                 yield (type(b).__name__,)
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "true"}):
-            result = BinaryTypeUDF(lit(b"test_bytes")).collect()
-            self.assertEqual(result[0]["type_name"], "bytes")
+        with self.sql_conf({"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "false"}):
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "true"}):
+                result = BinaryTypeUDF(lit(b"test_bytes")).collect()
+                self.assertEqual(result[0]["type_name"], "bytes")
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "false"}):
-            result = BinaryTypeUDF(lit(b"test_bytearray")).collect()
-            self.assertEqual(result[0]["type_name"], "bytearray")
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "false"}):
+                result = BinaryTypeUDF(lit(b"test_bytearray")).collect()
+                self.assertEqual(result[0]["type_name"], "bytearray")
 
 
 if __name__ == "__main__":
