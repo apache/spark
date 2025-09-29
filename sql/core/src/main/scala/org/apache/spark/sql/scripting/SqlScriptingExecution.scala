@@ -122,8 +122,7 @@ class SqlScriptingExecution(
 
       // If the last frame is a handler, set leave statement to be the next one in the
       // innermost scope that should be exited.
-      if ((lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER
-          || lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER)
+      if (lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER
           && context.frames.nonEmpty) {
         // Remove the scope if handler is executed.
         if (context.firstHandlerScopeLabel.isDefined
@@ -131,15 +130,20 @@ class SqlScriptingExecution(
           context.firstHandlerScopeLabel = None
         }
 
-        if (lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER) {
-          // Inject leave statement into the execution plan of the last frame.
-          injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
+        // Inject leave statement into the execution plan of the last frame.
+        injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
+      }
+
+      if (lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER
+          && context.frames.nonEmpty) {
+        // Remove the scope if handler is executed.
+        if (context.firstHandlerScopeLabel.isDefined
+          && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
+          context.firstHandlerScopeLabel = None
         }
 
-        if (lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER
-            && context.frames.nonEmpty) {
-            interruptConditionalStatements(context.frames.last.executionPlan)
-        }
+        // Interrupt conditional statements
+        interruptConditionalStatements(context.frames.last.executionPlan)
       }
     }
     // If there are still frames available, get the next statement.
