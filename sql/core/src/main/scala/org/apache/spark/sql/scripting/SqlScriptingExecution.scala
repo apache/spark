@@ -78,7 +78,7 @@ class SqlScriptingExecution(
    */
   private def injectLeaveStatement(executionPlan: NonLeafStatementExec, label: String): Unit = {
     // Go as deep as possible, to find a leaf node. Instead of a statement that
-    //   should be executed next, inject LEAVE statement in its place.
+    // should be executed next, inject LEAVE statement in its place.
     var currExecPlan = executionPlan
     while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
       currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
@@ -91,8 +91,9 @@ class SqlScriptingExecution(
    * @param executionPlan Execution plan.
    */
   private def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {
-    // Go as deep as possible, to find a leaf node. Instead of a statement that
-    //   should be executed next, skip a conditional statement in.
+    // Go as deep as possible into the execution plan children nodes, to find a leaf node.
+    // That leaf node is the next statement that is to be executed. If the parent node of that
+    // leaf node is a conditional statement, skip the conditional statement entirely.
     var currExecPlan = executionPlan
     while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
       currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
