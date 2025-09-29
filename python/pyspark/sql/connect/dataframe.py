@@ -82,6 +82,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    DirectShufflePartitionID,
     SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
@@ -440,6 +441,38 @@ class DataFrame(ParentDataFrame):
                     "arg_type": type(numPartitions).__name__,
                 },
             )
+        res._cached_schema = self._cached_schema
+        return res
+
+    def repartitionById(
+        self, numPartitions: int, partitionIdCol: "ColumnOrName"
+    ) -> ParentDataFrame:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
+            raise PySparkTypeError(
+                errorClass="NOT_INT",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_type": type(numPartitions).__name__,
+                },
+            )
+        if numPartitions <= 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_value": str(numPartitions),
+                },
+            )
+
+        partition_connect_col = cast(ConnectColumn, F._to_col(partitionIdCol))
+        direct_partition_expr = DirectShufflePartitionID(partition_connect_col._expr)
+        direct_partition_col = ConnectColumn(direct_partition_expr)
+        res = DataFrame(
+            plan.RepartitionByExpression(self._plan, numPartitions, [direct_partition_col]),
+            self._session,
+        )
         res._cached_schema = self._cached_schema
         return res
 

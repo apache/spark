@@ -901,6 +901,11 @@
       "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
     ]
   },
+  "PIPELINE_SPEC_INVALID_GLOB_PATTERN": {
+    "message": [
+      "Invalid glob pattern `<glob_pattern>` in libraries. Only file paths, or folder paths ending with /** are allowed."
+    ]
+  },
   "PIPELINE_SPEC_MISSING_REQUIRED_FIELD": {
     "message": [
       "Pipeline spec missing required field `<field_name>`."

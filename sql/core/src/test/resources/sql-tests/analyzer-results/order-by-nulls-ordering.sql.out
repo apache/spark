@@ -10,7 +10,8 @@ INSERT INTO spark_10747 VALUES (6, 12, 10), (6, 11, 4), (6, 9, 10), (6, 15, 8),
 (6, 15, 8), (6, 7, 4), (6, 7, 8), (6, 13, null), (6, 10, null)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/spark_10747, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/spark_10747], Append, `spark_catalog`.`default`.`spark_10747`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/spark_10747), [col1, col2, col3]
-+- LocalRelation [col1#x, col2#x, col3#x]
++- Project [col1#x AS col1#x, col2#x AS col2#x, col3#x AS col3#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
 
 
 -- !query
@@ -148,7 +149,7 @@ INSERT INTO spark_10747_mix VALUES
 ('c', 3, 2.0, 2.00, null)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/spark_10747_mix, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/spark_10747_mix], Append, `spark_catalog`.`default`.`spark_10747_mix`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/spark_10747_mix), [col1, col2, col3, col4, col5]
-+- Project [col1#x, col2#x, cast(col3#x as double) AS col3#x, cast(col4#x as decimal(10,2)) AS col4#x, cast(col5#x as decimal(20,1)) AS col5#x]
++- Project [col1#x AS col1#x, col2#x AS col2#x, cast(col3#x as double) AS col3#x, cast(col4#x as decimal(10,2)) AS col4#x, cast(col5#x as decimal(20,1)) AS col5#x]
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 

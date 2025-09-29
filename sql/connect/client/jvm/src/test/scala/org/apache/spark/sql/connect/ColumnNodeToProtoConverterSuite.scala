@@ -78,23 +78,17 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
     testConversion(
       Literal((12.0, "north", 60.0, "west"), Option(dataType)),
       expr { b =>
-        val builder = b.getLiteralBuilder.getStructBuilder
-        builder
+        b.getLiteralBuilder.getStructBuilder
           .addElements(proto.Expression.Literal.newBuilder().setDouble(12.0).build())
-        builder
           .addElements(proto.Expression.Literal.newBuilder().setString("north").build())
-        builder
           .addElements(proto.Expression.Literal.newBuilder().setDouble(60.0).build())
-        builder
           .addElements(proto.Expression.Literal.newBuilder().setString("west").build())
-        builder.setDataTypeStruct(
+        b.getLiteralBuilder.getDataTypeBuilder.setStruct(
           proto.DataType.Struct
             .newBuilder()
-            .addFields(
-              proto.DataType.StructField.newBuilder().setName("_1").setNullable(true).build())
+            .addFields(structField("_1", ProtoDataTypes.DoubleType))
             .addFields(structField("_2", stringTypeWithCollation))
-            .addFields(
-              proto.DataType.StructField.newBuilder().setName("_3").setNullable(true).build())
+            .addFields(structField("_3", ProtoDataTypes.DoubleType))
             .addFields(structField("_4", stringTypeWithCollation))
             .build())
       })
