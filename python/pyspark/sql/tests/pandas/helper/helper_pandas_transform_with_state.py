@@ -942,7 +942,10 @@ class RowListStateProcessor(StatefulProcessor):
 
 class PandasListStateLargeListProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
-        list_state_schema = StructType([StructField("value", IntegerType(), True)])
+        list_state_schema = StructType([
+            StructField("value", IntegerType(), True),
+            StructField("valueNull", IntegerType(), True),
+        ])
         value_state_schema = StructType([StructField("size", IntegerType(), True)])
         self.list_state = handle.getListState("listState", list_state_schema)
         self.list_size_state = handle.getValueState("listSizeState", value_state_schema)
@@ -952,18 +955,15 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
         elements = list(elements_iter)
 
         # Use the magic number 100 to test with both inline proto case and Arrow case.
-        # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
-        #  value backed by various benchmarks.
-        # Put 90 elements per batch:
-        # 1st batch: read 0 element, and write 90 elements, read back 90 elements
-        #   (both use inline proto)
-        # 2nd batch: read 90 elements, and write 90 elements, read back 180 elements
-        #   (read uses both inline proto and Arrow, write uses Arrow)
+        # Now the magic number is not actually used, but this is to make this test be a regression
+        # test of SPARK-53743.
+        # Explicitly put 100 elements of list which triggered Arrow based list serialization before
+        # SPARK-53743.
 
         if len(elements) == 0:
             # should be the first batch
             assert self.list_size_state.get() is None
-            new_elements = [(i,) for i in range(90)]
+            new_elements = [(i, None) for i in range(100)]
             if key == ("0",):
                 self.list_state.put(new_elements)
             else:
@@ -983,13 +983,13 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
 
             if key == ("0",):
                 # Use the operation `put`
-                new_elements = [(i,) for i in range(list_size + 90)]
+                new_elements = [(i, None) for i in range(list_size + 90)]
                 self.list_state.put(new_elements)
                 final_size = len(new_elements)
                 self.list_size_state.update((final_size,))
             else:
                 # Use the operation `appendList`
-                new_elements = [(i,) for i in range(list_size, list_size + 90)]
+                new_elements = [(i, None) for i in range(list_size, list_size + 90)]
                 self.list_state.appendList(new_elements)
                 final_size = len(new_elements) + list_size
                 self.list_size_state.update((final_size,))
@@ -1004,7 +1004,10 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
 
 class RowListStateLargeListProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
-        list_state_schema = StructType([StructField("value", IntegerType(), True)])
+        list_state_schema = StructType([
+            StructField("value", IntegerType(), True),
+            StructField("valueNull", IntegerType(), True),
+        ])
         value_state_schema = StructType([StructField("size", IntegerType(), True)])
         self.list_state = handle.getListState("listState", list_state_schema)
         self.list_size_state = handle.getValueState("listSizeState", value_state_schema)
@@ -1015,18 +1018,15 @@ class RowListStateLargeListProcessor(StatefulProcessor):
         elements = list(elements_iter)
 
         # Use the magic number 100 to test with both inline proto case and Arrow case.
-        # TODO(SPARK-51907): Let's update this to be either flexible or more reasonable default
-        #  value backed by various benchmarks.
-        # Put 90 elements per batch:
-        # 1st batch: read 0 element, and write 90 elements, read back 90 elements
-        #   (both use inline proto)
-        # 2nd batch: read 90 elements, and write 90 elements, read back 180 elements
-        #   (read uses both inline proto and Arrow, write uses Arrow)
+        # Now the magic number is not actually used, but this is to make this test be a regression
+        # test of SPARK-53743.
+        # Explicitly put 100 elements of list which triggered Arrow based list serialization before
+        # SPARK-53743.
 
         if len(elements) == 0:
             # should be the first batch
             assert self.list_size_state.get() is None
-            new_elements = [(i,) for i in range(90)]
+            new_elements = [(i, None) for i in range(100)]
             if key == ("0",):
                 self.list_state.put(new_elements)
             else:
@@ -1046,13 +1046,13 @@ class RowListStateLargeListProcessor(StatefulProcessor):
 
             if key == ("0",):
                 # Use the operation `put`
-                new_elements = [(i,) for i in range(list_size + 90)]
+                new_elements = [(i, None) for i in range(list_size + 90)]
                 self.list_state.put(new_elements)
                 final_size = len(new_elements)
                 self.list_size_state.update((final_size,))
             else:
                 # Use the operation `appendList`
-                new_elements = [(i,) for i in range(list_size, list_size + 90)]
+                new_elements = [(i, None) for i in range(list_size, list_size + 90)]
                 self.list_state.appendList(new_elements)
                 final_size = len(new_elements) + list_size
                 self.list_size_state.update((final_size,))
