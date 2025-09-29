@@ -40,10 +40,7 @@ case class FlowSystemMetadata(
    */
   private def flowCheckpointsDirOpt(): Option[Path] = {
     Option(if (graph.table.contains(flow.destinationIdentifier)) {
-      val storageRoot = context.storageRootOpt.getOrElse(
-        // TODO: better error
-        throw new IllegalArgumentException("Storage root must be defined for flow checkpoints")
-      )
+      val storageRoot = context.storageRoot
       val flowTableName = flow.destinationIdentifier.table
       val flowName = flow.identifier.table
       new Path(

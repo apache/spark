@@ -27,10 +27,11 @@ trait BaseCoreExecutionTest extends ExecutionTest {
    */
   protected def materializeGraph(
       graph: DataflowGraph,
-      contextOpt: Option[PipelineUpdateContext] = None
+      contextOpt: Option[PipelineUpdateContext] = None,
+      storageRoot: String
   ): DataflowGraph = {
     val contextToUse = contextOpt.getOrElse(
-      TestPipelineUpdateContext(spark = spark, unresolvedGraph = graph)
+      TestPipelineUpdateContext(spark = spark, unresolvedGraph = graph, storageRoot = storageRoot)
     )
     val tablesCreatedGraph = DataflowGraphTransformer
       .withDataflowGraphTransformer(graph) { transformer =>

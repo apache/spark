@@ -36,7 +36,7 @@ trait PipelineUpdateContext {
   /**
    * The root storage location for pipeline metadata, including checkpoints for some kinds of flows.
    */
-  def storageRootOpt: Option[String]
+  def storageRoot: String
 
   /**
    * Filter for which flows should be refreshed when performing this update. Should be a superset of
