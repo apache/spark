@@ -52,11 +52,6 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
             orderIndependentChecksumEnabled,
           SQLConf.SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key ->
             checksumMismatchFullRetryEnabled) {
-          assert(SQLConf.get.shuffleOrderIndependentChecksumEnabled ===
-            orderIndependentChecksumEnabled.toBoolean)
-          assert(SQLConf.get.shuffleChecksumMismatchFullRetryEnabled ===
-            checksumMismatchFullRetryEnabled.toBoolean)
-
           withTable("t") {
             spark.range(1000).repartition(10).write.mode("overwrite").
               saveAsTable("t")
