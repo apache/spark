@@ -523,7 +523,6 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
   test("compatibility: ShufflePartitionIdPassThroughSpec vs other specs") {
     val dist = ClusteredDistribution(Seq($"a", $"b"))
-    val p = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
 
     // Compatibility with SinglePartitionShuffleSpec when numPartitions is 1
     val p1 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 1)
@@ -543,7 +542,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // Incompatible with HashShuffleSpec
     val p2 = HashPartitioning(Seq($"c"), 10)
     checkCompatible(
-      p.createShuffleSpec(dist),
+      ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10).createShuffleSpec(dist),
       p2.createShuffleSpec(ClusteredDistribution(Seq($"c", $"d"))),
       expected = false
     )

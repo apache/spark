@@ -995,7 +995,7 @@ case class ShufflePartitionIdPassThroughSpec(
       // as the partitioning expression, we check compatibility as follows:
       // 1. Same number of clustering expressions
       // 2. Same number of partitions
-      // 3. each pair of partitioning expression from both sides has overlapping positions in their
+      // 3. each partitioning expression from both sides has overlapping positions in their
       //    corresponding distributions.
       distribution.clustering.length == otherDistribution.clustering.length &&
       partitioning.numPartitions == otherPartitioning.numPartitions && {
