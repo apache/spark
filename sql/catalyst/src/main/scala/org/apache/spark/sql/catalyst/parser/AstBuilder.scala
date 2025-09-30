@@ -2085,7 +2085,11 @@ class AstBuilder extends DataTypeAstBuilder
     val expression = visitNamedExpression(ctx.namedExpression())
     val delayInterval = visitInterval(ctx.delay)
 
-    UnresolvedEventTimeWatermark(expression, delayInterval, query)
+    val delay = IntervalUtils.fromIntervalString(delayInterval.toString)
+    require(!IntervalUtils.isNegative(delay),
+      s"delay threshold (${delayInterval.toString}) should not be negative.")
+
+    UnresolvedEventTimeWatermark(expression, delay, query)
   }
 
   /**

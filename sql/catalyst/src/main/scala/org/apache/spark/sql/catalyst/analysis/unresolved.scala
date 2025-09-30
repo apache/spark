@@ -1232,17 +1232,11 @@ case class UnresolvedExecuteImmediate(
 
 case class UnresolvedEventTimeWatermark(
     eventTimeColExpr: Expression,
-    delayInterval: Literal,
+    delay: CalendarInterval,
     child: LogicalPlan)
   extends UnresolvedUnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_EVENT_TIME_WATERMARK)
-
-  private val delay = IntervalUtils.fromIntervalString(delayInterval.toString)
-  require(!IntervalUtils.isNegative(delay),
-    s"delay threshold (${delayInterval.toString}) should not be negative.")
-
-  def getDelay: CalendarInterval = delay
 
   override protected def withNewChildInternal(
       newChild: LogicalPlan): UnresolvedEventTimeWatermark = copy(child = newChild)
