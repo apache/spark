@@ -338,7 +338,8 @@ private[connect] object PipelinesHandler extends Logging {
         }
       }
       // read storage root from spark conf
-      val storageRoot = sessionHolder.session.conf.getOption("spark.sql.pipelines.storageRoot")
+      val storageRoot = sessionHolder.session.conf
+        .getOption("spark.sql.pipelines.storageRoot")
         .getOrElse(throw new IllegalArgumentException(
           "spark.sql.pipelines.storageRoot must be set to use pipelines."))
 

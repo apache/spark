@@ -567,8 +567,7 @@ class PythonPipelineSuite
 
   test("groupby and rollup works with internal datasets, referencing with (col, str)") {
     withTempDir { dir =>
-      val graph = buildGraph(
-        """
+      val graph = buildGraph("""
       from pyspark.sql.functions import col, sum, count
 
       @dp.materialized_view
@@ -604,7 +603,8 @@ class PythonPipelineSuite
         )
     """)
 
-      val updateContext = new PipelineUpdateContextImpl(graph, _ => (), storageRoot = dir.toString)
+      val updateContext =
+        new PipelineUpdateContextImpl(graph, _ => (), storageRoot = dir.toString)
       updateContext.pipelineExecution.runPipeline()
       updateContext.pipelineExecution.awaitCompletion()
 
@@ -631,8 +631,7 @@ class PythonPipelineSuite
   test("MV/ST with partition columns works") {
     withTempDir { dir =>
       withTable("mv", "st") {
-        val graph = buildGraph(
-          """
+        val graph = buildGraph("""
             |from pyspark.sql.functions import col
             |
             |@dp.materialized_view(partition_cols = ["id_mod"])
@@ -644,8 +643,10 @@ class PythonPipelineSuite
             |  return spark.readStream.table("mv")
             |""".stripMargin)
 
-        val updateContext = new PipelineUpdateContextImpl(graph,
-          eventCallback = _ => (), storageRoot = dir.toString)
+        val updateContext = new PipelineUpdateContextImpl(
+          graph,
+          eventCallback = _ => (),
+          storageRoot = dir.toString)
         updateContext.pipelineExecution.runPipeline()
         updateContext.pipelineExecution.awaitCompletion()
 
