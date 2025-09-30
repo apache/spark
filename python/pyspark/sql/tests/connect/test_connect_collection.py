@@ -331,23 +331,32 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         query = """
             SELECT * FROM VALUES
             (CAST('hello' AS BINARY)),
-            (CAST('world' AS BINARY)),
-            (CAST('test' AS BINARY))
+            (CAST('world' AS BINARY))
             AS tab(b)
         """
 
         # Test with binary_as_bytes=True (default)
         with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
-            for row in self.connect.sql(query).collect():
+            connect_rows = self.connect.sql(query).collect()
+            self.assertEqual(len(connect_rows), 2)
+            for row in connect_rows:
                 self.assertIsInstance(row.b, bytes)
-            for row in self.spark.sql(query).collect():
+
+            spark_rows = self.spark.sql(query).collect()
+            self.assertEqual(len(spark_rows), 2)
+            for row in spark_rows:
                 self.assertIsInstance(row.b, bytes)
 
         # Test with binary_as_bytes=False
         with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
-            for row in self.connect.sql(query).collect():
+            connect_rows = self.connect.sql(query).collect()
+            self.assertEqual(len(connect_rows), 2)
+            for row in connect_rows:
                 self.assertIsInstance(row.b, bytearray)
-            for row in self.spark.sql(query).collect():
+
+            spark_rows = self.spark.sql(query).collect()
+            self.assertEqual(len(spark_rows), 2)
+            for row in spark_rows:
                 self.assertIsInstance(row.b, bytearray)
 
     def test_to_local_iterator_binary_type(self):
@@ -362,17 +371,31 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         # Test with binary_as_bytes=True
         with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
+            connect_count = 0
             for row in self.connect.sql(query).toLocalIterator():
                 self.assertIsInstance(row.b, bytes)
+                connect_count += 1
+            self.assertEqual(connect_count, 2)
+
+            spark_count = 0
             for row in self.spark.sql(query).toLocalIterator():
                 self.assertIsInstance(row.b, bytes)
+                spark_count += 1
+            self.assertEqual(spark_count, 2)
 
         # Test with binary_as_bytes=False
         with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
+            connect_count = 0
             for row in self.connect.sql(query).toLocalIterator():
                 self.assertIsInstance(row.b, bytearray)
+                connect_count += 1
+            self.assertEqual(connect_count, 2)
+
+            spark_count = 0
             for row in self.spark.sql(query).toLocalIterator():
                 self.assertIsInstance(row.b, bytearray)
+                spark_count += 1
+            self.assertEqual(spark_count, 2)
 
     def test_foreach_partition_binary_type(self):
         """Test that df.foreachPartition() respects binary_as_bytes configuration
@@ -392,9 +415,13 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
 
             def assert_bytes_type(iterator):
+                count = 0
                 for row in iterator:
                     # This will raise an exception if the type is not bytes
                     assert isinstance(row.b, bytes), f"Expected bytes, got {type(row.b).__name__}"
+                    count += 1
+                # Ensure we actually processed rows
+                assert count > 0, "No rows were processed"
 
             self.connect.sql(query).foreachPartition(assert_bytes_type)
             self.spark.sql(query).foreachPartition(assert_bytes_type)
@@ -403,11 +430,15 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
 
             def assert_bytearray_type(iterator):
+                count = 0
                 for row in iterator:
                     # This will raise an exception if the type is not bytearray
                     assert isinstance(
                         row.b, bytearray
                     ), f"Expected bytearray, got {type(row.b).__name__}"
+                    count += 1
+                # Ensure we actually processed rows
+                assert count > 0, "No rows were processed"
 
             self.connect.sql(query).foreachPartition(assert_bytearray_type)
             # self.spark.sql(query).foreachPartition(assert_bytearray_type)
