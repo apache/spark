@@ -560,6 +560,7 @@ class BlockManagerMasterEndpoint(
   private def removeExecutor(execId: String): Unit = {
     logInfo(log"Trying to remove executor ${MDC(EXECUTOR_ID, execId)} from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
+    logInfo(log"Removed ${MDC(EXECUTOR_ID, execId)} successfully in removeExecutor")
   }
 
   /**
