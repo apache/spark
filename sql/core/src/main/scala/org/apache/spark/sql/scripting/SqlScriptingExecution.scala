@@ -21,7 +21,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, ExceptionHandlerType, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
@@ -78,12 +78,33 @@ class SqlScriptingExecution(
    */
   private def injectLeaveStatement(executionPlan: NonLeafStatementExec, label: String): Unit = {
     // Go as deep as possible, to find a leaf node. Instead of a statement that
-    //   should be executed next, inject LEAVE statement in its place.
+    // should be executed next, inject LEAVE statement in its place.
     var currExecPlan = executionPlan
     while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
       currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
     }
     currExecPlan.curr = Some(new LeaveStatementExec(label))
+  }
+
+  /**
+   * Helper method to execute interrupts to ConditionalStatements.
+   * This method should only interrupt when the statement that throws is a conditional statement.
+   * @param executionPlan Execution plan.
+   */
+  private def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {
+    // Go as deep as possible into the execution plan children nodes, to find a leaf node.
+    // That leaf node is the next statement that is to be executed. If the parent node of that
+    // leaf node is a conditional statement, skip the conditional statement entirely.
+    var currExecPlan = executionPlan
+    while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
+      currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
+    }
+
+    currExecPlan match {
+      case exec: ConditionalStatementExec =>
+        exec.interrupted = true
+      case _ =>
+    }
   }
 
   /** Helper method to iterate get next statements from the first available frame. */
@@ -103,14 +124,28 @@ class SqlScriptingExecution(
 
       // If the last frame is a handler, set leave statement to be the next one in the
       // innermost scope that should be exited.
-      if (lastFrame.frameType == SqlScriptingFrameType.HANDLER && context.frames.nonEmpty) {
+      if (lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER
+          && context.frames.nonEmpty) {
         // Remove the scope if handler is executed.
         if (context.firstHandlerScopeLabel.isDefined
           && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
           context.firstHandlerScopeLabel = None
         }
+
         // Inject leave statement into the execution plan of the last frame.
         injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
+      }
+
+      if (lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER
+          && context.frames.nonEmpty) {
+        // Remove the scope if handler is executed.
+        if (context.firstHandlerScopeLabel.isDefined
+          && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
+          context.firstHandlerScopeLabel = None
+        }
+
+        // Interrupt conditional statements
+        interruptConditionalStatements(context.frames.last.executionPlan)
       }
     }
     // If there are still frames available, get the next statement.
@@ -169,7 +204,11 @@ class SqlScriptingExecution(
       case Some(handler) =>
         val handlerFrame = new SqlScriptingExecutionFrame(
           handler.body,
-          SqlScriptingFrameType.HANDLER,
+          if (handler.handlerType == ExceptionHandlerType.CONTINUE) {
+            SqlScriptingFrameType.CONTINUE_HANDLER
+          } else {
+            SqlScriptingFrameType.EXIT_HANDLER
+          },
           handler.scopeLabel
         )
         context.frames.append(
