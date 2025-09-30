@@ -81,9 +81,8 @@ case class EventTimeWatermark(
   // This is not allowed by default - WatermarkPropagator will throw an exception. We keep the
   // logic here because we also maintain the compatibility flag. (See
   // SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE for details.)
-  // Should be defined as lazy so that attributes can be resolved before calling this.
   // TODO: Disallow updating the metadata once we remove the compatibility flag.
-  override lazy val output: Seq[Attribute] = {
+  override val output: Seq[Attribute] = {
     val delayMs = EventTimeWatermark.getDelayMs(delay)
     updateEventTimeColumn(child.output, delayMs, eventTime)
   }

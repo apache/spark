@@ -30,7 +30,7 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(TreePattern.UNRESOLVED_EVENT_TIME_WATERMARK), ruleId) {
 
-    case u: UnresolvedEventTimeWatermark if u.childrenResolved =>
+    case u: UnresolvedEventTimeWatermark if u.eventTimeColExpr.resolved && u.childrenResolved =>
       val uuid = java.util.UUID.randomUUID()
 
       if (u.eventTimeColExpr.isInstanceOf[MultiAlias]) {
@@ -45,10 +45,7 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
         case e: Expression => UnresolvedAlias(e)
       }
 
-      val isAttributeReference = namedExpression.isInstanceOf[AttributeReference]
-      val exprInChildOutput = u.child.output.exists(_.name == namedExpression.name)
-
-      if (exprInChildOutput && isAttributeReference) {
+      if (u.child.outputSet.contains(namedExpression)) {
         // We don't need to have projection since the attribute being referenced will be available.
         EventTimeWatermark(uuid, namedExpression.toAttribute, u.getDelay, u.child)
       } else {
