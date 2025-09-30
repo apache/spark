@@ -487,6 +487,12 @@ case class InMemoryRelation(
     cloned
   }
 
+  override def makeCopy(newArgs: Array[AnyRef]): LogicalPlan = {
+    val copied = super.makeCopy(newArgs).asInstanceOf[InMemoryRelation]
+    copied.statsOfPlanToCache = this.statsOfPlanToCache
+    copied
+  }
+
   override def simpleString(maxFields: Int): String =
     s"InMemoryRelation [${truncatedString(output, ", ", maxFields)}], ${cacheBuilder.storageLevel}"
 
