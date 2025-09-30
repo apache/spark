@@ -385,9 +385,9 @@ case class TakeOrderedAndProjectExec(
     }
   }
 
-  override def outputExpressions: Seq[NamedExpression] = projectList
+  override protected def outputExpressions: Seq[NamedExpression] = projectList
 
-  override def orderingExpressions: Seq[SortOrder] = sortOrder
+  override protected def orderingExpressions: Seq[SortOrder] = sortOrder
 
   override def outputPartitioning: Partitioning = SinglePartition
 

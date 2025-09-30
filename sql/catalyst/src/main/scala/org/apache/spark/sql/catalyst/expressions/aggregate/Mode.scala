@@ -195,9 +195,9 @@ case class Mode(
             nodeName, 1, orderingWithinGroup.length)
         }
         orderingWithinGroup.head match {
-          case SortOrder(child, Ascending, _, _) =>
+          case SortOrder(child, Ascending, _, _, _) =>
             this.copy(child = child, reverseOpt = Some(true))
-          case SortOrder(child, Descending, _, _) =>
+          case SortOrder(child, Descending, _, _, _) =>
             this.copy(child = child, reverseOpt = Some(false))
         }
       case _ => this

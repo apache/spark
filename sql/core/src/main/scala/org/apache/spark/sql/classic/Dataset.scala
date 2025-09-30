@@ -2274,7 +2274,8 @@ class Dataset[T] private[sql](
   protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
     val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
-        case sortOrderWithOrdinal @ SortOrder(literal @ Literal(value: Int, IntegerType), _, _, _)
+        case sortOrderWithOrdinal @ SortOrder(
+          literal @ Literal(value: Int, IntegerType), _, _, _, _)
             if sparkSession.sessionState.conf.orderByOrdinal =>
           // Replace top-level integer literals with UnresolvedOrdinal, if `orderByOrdinal` is
           // enabled.

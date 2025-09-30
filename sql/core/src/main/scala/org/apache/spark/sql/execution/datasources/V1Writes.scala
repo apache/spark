@@ -202,10 +202,24 @@ object V1WritesUtils {
   def isOrderingMatched(
       requiredOrdering: Seq[Expression],
       outputOrdering: Seq[SortOrder]): Boolean = {
-    if (requiredOrdering.length > outputOrdering.length) {
+    val (constantOutputOrdering, nonConstantOutputOrdering) = outputOrdering.partition {
+      case SortOrder(child, _, _, _, isConstant) => isConstant || child.foldable
+    }
+
+    val effectiveRequiredOrdering = requiredOrdering.filterNot { requiredOrder =>
+      constantOutputOrdering.exists {
+        case s @ SortOrder(alias: Alias, _, _, _, true) =>
+          val outputOrder = s.copy(child = alias.toAttribute)
+          outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
+        case outputOrder =>
+          outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
+      }
+    }
+
+    if (effectiveRequiredOrdering.length > nonConstantOutputOrdering.length) {
       false
     } else {
-      requiredOrdering.zip(outputOrdering).forall {
+      effectiveRequiredOrdering.zip(nonConstantOutputOrdering).forall {
         case (requiredOrder, outputOrder) =>
           outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
       }

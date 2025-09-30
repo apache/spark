@@ -382,8 +382,8 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
         nodeName, 1, orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
-      case SortOrder(child, Ascending, _, _) => this.copy(left = child)
-      case SortOrder(child, Descending, _, _) => this.copy(left = child, reverse = true)
+      case SortOrder(child, Ascending, _, _, _) => this.copy(left = child)
+      case SortOrder(child, Descending, _, _, _) => this.copy(left = child, reverse = true)
     }
   }
 
@@ -440,8 +440,8 @@ case class PercentileDisc(
         nodeName, 1, orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
-      case SortOrder(expr, Ascending, _, _) => this.copy(child = expr)
-      case SortOrder(expr, Descending, _, _) => this.copy(child = expr, reverse = true)
+      case SortOrder(expr, Ascending, _, _, _) => this.copy(child = expr)
+      case SortOrder(expr, Descending, _, _, _) => this.copy(child = expr, reverse = true)
     }
   }
 

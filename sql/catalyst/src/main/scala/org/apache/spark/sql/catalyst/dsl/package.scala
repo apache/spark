@@ -459,7 +459,7 @@ package object dsl extends SQLConfHelper {
        * `orderByOrdinal` is enabled.
        */
       private def replaceOrdinalsInSortOrder(sortOrder: SortOrder): SortOrder = sortOrder match {
-        case sortOrderByOrdinal @ SortOrder(literal @ Literal(value: Int, IntegerType), _, _, _)
+        case sortOrderByOrdinal @ SortOrder(literal @ Literal(value: Int, IntegerType), _, _, _, _)
             if conf.orderByOrdinal =>
           val ordinal = CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
           sortOrderByOrdinal

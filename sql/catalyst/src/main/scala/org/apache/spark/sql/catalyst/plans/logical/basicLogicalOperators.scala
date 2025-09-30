@@ -73,7 +73,7 @@ object Subquery {
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
-  override def outputExpressions: Seq[NamedExpression] = projectList
+  override protected def outputExpressions: Seq[NamedExpression] = projectList
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
@@ -912,7 +912,7 @@ case class Sort(
   override def maxRowsPerPartition: Option[Long] = {
     if (global) maxRows else child.maxRowsPerPartition
   }
-  override def outputOrdering: Seq[SortOrder] = order
+  override def outputOrdering: Seq[SortOrder] = order ++ child.outputOrdering.filter(_.isConstant)
   final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait AliasAwareOutputExpression extends SQLConfHelper {
   protected val aliasCandidateLimit = conf.getConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT)
-  def outputExpressions: Seq[NamedExpression]
+  protected def outputExpressions: Seq[NamedExpression]
   /**
    * This method can be used to strip expression which does not affect the result, for example:
    * strip the expression which is ordering agnostic for output ordering.
@@ -88,7 +88,7 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
  */
 trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
   extends AliasAwareOutputExpression { self: QueryPlan[T] =>
-  def orderingExpressions: Seq[SortOrder]
+  protected def orderingExpressions: Seq[SortOrder]
 
   override protected def strip(expr: Expression): Expression = expr match {
     case e: Empty2Null => strip(e.child)
@@ -128,6 +128,9 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
         }
       }
     }
-    newOrdering.takeWhile(_.isDefined).flatten.toSeq
+    newOrdering.takeWhile(_.isDefined).flatten.toSeq ++ outputExpressions.filter {
+      case Alias(child, _) => child.foldable
+      case expr => expr.foldable
+    }.map(SortOrder(_, Ascending).copy(isConstant = true))
   }
 }

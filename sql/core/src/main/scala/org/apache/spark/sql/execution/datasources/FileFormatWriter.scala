@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.{Date, UUID}
 
-import scala.annotation.tailrec
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -39,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write.WriterCommitMessage
-import org.apache.spark.sql.execution.{OrderPreservingUnaryExecNode, ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
+import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -140,6 +138,10 @@ object FileFormatWriter extends Logging {
       statsTrackers = statsTrackers
     )
 
+    // We should first sort by dynamic partition columns, then bucket id, and finally sorting
+    // columns.
+    val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
+        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
 
     // SPARK-40588: when planned writing is disabled and AQE is enabled,
@@ -151,34 +153,10 @@ object FileFormatWriter extends Logging {
       case p: SparkPlan => p.withNewChildren(p.children.map(materializeAdaptiveSparkPlan))
     }
 
-    val query = writeFilesOpt.map(_.child).getOrElse(materializeAdaptiveSparkPlan(plan))
-
     // the sort order doesn't matter
-    val actualOrdering = query.outputOrdering
-
-    val queryOutput = query match {
-      case o: OrderPreservingUnaryExecNode => o.outputExpressions
-      case _ => query.output
-    }
-
-    @tailrec
-    def isLiteral(e: Expression, name: String): Option[String] =
-      e match {
-        case Alias(child, n) => isLiteral(child, n)
-        case _: Literal => Some(name)
-        case _ => None
-      }
-
-    val literalColumns = queryOutput.flatMap { ne => isLiteral(ne, ne.name) }
-
-    // We should first sort by dynamic partition columns, then bucket id, and finally sorting
-    // columns, then drop literal columns
-    val requiredOrdering = (partitionColumns.drop(numStaticPartitionCols) ++
-      writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns).dropWhile {
-      case attr: Attribute => literalColumns.contains(attr.name)
-      case _ => false
-    }
-
+    val actualOrdering = writeFilesOpt.map(_.child)
+      .getOrElse(materializeAdaptiveSparkPlan(plan))
+      .outputOrdering
     val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
 
     SQLExecution.checkSQLExecutionId(sparkSession)

@@ -293,8 +293,8 @@ trait BinaryNode extends LogicalPlan with BinaryLike[LogicalPlan]
 
 trait OrderPreservingUnaryNode extends UnaryNode
   with AliasAwareQueryOutputOrdering[LogicalPlan] {
-  override def outputExpressions: Seq[NamedExpression] = child.output
-  override def orderingExpressions: Seq[SortOrder] = child.outputOrdering
+  override protected def outputExpressions: Seq[NamedExpression] = child.output
+  override protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
 }
 
 object LogicalPlanIntegrity {

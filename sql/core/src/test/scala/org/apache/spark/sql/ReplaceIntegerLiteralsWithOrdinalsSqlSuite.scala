@@ -77,11 +77,11 @@ class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends QueryTest with SharedSp
       val analyzedPlan = query.queryExecution.analyzed
 
       assert(parsedPlan.expressions.collect {
-        case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _) => ordinal
+        case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _, _) => ordinal
       }.nonEmpty)
 
       assert(analyzedPlan.expressions.collect {
-        case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _) => ordinal
+        case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _, _) => ordinal
       }.isEmpty)
 
       checkAnswer(query, Row(1) :: Row(2) :: Nil)
@@ -100,11 +100,11 @@ class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends QueryTest with SharedSp
       val analyzedPlan = query.queryExecution.analyzed
 
       assert(parsedPlan.expressions.collect {
-        case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _) => ordinal
+        case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _, _) => ordinal
       }.isEmpty)
 
       assert(analyzedPlan.expressions.collect {
-        case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _) => ordinal
+        case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _, _) => ordinal
       }.isEmpty)
 
       checkAnswer(query, Row(2) :: Row(1) :: Nil)

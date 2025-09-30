@@ -66,11 +66,11 @@ class ReplaceIntegerLiteralsWithOrdinalsDataframeSuite extends QueryTest with Sh
         val resolvedPlan = query.queryExecution.analyzed
 
         assert(unresolvedPlan.expressions.collect {
-          case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _) => ordinal
+          case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _, _) => ordinal
         }.nonEmpty)
 
         assert(resolvedPlan.expressions.collect {
-          case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _) => ordinal
+          case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _, _) => ordinal
         }.isEmpty)
 
         checkAnswer(query, Row(1, 2) :: Row(2, 1) :: Nil)
@@ -100,11 +100,11 @@ class ReplaceIntegerLiteralsWithOrdinalsDataframeSuite extends QueryTest with Sh
         val resolvedPlan = query.queryExecution.analyzed
 
         assert(unresolvedPlan.expressions.collect {
-          case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _) => ordinal
+          case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _, _) => ordinal
         }.isEmpty)
 
         assert(resolvedPlan.expressions.collect {
-          case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _) => ordinal
+          case ordinal @ SortOrder(UnresolvedOrdinal(1), _, _, _, _) => ordinal
         }.isEmpty)
 
         checkAnswer(query, Row(2, 1) :: Row(1, 2) :: Nil)

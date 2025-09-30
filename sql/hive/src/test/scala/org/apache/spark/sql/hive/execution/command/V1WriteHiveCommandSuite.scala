@@ -148,7 +148,7 @@ class V1WriteHiveCommandSuite
             } { optimizedPlan =>
               assert {
                 optimizedPlan.outputOrdering.exists {
-                  case SortOrder(attr: AttributeReference, _, _, _) => attr.name == "i"
+                  case SortOrder(attr: AttributeReference, _, _, _, _) => attr.name == "i"
                   case _ => false
                 }
               }

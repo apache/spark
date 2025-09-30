@@ -1995,9 +1995,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case Sort(orders, global, child, hint)
         if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
-          case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering, _) =>
+          case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering, _, _) =>
             if (index > 0 && index <= child.output.size) {
-              SortOrder(child.output(index - 1), direction, nullOrdering, Seq.empty)
+              val resolvedCol = child.output(index - 1)
+              SortOrder(resolvedCol, direction, nullOrdering, Seq.empty, resolvedCol.foldable)
             } else {
               throw QueryCompilationErrors.orderByPositionRangeError(index, child.output.size, s)
             }

@@ -51,7 +51,7 @@ case class SortAggregateExec(
     groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
   }
 
-  override def orderingExpressions: Seq[SortOrder] = {
+  override protected def orderingExpressions: Seq[SortOrder] = {
     groupingExpressions.map(SortOrder(_, Ascending))
   }
 

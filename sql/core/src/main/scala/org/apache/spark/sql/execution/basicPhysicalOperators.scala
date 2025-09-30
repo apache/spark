@@ -102,9 +102,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
   }
 
-  override def outputExpressions: Seq[NamedExpression] = projectList
+  override protected def outputExpressions: Seq[NamedExpression] = projectList
 
-  override def orderingExpressions: Seq[SortOrder] = child.outputOrdering
+  override protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
 
   override def verboseStringWithOperatorId(): String = {
     s"""

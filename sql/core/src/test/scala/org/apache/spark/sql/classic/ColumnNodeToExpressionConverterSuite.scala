@@ -178,7 +178,8 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
         analysis.UnresolvedAttribute("unsorted"),
         catDirection,
         catNullOrdering,
-        Nil))
+        Nil,
+        false))
   }
 
   test("sortOrder") {
