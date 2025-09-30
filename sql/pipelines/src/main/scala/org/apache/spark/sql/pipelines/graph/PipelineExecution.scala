@@ -165,28 +165,3 @@ class PipelineExecution(context: PipelineUpdateContext) {
   }
 
 }
-
-object PipelineExecution {
-
-//  /**
-//   * @return a graph where all tables have their `path` attribute filled out.
-//   */
-//   def createTables(resolvedGraph: DataflowGraph, context: PipelineUpdateContext):
-//    DataflowGraph = {
-//    DataflowGraphTransformer
-//      .withDataflowGraphTransformer(resolvedGraph) { transformer =>
-//        transformer.transformTables { table =>
-//          try {
-//            DatasetManager.ensureTableCreated(context.spark, table, resolvedGraph)
-//          }
-//          catch {
-//            case NonFatal(e) =>
-//              throw TableMaterializationException(
-//                table.displayName,
-//                cause = e.addOrigin(table.origin)
-//              )
-//          }
-//        }
-//      }.getDataflowGraph
-//  }
-}

@@ -138,8 +138,8 @@ object DatasetManager extends Logging {
    *                                            from the graph.
    */
   private def materializeViews(
-    virtualizedConnectedGraphWithTables: DataflowGraph,
-    context: PipelineUpdateContext): Unit = {
+      virtualizedConnectedGraphWithTables: DataflowGraph,
+      context: PipelineUpdateContext): Unit = {
     var viewsToPublish: Set[PersistedView] =
       virtualizedConnectedGraphWithTables.persistedViews.toSet
     var publishedViews: Set[TableIdentifier] = Set.empty
