@@ -5179,7 +5179,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
