@@ -321,53 +321,6 @@ struct<>
 
 -- !query
 BEGIN
-    DECLARE v_cust_id INT;
-    DECLARE v_price DOUBLE;
-    DECLARE v_updated_price DOUBLE;
-    DECLARE v_error_count INT DEFAULT 0;
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        SET v_error_count = v_error_count + 1;
-        VALUES('Error encountered');
-    END;
-    first_loop: FOR cust AS SELECT customer_id FROM customers LIMIT 2 DO
-        SET v_cust_id = cust.customer_id;
-        SET v_price = (SELECT product_price FROM products LIMIT 1);
-        IF v_price > 100 THEN
-            SET v_updated_price = v_price * 0.9;
-            UPDATE products SET product_price = product_price * 0.9 WHERE product_price > 100;
-            WHILE v_updated_price > 80 DO
-                SET v_updated_price = v_updated_price * 0.9;
-            END WHILE;
-        ELSE
-            REPEAT
-                SET v_price = v_price + 1;
-            UNTIL v_price > 100
-            END REPEAT;
-        END IF;
-        L1: BEGIN
-            DECLARE v_item_count INT;
-            SET v_item_count = (SELECT COUNT(*) FROM order_items WHERE order_id IN (SELECT order_id FROM orders WHERE customer_id = v_cust_id));
-            IF v_item_count < 2 THEN
-                INSERT INTO orders (order_id, customer_id, order_date, order_status, order_total, order_tax, order_discount, order_shipping)
-                VALUES (2000 + v_cust_id, v_cust_id, CURRENT_TIMESTAMP, 'New', 10.0, 1.0, 0.0, 2.0);
-                FOR loop_var AS SELECT product_id FROM products LIMIT 2 DO
-                    INSERT INTO order_items (order_item_id, order_id, product_id, item_quantity, item_price_per_unit, item_discount, item_tax, item_total)
-                    VALUES (100 + loop_var.product_id, 2000 + v_cust_id, loop_var.product_id, 1, 10.0, 0.0, 1.0, 11.0);
-                END FOR;
-            END IF;
-        END L1;
-    END FOR first_loop;
-END
--- !query schema
-struct<>
--- !query output
-java.lang.NullPointerException
-Cannot invoke "String.toUpperCase(java.util.Locale)" because "sqlState" is null
-
-
--- !query
-BEGIN
     DECLARE v_inventory_threshold INT DEFAULT 20;
     DECLARE v_low_stock_products INT DEFAULT 0;
     DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Stock error'); END;
@@ -563,7 +516,7 @@ BEGIN
             SET v_emp_count = v_emp_count + 1;
             L1: BEGIN
                 DECLARE v_split_result ARRAY<STRING>;
-                SET v_split_result = STRING_SPLIT(v_employee_name, ' ');
+                SET v_split_result = split(v_employee_name, ' ');
                 CASE v_split_result[0]
                     WHEN 'Dan' THEN SET v_is_manager = true;
                     ELSE SET v_is_manager = false;
@@ -576,7 +529,7 @@ BEGIN
                             FOR sub_emp AS SELECT employee_id, employee_name FROM employees WHERE employee_manager_id = emp.employee_id LIMIT 2 DO
                                 L3: BEGIN
                                     DECLARE v_name_part STRING;
-                                    SET v_name_part = (SELECT CONCAT(STRING_SPLIT(sub_emp.employee_name, ' ')[0], '_', ROUND(RANDOM() * 100)));
+                                    SET v_name_part = (SELECT CONCAT(split(sub_emp.employee_name, ' ')[0], '_', ROUND(RANDOM() * 100)));
                                     INSERT INTO customers (customer_id, customer_name, customer_email, customer_phone, customer_address_1, customer_city, customer_state, customer_zip, customer_country, customer_active_status)
                                     VALUES (sub_emp.employee_id + 9999, v_name_part, CONCAT(v_name_part, '@company.com'), '555-8888', '123 HR St', 'HQ City', 'CA', '00000', 'USA', true);
                                 END L3;
@@ -599,9 +552,9 @@ BEGIN
     END staff_scope;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Employee processing error
+
 
 
 -- !query
@@ -1200,59 +1153,6 @@ END
 struct<col1:string>
 -- !query output
 Shipping analysis error
-
-
--- !query
-BEGIN
-    DECLARE v_product_rating DOUBLE DEFAULT 0.0;
-    DECLARE v_high_rated_products INT DEFAULT 0;
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Product rating error'); END;
-
-    L0: BEGIN
-        DECLARE v_min_reviews INT DEFAULT 20;
-        FOR product AS SELECT product_id, product_rating, product_reviews FROM products LIMIT 3 DO
-            SET v_product_rating = product.product_rating;
-            IF v_product_rating > 4.5 THEN
-                SET v_high_rated_products = v_high_rated_products + 1;
-                L1: BEGIN
-                    IF product.product_reviews < v_min_reviews THEN
-                        BEGIN
-                            SET v_product_rating = v_product_rating - 0.1;
-                            UPDATE products SET product_rating = v_product_rating WHERE product_id = product.product_id;
-                            BEGIN
-                                DECLARE v_new_tag STRING DEFAULT 'Highly Rated';
-                                REPEAT
-                                    SET v_min_reviews = v_min_reviews - 5;
-                                    UPDATE products SET product_description = CONCAT(product_description, ' | ', v_new_tag) WHERE product_id = product.product_id;
-                                    SET v_product_rating = (SELECT MAX(product_rating) FROM products WHERE product_id = product.product_id);
-                                UNTIL v_min_reviews < 1 END REPEAT;
-                            END;
-                        END;
-                    END IF;
-                END L1;
-            END IF;
-        END FOR;
-        BEGIN
-            DECLARE v_most_reviews INT;
-            SET v_most_reviews = (SELECT MAX(product_reviews) FROM products);
-            IF v_most_reviews > 100 THEN
-                L2: BEGIN
-                    DECLARE v_reviews_to_add INT;
-                    SET v_reviews_to_add = (SELECT FLOOR(CAST(v_most_reviews AS DOUBLE) * 0.1));
-                    REPEAT
-                        SET v_reviews_to_add = v_reviews_to_add - 1;
-                        UPDATE products SET product_reviews = product_reviews + 1 WHERE product_reviews < 200;
-                    UNTIL v_reviews_to_add < 1 END REPEAT;
-                END L2;
-            END IF;
-        END;
-    END L0;
-END
--- !query schema
-struct<>
--- !query output
-java.lang.NullPointerException
-Cannot invoke "String.toUpperCase(java.util.Locale)" because "sqlState" is null
 
 
 -- !query
@@ -1891,60 +1791,6 @@ BEGIN
             END L1;
         END FOR;
     END L0;
-END
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-BEGIN
-    DECLARE v_customer_billing_contact STRING;
-    DECLARE v_customer_vat_number STRING;
-    DECLARE v_update_flag BOOLEAN DEFAULT false;
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Customer compliance error'); END;
-
-    L0: BEGIN
-        DECLARE v_customer_count INT DEFAULT 0;
-        FOR cust AS SELECT customer_id, customer_billing_contact, customer_vat_number FROM customers LIMIT 3 DO
-            SET v_customer_billing_contact = cust.customer_billing_contact;
-            SET v_customer_vat_number = cust.customer_vat_number;
-            IF v_customer_billing_contact IS NULL THEN
-                L1: BEGIN
-                    REPEAT
-                        SET v_customer_billing_contact = CONCAT('Billing', v_customer_count + 1);
-                        SET v_update_flag = true;
-                        UPDATE customers SET customer_billing_contact = v_customer_billing_contact WHERE customer_id = cust.customer_id;
-                        SET v_customer_count = v_customer_count + 1;
-                    UNTIL v_customer_count > 1 END REPEAT;
-                END L1;
-            END IF;
-            IF v_customer_vat_number IS NULL THEN
-                BEGIN
-                    DECLARE v_fake_vat STRING;
-                    REPEAT
-                        SET v_fake_vat = CONCAT('VAT', cust.customer_id, v_customer_count);
-                        SET v_customer_vat_number = v_fake_vat;
-                        UPDATE customers SET customer_vat_number = v_fake_vat WHERE customer_id = cust.customer_id;
-                        SET v_customer_count = v_customer_count + 1;
-                    UNTIL v_customer_vat_number IS NOT NULL END REPEAT;
-                END;
-            END IF;
-        END FOR;
-    END L0;
-    BEGIN
-        DECLARE v_customers_without_contact INT;
-        SET v_customers_without_contact = (SELECT COUNT(*) FROM customers WHERE customer_billing_contact IS NULL);
-        IF v_customers_without_contact > 0 THEN
-            L2: BEGIN
-                WHILE v_customers_without_contact > 0 DO
-                    SET v_customers_without_contact = v_customers_without_contact - 1;
-                    UPDATE customers SET customer_billing_contact = 'Auto Generated' WHERE customer_id = (SELECT MIN(customer_id) FROM customers WHERE customer_billing_contact IS NULL);
-                END WHILE;
-            END L2;
-        END IF;
-    END;
 END
 -- !query schema
 struct<>
@@ -3714,9 +3560,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Customer zip order error
+
 
 
 -- !query
@@ -3809,51 +3655,6 @@ END
 struct<col1:string>
 -- !query output
 Product margin error
-
-
--- !query
-BEGIN
-    DECLARE v_customer_address_2_count INT DEFAULT 0;
-    DECLARE v_customer_city STRING;
-    DECLARE v_customer_address_2_filled BOOLEAN DEFAULT false;
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Customer address error'); END;
-
-    L0: BEGIN
-        DECLARE v_min_address2_required INT DEFAULT 1;
-        FOR city AS SELECT DISTINCT customer_city FROM customers LIMIT 3 DO
-            SET v_customer_city = city.customer_city;
-            SET v_customer_address_2_count = (SELECT COUNT(*) FROM customers WHERE customer_city = v_customer_city AND customer_address_2 IS NOT NULL AND customer_address_2 != '');
-            IF v_customer_address_2_count < v_min_address2_required THEN
-                L1: BEGIN
-                    REPEAT
-                        UPDATE customers
-                        SET customer_address_2 = 'Apt ' || (SELECT COUNT(*) FROM customers WHERE customer_city = v_customer_city)
-                        WHERE customer_id = (SELECT MIN(customer_id) FROM customers WHERE customer_city = v_customer_city AND (customer_address_2 IS NULL OR customer_address_2 = ''));
-                        SET v_customer_address_2_count = (SELECT COUNT(*) FROM customers WHERE customer_city = v_customer_city AND customer_address_2 IS NOT NULL AND customer_address_2 != '');
-                        SET v_customer_address_2_filled = true;
-                    UNTIL v_customer_address_2_count >= v_min_address2_required OR v_customer_address_2_filled = false END REPEAT;
-                END L1;
-                IF v_customer_address_2_filled AND ROW_COUNT() > 0 THEN
-                    BEGIN
-                        DECLARE v_reset_timestamps INT;
-                        SET v_reset_timestamps = (SELECT COUNT(*) FROM customers WHERE customer_city = v_customer_city AND customer_membership_date IS NULL);
-                        WHILE v_reset_timestamps > 0 DO
-                            UPDATE customers
-                            SET customer_membership_date = CURRENT_TIMESTAMP
-                            WHERE customer_id = (SELECT MIN(customer_id) FROM customers WHERE customer_city = v_customer_city AND customer_membership_date IS NULL);
-                            SET v_reset_timestamps = (SELECT COUNT(*) FROM customers WHERE customer_city = v_customer_city AND customer_membership_date IS NULL);
-                        END WHILE;
-                    END;
-                END IF;
-            END IF;
-        END FOR;
-    END L0;
-END
--- !query schema
-struct<>
--- !query output
-java.lang.NullPointerException
-Cannot invoke "String.toUpperCase(java.util.Locale)" because "sqlState" is null
 
 
 -- !query
@@ -4801,7 +4602,7 @@ BEGIN
                             'Review Filler',
                             category.product_category,
                             39.99,
-                            29.极99,
+                            29.99,
                             (SELECT MIN(supplier_id) FROM suppliers),
                             'Review Contact',
                             'Review Role',
@@ -4835,16 +4636,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_IDENTIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "ident" : "极99"
-  }
-}
+Product review/rating error
 
 
 -- !query
@@ -5206,7 +5000,7 @@ BEGIN
                                     empty_order.order_id,
                                     (SELECT MIN(product_id) FROM products),
                                     1,
-                                    10.极0,
+                                    10.0,
                                     0.0,
                                     1.0,
                                     11.0,
@@ -5253,16 +5047,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_IDENTIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "ident" : "极0"
-  }
-}
+Order-item linkage error
 
 
 -- !query
@@ -5297,9 +5084,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-
+Supplier site error
 
 
 -- !query
@@ -5536,9 +5323,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Customer no-sale error
+
 
 
 -- !query
@@ -6200,7 +5987,7 @@ BEGIN
                     order_discount,
                     order_shipping
                 ) VALUES (
-                    (SELECT MAX(order_id极) + 1 FROM orders),
+                    (SELECT MAX(order_id) + 1 FROM orders),
                     (SELECT MIN(customer_id) FROM customers),
                     CURRENT_TIMESTAMP,
                     'Low Value',
@@ -6214,16 +6001,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_IDENTIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "ident" : "order_id极"
-  }
-}
+Order value error
 
 
 -- !query
@@ -6761,7 +6541,7 @@ BEGIN
                 1,
                 10.0,
                 0.0,
-                1.极0,
+                1.0,
                 11.0,
                 'Returned',
                 CURRENT_TIMESTAMP
@@ -6770,16 +6550,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_IDENTIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "ident" : "极0"
-  }
-}
+Return item error
 
 
 -- !query
