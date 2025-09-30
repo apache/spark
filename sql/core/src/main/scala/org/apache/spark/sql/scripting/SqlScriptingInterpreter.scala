@@ -87,18 +87,11 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           args,
           context)
 
-      // Execution node of handler.
-      val handlerScopeLabel = if (handler.handlerType == ExceptionHandlerType.EXIT
-                                  || handler.handlerType == ExceptionHandlerType.CONTINUE) {
-        Some(compoundBody.label.get)
-      } else {
-        None
-      }
-
+      // Scope label should be Some(compoundBody.label.get) for both handler types
       val handlerExec = new ExceptionHandlerExec(
         handlerBodyExec,
         handler.handlerType,
-        handlerScopeLabel)
+        Some(compoundBody.label.get))
 
       // For each condition handler is defined for, add corresponding key value pair
       // to the conditionHandlerMap.
