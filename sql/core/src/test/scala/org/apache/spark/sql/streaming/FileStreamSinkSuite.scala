@@ -21,6 +21,7 @@ import java.io.{File, IOException}
 import java.nio.file.{Files, Paths}
 import java.util.Locale
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
@@ -534,7 +535,20 @@ abstract class FileStreamSinkSuite extends StreamTest {
         }
 
         import PendingCommitFilesTrackingManifestFileCommitProtocol._
-        val outputFileNames = Files.walk(outputDir.toPath).iterator().asScala
+        val fileIter = Files.walk(outputDir.toPath).iterator().asScala
+        val wrappedIter = new Iterator[java.nio.file.Path] {
+          @tailrec
+          override def hasNext: Boolean = try {
+            fileIter.hasNext
+          } catch {
+            case e if e.getMessage.contains("NoSuchFileException") =>
+              // Ignore files deleted during the walk
+              hasNext
+            case e => throw e;
+          }
+          override def next(): java.nio.file.Path = fileIter.next()
+        }
+        val outputFileNames = wrappedIter
           .filter(_.toString.endsWith(".parquet"))
           .map(_.getFileName.toString)
           .toSet
