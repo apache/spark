@@ -1142,6 +1142,52 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Removes date and time related functions that are unnecessary.
+ */
+object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(DATETIME), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+      _.containsPattern(DATETIME), ruleId) {
+      case DateFormatClass(
+          GetTimestamp(
+            e @ DateFormatClass(
+              _,
+              pattern,
+              timeZoneId),
+            pattern2,
+            TimestampType,
+            _,
+            timeZoneId2,
+            _),
+          pattern3,
+          timeZoneId3)
+          if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
+            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3 =>
+        e
+      case GetTimestamp(
+          DateFormatClass(
+            e @ GetTimestamp(
+              _,
+              pattern,
+              TimestampType,
+              _,
+              timeZoneId,
+              _),
+            pattern2,
+            timeZoneId2),
+          pattern3,
+          TimestampType,
+          _,
+          timeZoneId3,
+          _)
+          if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
+            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3 =>
+        e
+    }
+  }
+}
 
 /**
  * Combine nested [[Concat]] expressions.
