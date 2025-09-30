@@ -5323,9 +5323,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Customer no-sale error
+
 
 
 -- !query
