@@ -31,33 +31,71 @@ class StreamRealTimeModeSuite extends StreamTest {
       assert(
         realTimeTrigger.batchDurationMs == actual,
         s"Real time trigger duration should be ${actual} ms" +
-          s" but got ${realTimeTrigger.batchDurationMs} ms"
+        s" but got ${realTimeTrigger.batchDurationMs} ms"
       )
     }
 
     // test default
     testTrigger(Trigger.RealTime(), 300000)
 
-    testTrigger(Trigger.RealTime("1 second"), 1000)
-    testTrigger(Trigger.RealTime("1 minute"), 60000)
-    testTrigger(Trigger.RealTime("1 hour"), 3600000)
-    testTrigger(Trigger.RealTime("1 day"), 86400000)
-    testTrigger(Trigger.RealTime("1 week"), 604800000)
+    List(
+      ("1 second", 1000),
+      ("1 minute", 60000),
+      ("1 hour", 3600000),
+      ("1 day", 86400000),
+      ("1 week", 604800000)
+    ).foreach {
+      case (str, ms) =>
+        testTrigger(Trigger.RealTime(str), ms)
+        testTrigger(RealTimeTrigger(str), ms)
+        testTrigger(RealTimeTrigger.create(str), ms)
 
-    testTrigger(Trigger.RealTime(1000), 1000)
-    testTrigger(Trigger.RealTime(60000), 60000)
-    testTrigger(Trigger.RealTime(3600000), 3600000)
-    testTrigger(Trigger.RealTime(86400000), 86400000)
-    testTrigger(Trigger.RealTime(604800000), 604800000)
+    }
 
-    testTrigger(Trigger.RealTime(Duration.apply(1000, "ms")), 1000)
-    testTrigger(Trigger.RealTime(Duration.apply(60, "s")), 60000)
-    testTrigger(Trigger.RealTime(Duration.apply(1, "h")), 3600000)
-    testTrigger(Trigger.RealTime(Duration.apply(1, "d")), 86400000)
+    List(1000, 60000, 3600000, 86400000, 604800000).foreach { ms =>
+      testTrigger(Trigger.RealTime(ms), ms)
+      testTrigger(RealTimeTrigger(ms), ms)
+      testTrigger(new RealTimeTrigger(ms), ms)
+    }
 
-    testTrigger(Trigger.RealTime(1000, TimeUnit.MILLISECONDS), 1000)
-    testTrigger(Trigger.RealTime(60, TimeUnit.SECONDS), 60000)
-    testTrigger(Trigger.RealTime(1, TimeUnit.HOURS), 3600000)
-    testTrigger(Trigger.RealTime(1, TimeUnit.DAYS), 86400000)
+    List(
+      (Duration.apply(1000, "ms"), 1000),
+      (Duration.apply(60, "s"), 60000),
+      (Duration.apply(1, "h"), 3600000),
+      (Duration.apply(1, "d"), 86400000)
+    ).foreach {
+      case (duration, ms) =>
+        testTrigger(Trigger.RealTime(duration), ms)
+        testTrigger(RealTimeTrigger(duration), ms)
+        testTrigger(RealTimeTrigger(duration), ms)
+    }
+
+    List(
+      (1000, TimeUnit.MILLISECONDS, 1000),
+      (60, TimeUnit.SECONDS, 60000),
+      (1, TimeUnit.HOURS, 3600000),
+      (1, TimeUnit.DAYS, 86400000)
+    ).foreach {
+      case (interval, unit, ms) =>
+        testTrigger(Trigger.RealTime(interval, unit), ms)
+        testTrigger(RealTimeTrigger(interval, unit), ms)
+        testTrigger(RealTimeTrigger.create(interval, unit), ms)
+    }
+    // test invalid
+    List("-1", "0").foreach(
+      str =>
+        intercept[IllegalArgumentException] {
+          testTrigger(Trigger.RealTime(str), -1)
+          testTrigger(RealTimeTrigger.create(str), -1)
+        }
+    )
+
+    List(-1, 0).foreach(
+      duration =>
+        intercept[IllegalArgumentException] {
+          testTrigger(Trigger.RealTime(duration), -1)
+          testTrigger(RealTimeTrigger(duration), -1)
+        }
+    )
   }
 }
