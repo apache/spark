@@ -200,8 +200,13 @@ object DatasetManager extends Logging {
     }
 
     // Wipe the data if we need to
-    if (!table.isStreamingTable && existingTableOpt.isDefined) {
-      context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
+    if (existingTableOpt.isDefined) {
+      (isFullRefresh, table.isStreamingTable) match {
+        case (true, _) => // Already performed reset for full refresh mv/st - no-op
+        case (false, true) => // Incremental refresh of a st - no-op
+        case (false, false) => // Incremental refresh of a mv - truncate
+          context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
+      }
     }
 
     // Alter the table if we need to
