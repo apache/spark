@@ -332,7 +332,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       ArrayType(new StructType().add("y", "int").add("x", "byte")),
       hasTransform = true)
 
-    withSQLConf("spark.sql.preserveCharVarcharTypeInfo" -> "true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
       // exact match on VARCHAR does not need transform
       assertArrayField(ArrayType(VarcharType(7)), ArrayType(VarcharType(7)), hasTransform = false)
       // VARCHAR length increase could avoid transform
@@ -512,7 +512,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val y = query.output.last
 
     val parsedPlan = byName(table, query)
-    val expectedPlan = byName(table, Project(Seq(Alias(X, "x")(), y), query))
+    val expectedPlan = byName(table,
+      Project(Seq(Alias(X, "x")(), Alias(y, y.name)()), query))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan, caseSensitive = false)
@@ -529,7 +530,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val x = query.output.last
 
     val parsedPlan = byName(table, query)
-    val expectedPlan = byName(table, Project(Seq(x, y), query))
+    val expectedPlan = byName(table,
+      Project(Seq(Alias(x, x.name)(), Alias(y, y.name)()), query))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan)

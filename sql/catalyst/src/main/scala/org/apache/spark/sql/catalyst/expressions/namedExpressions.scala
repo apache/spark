@@ -255,6 +255,11 @@ case class Alias(child: Expression, name: String)(
     s"${child.sql} AS $qualifierPrefix${quoteIfNeeded(name)}"
   }
 
+  // Copying this alias with a new child expression.
+  def withNewChild(newChild: Expression): Alias = {
+    withNewChildInternal(newChild)
+  }
+
   override protected def withNewChildInternal(newChild: Expression): Alias =
     copy(child = newChild)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
 }

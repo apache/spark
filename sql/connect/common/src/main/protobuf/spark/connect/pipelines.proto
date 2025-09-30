@@ -20,6 +20,7 @@ syntax = "proto3";
 package spark.connect;
 
 import "google/protobuf/timestamp.proto";
+import "spark/connect/common.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -48,11 +49,6 @@ message PipelineCommand {
 
     // SQL configurations for all flows in this graph.
     map<string, string> sql_conf = 5;
-
-    message Response {
-      // The ID of the created graph.
-      optional string dataflow_graph_id = 1;
-    }
   }
 
   // Drops the graph and stops any running attached flows.
@@ -146,10 +142,20 @@ message PipelineCommand {
 message PipelineCommandResult {
   oneof result_type {
     CreateDataflowGraphResult create_dataflow_graph_result = 1;
+    DefineDatasetResult define_dataset_result = 2;
+    DefineFlowResult define_flow_result = 3;
   }
   message CreateDataflowGraphResult {
     // The ID of the created graph.
     optional string dataflow_graph_id = 1;
+  }
+  message DefineDatasetResult {
+    // Resolved identifier of the dataset
+    optional ResolvedIdentifier resolved_identifier = 1;
+  }
+  message DefineFlowResult {
+    // Resolved identifier of the flow
+    optional ResolvedIdentifier resolved_identifier = 1;
   }
 }
 
