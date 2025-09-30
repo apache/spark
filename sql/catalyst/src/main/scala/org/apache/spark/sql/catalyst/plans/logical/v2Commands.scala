@@ -41,7 +41,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -883,21 +883,16 @@ case class MergeIntoTable(
     }
   }
 
-  def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
+  lazy val duplicateResolved: Boolean =
+    targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
-  def skipSchemaResolution: Boolean = targetTable match {
+  lazy val skipSchemaResolution: Boolean = targetTable match {
     case r: NamedRelation => r.skipSchemaResolution
     case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
     case _ => false
   }
 
-  override def left: LogicalPlan = targetTable
-  override def right: LogicalPlan = sourceTable
-  override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
-    copy(targetTable = newLeft, sourceTable = newRight)
-
-  def needSchemaEvolution: Boolean =
+  lazy val needSchemaEvolution: Boolean =
     schemaEvolutionEnabled &&
       MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
 
@@ -907,6 +902,12 @@ case class MergeIntoTable(
       case _ => false
     }
   }
+
+  override def left: LogicalPlan = targetTable
+  override def right: LogicalPlan = sourceTable
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
+    copy(targetTable = newLeft, sourceTable = newRight)
 }
 
 object MergeIntoTable {
@@ -914,13 +915,14 @@ object MergeIntoTable {
       matchedActions: Iterable[MergeAction],
       notMatchedActions: Iterable[MergeAction],
       notMatchedBySourceActions: Iterable[MergeAction]): Seq[TableWritePrivilege] = {
-    val privileges = scala.collection.mutable.HashSet.empty[TableWritePrivilege]
-    (matchedActions.iterator ++ notMatchedActions ++ notMatchedBySourceActions).foreach {
-      case _: DeleteAction => privileges.add(TableWritePrivilege.DELETE)
-      case _: UpdateAction | _: UpdateStarAction => privileges.add(TableWritePrivilege.UPDATE)
-      case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
-    }
-    privileges.toSeq
+    (matchedActions ++ notMatchedActions ++ notMatchedBySourceActions)
+      .collect {
+        case _: DeleteAction => TableWritePrivilege.DELETE
+        case _: UpdateAction | _: UpdateStarAction => TableWritePrivilege.UPDATE
+        case _: InsertAction | _: InsertStarAction => TableWritePrivilege.INSERT
+      }
+      .toSet
+      .toSeq
   }
 
   def schemaChanges(
@@ -966,12 +968,15 @@ object MergeIntoTable {
           schemaChanges(currentElementType, updateElementType,
             originalTarget, originalSource, fieldPath ++ Seq("value"))
 
+      case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
+        Array(TableChange.updateColumnType(fieldPath, newType))
+
       case (currentType, newType) if currentType == newType =>
         // No change needed
         Array.empty[TableChange]
 
       case _ =>
-        // For now do not support type widening
+        // Do not support change between atomic and complex types for now
         throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
           originalTarget, originalSource, null)
     }
@@ -1833,12 +1838,19 @@ case class Call(
   }
 
   override def simpleString(maxFields: Int): String = {
-    val name = procedure match {
+    procedure match {
       case ResolvedProcedure(catalog, ident, _) =>
-        s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
+        val name = s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
+        simpleString(name, maxFields)
       case UnresolvedProcedure(nameParts) =>
-        nameParts.quoted
+        val name = nameParts.quoted
+        simpleString(name, maxFields)
+      case _ =>
+        super.simpleString(maxFields)
     }
+  }
+
+  private def simpleString(name: String, maxFields: Int): String = {
     val argsString = truncatedString(args, ", ", maxFields)
     s"Call $name($argsString)"
   }

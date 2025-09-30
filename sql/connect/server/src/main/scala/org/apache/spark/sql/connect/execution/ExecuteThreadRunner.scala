@@ -31,6 +31,7 @@ import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
 /**
@@ -227,21 +228,22 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             executeHolder.request.getPlan.getDescriptorForType)
       }
 
-      val observedMetrics: Map[String, Seq[(Option[String], Any)]] = {
+      val observedMetrics: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
         executeHolder.observations.map { case (name, observation) =>
-          val values = observation.getOrEmpty.map { case (key, value) =>
-            (Some(key), value)
-          }.toSeq
+          val values =
+            observation.getRowOrEmpty
+              .map(SparkConnectPlanExecution.toObservedMetricsValues(_))
+              .getOrElse(Seq.empty)
           name -> values
         }.toMap
       }
-      val accumulatedInPython: Map[String, Seq[(Option[String], Any)]] = {
+      val accumulatedInPython: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
         executeHolder.sessionHolder.pythonAccumulator.flatMap { accumulator =>
           accumulator.synchronized {
             val value = accumulator.value.asScala.toSeq
             if (value.nonEmpty) {
               accumulator.reset()
-              Some("__python_accumulator__" -> value.map(value => (None, value)))
+              Some("__python_accumulator__" -> value.map(value => (None, value, None)))
             } else {
               None
             }

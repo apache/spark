@@ -383,7 +383,7 @@ private[sql] object SparkResult {
     (0 until metric.getKeysCount).foreach { i =>
       val key = metric.getKeys(i)
       val value = LiteralValueProtoConverter.toScalaValue(metric.getValues(i))
-      schema = schema.add(key, LiteralValueProtoConverter.toDataType(value.getClass))
+      schema = schema.add(key, LiteralValueProtoConverter.getDataType(metric.getValues(i)))
       values += value
     }
     new GenericRowWithSchema(values.result(), schema)

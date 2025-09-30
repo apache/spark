@@ -167,12 +167,17 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
         }
 
-        case u @ UnresolvedExtractValue(child, fieldName) =>
+        case u @ UnresolvedExtractValue(child, field) =>
           val newChild = innerResolve(child, isTopLevel = false)
-          if (newChild.resolved) {
-            ExtractValue(newChild, fieldName, resolver)
+          val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
+            innerResolve(field, isTopLevel = false)
           } else {
-            u.copy(child = newChild)
+            field
+          }
+          if (newChild.resolved) {
+            ExtractValue(child = newChild, extraction = resolvedField, resolver = resolver)
+          } else {
+            u.copy(child = newChild, extraction = resolvedField)
           }
 
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
@@ -241,7 +246,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       variableResolution.resolveMultipartName(
         nameParts = nameParts,
         resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty,
-        resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate,
         referredTempVariableNames = AnalysisContext.get.referredTempVariableNames
       ).map(e => Alias(e, nameParts.last)())
     }

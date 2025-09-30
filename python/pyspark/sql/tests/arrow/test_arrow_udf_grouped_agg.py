@@ -30,11 +30,13 @@ from pyspark.sql.types import (
 )
 from pyspark.sql import functions as sf
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -146,6 +148,7 @@ class GroupedAggArrowUDFTestsMixin:
 
         self.assertEqual(expected, result.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_basic(self):
         df = self.data
         weighted_mean_udf = self.arrow_agg_weighted_mean_udf
@@ -268,6 +271,7 @@ class GroupedAggArrowUDFTestsMixin:
         self.assertEqual(expected5, result5.collect())
         self.assertEqual(expected6, result6.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_multiple_udfs(self):
         """
         Test multiple group aggregate pandas UDFs in one agg function.
@@ -537,6 +541,7 @@ class GroupedAggArrowUDFTestsMixin:
 
         assert filtered.collect()[0]["mean"] == 42.0
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -565,6 +570,7 @@ class GroupedAggArrowUDFTestsMixin:
                         df.groupby("id").agg(sf.mean(df.v).alias("wm")).collect(),
                     )
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments_negative(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
@@ -886,6 +892,40 @@ class GroupedAggArrowUDFTestsMixin:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_return_numpy_scalar(self):
+        import numpy as np
+        import pyarrow as pa
+
+        @arrow_udf("long")
+        def np_max_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.max(v)
+
+        @arrow_udf("long")
+        def np_min_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.min(v)
+
+        @arrow_udf("double")
+        def np_avg_udf(v: pa.Array) -> np.float64:
+            assert isinstance(v, pa.Array)
+            return np.mean(v)
+
+        df = self.spark.range(10)
+        expected = df.select(
+            sf.max("id").alias("max"),
+            sf.min("id").alias("min"),
+            sf.avg("id").alias("avg"),
+        )
+
+        result = df.select(
+            np_max_udf("id").alias("max"),
+            np_min_udf("id").alias("min"),
+            np_avg_udf("id").alias("avg"),
+        )
+        self.assertEqual(expected.collect(), result.collect())
+
     def test_unsupported_return_types(self):
         import pyarrow as pa
 
@@ -910,6 +950,41 @@ class GroupedAggArrowUDFTestsMixin:
                 @arrow_udf(ArrayType(ArrayType(YearMonthIntervalType())), ArrowUDFType.GROUPED_AGG)
                 def func_a(a: pa.Array) -> pa.Scalar:
                     return pa.compute.max(a)
+
+    def test_0_args(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10).withColumn("k", sf.col("id") % 3)
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_max(v) -> int:
+            return pa.compute.max(v).as_py()
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_lit_1() -> int:
+            return 1
+
+        expected1 = df.select(sf.max("id").alias("res1"), sf.lit(1).alias("res1"))
+        result1 = df.select(arrow_max("id").alias("res1"), arrow_lit_1().alias("res1"))
+        self.assertEqual(expected1.collect(), result1.collect())
+
+        expected2 = (
+            df.groupby("k")
+            .agg(
+                sf.max("id").alias("res1"),
+                sf.lit(1).alias("res1"),
+            )
+            .sort("k")
+        )
+        result2 = (
+            df.groupby("k")
+            .agg(
+                arrow_max("id").alias("res1"),
+                arrow_lit_1().alias("res1"),
+            )
+            .sort("k")
+        )
+        self.assertEqual(expected2.collect(), result2.collect())
 
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):

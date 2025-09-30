@@ -328,6 +328,17 @@ object Connect {
       .booleanConf
       .createWithDefault(true)
 
+  val CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS =
+    buildStaticConf("spark.connect.session.inactiveOperations.cacheExpiration")
+      .doc(
+        "Expiration time for inactive operation IDs cache in Spark Connect Session." +
+          " Operations are cached after completion for a period of time to detect duplicates." +
+          " The time should allow for network late arrivals, at least several minutes.")
+      .version("4.1.0")
+      .internal()
+      .timeConf(TimeUnit.MINUTES)
+      .createWithDefault(30)
+
   val CONNECT_AUTHENTICATE_TOKEN =
     buildStaticConf("spark.connect.authenticate.token")
       .doc("A pre-shared token that will be used to authenticate clients. This secret must be" +
@@ -392,4 +403,19 @@ object Connect {
       .internal()
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10g")
+
+  val CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE =
+    buildConf("spark.connect.session.resultChunking.maxChunkSize")
+      .doc("The max size of a chunk in responses for a result batch. Result chunking is enabled" +
+        " if this config is set to a value greater than 0 and if the client allows it in" +
+        " ResultChunkingOptions. Otherwise, for example if set to -1, this feature is disabled." +
+        " While spark.connect.grpc.arrow.maxBatchSize determines the max size of a result batch," +
+        " maxChunkSize defines the max size of each individual chunk that is part of the batch" +
+        " that will be sent in a response. This allows the server to send large rows to clients." +
+        " The size is in bytes.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      // 90% of the max message size by default to allow for some overhead.
+      .createWithDefault((ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE * 0.9).toInt)
 }

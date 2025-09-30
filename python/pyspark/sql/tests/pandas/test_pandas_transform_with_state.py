@@ -312,11 +312,11 @@ class TransformWithStateTestsMixin:
             batch_df.collect()
             if batch_id == 0:
                 expected_prev_elements = ""
-                expected_updated_elements = ",".join(map(lambda x: str(x), range(90)))
+                expected_updated_elements = ",".join(map(lambda x: str(x), range(100)))
             else:
                 # batch_id == 1:
-                expected_prev_elements = ",".join(map(lambda x: str(x), range(90)))
-                expected_updated_elements = ",".join(map(lambda x: str(x), range(180)))
+                expected_prev_elements = ",".join(map(lambda x: str(x), range(100)))
+                expected_updated_elements = ",".join(map(lambda x: str(x), range(190)))
 
             assert set(batch_df.sort("id").collect()) == {
                 Row(
@@ -1923,10 +1923,6 @@ class TransformWithStateInPandasWithCheckpointV2TestsMixin(TransformWithStateInP
         cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
         return cfg
 
-    # TODO(SPARK-53332): Add test back when checkpoint v2 support exists for snapshotStartBatchId
-    def test_transform_with_value_state_metadata(self):
-        pass
-
 
 class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateInPySparkTestsMixin):
     @classmethod
@@ -1934,10 +1930,6 @@ class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateIn
         cfg = super().conf()
         cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
         return cfg
-
-    # TODO(SPARK-53332): Add test back when checkpoint v2 support exists for snapshotStartBatchId
-    def test_transform_with_value_state_metadata(self):
-        pass
 
 
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):

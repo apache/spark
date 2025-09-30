@@ -765,20 +765,15 @@ object CatalogTable {
 
   def readLargeTableProp(props: Map[String, String], key: String): Option[String] = {
     props.get(key).orElse {
-      if (props.exists { case (mapKey, _) => mapKey.startsWith(key) }) {
-        props.get(s"$key.numParts") match {
-          case None => throw QueryCompilationErrors.insufficientTablePropertyError(key)
-          case Some(numParts) =>
-            val parts = (0 until numParts.toInt).map { index =>
-              val keyPart = s"$key.part.$index"
-              props.getOrElse(keyPart, {
-                throw QueryCompilationErrors.insufficientTablePropertyPartError(keyPart, numParts)
-              })
-            }
-            Some(parts.mkString)
+      // only construct the property from parts if numParts exist,
+      props.get(s"$key.numParts").map { numParts =>
+        val parts = (0 until numParts.toInt).map { index =>
+          val keyPart = s"$key.part.$index"
+          props.getOrElse(keyPart, {
+            throw QueryCompilationErrors.insufficientTablePropertyPartError(keyPart, numParts)
+          })
         }
-      } else {
-        None
+        parts.mkString
       }
     }
   }

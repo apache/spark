@@ -479,7 +479,6 @@ dev.ludovic.netlib:blas
 dev.ludovic.netlib:arpack
 dev.ludovic.netlib:lapack
 net.razorvine:pickle
-org.bouncycastle:bcprov-jdk18on
 org.checkerframework:checker-qual
 org.typelevel:algebra_2.13:jar
 org.typelevel:cats-kernel_2.13
