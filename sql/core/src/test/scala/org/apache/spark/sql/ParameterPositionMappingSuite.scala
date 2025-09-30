@@ -225,7 +225,7 @@ class ParameterPositionMappingSuite extends QueryTest with SharedSparkSession {
   test("analysis error with positional parameter") {
     checkParameterError[AnalysisException](
       "SELECT ? FROM nonexistent_table",
-      expectedStartPos = Some(0),
+      expectedStartPos = Some(14),
       expectedStopPos = Some(30), // "SELECT ? FROM nonexistent_table".length - 1 = 31 - 1 = 30
       positionalParams = Array(42)
     )
