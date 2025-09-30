@@ -1830,9 +1830,7 @@ class DataFrame(ParentDataFrame):
     def _get_binary_as_bytes(self) -> bool:
         """Get the binary_as_bytes configuration value from Spark session."""
         return (
-            self._session.conf.get(
-                "spark.sql.execution.pyspark.binaryAsBytes", "true"
-            ).lower()
+            self._session.conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true").lower()
             == "true"
         )
 
