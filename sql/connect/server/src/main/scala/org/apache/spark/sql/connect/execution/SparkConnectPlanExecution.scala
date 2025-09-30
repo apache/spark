@@ -31,7 +31,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.{toLiteralProtoWithOptions, ToLiteralProtoOptions}
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE}
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.ExecuteHolder
@@ -331,7 +331,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             sessionId,
             sessionHolder.serverSessionId,
             observationAndPlanIds,
-            observedMetrics))
+            observedMetrics,
+            executeHolder.acceptLiteralDataTypeFieldInResponses))
     } else None
   }
 }
@@ -352,7 +353,10 @@ object SparkConnectPlanExecution {
       sessionId: String,
       serverSessionId: String,
       observationAndPlanIds: Map[String, Long],
-      metrics: Map[String, Seq[(Option[String], Any, Option[DataType])]]): ExecutePlanResponse = {
+      metrics: Map[String, Seq[(Option[String], Any, Option[DataType])]],
+      acceptLiteralDataTypeFieldInResponses: Boolean): ExecutePlanResponse = {
+    val toLiteralProtoOptions =
+      ToLiteralProtoOptions(useDeprecatedDataTypeFields = !acceptLiteralDataTypeFieldInResponses)
     val observedMetrics = metrics.map { case (name, values) =>
       val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
@@ -360,9 +364,10 @@ object SparkConnectPlanExecution {
       values.foreach { case (keyOpt, value, dataTypeOpt) =>
         dataTypeOpt match {
           case Some(dataType) =>
-            metrics.addValues(toLiteralProto(value, dataType))
+            metrics.addValues(
+              toLiteralProtoWithOptions(value, Some(dataType), toLiteralProtoOptions))
           case None =>
-            metrics.addValues(toLiteralProto(value))
+            metrics.addValues(toLiteralProtoWithOptions(value, None, toLiteralProtoOptions))
         }
         keyOpt.foreach(metrics.addKeys)
       }

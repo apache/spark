@@ -1094,11 +1094,17 @@ class ExecutePlanRequest(google.protobuf.message.Message):
 
         REATTACH_OPTIONS_FIELD_NUMBER: builtins.int
         RESULT_CHUNKING_OPTIONS_FIELD_NUMBER: builtins.int
+        ACCEPT_RESPONSE_OPTIONS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
         @property
         def reattach_options(self) -> global___ReattachOptions: ...
         @property
         def result_chunking_options(self) -> global___ResultChunkingOptions: ...
+        @property
+        def accept_response_options(self) -> global___AcceptResponseOptions:
+            """Options to describe what responses (e.g. using a new field in the response)
+            can be accepted.
+            """
         @property
         def extension(self) -> google.protobuf.any_pb2.Any:
             """Extension type for request options"""
@@ -1107,11 +1113,14 @@ class ExecutePlanRequest(google.protobuf.message.Message):
             *,
             reattach_options: global___ReattachOptions | None = ...,
             result_chunking_options: global___ResultChunkingOptions | None = ...,
+            accept_response_options: global___AcceptResponseOptions | None = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "accept_response_options",
+                b"accept_response_options",
                 "extension",
                 b"extension",
                 "reattach_options",
@@ -1125,6 +1134,8 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "accept_response_options",
+                b"accept_response_options",
                 "extension",
                 b"extension",
                 "reattach_options",
@@ -1138,7 +1149,12 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["request_option", b"request_option"]
         ) -> (
-            typing_extensions.Literal["reattach_options", "result_chunking_options", "extension"]
+            typing_extensions.Literal[
+                "reattach_options",
+                "result_chunking_options",
+                "accept_response_options",
+                "extension",
+            ]
             | None
         ): ...
 
@@ -3048,6 +3064,28 @@ class ResultChunkingOptions(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["preferred_arrow_chunk_size"] | None: ...
 
 global___ResultChunkingOptions = ResultChunkingOptions
+
+class AcceptResponseOptions(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ACCEPT_LITERAL_DATA_TYPE_FIELD_FIELD_NUMBER: builtins.int
+    accept_literal_data_type_field: builtins.bool
+    """When true, the client indicates it can handle Literal messages in responses
+    that include the data_type field.
+    """
+    def __init__(
+        self,
+        *,
+        accept_literal_data_type_field: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "accept_literal_data_type_field", b"accept_literal_data_type_field"
+        ],
+    ) -> None: ...
+
+global___AcceptResponseOptions = AcceptResponseOptions
 
 class ReattachExecuteRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

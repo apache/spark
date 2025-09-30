@@ -135,33 +135,30 @@ package object dsl {
           .build()
     }
 
-    def proto_min(e: Expression): Expression =
+    private def unresolvedFunction(functionName: String, e: Expression): Expression =
       Expression
         .newBuilder()
         .setUnresolvedFunction(
-          Expression.UnresolvedFunction.newBuilder().setFunctionName("min").addArguments(e))
+          Expression.UnresolvedFunction
+            .newBuilder()
+            .setFunctionName(functionName)
+            .addArguments(e))
         .build()
+
+    def proto_struct(e: Expression): Expression =
+      unresolvedFunction("struct", e)
+
+    def proto_min(e: Expression): Expression =
+      unresolvedFunction("min", e)
 
     def proto_max(e: Expression): Expression =
-      Expression
-        .newBuilder()
-        .setUnresolvedFunction(
-          Expression.UnresolvedFunction.newBuilder().setFunctionName("max").addArguments(e))
-        .build()
+      unresolvedFunction("max", e)
 
     def proto_sum(e: Expression): Expression =
-      Expression
-        .newBuilder()
-        .setUnresolvedFunction(
-          Expression.UnresolvedFunction.newBuilder().setFunctionName("sum").addArguments(e))
-        .build()
+      unresolvedFunction("sum", e)
 
     def proto_explode(e: Expression): Expression =
-      Expression
-        .newBuilder()
-        .setUnresolvedFunction(
-          Expression.UnresolvedFunction.newBuilder().setFunctionName("explode").addArguments(e))
-        .build()
+      unresolvedFunction("explode", e)
 
     /**
      * Create an unresolved function from name parts.
