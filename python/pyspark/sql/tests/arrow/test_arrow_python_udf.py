@@ -432,7 +432,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
         finally:
             super(ArrowPythonUDFNonLegacyTests, cls).tearDownClass()
 
-    def test_arrow_batched_udf_binary_type(self):
+    def test_udf_binary_type(self):
         def get_binary_type(x):
             return type(x).__name__
 
@@ -452,7 +452,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             self.assertEqual(result[0]["type_name"], "bytearray")
             self.assertEqual(result[1]["type_name"], "bytearray")
 
-    def test_arrow_batched_udf_array_binary_type(self):
+    def test_udf_array_binary_type(self):
         def check_array_binary_types(arr):
             return [type(x).__name__ for x in arr]
 
@@ -473,7 +473,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             self.assertEqual(result[0]["types"], ["bytearray", "bytearray"])
             self.assertEqual(result[1]["types"], ["bytearray", "bytearray"])
 
-    def test_arrow_batched_udf_map_binary_type(self):
+    def test_udf_map_binary_type(self):
         def check_map_binary_types(m):
             return [type(v).__name__ for v in m.values()]
 
@@ -494,7 +494,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             self.assertEqual(set(result[0]["types"]), {"bytearray"})
             self.assertEqual(result[1]["types"], ["bytearray"])
 
-    def test_arrow_batched_udf_struct_binary_type(self):
+    def test_udf_struct_binary_type(self):
         def check_struct_binary_type(s):
             return type(s.b).__name__
 

@@ -58,9 +58,6 @@ are listed below:
     * - spark.sql.execution.pythonUDF.arrow.enabled
       - Enable PyArrow in PySpark. See more `here <arrow_pandas.rst>`_.
       - False
-    * - spark.sql.execution.arrow.pyspark.enabled
-      - Enable PyArrow for PySpark operations. When enabled, affects binary type conversions (BinaryType maps to ``bytes`` instead of ``bytearray``).
-      - False
     * - spark.sql.pyspark.inferNestedDictAsStruct.enabled
       - When enabled, nested dictionaries are inferred as StructType. Otherwise, they are inferred as MapType.
       - False
@@ -70,6 +67,8 @@ are listed below:
     * - spark.sql.execution.pandas.inferPandasDictAsMap
       - When enabled, Pandas dictionaries are inferred as MapType. Otherwise, they are inferred as StructType.
       - False
+    * - spark.sql.execution.pyspark.binaryAsBytes
+      - Introduced in Spark 4.1.0. When enabled, BinaryType is mapped consistently to Python bytes; when disabled, matches the PySpark default behavior before 4.1.0.
 
 All Conversions
 ---------------
@@ -108,8 +107,7 @@ All Conversions
       - string
       - StringType()
     * - **BinaryType**
-      - bytearray
-          .. note:: When Arrow is enabled (``spark.sql.execution.arrow.pyspark.enabled=true``), BinaryType maps to ``bytes`` instead of ``bytearray``.
+      - bytes
       - BinaryType()
     * - **BooleanType**
       - bool

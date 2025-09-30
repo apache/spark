@@ -3044,6 +3044,21 @@ class BaseUDTFTestsMixin:
         for idx, field in enumerate(result_df.schema.fields):
             self.assertEqual(field.dataType, expected_output_types[idx])
 
+    def test_arrow_table_udf_binary_type(self):
+        @udtf(returnType="type_name: string")
+        class BinaryTypeUDF:
+            def eval(self, b):
+                # Check the type of the binary input and return type name as string
+                yield (type(b).__name__,)
+
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
+            result = BinaryTypeUDF(lit(b"test_bytes")).collect()
+            self.assertEqual(result[0]["type_name"], "bytes")
+
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
+            result = BinaryTypeUDF(lit(b"test_bytearray")).collect()
+            self.assertEqual(result[0]["type_name"], "bytearray")
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -3627,23 +3642,6 @@ class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
             super(UDTFArrowTests, cls).tearDownClass()
-
-    def test_arrow_table_udf_binary_type(self):
-        from pyspark.sql.functions import udtf, lit
-
-        @udtf(returnType="type_name: string", useArrow=True)
-        class BinaryTypeUDF:
-            def eval(self, b):
-                # Check the type of the binary input and return type name as string
-                yield (type(b).__name__,)
-
-        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
-            result = BinaryTypeUDF(lit(b"test_bytes")).collect()
-            self.assertEqual(result[0]["type_name"], "bytes")
-
-        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
-            result = BinaryTypeUDF(lit(b"test_bytearray")).collect()
-            self.assertEqual(result[0]["type_name"], "bytearray")
 
 
 if __name__ == "__main__":

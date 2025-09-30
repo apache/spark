@@ -3726,8 +3726,9 @@ object SQLConf {
 
   val PYSPARK_BINARY_AS_BYTES =
     buildConf("spark.sql.execution.pyspark.binaryAsBytes")
-      .doc("When true, BINARY type columns are returned as bytes in PySpark. " +
-        "When false, restores pre 4.1 behavior.")
+      .doc("When true, BinaryType is mapped consistently to bytes in PySpark." +
+        "When false, matches the PySpark behavior before 4.1.0, where BinaryType is mapped to " +
+        "to bytes or bytearray in different cases.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
