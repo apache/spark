@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils, JsonToStructsEvaluator, JsonTupleEvaluator, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -61,6 +61,7 @@ case class GetJsonObject(json: Expression, path: Expression)
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true))
   override def nullable: Boolean = true
+  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
   override def prettyName: String = "get_json_object"
 
   @transient

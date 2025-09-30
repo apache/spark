@@ -116,6 +116,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Operator combine
         CollapseRepartition,
         CollapseProject,
+        CollapseGetJsonObject,
         OptimizeWindowFunctions,
         CollapseWindow,
         EliminateOffsets,
@@ -1581,6 +1582,34 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     case r @ RebalancePartitions(_, child: RebalancePartitions, _, _) =>
       r.withNewChildren(child.children)
   }
+}
+
+/**
+ * Combines adjacent [[GetJsonObject]] expressions.
+ */
+object CollapseGetJsonObject extends Rule[LogicalPlan] {
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(GET_JSON_OBJECT), ruleId) {
+    case GetJsonObject(child @ GetJsonObject(_, innerPath), outerPath)
+      if innerPath.foldable && outerPath.foldable =>
+
+      val inner = innerPath.eval().toString
+      val outer = outerPath.eval().toString
+
+      child.copy(path = Literal.create(mergeJsonPath(inner, outer), StringType))
+  }
+
+  private def mergeJsonPath(innerPath: String, outerPath: String): String = {
+    if (isValidPath(innerPath) && isValidPath(outerPath)) {
+      innerPath + outerPath.substring(1)
+    } else {
+      null
+    }
+  }
+
+  private def isValidPath(path: String): Boolean =
+    path != null && path.nonEmpty && path.charAt(0) == '$'
 }
 
 /**
