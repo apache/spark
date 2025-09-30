@@ -5754,6 +5754,13 @@
     ],
     "sqlState" : "42846"
   },
+  "UNEXPECTED_USE_OF_PARAMETER_MARKER" : {
+    "message" : [
+      "Internal error: Unexpected parameter marker <parameterMarker> found during AST building.",
+      "This should have been blocked at the grammar level. Report this as a bug."
+    ],
+    "sqlState" : "XX000"
+  },
   "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE" : {
     "message" : [
       "The UNION operator is not yet supported within recursive common table expressions (WITH clauses that refer to themselves, directly or indirectly). Please use UNION ALL instead."

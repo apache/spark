@@ -45,16 +45,43 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  override def visitStringLit(ctx: StringLitContext): Token = {
-    if (ctx != null) {
-      if (ctx.STRING_LITERAL != null) {
-        ctx.STRING_LITERAL.getSymbol
-      } else {
-        ctx.DOUBLEQUOTED_STRING.getSymbol
-      }
-    } else {
-      null
-    }
+  override def visitStringLiteralValue(ctx: StringLiteralValueContext): Token =
+    Option(ctx).map(_.STRING_LITERAL.getSymbol).orNull
+
+  override def visitDoubleQuotedStringLiteralValue(
+      ctx: DoubleQuotedStringLiteralValueContext): Token =
+    Option(ctx).map(_.DOUBLEQUOTED_STRING.getSymbol).orNull
+
+  override def visitIntegerVal(ctx: IntegerValContext): Token =
+    Option(ctx).map(_.INTEGER_VALUE.getSymbol).orNull
+
+  override def visitStringLiteralInContext(ctx: StringLiteralInContextContext): Token = {
+    visit(ctx.stringLitWithoutMarker).asInstanceOf[Token]
+  }
+
+  override def visitNamedParameterValue(ctx: NamedParameterValueContext): Token = {
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
+  }
+
+  override def visitNamedParameterIntegerValue(ctx: NamedParameterIntegerValueContext): Token = {
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
+  }
+
+  override def visitPositionalParameterIntegerValue(
+      ctx: PositionalParameterIntegerValueContext): Token = {
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
+  }
+
+  override def visitPositionalParameterValue(ctx: PositionalParameterValueContext): Token = {
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
   }
 
   /**
@@ -138,7 +165,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       }
     } else {
       val badType = typeCtx.unsupportedType.getText
-      val params = typeCtx.INTEGER_VALUE().asScala.toList
+      val params = typeCtx.integerValue().asScala.map(_.getText).toList
       val dtStr =
         if (params.nonEmpty) s"$badType(${params.mkString(",")})"
         else badType
@@ -260,6 +287,12 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitCommentSpec(ctx: CommentSpecContext): String = withOrigin(ctx) {
     string(visitStringLit(ctx.stringLit))
   }
+
+  /**
+   * Visit a stringLit context by delegating to the appropriate labeled visitor.
+   */
+  def visitStringLit(ctx: StringLitContext): Token =
+    Option(ctx).map(visit(_).asInstanceOf[Token]).orNull
 
   /**
    * Returns a collation name.

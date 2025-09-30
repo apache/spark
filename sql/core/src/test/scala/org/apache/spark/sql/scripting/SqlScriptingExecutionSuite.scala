@@ -3111,9 +3111,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       sqlState = "42703",
       parameters = Map("objectName" -> toSQLId("localVar")),
       context = ExpectedContext(
-        fragment = "localVar",
-        start = 7,
-        stop = 14)
+        objectType = "EXECUTE IMMEDIATE",
+        objectName = "",
+        startIndex = 7,
+        stopIndex = 14,
+        fragment = "localVar")
     )
   }
 

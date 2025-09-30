@@ -44,12 +44,12 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
+import org.apache.spark.sql.catalyst.parser.{ParameterHandler, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
@@ -106,6 +106,7 @@ class SparkConnectPlanner(
   import sessionHolder.session.toRichColumn
 
   private[connect] def parser = session.sessionState.sqlParser
+  private val parameterHandler = new ParameterHandler()
 
   private[connect] def userId: String = sessionHolder.userId
 
@@ -320,25 +321,41 @@ class SparkConnectPlanner(
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
+    val queryText = substituteParametersInQuery(sql)
+    // Parse the substituted query
+    parser.parsePlan(queryText)
+  }
+
+  /**
+   * Helper method to handle parameter substitution for SQL queries. Consolidates the logic for
+   * handling different parameter types and sources.
+   */
+  private def substituteParametersInQuery(sql: proto.SQL): String = {
     val args = sql.getArgsMap
     val namedArguments = sql.getNamedArgumentsMap
     val posArgs = sql.getPosArgsList
     val posArguments = sql.getPosArgumentsList
-    val parsedPlan = parser.parsePlan(sql.getQuery)
+
+    // Apply text-level parameter substitution if we have parameters
     if (!namedArguments.isEmpty) {
-      NameParameterizedQuery(
-        parsedPlan,
-        namedArguments.asScala.toMap.transform((_, v) => transformExpression(v)))
+      // Use named arguments (expressions)
+      val paramMap = namedArguments.asScala.toMap.transform((_, v) => transformExpression(v))
+      parameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
     } else if (!posArguments.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
+      // Use positional arguments (expressions)
+      val paramList = posArguments.asScala.map(transformExpression).toSeq
+      parameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
     } else if (!args.isEmpty) {
-      NameParameterizedQuery(
-        parsedPlan,
-        args.asScala.toMap.transform((_, v) => transformLiteral(v)))
+      // Use named arguments (literals)
+      val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
+      parameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
     } else if (!posArgs.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
+      // Use positional arguments (literals)
+      val paramList = posArgs.asScala.map(transformLiteral).toSeq
+      parameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
     } else {
-      parsedPlan
+      // No parameters to substitute
+      sql.getQuery
     }
   }
 
