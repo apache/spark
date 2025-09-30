@@ -1485,7 +1485,7 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         def get_binary_type(x):
             return type(x).__name__
 
-        binary_udf = udf(get_binary_type, returnType="string", useArrow=True)
+        binary_udf = udf(get_binary_type, returnType="string")
 
         df = self.spark.createDataFrame(
             [Row(b=b"hello"), Row(b=b"world")], schema=StructType([StructField("b", BinaryType())])
@@ -1505,7 +1505,7 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         def check_array_binary_types(arr):
             return [type(x).__name__ for x in arr]
 
-        array_binary_udf = udf(check_array_binary_types, returnType="array<string>", useArrow=True)
+        array_binary_udf = udf(check_array_binary_types, returnType="array<string>")
 
         df = self.spark.createDataFrame(
             [Row(arr_b=[b"a", b"b"]), Row(arr_b=[b"c", b"d"])],
@@ -1526,7 +1526,7 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         def check_map_binary_types(m):
             return [type(v).__name__ for v in m.values()]
 
-        map_binary_udf = udf(check_map_binary_types, returnType="array<string>", useArrow=True)
+        map_binary_udf = udf(check_map_binary_types, returnType="array<string>")
 
         df = self.spark.createDataFrame(
             [Row(map_b={"k1": b"v1", "k2": b"v2"}), Row(map_b={"k3": b"v3"})],
@@ -1547,7 +1547,7 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         def check_struct_binary_type(s):
             return type(s.b).__name__
 
-        struct_binary_udf = udf(check_struct_binary_type, returnType="string", useArrow=True)
+        struct_binary_udf = udf(check_struct_binary_type, returnType="string")
 
         struct_schema = StructType(
             [StructField("i", IntegerType()), StructField("b", BinaryType())]
