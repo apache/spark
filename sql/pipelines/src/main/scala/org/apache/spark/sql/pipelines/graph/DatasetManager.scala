@@ -65,40 +65,6 @@ object DatasetManager extends Logging {
       with NoStackTrace
 
   /**
-   * Creates the table in the catalog if it doesn't already exist.
-   * @return A Table with its `path` attribute filled out.
-   */
-  def ensureTableCreated(
-      spark: SparkSession,
-      table: Table,
-      resolvedDataflowGraph: DataflowGraph): Table = {
-    val catalog = getTableCatalogForTable(spark, table.identifier)
-
-    val identifier = table.catalogV2Identifier
-    val properties = resolveTableProperties(table, identifier)
-
-    // Create the table if we need to
-    if (!catalog.tableExists(identifier)) {
-      catalog.createTable(
-        identifier,
-        new TableInfo.Builder()
-          .withProperties(properties.asJava)
-          .withColumns(
-            CatalogV2Util.structTypeToV2Columns(tableOutputSchema(table, resolvedDataflowGraph))
-          )
-          .withPartitions(tablePartitioning(table).toArray)
-          .build()
-      )
-    }
-
-    table.copy(
-      normalizedPath = Option(
-        catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION)
-      )
-    )
-  }
-
-  /**
    * Materializes the tables in the given graph. This method will create or update the tables
    * in the catalog based on the given graph and context.
    *
@@ -110,7 +76,7 @@ object DatasetManager extends Logging {
   def materializeDatasets(
       resolvedDataflowGraph: DataflowGraph,
       context: PipelineUpdateContext
-  ): Unit = {
+  ): DataflowGraph = {
     val (_, refreshTableIdentsSet, fullRefreshTableIdentsSet) = {
       DatasetManager.constructFullRefreshSet(resolvedDataflowGraph.tables, context)
     }
@@ -129,30 +95,40 @@ object DatasetManager extends Logging {
       tablesToMatz(resolvedDataflowGraph).map(t => t.table.identifier -> t).toMap
     }
 
-    try {
-      resolvedDataflowGraph.tables.foreach { table =>
-        if (tablesToMaterialize.contains(table.identifier)) {
-          try {
-            materializeTable(
-              resolvedDataflowGraph = resolvedDataflowGraph,
-              table = table,
-              isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh,
-              context = context
-            )
-          } catch {
-            case NonFatal(e) =>
-              throw TableMaterializationException(
-                table.displayName,
-                cause = e.addOrigin(table.origin)
-              )
+    // materialized [[DataflowGraph]] where each table has been materialized and each table
+    // has metadata (e.g., normalized table storage path) populated
+    val materializedGraph: DataflowGraph = try {
+      DataflowGraphTransformer
+        .withDataflowGraphTransformer(resolvedDataflowGraph) { transformer =>
+          transformer.transformTables { table =>
+            if (tablesToMaterialize.keySet.contains(table.identifier)) {
+              try {
+                materializeTable(
+                  resolvedDataflowGraph = resolvedDataflowGraph,
+                  table = table,
+                  isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh,
+                  context = context
+                )
+              } catch {
+                case NonFatal(e) =>
+                  throw TableMaterializationException(
+                    table.displayName,
+                    cause = e.addOrigin(table.origin)
+                  )
+              }
+            } else {
+              table
+            }
           }
+
         }
-      }
+        .getDataflowGraph
     } catch {
       case e: SparkException if e.getCause != null => throw e.getCause
     }
 
-    materializeViews(resolvedDataflowGraph, context)
+    materializeViews(materializedGraph, context)
+    materializedGraph
   }
 
   /**
@@ -261,11 +237,8 @@ object DatasetManager extends Logging {
   }
 
   /**
-   * Materializes metadata for a table in the catalog, i.e. updates the metadata in the catalog to
-   * match the metadata on the table's definition in the graph.
-   *
-   * Expects that the table already exists.
-   *
+   * Materializes a table in the catalog. This method will create or update the table in the
+   * catalog based on the given table and context.
    * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used to infer the table schema.
    * @param table The table to be materialized.
    * @param isFullRefresh Whether this table should be full refreshed or not.
@@ -277,14 +250,20 @@ object DatasetManager extends Logging {
       table: Table,
       isFullRefresh: Boolean,
       context: PipelineUpdateContext
-  ): Unit = {
+  ): Table = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
-    val catalog = getTableCatalogForTable(context.spark, table.identifier)
+    val catalogManager = context.spark.sessionState.catalogManager
+    val catalog = (table.identifier.catalog match {
+      case Some(catalogName) =>
+        catalogManager.catalog(catalogName)
+      case None =>
+        catalogManager.currentCatalog
+    }).asInstanceOf[TableCatalog]
 
-    val identifier = table.catalogV2Identifier
-    val outputSchema = table.specifiedSchema.getOrElse(
-      resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
-    )
+    val identifier =
+      Identifier.of(Array(table.identifier.database.get), table.identifier.identifier)
+    val outputSchema = tableOutputSchema(table, resolvedDataflowGraph)
+
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = tablePartitioning(table)
 
@@ -332,6 +311,24 @@ object DatasetManager extends Logging {
       val setProperties = mergedProperties.map { case (k, v) => TableChange.setProperty(k, v) }
       catalog.alterTable(identifier, (columnChanges ++ setProperties).toArray: _*)
     }
+
+    // Create the table if we need to
+    if (existingTableOpt.isEmpty) {
+      catalog.createTable(
+        identifier,
+        new TableInfo.Builder()
+          .withProperties(mergedProperties.asJava)
+          .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
+          .withPartitions(partitioning.toArray)
+          .build()
+      )
+    }
+
+    table.copy(
+      normalizedPath = Option(
+        catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION)
+      )
+    )
   }
 
   /**

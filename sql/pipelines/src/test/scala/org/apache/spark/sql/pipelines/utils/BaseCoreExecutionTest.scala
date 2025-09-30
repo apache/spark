@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.utils
 
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, DatasetManager, PipelineExecution, PipelineUpdateContext}
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, DatasetManager, PipelineUpdateContext}
 
 trait BaseCoreExecutionTest extends ExecutionTest {
 
@@ -33,8 +33,6 @@ trait BaseCoreExecutionTest extends ExecutionTest {
     val contextToUse = contextOpt.getOrElse(
       TestPipelineUpdateContext(spark = spark, unresolvedGraph = graph, storageRoot = storageRoot)
     )
-    val tablesCreatedGraph = PipelineExecution.createTables(graph, contextToUse)
     DatasetManager.materializeDatasets(graph, contextToUse)
-    tablesCreatedGraph
   }
 }

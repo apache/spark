@@ -337,13 +337,17 @@ private[connect] object PipelinesHandler extends Logging {
             eventSender.sendEvent(event)
         }
       }
+      // read storage root from spark conf
+      val storageRoot = sessionHolder.session.conf.getOption("spark.sql.pipelines.storageRoot")
+        .getOrElse(throw new IllegalArgumentException(
+          "spark.sql.pipelines.storageRoot must be set to use pipelines."))
 
       val pipelineUpdateContext = new PipelineUpdateContextImpl(
         graphElementRegistry.toDataflowGraph,
         eventCallback,
         tableFiltersResult.refresh,
         tableFiltersResult.fullRefresh,
-        "") // TODO: storage root
+        storageRoot)
       sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
 
       if (cmd.getDry) {

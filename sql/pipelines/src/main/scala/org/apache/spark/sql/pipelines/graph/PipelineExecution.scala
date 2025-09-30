@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.pipelines.common.RunState
-import org.apache.spark.sql.pipelines.graph.DatasetManager.TableMaterializationException
-import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.logging.{ConstructPipelineEvent, EventLevel, PipelineEvent, PipelineEventOrigin, RunProgress}
 
 /**
@@ -44,12 +40,11 @@ class PipelineExecution(context: PipelineUpdateContext) {
   def startPipeline(): Unit = synchronized {
     // Initialize the graph.
     val resolvedGraph = resolveGraph()
-    val initializedGraph = PipelineExecution.createTables(resolvedGraph, context)
     if (context.fullRefreshTables.nonEmpty) {
-      State.reset(initializedGraph, context)
+      State.reset(resolvedGraph, context)
     }
 
-    DatasetManager.materializeDatasets(initializedGraph, context)
+    val initializedGraph = DatasetManager.materializeDatasets(resolvedGraph, context)
 
     // Execute the graph.
     graphExecution = Option(
@@ -173,25 +168,25 @@ class PipelineExecution(context: PipelineUpdateContext) {
 
 object PipelineExecution {
 
-  /**
-   * @return a graph where all tables have their `path` attribute filled out.
-   */
-   def createTables(resolvedGraph: DataflowGraph, context: PipelineUpdateContext):
-    DataflowGraph = {
-    DataflowGraphTransformer
-      .withDataflowGraphTransformer(resolvedGraph) { transformer =>
-        transformer.transformTables { table =>
-          try {
-            DatasetManager.ensureTableCreated(context.spark, table, resolvedGraph)
-          }
-          catch {
-            case NonFatal(e) =>
-              throw TableMaterializationException(
-                table.displayName,
-                cause = e.addOrigin(table.origin)
-              )
-          }
-        }
-      }.getDataflowGraph
-  }
+//  /**
+//   * @return a graph where all tables have their `path` attribute filled out.
+//   */
+//   def createTables(resolvedGraph: DataflowGraph, context: PipelineUpdateContext):
+//    DataflowGraph = {
+//    DataflowGraphTransformer
+//      .withDataflowGraphTransformer(resolvedGraph) { transformer =>
+//        transformer.transformTables { table =>
+//          try {
+//            DatasetManager.ensureTableCreated(context.spark, table, resolvedGraph)
+//          }
+//          catch {
+//            case NonFatal(e) =>
+//              throw TableMaterializationException(
+//                table.displayName,
+//                cause = e.addOrigin(table.origin)
+//              )
+//          }
+//        }
+//      }.getDataflowGraph
+//  }
 }

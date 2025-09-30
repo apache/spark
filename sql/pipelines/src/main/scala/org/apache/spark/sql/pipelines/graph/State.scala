@@ -74,7 +74,7 @@ object State extends Logging {
   }
 
   /**
-   * Resets the table by:
+   * Resets the table only if it exists by:
    *  - Clearing out all data
    *  - Removing all columns
    */
@@ -84,13 +84,15 @@ object State extends Logging {
     val identifier =
       Identifier.of(Array(table.identifier.database.get), table.identifier.identifier)
 
-    env.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
+    if (catalog.tableExists(identifier)) {
+      env.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
 
-    val catalogTable = catalog.loadTable(identifier)
-    val deletions = catalogTable.columns().map { c =>
-      TableChange.deleteColumn(Array(c.name), false)
+      val catalogTable = catalog.loadTable(identifier)
+      val deletions = catalogTable.columns().map { c =>
+        TableChange.deleteColumn(Array(c.name), false)
+      }
+      catalog.alterTable(identifier, deletions: _*)
     }
-    catalog.alterTable(identifier, deletions: _*)
   }
 
   /**

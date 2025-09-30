@@ -25,8 +25,14 @@ import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkConnectTestUti
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.pipelines.utils.PipelineTest
+import org.apache.spark.util.Utils
 
 class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
+
+  protected override def sparkConf = {
+    super.sparkConf
+      .set("spark.sql.pipelines.storageRoot", Utils.createTempDir().getAbsolutePath)
+  }
 
   override def afterEach(): Unit = {
     SparkConnectService.sessionManager
@@ -37,6 +43,9 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
       })
     PipelineTest.cleanupMetastore(spark)
     super.afterEach()
+    // clear spark.sql.pipelines.storageRoot directory
+    val storageRoot = spark.conf.get("spark.sql.pipelines.storageRoot")
+    Utils.deleteRecursively(new java.io.File(storageRoot))
   }
 
   // Helper method to get the session holder
