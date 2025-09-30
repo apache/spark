@@ -570,10 +570,10 @@ class SparkThrowableSuite extends SparkFunSuite {
       val breakingChangeInfo = reader.getBreakingChangeInfo("TEST_ERROR")
       assert(
         breakingChangeInfo.contains(
-          BreakingChangeInfo(
+          new BreakingChangeInfo(
             Seq("Migration message with <param2>."),
-            Some(MitigationConfig("config.key1", "config.value1")),
-            needsAudit = false)))
+            Some(new MitigationConfig("config.key1", "config.value1")),
+            false)))
       val errorMessage2 =
         reader.getErrorMessage("TEST_ERROR_WITH_SUBCLASS.SUBCLASS", error2Params)
       assert(
@@ -582,9 +582,9 @@ class SparkThrowableSuite extends SparkFunSuite {
       val breakingChangeInfo2 = reader.getBreakingChangeInfo("TEST_ERROR_WITH_SUBCLASS.SUBCLASS")
       assert(
         breakingChangeInfo2.contains(
-          BreakingChangeInfo(
+          new BreakingChangeInfo(
             Seq("Subclass migration message with <param3>."),
-            Some(MitigationConfig("config.key2", "config.value2")))))
+            Some(new MitigationConfig("config.key2", "config.value2")))))
     }
   }
 
