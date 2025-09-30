@@ -91,7 +91,7 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
           case Seq(
               StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
               StringLiteral("n_s"), GetStructField(_, _, Some("n_s"))) =>
-            // todo: is this change ok? I think this is better as it avoids unnecessary copy.
+            // OK
 
           case sValueChildren =>
             fail(s"Unexpected children for 's': $sValueChildren")

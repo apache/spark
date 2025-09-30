@@ -174,17 +174,6 @@ object TableOutputResolver extends SQLConfHelper with Logging {
    *
    * See SPARK-52772 for a discussion on rewrites that caused trouble with
    * going from resolved to unresolved.
-   *
-   * There are some rewrites the undo our efforts to set the metadata (see below).
-   * If we return the two inherited childMetadata, this may cause some
-   * writers to behave incorrectly, or if the childMetadata has
-   * the char/varchar key, then the update will flip from resolved back to unresolved,
-   * which causes validateOptimizedPlan to throw exception.
-   *
-   * So we choose representations that:
-   *   - keep the table attr metadata when nonempty
-   *   - never keeps the char/varchar key
-   *   - may leak the query meta
    */
   private def applyColumnMetadata(expr: Expression, column: Attribute): NamedExpression = {
     // We have dealt with the required write-side char/varchar processing.

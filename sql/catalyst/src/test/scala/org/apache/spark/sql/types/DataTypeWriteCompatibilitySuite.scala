@@ -678,5 +678,4 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       case e: Throwable => fail(desc, e)
     }
   }
-
 }
