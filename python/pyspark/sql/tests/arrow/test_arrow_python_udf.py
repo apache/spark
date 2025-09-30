@@ -442,12 +442,12 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             [Row(b=b"hello"), Row(b=b"world")], schema=StructType([StructField("b", BinaryType())])
         )
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "true"}):
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
             result = df.select(binary_udf(col("b")).alias("type_name")).collect()
             self.assertEqual(result[0]["type_name"], "bytes")
             self.assertEqual(result[1]["type_name"], "bytes")
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "false"}):
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
             result = df.select(binary_udf(col("b")).alias("type_name")).collect()
             self.assertEqual(result[0]["type_name"], "bytearray")
             self.assertEqual(result[1]["type_name"], "bytearray")
@@ -463,12 +463,12 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             schema=StructType([StructField("arr_b", ArrayType(BinaryType()))]),
         )
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "true"}):
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
             result = df.select(array_binary_udf(col("arr_b")).alias("types")).collect()
             self.assertEqual(result[0]["types"], ["bytes", "bytes"])
             self.assertEqual(result[1]["types"], ["bytes", "bytes"])
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "false"}):
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
             result = df.select(array_binary_udf(col("arr_b")).alias("types")).collect()
             self.assertEqual(result[0]["types"], ["bytearray", "bytearray"])
             self.assertEqual(result[1]["types"], ["bytearray", "bytearray"])
@@ -484,12 +484,12 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             schema=StructType([StructField("map_b", MapType(StringType(), BinaryType()))]),
         )
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "true"}):
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
             result = df.select(map_binary_udf(col("map_b")).alias("types")).collect()
             self.assertEqual(set(result[0]["types"]), {"bytes"})
             self.assertEqual(result[1]["types"], ["bytes"])
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "false"}):
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
             result = df.select(map_binary_udf(col("map_b")).alias("types")).collect()
             self.assertEqual(set(result[0]["types"]), {"bytearray"})
             self.assertEqual(result[1]["types"], ["bytearray"])
@@ -509,12 +509,12 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             schema=StructType([StructField("struct_b", struct_schema)]),
         )
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "true"}):
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
             result = df.select(struct_binary_udf(col("struct_b")).alias("type_name")).collect()
             self.assertEqual(result[0]["type_name"], "bytes")
             self.assertEqual(result[1]["type_name"], "bytes")
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.binaryAsBytes": "false"}):
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
             result = df.select(struct_binary_udf(col("struct_b")).alias("type_name")).collect()
             self.assertEqual(result[0]["type_name"], "bytearray")
             self.assertEqual(result[1]["type_name"], "bytearray")

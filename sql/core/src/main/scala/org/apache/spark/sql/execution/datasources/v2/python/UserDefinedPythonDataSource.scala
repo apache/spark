@@ -458,7 +458,7 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
 
     // Send configurations
     dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
-    dataOut.writeBoolean(SQLConf.get.arrowPySparkBinaryAsBytes)
+    dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
@@ -551,7 +551,7 @@ private class UserDefinedPythonDataSourceReadRunner(
     dataOut.writeBoolean(SQLConf.get.pythonFilterPushDown)
 
     dataOut.writeBoolean(isStreaming)
-    dataOut.writeBoolean(SQLConf.get.arrowPySparkBinaryAsBytes)
+    dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceReadInfo = {
@@ -602,7 +602,7 @@ private class UserDefinedPythonDataSourceWriteRunner(
     dataOut.writeBoolean(overwrite)
 
     dataOut.writeBoolean(isStreaming)
-    dataOut.writeBoolean(SQLConf.get.arrowPySparkBinaryAsBytes)
+    dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
   }
 
   override protected def receiveFromPython(

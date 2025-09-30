@@ -3724,9 +3724,10 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val ARROW_PYSPARK_BINARY_AS_BYTES =
-    buildConf("spark.sql.execution.arrow.pyspark.binaryAsBytes")
-      .doc("To be added.")
+  val PYSPARK_BINARY_AS_BYTES =
+    buildConf("spark.sql.execution.pyspark.binaryAsBytes")
+      .doc("When true, BINARY type columns are returned as bytes in PySpark. " +
+        "When false, restores pre 4.1 behavior.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
@@ -7109,7 +7110,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
 
-  def arrowPySparkBinaryAsBytes: Boolean = getConf(ARROW_PYSPARK_BINARY_AS_BYTES)
+  def pysparkBinaryAsBytes: Boolean = getConf(PYSPARK_BINARY_AS_BYTES)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 

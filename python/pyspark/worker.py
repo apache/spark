@@ -1306,8 +1306,7 @@ def read_udtf(pickleSer, infile, eval_type):
             == "true"
         )
         binary_as_bytes = (
-            runner_conf.get("spark.sql.execution.arrow.pyspark.binaryAsBytes", "true").lower()
-            == "true"
+            runner_conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true").lower() == "true"
         )
         input_types = [
             field.dataType for field in _parse_datatype_json_string(utf8_deserializer.loads(infile))
@@ -2553,8 +2552,7 @@ def read_udfs(pickleSer, infile, eval_type):
             == "true"
         )
         binary_as_bytes = (
-            runner_conf.get("spark.sql.execution.arrow.pyspark.binaryAsBytes", "true").lower()
-            == "true"
+            runner_conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true").lower() == "true"
         )
         _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
