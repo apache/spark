@@ -1873,7 +1873,7 @@ class ClientE2ETestSuite
     }
   }
 
-  testForce("Arrow batch result chunking") {
+  test("Arrow batch result chunking") {
     // This test validates that the client can correctly reassemble chunked Arrow batches
     // using SequenceInputStream as implemented in SparkResult.processResponses
 
@@ -1889,11 +1889,10 @@ class ClientE2ETestSuite
           // Set preferred chunk size if specified and add interceptor
           preferredChunkSizeOpt match {
             case Some(size) =>
-              spark = createSparkSession(connectionString,
+              spark = createSparkSession(
                 _.preferredArrowChunkSize(Some(size)).interceptor(arrowBatchInterceptor))
             case None =>
-              spark = createSparkSession(connectionString,
-                _.interceptor(arrowBatchInterceptor))
+              spark = createSparkSession(_.interceptor(arrowBatchInterceptor))
           }
           // Set server max chunk size if specified
           maxChunkSizeOpt.foreach { size =>

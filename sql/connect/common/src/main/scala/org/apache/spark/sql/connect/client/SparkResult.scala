@@ -30,6 +30,7 @@ import org.apache.arrow.vector.types.pojo
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
@@ -44,7 +45,8 @@ private[sql] class SparkResult[T](
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
     timeZoneId: String)
-    extends AutoCloseable { self =>
+    extends AutoCloseable
+    with Logging { self =>
 
   case class StageInfo(
       stageId: Long,
@@ -197,7 +199,7 @@ private[sql] class SparkResult[T](
 
           val numChunks = arrowBatchChunksToAssemble.size
           val inputStreams =
-            arrowBatchChunksToAssemble.map(_.newInput()).toIterator.asJavaEnumeration
+            arrowBatchChunksToAssemble.map(_.newInput()).iterator.asJavaEnumeration
           val input = new SequenceInputStream(inputStreams)
           arrowBatchChunksToAssemble.clear()
           logDebug(
