@@ -3421,8 +3421,8 @@ class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
 
 class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
     def test_udtf_binary_type(self):
-        # For Arrow Python UDTF with non-legacy conversion BinaryType is mapped to bytes or bytearray
-        # consistently with non-Arrow Python UDTF behavior.
+        # For Arrow Python UDTF with non-legacy conversionBinaryType is mapped to
+        # bytes or bytearray consistently with non-Arrow Python UDTF behavior.
         BaseUDTFTestsMixin.test_udtf_binary_type(self)
 
     def test_numeric_output_type_casting(self):

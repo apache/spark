@@ -46,6 +46,10 @@ class ArrowPythonUDFParityLegacyTestsMixin(ArrowPythonUDFTestsMixin):
         finally:
             super().tearDownClass()
 
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFLegacyTests.")
+    def test_udf_binary_type(self):
+        super().test_udf_binary_type(self)
+
 
 class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
     @classmethod
@@ -61,6 +65,10 @@ class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
         finally:
             super().tearDownClass()
+
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFNonLegacyTests.")
+    def test_udf_binary_type(self):
+        super().test_udf_binary_type(self)
 
 
 class ArrowPythonUDFParityLegacyTests(UDFParityTests, ArrowPythonUDFParityLegacyTestsMixin):

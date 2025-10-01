@@ -22,11 +22,8 @@ from pyspark.sql import Row
 from pyspark.sql.functions import udf, col
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
-    ArrayType,
     BinaryType,
     DayTimeIntervalType,
-    IntegerType,
-    MapType,
     StringType,
     StructField,
     StructType,
