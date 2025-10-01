@@ -69,6 +69,7 @@ are listed below:
       - False
     * - spark.sql.execution.pyspark.binaryAsBytes
       - Introduced in Spark 4.1.0. When enabled, BinaryType is mapped consistently to Python bytes; when disabled, matches the PySpark default behavior before 4.1.0.
+      - True
 
 All Conversions
 ---------------
