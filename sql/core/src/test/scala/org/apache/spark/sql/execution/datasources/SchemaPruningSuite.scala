@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -107,6 +108,93 @@ abstract class SchemaPruningSuite
     p: Int)
 
   case class BriefContactWithDataPartitionColumn(id: Int, name: Name, address: String, p: Int)
+
+  // Case classes for nested column aliasing tests
+  case class Item(itemId: Int, itemName: String, itemPrice: Double, itemCategory: String)
+  case class SubItem(itemId: Int, itemName: String, itemStatus: String, itemValue: Double)
+  case class SubContainer(containerId: Int, items: Array[SubItem], containerType: String)
+  case class Request(requestId: Int, timestamp: String, userAgent: String, items: Array[Item])
+  case class PageView(pageId: Int, userId: String, requests: Array[Request])
+  case class NestedItem(id: Int, name: String, price: Double, category: String, active: Boolean)
+  case class Container(id: Int, items: Array[NestedItem])
+  case class Session(sessionId: Int, startTime: String, events: Array[String])
+  case class User(userId: Int, userName: String, sessions: Array[Session])
+  case class JsonNestedItem(id: Int, name: String, price: Double, tags: Array[String])
+  case class JsonContainer(containerId: Int, items: Array[JsonNestedItem], metadata: String)
+  case class ParquetOrder(orderId: Int, orderDate: String, total: Double)
+  case class ParquetCustomer(customerId: Int, customerName: String, orders: Array[ParquetOrder])
+  case class FilterableItem(id: Int, name: String, category: String, price: Double, active: Boolean)
+  case class FilterableContainer(containerId: Int, containerType: String, items: Array[FilterableItem])
+  case class SalesRecord(salesId: Int, amount: Double, region: String, quarter: Int)
+  case class SalesData(year: Int, records: Array[SalesRecord], totalRevenue: Double)
+
+  case class DocumentContent(title: String, body: String, tags: Array[String])
+  case class Document(docId: Int, content: DocumentContent, metadata: Map[String, String])
+  case class DocumentWithTags(docId: Int, title: String, tags: Array[Tag], categories: Array[String])
+
+  case class LeftRecord(id: Int, leftData: String, leftValue: Double)
+  case class RightRecord(id: Int, rightData: String, rightCode: String)
+  case class LeftContainer(leftItems: Array[LeftRecord])
+  case class RightContainer(rightItems: Array[RightRecord])
+
+
+  case class Address(street: String, city: String, zipCode: String, country: String)
+  case class PersonalInfo(firstName: String, lastName: String, address: Address, age: Int)
+  case class Employee2(empId: Int, personalInfo: PersonalInfo, department: String, salary: Double)
+  case class Company2(companyId: Int, employees: Array[Employee2], companyName: String)
+
+  case class CteRecord(recordId: Int, recordName: String, recordType: String, recordData: Double)
+  case class CteData(dataId: Int, records: Array[CteRecord], metadata: String)
+  case class Skill(skillId: Int, skillName: String, level: String)
+  case class Project(projectId: Int, projectName: String, skills: Array[Skill])
+  case class TestDepartment(deptId: Int, deptName: String, projects: Array[Project])
+  case class Organization(orgId: Int, orgName: String, departments: Array[TestDepartment])
+
+  case class AddressTag(street: String, city: String, zipCode: String, country: String)
+  case class PersonalInfoTag(firstName: String, lastName: String, address: AddressTag, age: Int)
+  case class EmployeeTag(empId: Int, personalInfo: PersonalInfoTag, department: String, salary: Double)
+  case class CompanyTag(companyId: Int, employees: Array[EmployeeTag], companyName: String)
+
+  case class SkillTag(skillId: Int, skillName: String, level: String, certified: Boolean)
+  case class ProjectTag(projectId: Int, projectName: String, skills: Array[SkillTag], budget: Double)
+  case class DepartmentTag(deptId: Int, deptName: String, projects: Array[ProjectTag], manager: String)
+  case class OrganizationTag(orgId: Int, departments: Array[DepartmentTag], orgType: String)
+
+
+  case class Customer(customerId: Int, customerName: String, address: String, phoneNumber: String)
+  case class CustomerData(customers: Array[Customer], lastUpdated: String)
+
+  case class Level3(field: String)
+  case class Level2(field: String, level3: Array[Level3])
+  case class Level1(field: String, level2: Array[Level2])
+  case class RootLevel(field: String, level1: Array[Level1])
+
+  case class Level4Tag(field4: String, data4: Int, unused4: String)
+  case class Level3Tag(field3: String, level4: Level4Tag, unused3: Double)
+  case class Level2Tag(field2: String, level3: Level3Tag, unused2: Boolean)
+  case class Level1Tag(field1: String, level2: Level2Tag, unused1: Array[String])
+  case class RootLevelTag(items: Array[Level1Tag], rootField: String)
+
+  // Aggregation test classes (use unique names to avoid TypeTag issues with local classes)
+  case class AggEvent(eventId: Int, eventName: String, eventType: String)
+  case class AggSession(sessionId: Int, duration: Int, events: Array[AggEvent])
+  case class AggUser(userId: Int, userName: String, sessions: Array[AggSession])
+
+  case class ParquetProduct(productId: Int, productName: String, productPrice: Double)
+  case class ParquetOrderAdvanced(orderId: Int, orderDate: String, products: Array[ParquetProduct])
+  case class ParquetCustomerAdvanced(customerId: Int, customerName: String, orders: Array[ParquetOrderAdvanced])
+
+  case class MixedCaseColumn(a: String, B: Int)
+  case class MixedCase(id: Int, CoL1: String, coL2: MixedCaseColumn)
+  case class FilterableItemTag(id: Int, name: String, category: String, price: Double, active: Boolean)
+  case class FilterableContainerv(containerId: Int, containerType: String, items: Array[FilterableItemTag])
+
+  case class ContactInfo(phone: String, email: String, preferred: String)
+  case class CustomerProfileWithContactInfo(profileId: Int, contacts: Array[ContactInfo], preferences: Map[String, String])
+  case class CustomerWithOrders(customerId: Int, profile: CustomerProfileWithContactInfo, orders: Array[Int], active: Boolean)
+  case class CustomerDataExtended(customers: Array[CustomerWithOrders], lastUpdated: String)
+
+  case class Tag(tagId: Int, tagName: String, tagType: String)
 
   val contactsWithDataPartitionColumn =
     contacts.map {case Contact(id, name, address, pets, friends, relatives, employer, relations) =>
@@ -765,8 +853,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  case class MixedCaseColumn(a: String, B: Int)
-  case class MixedCase(id: Int, CoL1: String, coL2: MixedCaseColumn)
+
 
   private val mixedCaseData =
     MixedCase(0, "r0c1", MixedCaseColumn("abc", 1)) ::
@@ -1165,9 +1252,6 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("SPARK-XXXXX: multi-field explode column pruning optimization") {
     // Create test data with nested structure similar to pageviews -> requests -> items
-    case class Item(itemId: Int, itemName: String, itemPrice: Double, itemCategory: String)
-    case class Request(requestId: Int, timestamp: String, userAgent: String, items: Array[Item])
-    case class PageView(pageId: Int, userId: String, requests: Array[Request])
 
     val testData = PageView(1, "user1", Array(
       Request(101, "2023-01-01", "browser1", Array(
@@ -1204,8 +1288,6 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("SPARK-XXXXX: explode with filter and multiple field selection") {
     // Test that optimization works even with filters
-    case class NestedItem(id: Int, name: String, price: Double, category: String, active: Boolean)
-    case class Container(id: Int, items: Array[NestedItem])
 
     val testData = Container(1, Array(
       NestedItem(1, "item1", 10.0, "cat1", true),
@@ -1227,19 +1309,15 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("SPARK-XXXXX: nested explode with aggregation") {
     // Test that optimization works with aggregations on exploded data
-    case class Event(eventId: Int, eventName: String, eventType: String)
-    case class Session(sessionId: Int, duration: Int, events: Array[Event])
-    case class User(userId: Int, userName: String, sessions: Array[Session])
-
-    val testData = User(1, "user1", Array(
-      Session(101, 3600, Array(
-        Event(1001, "login", "auth"),
-        Event(1002, "click", "interaction"),
-        Event(1003, "purchase", "transaction")
+    val testData = AggUser(1, "user1", Array(
+      AggSession(101, 3600, Array(
+        AggEvent(1001, "login", "auth"),
+        AggEvent(1002, "click", "interaction"),
+        AggEvent(1003, "purchase", "transaction")
       )),
-      Session(102, 1800, Array(
-        Event(1004, "login", "auth"),
-        Event(1005, "logout", "auth")
+      AggSession(102, 1800, Array(
+        AggEvent(1004, "login", "auth"),
+        AggEvent(1005, "logout", "auth")
       ))
     )) :: Nil
 
@@ -1258,8 +1336,6 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: multi-format support - JSON with nested explode") {
-    case class JsonNestedItem(id: Int, name: String, price: Double, tags: Array[String])
-    case class JsonContainer(containerId: Int, items: Array[JsonNestedItem], metadata: String)
     
     val testData = JsonContainer(1, Array(
       JsonNestedItem(101, "item1", 10.5, Array("tag1", "tag2")),
@@ -1278,16 +1354,14 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: multi-level explode with Parquet optimization") {
-    case class ParquetProduct(productId: Int, productName: String, productPrice: Double)
-    case class ParquetOrder(orderId: Int, orderDate: String, products: Array[ParquetProduct])
-    case class ParquetCustomer(customerId: Int, customerName: String, orders: Array[ParquetOrder])
-    
-    val testData = ParquetCustomer(1, "John Doe", Array(
-      ParquetOrder(101, "2023-01-01", Array(
+
+
+    val testData = ParquetCustomerAdvanced(1, "John Doe", Array(
+      ParquetOrderAdvanced(101, "2023-01-01", Array(
         ParquetProduct(201, "Product1", 10.0),
         ParquetProduct(202, "Product2", 20.0)
       )),
-      ParquetOrder(102, "2023-01-02", Array(
+      ParquetOrderAdvanced(102, "2023-01-02", Array(
         ParquetProduct(203, "Product3", 30.0)
       ))
     )) :: Nil
@@ -1307,8 +1381,7 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: complex filter predicates with explode optimization") {
-    case class FilterableItem(id: Int, name: String, category: String, price: Double, active: Boolean)
-    case class FilterableContainer(containerId: Int, containerType: String, items: Array[FilterableItem])
+
     
     val testData = FilterableContainer(1, "premium", Array(
       FilterableItem(1, "item1", "electronics", 100.0, true),
@@ -1332,8 +1405,7 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: window functions over exploded nested data") {
-    case class SalesRecord(salesId: Int, amount: Double, region: String, quarter: Int)
-    case class SalesData(year: Int, records: Array[SalesRecord], totalRevenue: Double)
+
     
     val testData = SalesData(2023, Array(
       SalesRecord(1, 1000.0, "North", 1),
@@ -1363,10 +1435,9 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: lateral view with multiple explodes") {
-    case class Tag(tagId: Int, tagName: String, tagType: String)
-    case class Document(docId: Int, title: String, tags: Array[Tag], categories: Array[String])
+
     
-    val testData = Document(1, "Test Document", Array(
+    val testData = DocumentWithTags(1, "Test Document", Array(
       Tag(101, "spark", "technology"),
       Tag(102, "sql", "technology")
     ), Array("tutorial", "advanced")) :: Nil
@@ -1391,10 +1462,7 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: join between exploded tables") {
-    case class LeftRecord(id: Int, leftData: String, leftValue: Double)
-    case class RightRecord(id: Int, rightData: String, rightCode: String)
-    case class LeftContainer(leftItems: Array[LeftRecord])
-    case class RightContainer(rightItems: Array[RightRecord])
+
     
     val leftData = LeftContainer(Array(
       LeftRecord(1, "left1", 10.0),
@@ -1406,25 +1474,26 @@ abstract class SchemaPruningSuite
       RightRecord(2, "right2", "code2")
     )) :: Nil
 
-    withDataSourceTable(leftData, "left_containers")
-    withDataSourceTable(rightData, "right_containers")
+    withDataSourceTable(leftData, "left_containers") {
+      withDataSourceTable(rightData, "right_containers") {
     
-    val query = spark.table("left_containers")
-      .select(explode(col("leftItems")).as("left"))
-      .join(
-        spark.table("right_containers")
-          .select(explode(col("rightItems")).as("right")),
-        col("left.id") === col("right.id")
-      )
-      .select("left.id", "left.leftData", "right.rightCode")
-      
-    // Should prune leftValue and rightData
-    checkAnswer(query, Row(1, "left1", "code1") :: Row(2, "left2", "code2") :: Nil)
+        val query = spark.table("left_containers")
+          .select(explode(col("leftItems")).as("left"))
+          .join(
+            spark.table("right_containers")
+              .select(explode(col("rightItems")).as("right")),
+            col("left.id") === col("right.id")
+          )
+          .select("left.id", "left.leftData", "right.rightCode")
+
+        // Should prune leftValue and rightData
+        checkAnswer(query, Row(1, "left1", "code1") :: Row(2, "left2", "code2") :: Nil)
+      }
+    }
   }
 
   testSchemaPruning("SPARK-XXXXX: subquery with exploded data") {
-    case class SubItem(itemId: Int, itemName: String, itemStatus: String, itemValue: Double)
-    case class SubContainer(containerId: Int, items: Array[SubItem], containerType: String)
+
     
     val testData = SubContainer(1, Array(
       SubItem(101, "item1", "active", 100.0),
@@ -1449,9 +1518,7 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: CTE with exploded nested data") {
-    case class CteRecord(recordId: Int, recordName: String, recordType: String, recordData: Double)
-    case class CteData(dataId: Int, records: Array[CteRecord], metadata: String)
-    
+
     val testData = CteData(1, Array(
       CteRecord(1, "record1", "typeA", 10.0),
       CteRecord(2, "record2", "typeB", 20.0),
@@ -1500,16 +1567,13 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: exploding nested structs within structs") {
-    case class Address(street: String, city: String, zipCode: String, country: String)
-    case class PersonalInfo(firstName: String, lastName: String, address: Address, age: Int)
-    case class Employee(empId: Int, personalInfo: PersonalInfo, department: String, salary: Double)
-    case class Company(companyId: Int, employees: Array[Employee], companyName: String)
+
     
-    val testData = Company(1, Array(
-      Employee(101, PersonalInfo("John", "Doe", 
-        Address("123 Main St", "NYC", "10001", "USA"), 30), "Engineering", 75000.0),
-      Employee(102, PersonalInfo("Jane", "Smith", 
-        Address("456 Oak Ave", "SF", "94102", "USA"), 28), "Marketing", 65000.0)
+    val testData = CompanyTag(1, Array(
+      EmployeeTag(101, PersonalInfoTag("John", "Doe",
+        AddressTag("123 Main St", "NYC", "10001", "USA"), 30), "Engineering", 75000.0),
+      EmployeeTag(102, PersonalInfoTag("Jane", "Smith",
+        AddressTag("456 Oak Ave", "SF", "94102", "USA"), 28), "Marketing", 65000.0)
     ), "TechCorp") :: Nil
 
     withDataSourceTable(testData, "companies") {
@@ -1526,25 +1590,22 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: nested list of structs containing lists of structs") {
-    case class Skill(skillId: Int, skillName: String, level: String, certified: Boolean)
-    case class Project(projectId: Int, projectName: String, skills: Array[Skill], budget: Double)
-    case class Department(deptId: Int, deptName: String, projects: Array[Project], manager: String)
-    case class Organization(orgId: Int, departments: Array[Department], orgType: String)
+
     
-    val testData = Organization(1, Array(
-      Department(10, "Engineering", Array(
-        Project(100, "Project A", Array(
-          Skill(1, "Scala", "Expert", true),
-          Skill(2, "Spark", "Advanced", false)
+    val testData = OrganizationTag(1, Array(
+      DepartmentTag(10, "Engineering", Array(
+        ProjectTag(100, "Project A", Array(
+          SkillTag(1, "Scala", "Expert", true),
+          SkillTag(2, "Spark", "Advanced", false)
         ), 100000.0),
-        Project(101, "Project B", Array(
-          Skill(3, "Python", "Intermediate", true)
+        ProjectTag(101, "Project B", Array(
+          SkillTag(3, "Python", "Intermediate", true)
         ), 75000.0)
       ), "Alice"),
-      Department(20, "Data Science", Array(
-        Project(200, "ML Project", Array(
-          Skill(4, "TensorFlow", "Advanced", true),
-          Skill(5, "Statistics", "Expert", false)
+      DepartmentTag(20, "Data Science", Array(
+        ProjectTag(200, "ML Project", Array(
+          SkillTag(4, "TensorFlow", "Advanced", true),
+          SkillTag(5, "Statistics", "Expert", false)
         ), 150000.0)
       ), "Bob")
     ), "Tech") :: Nil
@@ -1568,8 +1629,6 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: nested map of structs with explode") {
-    import org.apache.spark.sql.types._
-    
     // Using raw SQL since case classes don't support maps easily
     val mapData = spark.sql("""
       SELECT map(
@@ -1640,10 +1699,7 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: mixed nested structures with conditional access") {
-    case class ContactInfo(phone: String, email: String, preferred: String)
-    case class CustomerProfile(profileId: Int, contacts: Array[ContactInfo], preferences: Map[String, String])
-    case class Customer(customerId: Int, profile: CustomerProfile, orders: Array[Int], active: Boolean)
-    case class CustomerData(customers: Array[Customer], lastUpdated: String)
+
     
     // Simulate this with SQL since maps in case classes are complex
     val mixedData = spark.sql("""
@@ -1680,15 +1736,9 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("SPARK-XXXXX: deeply nested struct in array optimization") {
-    case class Level4(field4: String, data4: Int, unused4: String)
-    case class Level3(field3: String, level4: Level4, unused3: Double)
-    case class Level2(field2: String, level3: Level3, unused2: Boolean)
-    case class Level1(field1: String, level2: Level2, unused1: Array[String])
-    case class RootLevel(items: Array[Level1], rootField: String)
-    
-    val deepData = RootLevel(Array(
-      Level1("f1", Level2("f2", Level3("f3", Level4("f4", 42, "unused"), 3.14), false), Array("u1")),
-      Level1("f1b", Level2("f2b", Level3("f3b", Level4("f4b", 43, "unused2"), 2.71), true), Array("u2"))
+    val deepData = RootLevelTag(Array(
+      Level1Tag("f1", Level2Tag("f2", Level3Tag("f3", Level4Tag("f4", 42, "unused"), 3.14), false), Array("u1")),
+      Level1Tag("f1b", Level2Tag("f2b", Level3Tag("f3b", Level4Tag("f4b", 43, "unused2"), 2.71), true), Array("u2"))
     ), "root") :: Nil
 
     withDataSourceTable(deepData, "deep_data") {
@@ -1696,7 +1746,7 @@ abstract class SchemaPruningSuite
         .select(explode(col("items")).as("item"))
         .select(
           "item.field1",
-          "item.level2.field2", 
+          "item.level2.field2",
           "item.level2.level3.level4.field4",
           "item.level2.level3.level4.data4"
         )
