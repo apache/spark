@@ -199,6 +199,9 @@ object V1WritesUtils {
     expressions.exists(_.exists(_.isInstanceOf[Empty2Null]))
   }
 
+  // SortOrder sequence A (outputOrdering) satisfies SortOrder sequence B (requiredOrdering)
+  // if and only if B is an equivalent of A or of A's prefix, except for SortOrder in B that
+  // satisfies any constant SortOrder in A.
   def isOrderingMatched(
       requiredOrdering: Seq[Expression],
       outputOrdering: Seq[SortOrder]): Boolean = {
