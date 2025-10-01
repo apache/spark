@@ -255,6 +255,7 @@ private[sql] object SQLUtils extends Logging {
         timeZoneId,
         true,
         false,
+        false,
         context)
     }
     sparkSession.internalCreateDataFrame(rdd.setName("arrow"), schema)

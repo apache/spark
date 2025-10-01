@@ -432,12 +432,14 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
+      largeListType: Boolean,
       context: TaskContext)
       extends InternalRowIterator(arrowBatchIter, context) {
 
     override def nextBatch(): (Iterator[InternalRow], StructType) = {
       val arrowSchema =
-        ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+        ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
+          largeListType)
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
       resources.append(root)
       val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
@@ -478,9 +480,11 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
+      largeListType: Boolean,
       context: TaskContext): Iterator[InternalRow] = {
     new InternalRowIteratorWithoutSchema(
-      arrowBatchIter, schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, context
+      arrowBatchIter, schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
+      largeListType, context
     )
   }
 
@@ -547,6 +551,7 @@ private[sql] object ArrowConverters extends Logging {
     val attrs = toAttributes(schema)
     val batchesInDriver = arrowBatches.toArray
     val largeVarTypes = session.sessionState.conf.arrowUseLargeVarTypes
+    val largeListType = session.sessionState.conf.arrowUseLargeListType
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
 
@@ -562,6 +567,7 @@ private[sql] object ArrowConverters extends Logging {
             timezone,
             errorOnDuplicatedFieldNames = false,
             largeVarTypes = largeVarTypes,
+            largeListType = largeListType,
             TaskContext.get())
         }
       session.internalCreateDataFrame(rdd.setName("arrow"), schema)
@@ -573,6 +579,7 @@ private[sql] object ArrowConverters extends Logging {
         session.sessionState.conf.sessionLocalTimeZone,
         errorOnDuplicatedFieldNames = false,
         largeVarTypes = largeVarTypes,
+        largeListType = largeListType,
         TaskContext.get())
 
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.
