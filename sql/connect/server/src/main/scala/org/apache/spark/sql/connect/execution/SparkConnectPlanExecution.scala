@@ -107,7 +107,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       maxBatchSize: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
-      largeVarTypes: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
+      largeVarTypes: Boolean,
+      largeListType: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
     val batches = ArrowConverters.toBatchWithSchemaIterator(
       rows,
       schema,
@@ -115,7 +116,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       maxBatchSize,
       timeZoneId,
       errorOnDuplicatedFieldNames,
-      largeVarTypes)
+      largeVarTypes,
+      largeListType)
     batches.map(b => b -> batches.rowCountInLastBatch)
   }
 
@@ -140,7 +142,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       maxBatchSize,
       timeZoneId,
       errorOnDuplicatedFieldNames = false,
-      largeVarTypes = largeVarTypes)
+      largeVarTypes = largeVarTypes,
+      largeListType = executePlan.sessionHolder.session.sessionState.conf.arrowUseLargeListType)
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {

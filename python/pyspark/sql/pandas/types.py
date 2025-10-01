@@ -69,6 +69,7 @@ def to_arrow_type(
     error_on_duplicated_field_names_in_struct: bool = False,
     timestamp_utc: bool = True,
     prefers_large_types: bool = False,
+    prefers_large_list_type: bool = False,
 ) -> "pa.DataType":
     """
     Convert Spark data type to PyArrow type
@@ -138,10 +139,11 @@ def to_arrow_type(
                 error_on_duplicated_field_names_in_struct,
                 timestamp_utc,
                 prefers_large_types,
+                prefers_large_list_type,
             ),
             nullable=dt.containsNull,
         )
-        arrow_type = pa.list_(field)
+        arrow_type = pa.large_list(field) if prefers_large_list_type else pa.list_(field)
     elif type(dt) == MapType:
         key_field = pa.field(
             "key",
@@ -150,6 +152,7 @@ def to_arrow_type(
                 error_on_duplicated_field_names_in_struct,
                 timestamp_utc,
                 prefers_large_types,
+                prefers_large_list_type,
             ),
             nullable=False,
         )
@@ -160,6 +163,7 @@ def to_arrow_type(
                 error_on_duplicated_field_names_in_struct,
                 timestamp_utc,
                 prefers_large_types,
+                prefers_large_list_type,
             ),
             nullable=dt.valueContainsNull,
         )
@@ -179,6 +183,7 @@ def to_arrow_type(
                     error_on_duplicated_field_names_in_struct,
                     timestamp_utc,
                     prefers_large_types,
+                    prefers_large_list_type,
                 ),
                 nullable=field.nullable,
             )
@@ -193,6 +198,7 @@ def to_arrow_type(
             error_on_duplicated_field_names_in_struct,
             timestamp_utc,
             prefers_large_types,
+            prefers_large_list_type,
         )
     elif type(dt) == VariantType:
         fields = [
@@ -215,6 +221,7 @@ def to_arrow_schema(
     error_on_duplicated_field_names_in_struct: bool = False,
     timestamp_utc: bool = True,
     prefers_large_types: bool = False,
+    prefers_large_list_type: bool = False,
 ) -> "pa.Schema":
     """
     Convert a schema from Spark to Arrow
@@ -247,6 +254,7 @@ def to_arrow_schema(
                 error_on_duplicated_field_names_in_struct,
                 timestamp_utc,
                 prefers_large_types,
+                prefers_large_list_type,
             ),
             nullable=field.nullable,
         )

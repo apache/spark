@@ -91,6 +91,27 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = false))
   }
 
+  test("large list type") {
+    // Test that large list type produces LargeList ArrowType
+    val arrayType = ArrayType(IntegerType, containsNull = true)
+    val field = ArrowUtils.toArrowField("test", arrayType, nullable = true, null,
+      largeListType = true)
+    assert(field.getType === ArrowType.LargeList.INSTANCE)
+
+    // Test roundtrip conversion
+    val schema = new StructType().add("arr", arrayType)
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, null, true, false, true)
+    val convertedSchema = ArrowUtils.fromArrowSchema(arrowSchema)
+    assert(convertedSchema === schema)
+
+    // Test nested large list
+    val nestedArrayType = ArrayType(ArrayType(StringType, containsNull = true), containsNull = true)
+    val nestedField = ArrowUtils.toArrowField("nested", nestedArrayType, nullable = true, null,
+      largeListType = true)
+    assert(nestedField.getType === ArrowType.LargeList.INSTANCE)
+    assert(nestedField.getChildren.get(0).getType === ArrowType.LargeList.INSTANCE)
+  }
+
   test("struct") {
     roundtrip(new StructType())
     roundtrip(new StructType().add("i", IntegerType))

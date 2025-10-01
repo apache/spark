@@ -168,6 +168,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       pythonEvalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
+      conf.arrowUseLargeListType,
       pythonRunnerConf,
       metrics,
       jobArtifactUUID)

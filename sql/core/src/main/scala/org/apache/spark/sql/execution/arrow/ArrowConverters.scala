@@ -52,10 +52,11 @@ private[sql] class ArrowBatchStreamWriter(
     out: OutputStream,
     timeZoneId: String,
     errorOnDuplicatedFieldNames: Boolean,
-    largeVarTypes: Boolean) {
+    largeVarTypes: Boolean,
+    largeListType: Boolean = false) {
 
   val arrowSchema = ArrowUtils.toArrowSchema(
-    schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+    schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, largeListType)
   val writeChannel = new WriteChannel(Channels.newChannel(out))
 
   // Write the Arrow schema first, before batches
@@ -84,10 +85,12 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
+      largeListType: Boolean,
       context: TaskContext) extends Iterator[Array[Byte]] with AutoCloseable {
 
     protected val arrowSchema =
-      ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+      ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
+        largeListType)
     private val allocator =
       ArrowUtils.rootAllocator.newChildAllocator(
         s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
@@ -141,6 +144,7 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
+      largeListType: Boolean,
       context: TaskContext)
     extends ArrowBatchIterator(
       rowIter,
@@ -149,6 +153,7 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId,
       errorOnDuplicatedFieldNames,
       largeVarTypes,
+      largeListType,
       context) {
 
     private val arrowSchemaSize = SizeEstimator.estimate(arrowSchema)
@@ -216,6 +221,7 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
+      largeListType: Boolean,
       context: TaskContext): ArrowBatchIterator = {
     new ArrowBatchIterator(
       rowIter,
@@ -224,6 +230,7 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId,
       errorOnDuplicatedFieldNames,
       largeVarTypes,
+      largeListType,
       context)
   }
 
@@ -238,20 +245,23 @@ private[sql] object ArrowConverters extends Logging {
       maxEstimatedBatchSize: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
-      largeVarTypes: Boolean): ArrowBatchWithSchemaIterator = {
+      largeVarTypes: Boolean,
+      largeListType: Boolean): ArrowBatchWithSchemaIterator = {
     new ArrowBatchWithSchemaIterator(
       rowIter, schema, maxRecordsPerBatch, maxEstimatedBatchSize,
-      timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, TaskContext.get())
+      timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, largeListType, TaskContext.get())
   }
 
   private[sql] def createEmptyArrowBatch(
       schema: StructType,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
-      largeVarTypes: Boolean): Array[Byte] = {
+      largeVarTypes: Boolean,
+      largeListType: Boolean = false): Array[Byte] = {
     val batches = new ArrowBatchWithSchemaIterator(
         Iterator.empty, schema, 0L, 0L,
-        timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, TaskContext.get()) {
+        timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, largeListType,
+        TaskContext.get()) {
       override def hasNext: Boolean = true
     }
     Utils.tryWithSafeFinally {

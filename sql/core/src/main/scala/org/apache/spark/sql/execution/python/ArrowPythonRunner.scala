@@ -34,6 +34,7 @@ abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
     _schema: StructType,
     _timeZoneId: String,
     protected override val largeVarTypes: Boolean,
+    protected override val largeListType: Boolean,
     protected override val workerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
@@ -75,11 +76,12 @@ abstract class RowInputArrowPythonRunner(
     _schema: StructType,
     _timeZoneId: String,
     largeVarTypes: Boolean,
+    largeListType: Boolean,
     workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BaseArrowPythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
+    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, largeListType, workerConf,
     pythonMetrics, jobArtifactUUID)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput
@@ -94,12 +96,13 @@ class ArrowPythonRunner(
     _schema: StructType,
     _timeZoneId: String,
     largeVarTypes: Boolean,
+    largeListType: Boolean,
     workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
   extends RowInputArrowPythonRunner(
-    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
+    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, largeListType, workerConf,
     pythonMetrics, jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit =
@@ -117,13 +120,14 @@ class ArrowPythonWithNamedArgumentRunner(
     _schema: StructType,
     _timeZoneId: String,
     largeVarTypes: Boolean,
+    largeListType: Boolean,
     workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
   extends RowInputArrowPythonRunner(
-    funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes, workerConf,
-    pythonMetrics, jobArtifactUUID) {
+    funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes,
+    largeListType, workerConf, pythonMetrics, jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
@@ -146,6 +150,8 @@ object ArrowPythonRunner {
     ).getOrElse(Seq.empty)
     val useLargeVarTypes = Seq(SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES.key ->
       conf.arrowUseLargeVarTypes.toString)
+    val useLargeListType = Seq(SQLConf.ARROW_EXECUTION_USE_LARGE_LIST_TYPE.key ->
+      conf.arrowUseLargeListType.toString)
     val legacyPandasConversion = Seq(
       SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
       conf.legacyPandasConversion.toString)
@@ -156,7 +162,7 @@ object ArrowPythonRunner {
       SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED.key ->
       conf.getConf(SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED, false).toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
-      arrowAyncParallelism ++ useLargeVarTypes ++
+      arrowAyncParallelism ++ useLargeVarTypes ++ useLargeListType ++
       intToDecimalCoercion ++
       legacyPandasConversion ++ legacyPandasConversionUDF: _*)
   }

@@ -364,6 +364,50 @@ class ArrowWriterSuite extends SparkFunSuite {
     writer.root.close()
   }
 
+  test("large list") {
+    val schema = new StructType()
+      .add("arr", ArrayType(IntegerType, containsNull = true), nullable = true)
+    val writer = ArrowWriter.create(schema, null, largeListType = true)
+    assert(writer.schema === schema)
+
+    writer.write(InternalRow(ArrayData.toArrayData(Array(1, 2, 3))))
+    writer.write(InternalRow(ArrayData.toArrayData(Array(4, 5))))
+    writer.write(InternalRow(null))
+    writer.write(InternalRow(ArrayData.toArrayData(Array.empty[Int])))
+    writer.write(InternalRow(ArrayData.toArrayData(Array(6, null, 8))))
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+
+    val array0 = reader.getArray(0)
+    assert(array0.numElements() === 3)
+    assert(array0.getInt(0) === 1)
+    assert(array0.getInt(1) === 2)
+    assert(array0.getInt(2) === 3)
+
+    val array1 = reader.getArray(1)
+    assert(array1.numElements() === 2)
+    assert(array1.getInt(0) === 4)
+    assert(array1.getInt(1) === 5)
+
+    assert(reader.isNullAt(2))
+
+    val array3 = reader.getArray(3)
+    assert(array3.numElements() === 0)
+
+    val array4 = reader.getArray(4)
+    assert(array4.numElements() === 3)
+    assert(array4.getInt(0) === 6)
+    assert(array4.isNullAt(1))
+    assert(array4.getInt(2) === 8)
+
+    // Verify that the underlying vector is a LargeListVector
+    import org.apache.arrow.vector.complex.LargeListVector
+    assert(writer.root.getFieldVectors().get(0).isInstanceOf[LargeListVector])
+
+    writer.root.close()
+  }
+
   test("struct") {
     val schema = new StructType()
       .add("struct", new StructType().add("i", IntegerType).add("str", StringType))

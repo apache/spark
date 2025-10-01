@@ -152,6 +152,7 @@ class ArrowWindowPythonEvaluatorFactory(
     private val sizeInBytesSpillThreshold = conf.windowExecBufferSpillSizeThreshold
     private val sessionLocalTimeZone = conf.sessionLocalTimeZone
     private val largeVarTypes = conf.arrowUseLargeVarTypes
+    private val largeListType = conf.arrowUseLargeListType
 
     // Extract window expressions and window functions
     private val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
@@ -375,6 +376,7 @@ class ArrowWindowPythonEvaluatorFactory(
         pythonInputSchema,
         sessionLocalTimeZone,
         largeVarTypes,
+        largeListType,
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,

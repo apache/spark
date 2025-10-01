@@ -2123,7 +2123,8 @@ class Dataset[T] private[sql](
         val out = new DataOutputStream(outputStream)
         val batchWriter =
           new ArrowBatchStreamWriter(
-            schema, buffer, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false)
+            schema, buffer, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false,
+            largeListType = false)
         val arrowBatchRdd = toArrowBatchRdd(plan)
         val numPartitions = arrowBatchRdd.partitions.length
 
@@ -2175,13 +2176,14 @@ class Dataset[T] private[sql](
     val errorOnDuplicatedFieldNames =
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
     val largeVarTypes = sparkSession.sessionState.conf.arrowUseLargeVarTypes
+    val largeListType = sparkSession.sessionState.conf.arrowUseLargeListType
 
     PythonRDD.serveToStream("serve-Arrow") { outputStream =>
       withAction("collectAsArrowToPython", queryExecution) { plan =>
         val out = new DataOutputStream(outputStream)
         val batchWriter =
           new ArrowBatchStreamWriter(
-            schema, out, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+            schema, out, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, largeListType)
 
         // Batches ordered by (index of partition, batch index in that partition) tuple
         val batchOrder = ArrayBuffer.empty[(Int, Int)]
@@ -2344,6 +2346,8 @@ class Dataset[T] private[sql](
       sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
     val largeVarTypes =
       sparkSession.sessionState.conf.arrowUseLargeVarTypes
+    val largeListType =
+      sparkSession.sessionState.conf.arrowUseLargeListType
     plan.execute().mapPartitionsInternal { iter =>
       val context = TaskContext.get()
       ArrowConverters.toBatchIterator(
@@ -2353,6 +2357,7 @@ class Dataset[T] private[sql](
         timeZoneId,
         errorOnDuplicatedFieldNames,
         largeVarTypes,
+        largeListType,
         context)
     }
   }

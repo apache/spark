@@ -80,7 +80,11 @@ class PandasConversionMixin:
                 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
                 require_minimum_pyarrow_version()
-                to_arrow_schema(self.schema, prefers_large_types=jconf.arrowUseLargeVarTypes())
+                to_arrow_schema(
+                    self.schema,
+                    prefers_large_types=jconf.arrowUseLargeVarTypes(),
+                    prefers_large_list_type=jconf.arrowUseLargeListType(),
+                )
             except Exception as e:
                 if jconf.arrowPySparkFallbackEnabled():
                     msg = (
@@ -228,10 +232,12 @@ class PandasConversionMixin:
 
         require_minimum_pyarrow_version()
         prefers_large_var_types = jconf.arrowUseLargeVarTypes()
+        prefers_large_list_type = jconf.arrowUseLargeListType()
         schema = to_arrow_schema(
             self.schema,
             error_on_duplicated_field_names_in_struct=True,
             prefers_large_types=prefers_large_var_types,
+            prefers_large_list_type=prefers_large_list_type,
         )
 
         import pyarrow as pa
@@ -319,7 +325,12 @@ class PandasConversionMixin:
             import pyarrow as pa
 
             prefers_large_var_types = self.sparkSession._jconf.arrowUseLargeVarTypes()
-            schema = to_arrow_schema(self.schema, prefers_large_types=prefers_large_var_types)
+            prefers_large_list_type = self.sparkSession._jconf.arrowUseLargeListType()
+            schema = to_arrow_schema(
+                self.schema,
+                prefers_large_types=prefers_large_var_types,
+                prefers_large_list_type=prefers_large_list_type,
+            )
             empty_arrays = [pa.array([], type=field.type) for field in schema]
             return [pa.RecordBatch.from_arrays(empty_arrays, schema=schema)]
 
@@ -790,11 +801,13 @@ class SparkConversionMixin:
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
         prefers_large_var_types = self._jconf.arrowUseLargeVarTypes()
+        prefers_large_list_type = self._jconf.arrowUseLargeListType()
         table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
             to_arrow_schema(
                 schema,
                 error_on_duplicated_field_names_in_struct=True,
                 prefers_large_types=prefers_large_var_types,
+                prefers_large_list_type=prefers_large_list_type,
             )
         )
 

@@ -1748,6 +1748,22 @@ class ArrowTestsMixin:
             pdf = pd.DataFrame({"a": [123]})
             assert_frame_equal(pdf, self.spark.createDataFrame(pdf).toPandas())
 
+    def test_large_list_type_config(self):
+        # Test that the large list type configuration can be set and doesn't break functionality
+        pdf = pd.DataFrame({"arrays": [[1, 2, 3], [4, 5], [6, 7, 8, 9]]})
+        
+        # Test with large list type enabled
+        with self.sql_conf({"spark.sql.execution.arrow.useLargeListType": "true"}):
+            df = self.spark.createDataFrame(pdf)
+            result_pdf = df.toPandas()
+            assert_frame_equal(pdf, result_pdf)
+        
+        # Test with large list type disabled (default)
+        with self.sql_conf({"spark.sql.execution.arrow.useLargeListType": "false"}):
+            df = self.spark.createDataFrame(pdf)
+            result_pdf = df.toPandas()
+            assert_frame_equal(pdf, result_pdf)
+
     def test_createDataFrame_arrow_large_string(self):
         a = pa.array(["a"] * 5, type=pa.large_string())
         t = pa.table([a], ["ls"])

@@ -210,6 +210,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
   override protected lazy val timeZoneId: String = _timeZoneId
   override protected val errorOnDuplicatedFieldNames: Boolean = true
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
+  override protected val largeListType: Boolean = sqlConf.arrowUseLargeListType
 
   override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     super.handleMetadataBeforeExec(stream)

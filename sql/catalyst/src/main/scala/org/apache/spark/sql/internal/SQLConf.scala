@@ -3913,6 +3913,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ARROW_EXECUTION_USE_LARGE_LIST_TYPE =
+    buildConf("spark.sql.execution.arrow.useLargeListType")
+      .doc("When using Apache Arrow, use large list type for array columns. Regular list type " +
+        "has a 2GiB limit for a column in a single record batch. Large list type removes this " +
+        "limitation at the cost of higher memory usage per value.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_UDF_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.python.udf.maxRecordsPerBatch")
       .doc("When using Python UDFs, limit the maximum number of records that can be batched " +
@@ -7136,6 +7145,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)
 
   def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
+
+  def arrowUseLargeListType: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_LIST_TYPE)
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 

@@ -38,6 +38,7 @@ class MapInBatchEvaluatorFactory(
     pythonEvalType: Int,
     sessionLocalTimeZone: String,
     largeVarTypes: Boolean,
+    largeListType: Boolean,
     pythonRunnerConf: Map[String, String],
     val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
@@ -69,6 +70,7 @@ class MapInBatchEvaluatorFactory(
         StructType(Array(StructField("struct", inputSchema))),
         sessionLocalTimeZone,
         largeVarTypes,
+        largeListType,
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,

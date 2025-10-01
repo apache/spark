@@ -2864,6 +2864,7 @@ class SparkConnectPlanner(
       val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
       val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
       val largeVarTypes = session.sessionState.conf.arrowUseLargeVarTypes
+      val largeListType = session.sessionState.conf.arrowUseLargeListType
 
       // Convert the data.
       val bytes = if (rows.isEmpty) {
@@ -2871,7 +2872,8 @@ class SparkConnectPlanner(
           schema,
           timeZoneId,
           errorOnDuplicatedFieldNames = false,
-          largeVarTypes = largeVarTypes)
+          largeVarTypes = largeVarTypes,
+          largeListType = largeListType)
       } else {
         val batches = ArrowConverters.toBatchWithSchemaIterator(
           rowIter = rows.iterator,
@@ -2880,7 +2882,8 @@ class SparkConnectPlanner(
           maxEstimatedBatchSize = maxBatchSize,
           timeZoneId = timeZoneId,
           errorOnDuplicatedFieldNames = false,
-          largeVarTypes = largeVarTypes)
+          largeVarTypes = largeVarTypes,
+          largeListType = largeListType)
         assert(batches.hasNext)
         val bytes = batches.next()
         assert(!batches.hasNext, s"remaining batches: ${batches.size}")

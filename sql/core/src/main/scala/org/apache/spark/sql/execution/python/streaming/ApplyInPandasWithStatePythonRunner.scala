@@ -92,6 +92,7 @@ class ApplyInPandasWithStatePythonRunner(
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
 
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
+  override protected val largeListType: Boolean = sqlConf.arrowUseLargeListType
 
   override val bufferSize: Int = {
     val configuredSize = sqlConf.pandasUDFBufferSize

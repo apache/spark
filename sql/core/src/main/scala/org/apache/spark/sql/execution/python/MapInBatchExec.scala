@@ -61,6 +61,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       pythonEvalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
+      conf.arrowUseLargeListType,
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID)

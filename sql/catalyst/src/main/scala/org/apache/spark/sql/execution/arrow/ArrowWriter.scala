@@ -34,9 +34,10 @@ object ArrowWriter {
       schema: StructType,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean = true,
-      largeVarTypes: Boolean = false): ArrowWriter = {
+      largeVarTypes: Boolean = false,
+      largeListType: Boolean = false): ArrowWriter = {
     val arrowSchema = ArrowUtils.toArrowSchema(
-      schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+      schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, largeListType)
     val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
     create(root)
   }
@@ -72,6 +73,9 @@ object ArrowWriter {
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
+      case (ArrayType(_, _), vector: LargeListVector) =>
+        val elementVector = createFieldWriter(vector.getDataVector())
+        new LargeArrayWriter(vector, elementVector)
       case (MapType(_, _, _), vector: MapVector) =>
         val structVector = vector.getDataVector.asInstanceOf[StructVector]
         val keyWriter = createFieldWriter(structVector.getChild(MapVector.KEY_NAME))
@@ -374,6 +378,35 @@ private[arrow] class TimeWriter(
 
 private[arrow] class ArrayWriter(
     val valueVector: ListVector,
+    val elementWriter: ArrowFieldWriter) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val array = input.getArray(ordinal)
+    var i = 0
+    valueVector.startNewValue(count)
+    while (i < array.numElements()) {
+      elementWriter.write(array, i)
+      i += 1
+    }
+    valueVector.endValue(count, array.numElements())
+  }
+
+  override def finish(): Unit = {
+    super.finish()
+    elementWriter.finish()
+  }
+
+  override def reset(): Unit = {
+    super.reset()
+    elementWriter.reset()
+  }
+}
+
+private[arrow] class LargeArrayWriter(
+    val valueVector: LargeListVector,
     val elementWriter: ArrowFieldWriter) extends ArrowFieldWriter {
 
   override def setNull(): Unit = {

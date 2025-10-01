@@ -51,6 +51,7 @@ case class ArrowEvalPythonUDTFExec(
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val largeVarTypes = conf.arrowUseLargeVarTypes
+  private val largeListType = conf.arrowUseLargeListType
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
@@ -73,6 +74,7 @@ case class ArrowEvalPythonUDTFExec(
       schema,
       sessionLocalTimeZone,
       largeVarTypes,
+      largeListType,
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID).compute(batchIter, context.partitionId(), context)

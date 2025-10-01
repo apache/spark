@@ -42,6 +42,7 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val largeVarTypes = conf.arrowUseLargeVarTypes
+  private val largeListType = conf.arrowUseLargeListType
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private val pythonUDF = func.asInstanceOf[PythonUDF]
   private val pythonFunction = pythonUDF.func
@@ -89,6 +90,7 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
         groupedSchema(dedupAttributes),
         sessionLocalTimeZone,
         largeVarTypes,
+        largeListType,
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,

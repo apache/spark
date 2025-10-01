@@ -106,15 +106,18 @@ private[sql] object ArrowUtils {
       dt: DataType,
       nullable: Boolean,
       timeZoneId: String,
-      largeVarTypes: Boolean = false): Field = {
+      largeVarTypes: Boolean = false,
+      largeListType: Boolean = false): Field = {
     dt match {
       case ArrayType(elementType, containsNull) =>
-        val fieldType = new FieldType(nullable, ArrowType.List.INSTANCE, null)
+        val listType = if (largeListType) ArrowType.LargeList.INSTANCE else ArrowType.List.INSTANCE
+        val fieldType = new FieldType(nullable, listType, null)
         new Field(
           name,
           fieldType,
           Seq(
-            toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes)).asJava)
+            toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes,
+              largeListType)).asJava)
       case StructType(fields) =>
         val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
         new Field(
@@ -122,7 +125,8 @@ private[sql] object ArrowUtils {
           fieldType,
           fields
             .map { field =>
-              toArrowField(field.name, field.dataType, field.nullable, timeZoneId, largeVarTypes)
+              toArrowField(field.name, field.dataType, field.nullable, timeZoneId, largeVarTypes,
+                largeListType)
             }
             .toImmutableArraySeq
             .asJava)
@@ -140,9 +144,10 @@ private[sql] object ArrowUtils {
                 .add(MapVector.VALUE_NAME, valueType, nullable = valueContainsNull),
               nullable = false,
               timeZoneId,
-              largeVarTypes)).asJava)
+              largeVarTypes,
+              largeListType)).asJava)
       case udt: UserDefinedType[_] =>
-        toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
+        toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes, largeListType)
       case _: VariantType =>
         val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
         // The metadata field is tagged with additional metadata so we can identify that the arrow
@@ -156,7 +161,7 @@ private[sql] object ArrowUtils {
           name,
           fieldType,
           Seq(
-            toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes),
+            toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes, largeListType),
             new Field("metadata", metadataFieldType, Seq.empty[Field].asJava)).asJava)
       case dataType =>
         val fieldType =
@@ -182,7 +187,7 @@ private[sql] object ArrowUtils {
         val keyType = fromArrowField(elementField.getChildren.get(0))
         val valueType = fromArrowField(elementField.getChildren.get(1))
         MapType(keyType, valueType, elementField.getChildren.get(1).isNullable)
-      case ArrowType.List.INSTANCE =>
+      case ArrowType.List.INSTANCE | ArrowType.LargeList.INSTANCE =>
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)
         ArrayType(elementType, containsNull = elementField.isNullable)
@@ -205,14 +210,16 @@ private[sql] object ArrowUtils {
       schema: StructType,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
-      largeVarTypes: Boolean): Schema = {
+      largeVarTypes: Boolean,
+      largeListType: Boolean = false): Schema = {
     new Schema(schema.map { field =>
       toArrowField(
         field.name,
         deduplicateFieldNames(field.dataType, errorOnDuplicatedFieldNames),
         field.nullable,
         timeZoneId,
-        largeVarTypes)
+        largeVarTypes,
+        largeListType)
     }.asJava)
   }
 

@@ -111,6 +111,7 @@ case class ArrowAggregatePythonExec(
 
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val largeVarTypes = conf.arrowUseLargeVarTypes
+    val largeListType = conf.arrowUseLargeListType
     val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
 
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
@@ -187,6 +188,7 @@ case class ArrowAggregatePythonExec(
         aggInputSchema,
         sessionLocalTimeZone,
         largeVarTypes,
+        largeListType,
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,

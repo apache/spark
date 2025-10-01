@@ -38,6 +38,7 @@ class ArrowPythonUDTFRunner(
     protected override val schema: StructType,
     protected override val timeZoneId: String,
     protected override val largeVarTypes: Boolean,
+    protected override val largeListType: Boolean,
     protected override val workerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
