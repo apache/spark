@@ -128,7 +128,7 @@ class GeometryTypeSuite extends SparkFunSuite {
   test("GEOMETRY data type JSON parsing with valid CRS") {
     val validGeometries = Seq(
       "\"geometry\"",
-      "\"geometry(OGC:CRS84)\"",
+      "\"geometry(OGC:CRS84)\""
     )
     validGeometries.foreach { geom =>
       DataType.fromJson(geom).isInstanceOf[GeometryType]
