@@ -1840,16 +1840,14 @@ class ClientE2ETestSuite
                       numChunksInBatch = arrowBatch.getNumChunksInBatch.toInt,
                       rowCount = arrowBatch.getRowCount,
                       startOffset = arrowBatch.getStartOffset,
-                      dataSize = arrowBatch.getData.size()
-                    )
+                      dataSize = arrowBatch.getData.size())
                     // When we receive the last chunk, create the BatchInfo
                     if (currentBatchChunks.length == arrowBatch.getNumChunksInBatch) {
                       batches += BatchInfo(
                         batchIndex = currentBatchIndex,
                         rowCount = arrowBatch.getRowCount,
                         startOffset = arrowBatch.getStartOffset,
-                        chunks = currentBatchChunks.toList
-                      )
+                        chunks = currentBatchChunks.toList)
                       currentBatchChunks.clear()
                       currentBatchIndex += 1
                     }

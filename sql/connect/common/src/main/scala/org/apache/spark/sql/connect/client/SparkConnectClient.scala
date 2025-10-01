@@ -140,13 +140,15 @@ private[sql] class SparkConnectClient(
       .addAllTags(tags.get.toSeq.asJava)
 
     // Add request option to allow result chunking.
-    val chunkingOptionsBuilder = proto.ResultChunkingOptions.newBuilder()
+    val chunkingOptionsBuilder = proto.ResultChunkingOptions
+      .newBuilder()
       .setAllowArrowBatchChunking(configuration.allowArrowBatchChunking)
     configuration.preferredArrowChunkSize.foreach { size =>
       chunkingOptionsBuilder.setPreferredArrowChunkSize(size)
     }
     request.addRequestOptions(
-      proto.ExecutePlanRequest.RequestOption.newBuilder()
+      proto.ExecutePlanRequest.RequestOption
+        .newBuilder()
         .setResultChunkingOptions(chunkingOptionsBuilder.build())
         .build())
 
@@ -783,8 +785,7 @@ object SparkConnectClient {
       grpcMaxMessageSize: Int = ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE,
       grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT,
       allowArrowBatchChunking: Boolean = true,
-      preferredArrowChunkSize: Option[Int] = None
-  ) {
+      preferredArrowChunkSize: Option[Int] = None) {
 
     private def isLocal = host.equals("localhost")
 

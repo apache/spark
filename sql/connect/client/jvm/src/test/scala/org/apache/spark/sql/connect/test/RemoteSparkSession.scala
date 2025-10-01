@@ -184,16 +184,18 @@ object SparkConnectServerUtils {
   }
 
   def createSparkSession(
-      customBuilderFunc: SparkConnectClient.Builder => SparkConnectClient.Builder): SparkSession = {
+      customBuilderFunc: SparkConnectClient.Builder => SparkConnectClient.Builder)
+      : SparkSession = {
     SparkConnectServerUtils.start()
 
     var builder = SparkConnectClient
       .builder()
       .userId("test")
       .port(port)
-      .retryPolicy(RetryPolicy
-        .defaultPolicy()
-        .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
+      .retryPolicy(
+        RetryPolicy
+          .defaultPolicy()
+          .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
 
     builder = customBuilderFunc(builder)
     val spark = SparkSession

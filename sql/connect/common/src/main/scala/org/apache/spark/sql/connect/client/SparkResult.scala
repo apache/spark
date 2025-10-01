@@ -159,16 +159,16 @@ private[sql] class SparkResult[T](
         val arrowBatch = response.getArrowBatch
         logDebug(
           s"Received arrow batch rows=${arrowBatch.getRowCount} " +
-          s"Number of chunks in batch=${arrowBatch.getNumChunksInBatch} " +
-          s"Chunk index=${arrowBatch.getChunkIndex} " +
-          s"size=${arrowBatch.getData.size()}")
+            s"Number of chunks in batch=${arrowBatch.getNumChunksInBatch} " +
+            s"Chunk index=${arrowBatch.getChunkIndex} " +
+            s"size=${arrowBatch.getData.size()}")
 
         if (arrowBatchChunksToAssemble.nonEmpty) {
           // Expect next chunk of the same batch
           if (arrowBatch.getChunkIndex != arrowBatchChunksToAssemble.size) {
             throw new IllegalStateException(
               s"Expected chunk index ${arrowBatchChunksToAssemble.size} of the " +
-              s"arrow batch but got ${arrowBatch.getChunkIndex}.")
+                s"arrow batch but got ${arrowBatch.getChunkIndex}.")
           }
         } else {
           // Expect next batch
@@ -183,7 +183,7 @@ private[sql] class SparkResult[T](
           if (arrowBatch.getChunkIndex != 0) {
             throw new IllegalStateException(
               s"Expected chunk index 0 of the next arrow batch " +
-              s"but got ${arrowBatch.getChunkIndex}.")
+                s"but got ${arrowBatch.getChunkIndex}.")
           }
         }
 
@@ -194,16 +194,15 @@ private[sql] class SparkResult[T](
         //     in this case, it is the single chunk in the batch)
         // (b) or the client has received all chunks of the batch.
         if (!arrowBatch.hasNumChunksInBatch ||
-            arrowBatch.getNumChunksInBatch == 0 ||
-            arrowBatchChunksToAssemble.size == arrowBatch.getNumChunksInBatch) {
+          arrowBatch.getNumChunksInBatch == 0 ||
+          arrowBatchChunksToAssemble.size == arrowBatch.getNumChunksInBatch) {
 
           val numChunks = arrowBatchChunksToAssemble.size
           val inputStreams =
             arrowBatchChunksToAssemble.map(_.newInput()).iterator.asJavaEnumeration
           val input = new SequenceInputStream(inputStreams)
           arrowBatchChunksToAssemble.clear()
-          logDebug(
-            s"Assembling arrow batch from $numChunks chunks.")
+          logDebug(s"Assembling arrow batch from $numChunks chunks.")
 
           val expectedNumRows = arrowBatch.getRowCount
           val reader = new MessageIterator(input, allocator)
