@@ -441,7 +441,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     val progressPretty = testProgress5.prettyJson
 
     // Actual values
-    val avgOffsetsBehindLatest: Double = 2.8366294E8
+    val avgOffsetsBehindLatest: Double = 2.70941269E8
 
     // Get values from progress metrics JSON and cast back to Double
     // for numeric comparison
@@ -451,7 +451,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
 
     // Get expected values after type casting
     val avgOffsetsBehindLatestExpected = BigDecimal(avgOffsetsBehindLatest)
-      .setScale(1, RoundingMode.HALF_UP).toDouble
+      .setScale(1, RoundingMode.HALF_UP)
 
     // This should fail if avgOffsetsBehindLatest contains E notation
     avgOffsetsBehindLatestJSON should not include "E"
@@ -459,7 +459,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     // Value in progress metrics should be equal to the Decimal conversion of the same
     // Using epsilon to compare floating-point values
     val epsilon = 1e-6
-    avgOffsetsBehindLatestJSON.toDouble shouldBe avgOffsetsBehindLatestExpected +- epsilon
+    avgOffsetsBehindLatestJSON.toDouble shouldBe avgOffsetsBehindLatestExpected.toDouble +- epsilon
 
     // Validating that the pretty JSON of metrics reported is same as defined
     progressPretty shouldBe
@@ -469,31 +469,50 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
          |  "runId" : "${testProgress5.runId.toString}",
          |  "name" : "KafkaMetricsTest",
          |  "timestamp" : "2025-09-23T06:00:00.000Z",
-         |  "batchId" : 1,
-         |  "batchDuration" : 100,
+         |  "batchId" : 1250,
+         |  "batchDuration" : 111255,
          |  "numInputRows" : 800000,
-         |  "inputRowsPerSecond" : 78886.1,
-         |  "processedRowsPerSecond" : 41622.0,
+         |  "inputRowsPerSecond" : 75291.3,
+         |  "processedRowsPerSecond" : 71906.9,
          |  "durationMs" : {
-         |    "total" : 100
+         |    "addBatch" : 110481,
+         |    "commitBatch" : 410,
+         |    "commitOffsets" : 107,
+         |    "getBatch" : 0,
+         |    "latestOffset" : 2,
+         |    "queryPlanning" : 179,
+         |    "triggerExecution" : 111255,
+         |    "walCommit" : 74
          |  },
          |  "stateOperators" : [ ],
          |  "sources" : [ {
-         |    "description" : "kafkaSource",
-         |    "startOffset" : 100,
-         |    "endOffset" : 200,
-         |    "latestOffset" : 300,
-         |    "numInputRows" : 800000,
-         |    "inputRowsPerSecond" : 78886.1,
-         |    "processedRowsPerSecond" : 41622.0,
+         |    "description" : "KafkaV2[Subscribe[bigdata_omsTrade_cdc]]",
+         |    "startOffset" : {
+         |      "bigdata_omsTrade_cdc" : {
+         |        "0" : 18424809459
+         |      }
+         |    },
+         |    "endOffset" : {
+         |      "bigdata_omsTrade_cdc" : {
+         |        "0" : 18432809459
+         |      }
+         |    },
+         |    "latestOffset" : {
+         |      "bigdata_omsTrade_cdc" : {
+         |        "0" : 18703750728
+         |      }
+         |    },
+         |    "numInputRows" : 8000000,
+         |    "inputRowsPerSecond" : 75291.3,
+         |    "processedRowsPerSecond" : 71906.9,
          |    "metrics" : {
-         |      "avgOffsetsBehindLatest" : "283662940.0",
-         |      "maxOffsetsBehindLatest" : "283662940",
-         |      "minOffsetsBehindLatest" : "283662940"
+         |      "avgOffsetsBehindLatest" : "270941269.0",
+         |      "maxOffsetsBehindLatest" : "270941269",
+         |      "minOffsetsBehindLatest" : "270941269"
          |    }
          |  } ],
          |  "sink" : {
-         |    "description" : "sink",
+         |    "description" : "DeltaSink[s3://<masked-storage/__unitystorage/schemas/75bc9f38-9af3-4af9-852b-7077489f93d3/tables/c963dc05-f685-4fe8-a744-500cb40ce28a]",
          |    "numOutputRows" : -1
          |  }
          |}
@@ -665,27 +684,40 @@ object StreamingQueryStatusAndProgressSuite {
     runId = UUID.randomUUID,
     name = "KafkaMetricsTest",
     timestamp = "2025-09-23T06:00:00.000Z",
-    batchId = 1L,
-    batchDuration = 100L,
+    batchId = 1250,
+    batchDuration = 111255,
     durationMs = new java.util.HashMap(
-      Map("total" -> 100L).transform((_, v) => long2Long(v)).asJava
+      Map(
+        "addBatch" -> 110481,
+        "commitBatch" -> 410,
+        "commitOffsets" -> 107,
+        "getBatch" -> 0,
+        "latestOffset" -> 2,
+        "queryPlanning" -> 179,
+        "triggerExecution" -> 111255,
+        "walCommit" -> 74
+      ).transform((_, v) => long2Long(v)).asJava
     ),
     eventTime = new java.util.HashMap(),
     stateOperators = Array.empty,
     sources = Array(
       new SourceProgress(
-        description = "kafkaSource",
-        startOffset = "100",
-        endOffset = "200",
-        latestOffset = "300",
-        numInputRows = 800000L,
-        inputRowsPerSecond = 78886.1,
-        processedRowsPerSecond = 41622.0,
+        description = "KafkaV2[Subscribe[bigdata_omsTrade_cdc]]",
+        startOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18424809459\n    }\n}",
+        endOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18432809459\n    }\n}",
+        latestOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18703750728\n    }\n}",
+        numInputRows = 800000,
+        inputRowsPerSecond = 75291.2831516931,
+        processedRowsPerSecond = 71906.88058963642,
         metrics = new java.util.HashMap(Map(
-          "avgOffsetsBehindLatest" -> "2.8366294E8",
-          "minOffsetsBehindLatest" -> "283662940",
-          "maxOffsetsBehindLatest" -> "283662940").asJava))),
-    sink = SinkProgress("sink", None),
+          "avgOffsetsBehindLatest" -> "2.70941269E8",
+          "minOffsetsBehindLatest" -> "270941269",
+          "maxOffsetsBehindLatest" -> "270941269").asJava))),
+    sink = SinkProgress(
+      "DeltaSink[s3://<masked-storage/__unitystorage/schemas/" +
+        "75bc9f38-9af3-4af9-852b-7077489f93d3/tables/c963dc05-f685-4fe8-a744-500cb40ce28a]"
+      , None
+    ),
     observedMetrics = new java.util.HashMap())
 
   val testStatus = new StreamingQueryStatus("active", true, false)
