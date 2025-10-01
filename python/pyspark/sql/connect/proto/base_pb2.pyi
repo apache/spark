@@ -1750,6 +1750,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         """A signal from the server to the client to execute the query function for a flow, and to
         register its result with the server.
         """
+
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
@@ -1803,12 +1804,15 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
         checkpoint_command_result: global___CheckpointCommandResult | None = ...,
         ml_command_result: pyspark.sql.connect.proto.ml_pb2.MlCommandResult | None = ...,
-        pipeline_event_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult
-        | None = ...,
-        pipeline_command_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult
-        | None = ...,
-        pipeline_query_function_execution_signal: pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal
-        | None = ...,
+        pipeline_event_result: (
+            pyspark.sql.connect.proto.pipelines_pb2.PipelineEventResult | None
+        ) = ...,
+        pipeline_command_result: (
+            pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult | None
+        ) = ...,
+        pipeline_query_function_execution_signal: (
+            pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal | None
+        ) = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: (

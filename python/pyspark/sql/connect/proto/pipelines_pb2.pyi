@@ -959,6 +959,7 @@ class PipelineCommand(google.protobuf.message.Message):
         @property
         def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """An unresolved relation that defines the dataset's flow."""
+
         def __init__(
             self,
             *,
@@ -1051,10 +1052,12 @@ class PipelineCommand(google.protobuf.message.Message):
         drop_dataflow_graph: global___PipelineCommand.DropDataflowGraph | None = ...,
         start_run: global___PipelineCommand.StartRun | None = ...,
         define_sql_graph_elements: global___PipelineCommand.DefineSqlGraphElements | None = ...,
-        get_query_function_execution_signal_stream: global___PipelineCommand.GetQueryFunctionExecutionSignalStream
-        | None = ...,
-        define_flow_query_function_result: global___PipelineCommand.DefineFlowQueryFunctionResult
-        | None = ...,
+        get_query_function_execution_signal_stream: (
+            global___PipelineCommand.GetQueryFunctionExecutionSignalStream | None
+        ) = ...,
+        define_flow_query_function_result: (
+            global___PipelineCommand.DefineFlowQueryFunctionResult | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self,
