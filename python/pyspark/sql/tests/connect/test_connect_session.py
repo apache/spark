@@ -324,6 +324,32 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
         self.assertEqual(self.spark.conf.get("boolean"), "false")
         self.assertEqual(self.spark.conf.get("integer"), "1")
 
+    def test_context_manager_enter_exit(self):
+        """Test that SparkSession works as a context manager."""
+        # Create a new session for testing
+        with PySparkSession.builder.remote("local[2]").getOrCreate() as session:
+            self.assertIsInstance(session, PySparkSession)
+            self.assertFalse(session.is_stopped)
+            
+            df = session.range(3)
+            result = df.collect()
+            self.assertEqual(len(result), 3)
+        
+        self.assertTrue(session.is_stopped)
+
+    def test_context_manager_with_exception(self):
+        """Test that SparkSession is properly stopped even when exception occurs."""
+        session = None
+        try:
+            with PySparkSession.builder.remote("local[2]").getOrCreate() as session:
+                self.assertIsInstance(session, PySparkSession)
+                self.assertFalse(session.is_stopped)
+                raise ValueError("Test exception")
+        except ValueError:
+            pass  # Expected exception
+        
+        self.assertTrue(session.is_stopped)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_session import *  # noqa: F401

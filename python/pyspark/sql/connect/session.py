@@ -26,6 +26,7 @@ import warnings
 from collections.abc import Callable, Sized
 import functools
 from threading import RLock
+from types import TracebackType
 from typing import (
     Optional,
     Any,
@@ -40,6 +41,7 @@ from typing import (
     Mapping,
     TYPE_CHECKING,
     ClassVar,
+    Type,
 )
 
 import numpy as np
@@ -946,6 +948,57 @@ class SparkSession:
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
+
+    def __enter__(self) -> "SparkSession":
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+
+        .. versionadded:: 2.0.0
+
+        Examples
+        --------
+        >>> with SparkSession.builder.master("local").getOrCreate() as session:
+        ...     session.range(5).show()  # doctest: +SKIP
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
+        """
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+
+        Specifically stop the SparkSession on exit of the with block.
+
+        .. versionadded:: 2.0.0
+
+        Examples
+        --------
+        >>> with SparkSession.builder.master("local").getOrCreate() as session:
+        ...     session.range(5).show()  # doctest: +SKIP
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
+        """
+        self.stop()
 
     @property
     def is_stopped(self) -> bool:
