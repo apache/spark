@@ -1733,7 +1733,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val ctx = TaskContext.empty()
 
     val batchIter = ArrowConverters.toBatchIterator(
-      Iterator.empty, schema, 10, null, true, false, ctx)
+      Iterator.empty, schema, 10, null, true, false, false, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
