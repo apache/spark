@@ -1919,7 +1919,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(_.containsPattern(SORT)) {
     case s @ Sort(orders, _, child, _) if orders.isEmpty || orders.exists(_.child.foldable) =>
-      val newOrders = orders.filterNot(o => o.child.foldable && !o.isConstant)
+      val newOrders = orders.filterNot(o => o.direction != Constant && o.child.foldable)
       if (newOrders.isEmpty) {
         child
       } else {

@@ -306,7 +306,7 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
 
   private def canOrderByAll(expressions: Seq[SortOrder]): Boolean = {
     val isOrderByAll = expressions match {
-      case Seq(SortOrder(unresolvedAttribute: UnresolvedAttribute, _, _, _, _)) =>
+      case Seq(SortOrder(unresolvedAttribute: UnresolvedAttribute, _, _, _)) =>
         unresolvedAttribute.equalsIgnoreCase("ALL")
       case _ => false
     }

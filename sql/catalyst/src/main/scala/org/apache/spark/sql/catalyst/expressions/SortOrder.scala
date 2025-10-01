@@ -45,6 +45,11 @@ case object Descending extends SortDirection {
   override def defaultNullOrdering: NullOrdering = NullsLast
 }
 
+case object Constant extends SortDirection {
+  override def sql: String = "CONST"
+  override def defaultNullOrdering: NullOrdering = NullsFirst
+}
+
 case object NullsFirst extends NullOrdering {
   override def sql: String = "NULLS FIRST"
 }
@@ -64,14 +69,18 @@ case class SortOrder(
     child: Expression,
     direction: SortDirection,
     nullOrdering: NullOrdering,
-    sameOrderExpressions: Seq[Expression],
-    isConstant: Boolean)
+    sameOrderExpressions: Seq[Expression])
   extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = child +: sameOrderExpressions
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForOrderingExpr(dataType, prettyName)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (direction == Constant) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeUtils.checkForOrderingExpr(dataType, prettyName)
+    }
+  }
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -82,8 +91,8 @@ case class SortOrder(
   def isAscending: Boolean = direction == Ascending
 
   def satisfies(required: SortOrder): Boolean = {
-    children.exists(required.child.semanticEquals) &&
-      (isConstant || direction == required.direction && nullOrdering == required.nullOrdering)
+    children.exists(required.child.semanticEquals) && (direction == Constant ||
+      direction == required.direction && nullOrdering == required.nullOrdering)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): SortOrder =
@@ -95,15 +104,7 @@ object SortOrder {
      child: Expression,
      direction: SortDirection,
      sameOrderExpressions: Seq[Expression] = Seq.empty): SortOrder = {
-    new SortOrder(child, direction, direction.defaultNullOrdering, sameOrderExpressions, false)
-  }
-
-  def apply(
-     child: Expression,
-     direction: SortDirection,
-     nullOrdering: NullOrdering,
-     sameOrderExpressions: Seq[Expression]): SortOrder = {
-    new SortOrder(child, direction, nullOrdering, sameOrderExpressions, false)
+    new SortOrder(child, direction, direction.defaultNullOrdering, sameOrderExpressions)
   }
 
   /**
@@ -117,14 +118,35 @@ object SortOrder {
    *   <li>ordering A is [x(sameOrderExpressions=x1), y] and ordering B is [x1]</li>
    * </ul>
    */
-  def orderingSatisfies(ordering1: Seq[SortOrder], ordering2: Seq[SortOrder]): Boolean = {
-    if (ordering2.isEmpty) {
-      true
-    } else if (ordering2.length > ordering1.length) {
+  def orderingSatisfies(
+      providedOrdering: Seq[SortOrder], requiredOrdering: Seq[SortOrder]): Boolean = {
+    if (requiredOrdering.isEmpty) {
+      return true
+    }
+
+    val (constantProvidedOrdering, nonConstantProvidedOrdering) = providedOrdering.partition {
+      case SortOrder(_, Constant, _, _) => true
+      case SortOrder(child, _, _, _) => child.foldable
+    }
+
+    val effectiveRequiredOrdering = requiredOrdering.filterNot { requiredOrder =>
+      constantProvidedOrdering.exists {
+        case s @ SortOrder(alias: Alias, Constant, _, _) =>
+          val providedOrder = s.copy(child = alias.toAttribute)
+          providedOrder.satisfies(requiredOrder)
+        case providedOrder =>
+          providedOrder.satisfies(requiredOrder)
+      }
+      // constantProvidedOrdering.exists { providedOrder =>
+      //   providedOrder.satisfies(requiredOrder)
+      // }
+    }
+
+    if (effectiveRequiredOrdering.length > nonConstantProvidedOrdering.length) {
       false
     } else {
-      ordering2.zip(ordering1).forall {
-        case (o2, o1) => o1.satisfies(o2)
+      effectiveRequiredOrdering.zip(nonConstantProvidedOrdering).forall {
+        case (required, provided) => provided.satisfies(required)
       }
     }
   }

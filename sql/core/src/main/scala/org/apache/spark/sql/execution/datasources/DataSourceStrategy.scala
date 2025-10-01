@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PREDICATES
 import org.apache.spark.rdd.RDD
@@ -823,10 +824,12 @@ object DataSourceStrategy
 
   protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[V2SortOrder] = {
     def translateSortOrder(sortOrder: SortOrder): Option[V2SortOrder] = sortOrder match {
-      case SortOrder(PushableExpression(expr), directionV1, nullOrderingV1, _, _) =>
+      case SortOrder(PushableExpression(expr), directionV1, nullOrderingV1, _) =>
         val directionV2 = directionV1 match {
           case Ascending => SortDirection.ASCENDING
           case Descending => SortDirection.DESCENDING
+          case Constant =>
+            throw SparkException.internalError(s"Unexpected catalyst sort direction $Constant")
         }
         val nullOrderingV2 = nullOrderingV1 match {
           case NullsFirst => NullOrdering.NULLS_FIRST

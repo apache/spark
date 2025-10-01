@@ -47,7 +47,7 @@ case class SortExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputOrdering: Seq[SortOrder] =
-    sortOrder ++ child.outputOrdering.filter(_.isConstant)
+    sortOrder ++ child.outputOrdering.filter(_.direction == Constant)
 
   // sort performed is local within a given partition so will retain
   // child operator's partitioning
@@ -74,7 +74,7 @@ case class SortExec(
    * should make it public.
    */
   def createSorter(): UnsafeExternalRowSorter = {
-    val effectiveSortOrder = sortOrder.filterNot(_.isConstant)
+    val effectiveSortOrder = sortOrder.filterNot(_.direction == Constant)
 
     rowSorter = new ThreadLocal[UnsafeExternalRowSorter]()
 

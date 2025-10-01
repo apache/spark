@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Constant, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -203,17 +203,21 @@ object V1WritesUtils {
       requiredOrdering: Seq[Expression],
       outputOrdering: Seq[SortOrder]): Boolean = {
     val (constantOutputOrdering, nonConstantOutputOrdering) = outputOrdering.partition {
-      case SortOrder(child, _, _, _, isConstant) => isConstant || child.foldable
+      case SortOrder(_, Constant, _, _) => true
+      case SortOrder(child, _, _, _) => child.foldable
     }
 
     val effectiveRequiredOrdering = requiredOrdering.filterNot { requiredOrder =>
       constantOutputOrdering.exists {
-        case s @ SortOrder(alias: Alias, _, _, _, true) =>
+        case s @ SortOrder(alias: Alias, Constant, _, _) =>
           val outputOrder = s.copy(child = alias.toAttribute)
           outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
         case outputOrder =>
           outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
       }
+//      constantOutputOrdering.exists { outputOrder =>
+//        outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
+//      }
     }
 
     if (effectiveRequiredOrdering.length > nonConstantOutputOrdering.length) {

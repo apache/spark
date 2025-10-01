@@ -151,6 +151,7 @@ package object dsl extends SQLConfHelper {
 
     def asc: SortOrder = SortOrder(expr, Ascending)
     def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Seq.empty)
+    def const: SortOrder = SortOrder(expr, Constant)
     def desc: SortOrder = SortOrder(expr, Descending)
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
@@ -459,7 +460,7 @@ package object dsl extends SQLConfHelper {
        * `orderByOrdinal` is enabled.
        */
       private def replaceOrdinalsInSortOrder(sortOrder: SortOrder): SortOrder = sortOrder match {
-        case sortOrderByOrdinal @ SortOrder(literal @ Literal(value: Int, IntegerType), _, _, _, _)
+        case sortOrderByOrdinal @ SortOrder(literal @ Literal(value: Int, IntegerType), _, _, _)
             if conf.orderByOrdinal =>
           val ordinal = CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
           sortOrderByOrdinal
