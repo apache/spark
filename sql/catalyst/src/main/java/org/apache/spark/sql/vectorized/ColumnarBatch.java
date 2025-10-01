@@ -85,6 +85,9 @@ public class ColumnarBatch implements AutoCloseable {
    */
   public void setNumRows(int numRows) {
     this.numRows = numRows;
+    for (ColumnVector c: columns) {
+      c.setNum(numRows);
+    }
   }
 
   /**

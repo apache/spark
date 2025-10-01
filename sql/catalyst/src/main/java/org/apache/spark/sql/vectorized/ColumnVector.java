@@ -60,7 +60,9 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public final DataType dataType() { return type; }
 
-  /**
+    public void setNum(int num) { }
+
+    /**
    * Cleans up memory for this column vector. The column vector is not usable after this.
    * <p>
    * This overwrites {@link AutoCloseable#close} to remove the

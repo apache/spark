@@ -23,7 +23,7 @@ import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, TaskCont
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ArrowWritableColumnVector, OffHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
@@ -76,7 +76,7 @@ class RowToColumnarEvaluatorFactory(
         private lazy val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
           OffHeapColumnVector.allocateColumns(numRows, schema).toImmutableArraySeq
         } else {
-          OnHeapColumnVector.allocateColumns(numRows, schema).toImmutableArraySeq
+          ArrowWritableColumnVector.allocateColumns(numRows, schema).toImmutableArraySeq
         }
         private lazy val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
 

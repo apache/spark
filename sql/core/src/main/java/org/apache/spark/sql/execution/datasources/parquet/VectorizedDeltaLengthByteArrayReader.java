@@ -21,9 +21,10 @@ import static org.apache.spark.sql.types.DataTypes.IntegerType;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.io.ParquetDecodingException;
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.sql.execution.vectorized.ArrowWritableColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 /**
@@ -44,7 +45,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    lengthsVector = new OnHeapColumnVector(valueCount, IntegerType);
+    lengthsVector = new ArrowWritableColumnVector(valueCount, IntegerType);
     lengthReader.initFromPage(valueCount, in);
     lengthReader.readIntegers(lengthReader.getTotalValueCount(), lengthsVector, 0);
     this.in = in.remainingStream();

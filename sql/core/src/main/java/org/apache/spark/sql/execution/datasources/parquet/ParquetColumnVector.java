@@ -23,8 +23,8 @@ import java.util.Set;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.sql.execution.vectorized.ArrowWritableColumnVector;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.DataType;
@@ -113,7 +113,7 @@ final class ParquetColumnVector {
       ParquetColumn fileContentCol = column.variantFileType().get();
       WritableColumnVector fileContent = memoryMode == MemoryMode.OFF_HEAP
           ? new OffHeapColumnVector(capacity, fileContentCol.sparkType())
-          : new OnHeapColumnVector(capacity, fileContentCol.sparkType());
+          : new ArrowWritableColumnVector(capacity, fileContentCol.sparkType());
       ParquetColumnVector contentVector = new ParquetColumnVector(fileContentCol,
           fileContent, capacity, memoryMode, missingColumns, false, null);
       children.add(contentVector);
@@ -377,7 +377,7 @@ final class ParquetColumnVector {
 
   private static WritableColumnVector allocateLevelsVector(int capacity, MemoryMode memoryMode) {
     return switch (memoryMode) {
-      case ON_HEAP -> new OnHeapColumnVector(capacity, DataTypes.IntegerType);
+      case ON_HEAP -> new ArrowWritableColumnVector(capacity, DataTypes.IntegerType);
       case OFF_HEAP -> new OffHeapColumnVector(capacity, DataTypes.IntegerType);
     };
   }

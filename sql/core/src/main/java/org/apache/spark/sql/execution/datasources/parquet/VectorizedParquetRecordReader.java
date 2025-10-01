@@ -43,10 +43,10 @@ import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.execution.vectorized.ArrowWritableColumnVector;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -471,7 +471,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       }
     } else {
       for (int i = 0; i < fieldsLength - constantColumnLength; i++) {
-        vectors[i] = new OnHeapColumnVector(capacity, fields[i].dataType());
+        vectors[i] = new ArrowWritableColumnVector(capacity, fields[i].dataType());
       }
     }
     for (int i = fieldsLength - constantColumnLength; i < fieldsLength; i++) {

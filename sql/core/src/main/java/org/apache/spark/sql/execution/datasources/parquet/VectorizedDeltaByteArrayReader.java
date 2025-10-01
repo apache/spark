@@ -23,7 +23,7 @@ import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.sql.execution.vectorized.ArrowWritableColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import java.io.IOException;
@@ -50,13 +50,13 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   VectorizedDeltaByteArrayReader() {
     this.prefixLengthReader = new VectorizedDeltaBinaryPackedReader();
     this.suffixReader = new VectorizedDeltaLengthByteArrayReader();
-    binaryValVector = new OnHeapColumnVector(1, BinaryType);
-    tempBinaryValVector = new OnHeapColumnVector(1, BinaryType);
+    binaryValVector = new ArrowWritableColumnVector(1, BinaryType);
+    tempBinaryValVector = new ArrowWritableColumnVector(1, BinaryType);
   }
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    prefixLengthVector = new OnHeapColumnVector(valueCount, IntegerType);
+    prefixLengthVector = new ArrowWritableColumnVector(valueCount, IntegerType);
     prefixLengthReader.initFromPage(valueCount, in);
     prefixLengthReader.readIntegers(prefixLengthReader.getTotalValueCount(),
         prefixLengthVector, 0);

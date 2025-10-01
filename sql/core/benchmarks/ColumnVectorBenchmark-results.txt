@@ -1,0 +1,100 @@
+OpenJDK 64-Bit Server VM 17.0.15+0 on Mac OS X 15.7.1
+Apple M3 Max
+Write benchmark for IntegerType:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+OnHeapColumnVector.putSingleValue                     14             14           0      30048.4           0.0       1.0X
+OnHeapColumnVector.putFromArray                       99            102           2       4149.4           0.2       0.1X
+OnHeapColumnVector.putLittleEndian                   140            143           2       2919.0           0.3       0.1X
+OffHeapColumnVector.putSingleValue                    32             32           0      12962.7           0.1       0.4X
+OffHeapColumnVector.putFromArray                     100            103           2       4109.6           0.2       0.1X
+OffHeapColumnVector.putLittleEndian                  112            115           2       3656.8           0.3       0.1X
+ArrowWritableColumnVector.putSingleValue              48             49           1       8600.2           0.1       0.3X
+ArrowWritableColumnVector.putFromArray               102            105           2       4017.7           0.2       0.1X
+ArrowWritableColumnVector.putLittleEndian            113            117           2       3621.9           0.3       0.1X
+
+OpenJDK 64-Bit Server VM 17.0.15+0 on Mac OS X 15.7.1
+Apple M3 Max
+Read benchmark for IntegerType:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeapColumnVector (single)                           0              0           0  273066666.7           0.0       1.0X
+OnHeapColumnVector (batch)                           51             52           2       8099.2           0.1       0.0X
+OffHeapColumnVector (single)                          0              0           0   11095460.0           0.0       0.0X
+OffHeapColumnVector (batch)                          53             54           1       7748.3           0.1       0.0X
+ArrowWritableColumnVector (single)                    0              0           0  273066666.7           0.0       1.0X
+ArrowWritableColumnVector (batch)                    53             54           1       7765.5           0.1       0.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+0 on Mac OS X 15.7.1
+Apple M3 Max
+Write benchmark for LongType:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+OnHeapColumnVector.putSingleValue                     30             54           7      13511.4           0.1       1.0X
+OnHeapColumnVector.putFromArray                      141            146           3       2902.7           0.3       0.2X
+OnHeapColumnVector.putLittleEndian                   173            178           3       2362.8           0.4       0.2X
+OffHeapColumnVector.putSingleValue                    46             47           1       8909.4           0.1       0.7X
+OffHeapColumnVector.putFromArray                     141            147           4       2903.9           0.3       0.2X
+OffHeapColumnVector.putLittleEndian                  149            155           4       2750.4           0.4       0.2X
+ArrowWritableColumnVector.putSingleValue              64             66           1       6372.1           0.2       0.5X
+ArrowWritableColumnVector.putFromArray               142            146           3       2881.1           0.3       0.2X
+ArrowWritableColumnVector.putLittleEndian            150            154           4       2730.1           0.4       0.2X
+
+OpenJDK 64-Bit Server VM 17.0.15+0 on Mac OS X 15.7.1
+Apple M3 Max
+Read benchmark for LongType:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeapColumnVector (single)                           0              0           0    3096181.2           0.0       1.0X
+OnHeapColumnVector (batch)                           93             96           1       4410.1           0.2       0.0X
+OffHeapColumnVector (single)                          0              0           0    8309664.9           0.0       2.7X
+OffHeapColumnVector (batch)                          94             96           2       4377.0           0.2       0.0X
+ArrowWritableColumnVector (single)                    0              0           0   31110436.0           0.0      10.0X
+ArrowWritableColumnVector (batch)                    93             96           2       4408.3           0.2       0.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+0 on Mac OS X 15.7.1
+Apple M3 Max
+Write benchmark for FloatType:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+OnHeapColumnVector.putSingleValue                     13             14           0      30545.5           0.0       1.0X
+OnHeapColumnVector.putFromArray                      109            111           1       3763.3           0.3       0.1X
+OnHeapColumnVector.putLittleEndian                   127            129           2       3221.0           0.3       0.1X
+OffHeapColumnVector.putSingleValue                    53             54           1       7669.9           0.1       0.3X
+OffHeapColumnVector.putFromArray                     110            113           2       3729.9           0.3       0.1X
+OffHeapColumnVector.putLittleEndian                  119            121           2       3443.0           0.3       0.1X
+ArrowWritableColumnVector.putSingleValue              57             58           1       7249.4           0.1       0.2X
+ArrowWritableColumnVector.putFromArray               111            113           2       3683.4           0.3       0.1X
+ArrowWritableColumnVector.putLittleEndian            120            122           3       3426.1           0.3       0.1X
+
+OpenJDK 64-Bit Server VM 17.0.15+0 on Mac OS X 15.7.1
+Apple M3 Max
+Read benchmark for FloatType:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeapColumnVector (single)                           0              0           0    2768353.2           0.0       1.0X
+OnHeapColumnVector (batch)                           50             52           2       8113.8           0.1       0.0X
+OffHeapColumnVector (single)                          0              0           0    5541425.4           0.0       2.0X
+OffHeapColumnVector (batch)                          52             54           1       7805.7           0.1       0.0X
+ArrowWritableColumnVector (single)                    0              0           0   16633502.5           0.0       6.0X
+ArrowWritableColumnVector (batch)                    53             54           1       7729.9           0.1       0.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+0 on Mac OS X 15.7.1
+Apple M3 Max
+Write benchmark for DoubleType:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+OnHeapColumnVector.putSingleValue                     36             50           5      11320.2           0.1       1.0X
+OnHeapColumnVector.putFromArray                      150            152           2       2729.2           0.4       0.2X
+OnHeapColumnVector.putLittleEndian                   159            161           2       2582.5           0.4       0.2X
+OffHeapColumnVector.putSingleValue                    54             55           1       7653.2           0.1       0.7X
+OffHeapColumnVector.putFromArray                     151            156           3       2720.4           0.4       0.2X
+OffHeapColumnVector.putLittleEndian                  157            159           2       2601.1           0.4       0.2X
+ArrowWritableColumnVector.putSingleValue              60             61           1       6770.4           0.1       0.6X
+ArrowWritableColumnVector.putFromArray               151            156           4       2719.6           0.4       0.2X
+ArrowWritableColumnVector.putLittleEndian            156            163           3       2627.1           0.4       0.2X
+
+OpenJDK 64-Bit Server VM 17.0.15+0 on Mac OS X 15.7.1
+Apple M3 Max
+Read benchmark for DoubleType:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeapColumnVector (single)                           0              0           0    2201653.4           0.0       1.0X
+OnHeapColumnVector (batch)                           93             95           2       4427.0           0.2       0.0X
+OffHeapColumnVector (single)                          0              0           0    4748985.5           0.0       2.2X
+OffHeapColumnVector (batch)                          92             95           2       4445.0           0.2       0.0X
+ArrowWritableColumnVector (single)                    0              0           0   11095159.4           0.0       5.0X
+ArrowWritableColumnVector (batch)                    94             96           2       4361.6           0.2       0.0X
+

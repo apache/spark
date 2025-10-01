@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ArrowWritableColumnVector, ConstantColumnVector, OffHeapColumnVector}
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.sources._
@@ -100,7 +100,7 @@ class ParquetFileFormat
       sqlConf: SQLConf): Option[Seq[String]] = {
     Option(Seq.fill(requiredSchema.fields.length)(
       if (!sqlConf.offHeapColumnVectorEnabled) {
-        classOf[OnHeapColumnVector].getName
+        classOf[ArrowWritableColumnVector].getName
       } else {
         classOf[OffHeapColumnVector].getName
       }
