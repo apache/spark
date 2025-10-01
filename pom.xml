@@ -382,10 +382,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <repository>
-      <id>orc</id>
-      <url>https://repository.apache.org/content/repositories/orgapacheorc-1104/</url>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
