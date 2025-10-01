@@ -208,16 +208,9 @@ object V1WritesUtils {
     }
 
     val effectiveRequiredOrdering = requiredOrdering.filterNot { requiredOrder =>
-      constantOutputOrdering.exists {
-        case s @ SortOrder(alias: Alias, Constant, _, _) =>
-          val outputOrder = s.copy(child = alias.toAttribute)
-          outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
-        case outputOrder =>
-          outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
+      constantOutputOrdering.exists { outputOrder =>
+        outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
       }
-//      constantOutputOrdering.exists { outputOrder =>
-//        outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
-//      }
     }
 
     if (effectiveRequiredOrdering.length > nonConstantOutputOrdering.length) {

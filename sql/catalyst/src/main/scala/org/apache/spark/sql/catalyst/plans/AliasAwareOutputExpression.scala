@@ -128,16 +128,8 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
         }
       }
     }
-    newOrdering.takeWhile(_.isDefined).flatten.toSeq ++ outputExpressions.filter {
-      case Alias(child, _) => child.foldable
-      case expr => expr.foldable
-    }.map(SortOrder(_, Constant))
-//    newOrdering.takeWhile(_.isDefined).flatten.toSeq ++ outputExpressions.flatMap {
-//      case alias @ Alias(child, _) if child.foldable =>
-//        Some(SortOrder(alias.toAttribute, Constant))
-//      case expr if expr.foldable =>
-//        Some(SortOrder(expr, Constant))
-//      case _ => None
-//    }
+    newOrdering.takeWhile(_.isDefined).flatten.toSeq ++ outputExpressions.collect {
+      case a @ Alias(child, _) if child.foldable => SortOrder(a.toAttribute, Constant)
+    }
   }
 }
