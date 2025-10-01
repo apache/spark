@@ -20,7 +20,20 @@ package org.apache.spark.sql.pipelines.utils
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{LocalTempView, PersistedView => PersistedViewType, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, FlowAnalysis, FlowFunction, GraphIdentifierManager, GraphRegistrationContext, PersistedView, QueryContext, QueryOrigin, QueryOriginType, Table, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{
+  DataflowGraph,
+  FlowAnalysis,
+  FlowFunction,
+  GraphIdentifierManager,
+  GraphRegistrationContext,
+  PersistedView,
+  QueryContext,
+  QueryOrigin,
+  QueryOriginType,
+  Table,
+  TemporaryView,
+  UnresolvedFlow
+}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
