@@ -175,6 +175,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             u.copy(child = newChild)
           }
 
+        case d @ DefaultValueExpression(u: UnresolvedAttribute, _, _) =>
+          d.copy(child = LiteralFunctionResolution.resolve(u.nameParts)
+            .map {
+              case Alias(child, _) if !isTopLevel => child
+              case other => other
+            }
+            .getOrElse(u))
+
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
       resolved.copyTagsFrom(e)
