@@ -328,7 +328,7 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
         """Test that SparkSession works as a context manager."""
         # Create a new session for testing
         with PySparkSession.builder.remote("local[2]").getOrCreate() as session:
-            self.assertIsInstance(session, PySparkSession)
+            self.assertIsInstance(session, RemoteSparkSession)
             self.assertFalse(session.is_stopped)
             
             df = session.range(3)
@@ -342,7 +342,7 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
         session = None
         try:
             with PySparkSession.builder.remote("local[2]").getOrCreate() as session:
-                self.assertIsInstance(session, PySparkSession)
+                self.assertIsInstance(session, RemoteSparkSession)
                 self.assertFalse(session.is_stopped)
                 raise ValueError("Test exception")
         except ValueError:
