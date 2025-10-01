@@ -1147,15 +1147,14 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
  */
 object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(DATETIME), ruleId) {
-    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
       _.containsPattern(DATETIME), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+        _.containsPattern(DATETIME), ruleId) {
+      // Remove a string to timestamp conversions followed by a timestamp to string conversions if
+      // original string is in the same format.
       case DateFormatClass(
           GetTimestamp(
-            e @ DateFormatClass(
-              _,
-              pattern,
-              timeZoneId),
+            e @ DateFormatClass(_, pattern, timeZoneId),
             pattern2,
             TimestampType,
             _,
@@ -1166,15 +1165,12 @@ object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
           if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
             && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3 =>
         e
+
+      // Remove a timestamp to string conversion followed by a string to timestamp conversions if
+      // original timestamp is built with the same format.
       case GetTimestamp(
           DateFormatClass(
-            e @ GetTimestamp(
-              _,
-              pattern,
-              TimestampType,
-              _,
-              timeZoneId,
-              _),
+            e @ GetTimestamp(_, pattern, TimestampType, _, timeZoneId, _),
             pattern2,
             timeZoneId2),
           pattern3,
