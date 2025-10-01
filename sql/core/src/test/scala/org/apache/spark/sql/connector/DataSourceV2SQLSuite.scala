@@ -3870,6 +3870,17 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("test default value conflicting with special column name") {
+    val t = "testcat.ns.t"
+    withTable("t") {
+      sql(s"""CREATE table $t (
+         c1 STRING,
+         c2 TIMESTAMP,
+         c3 BOOLEAN DEFAULT FALSE,
+         current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
