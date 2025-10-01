@@ -207,7 +207,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         converters = [
             ArrowTableToRowsConversion._create_converter(
-                f.dataType, binary_as_bytes=binary_as_bytes
+                f.dataType, none_on_identity=False, binary_as_bytes=binary_as_bytes
             )
             for f in schema.fields
         ]

@@ -1829,10 +1829,8 @@ class DataFrame(ParentDataFrame):
 
     def _get_binary_as_bytes(self) -> bool:
         """Get the binary_as_bytes configuration value from Spark session."""
-        return (
-            self._session.conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true").lower()
-            == "true"
-        )
+        conf_value = self._session.conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true")
+        return (conf_value or "true").lower() == "true"
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
@@ -2175,7 +2173,7 @@ class DataFrame(ParentDataFrame):
         binary_as_bytes = self._get_binary_as_bytes()
         field_converters = [
             ArrowTableToRowsConversion._create_converter(
-                f.dataType, binary_as_bytes=binary_as_bytes
+                f.dataType, none_on_identity=False, binary_as_bytes=binary_as_bytes
             )
             for f in schema.fields
         ]

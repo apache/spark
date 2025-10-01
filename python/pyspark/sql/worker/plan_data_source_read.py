@@ -181,7 +181,7 @@ def write_read_func_and_partitions(
 
     # Create input converter.
     converter = ArrowTableToRowsConversion._create_converter(
-        BinaryType(), binary_as_bytes=binary_as_bytes
+        BinaryType(), none_on_identity=False, binary_as_bytes=binary_as_bytes
     )
 
     # Create output converter.

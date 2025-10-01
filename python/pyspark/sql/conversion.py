@@ -518,7 +518,7 @@ class ArrowTableToRowsConversion:
     @overload
     @staticmethod
     def _create_converter(
-        dataType: DataType, *, none_on_identity: bool = True, binary_as_bytes: bool = True
+        dataType: DataType, *, none_on_identity: bool = True
     ) -> Optional[Callable]:
         pass
 
@@ -725,6 +725,13 @@ class ArrowTableToRowsConversion:
     @staticmethod
     def convert(  # type: ignore[overload-overlap]
         table: "pa.Table", schema: StructType
+    ) -> List[Row]:
+        pass
+
+    @overload
+    @staticmethod
+    def convert(
+        table: "pa.Table", schema: StructType, *, binary_as_bytes: bool = True
     ) -> List[Row]:
         pass
 
