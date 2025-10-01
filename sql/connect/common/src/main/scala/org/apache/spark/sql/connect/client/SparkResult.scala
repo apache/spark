@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.io.SequenceInputStream
 import java.lang.ref.Cleaner
 import java.util.Objects
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.{ArrowMessage, ArrowRecordBatch}
 import org.apache.arrow.vector.types.pojo
@@ -82,6 +84,7 @@ private[sql] class SparkResult[T](
   private[this] var arrowSchema: pojo.Schema = _
   private[this] var nextResultIndex: Int = 0
   private val resultMap = mutable.Map.empty[Int, (Long, Seq[ArrowMessage])]
+  private val arrowBatchChunksToAssemble = mutable.Buffer.empty[ByteString]
   private val observedMetrics = mutable.Map.empty[String, Row]
   private val cleanable =
     SparkResult.cleaner.register(this, new SparkResultCloseable(resultMap, responses))
@@ -151,55 +154,97 @@ private[sql] class SparkResult[T](
         stop |= stopOnSchema
       }
       if (response.hasArrowBatch) {
-        val ipcStreamBytes = response.getArrowBatch.getData
-        val expectedNumRows = response.getArrowBatch.getRowCount
-        val reader = new MessageIterator(ipcStreamBytes.newInput(), allocator)
-        if (arrowSchema == null) {
-          arrowSchema = reader.schema
-          stop |= stopOnArrowSchema
-        } else if (arrowSchema != reader.schema) {
-          throw new IllegalStateException(
-            s"""Schema Mismatch between expected and received schema:
-               |=== Expected Schema ===
-               |$arrowSchema
-               |=== Received Schema ===
-               |${reader.schema}
-               |""".stripMargin)
-        }
-        if (structType == null) {
-          // If the schema is not available yet, fallback to the arrow schema.
-          structType = ArrowUtils.fromArrowSchema(reader.schema)
-        }
-        if (response.getArrowBatch.hasStartOffset) {
-          val expectedStartOffset = response.getArrowBatch.getStartOffset
-          if (numRecords != expectedStartOffset) {
+        val arrowBatch = response.getArrowBatch
+        logDebug(
+          s"Received arrow batch rows=${arrowBatch.getRowCount} " +
+          s"Number of chunks in batch=${arrowBatch.getNumChunksInBatch} " +
+          s"Chunk index=${arrowBatch.getChunkIndex} " +
+          s"size=${arrowBatch.getData.size()}")
+
+        if (arrowBatchChunksToAssemble.nonEmpty) {
+          // Expect next chunk of the same batch
+          if (arrowBatch.getChunkIndex != arrowBatchChunksToAssemble.size) {
             throw new IllegalStateException(
-              s"Expected arrow batch to start at row offset $numRecords in results, " +
-                s"but received arrow batch starting at offset $expectedStartOffset.")
+              s"Expected chunk index ${arrowBatchChunksToAssemble.size} of the " +
+              s"arrow batch but got ${arrowBatch.getChunkIndex}.")
+          }
+        } else {
+          // Expect next batch
+          if (arrowBatch.hasStartOffset) {
+            val expectedStartOffset = arrowBatch.getStartOffset
+            if (numRecords != expectedStartOffset) {
+              throw new IllegalStateException(
+                s"Expected arrow batch to start at row offset $numRecords in results, " +
+                  s"but received arrow batch starting at offset $expectedStartOffset.")
+            }
+          }
+          if (arrowBatch.getChunkIndex != 0) {
+            throw new IllegalStateException(
+              s"Expected chunk index 0 of the next arrow batch " +
+              s"but got ${arrowBatch.getChunkIndex}.")
           }
         }
-        var numRecordsInBatch = 0
-        val messages = Seq.newBuilder[ArrowMessage]
-        while (reader.hasNext) {
-          val message = reader.next()
-          message match {
-            case batch: ArrowRecordBatch =>
-              numRecordsInBatch += batch.getLength
-            case _ =>
+
+        arrowBatchChunksToAssemble += arrowBatch.getData
+
+        // Assemble the chunks to an arrow batch to process if
+        // (a) chunking is not enabled (numChunksInBatch is not set or is 0,
+        //     in this case, it is the single chunk in the batch)
+        // (b) or the client has received all chunks of the batch.
+        if (!arrowBatch.hasNumChunksInBatch ||
+            arrowBatch.getNumChunksInBatch == 0 ||
+            arrowBatchChunksToAssemble.size == arrowBatch.getNumChunksInBatch) {
+
+          val numChunks = arrowBatchChunksToAssemble.size
+          val inputStreams =
+            arrowBatchChunksToAssemble.map(_.newInput()).toIterator.asJavaEnumeration
+          val input = new SequenceInputStream(inputStreams)
+          arrowBatchChunksToAssemble.clear()
+          logDebug(
+            s"Assembling arrow batch from $numChunks chunks.")
+
+          val expectedNumRows = arrowBatch.getRowCount
+          val reader = new MessageIterator(input, allocator)
+          if (arrowSchema == null) {
+            arrowSchema = reader.schema
+            stop |= stopOnArrowSchema
+          } else if (arrowSchema != reader.schema) {
+            throw new IllegalStateException(
+              s"""Schema Mismatch between expected and received schema:
+                 |=== Expected Schema ===
+                 |$arrowSchema
+                 |=== Received Schema ===
+                 |${reader.schema}
+                 |""".stripMargin)
           }
-          messages += message
-        }
-        if (numRecordsInBatch != expectedNumRows) {
-          throw new IllegalStateException(
-            s"Expected $expectedNumRows rows in arrow batch but got $numRecordsInBatch.")
-        }
-        // Skip the entire result if it is empty.
-        if (numRecordsInBatch > 0) {
-          numRecords += numRecordsInBatch
-          resultMap.put(nextResultIndex, (reader.bytesRead, messages.result()))
-          nextResultIndex += 1
-          nonEmpty |= true
-          stop |= stopOnFirstNonEmptyResponse
+          if (structType == null) {
+            // If the schema is not available yet, fallback to the arrow schema.
+            structType = ArrowUtils.fromArrowSchema(reader.schema)
+          }
+
+          var numRecordsInBatch = 0
+          val messages = Seq.newBuilder[ArrowMessage]
+          while (reader.hasNext) {
+            val message = reader.next()
+            message match {
+              case batch: ArrowRecordBatch =>
+                numRecordsInBatch += batch.getLength
+              case _ =>
+            }
+            messages += message
+          }
+          if (numRecordsInBatch != expectedNumRows) {
+            throw new IllegalStateException(
+              s"Expected $expectedNumRows rows in arrow batch but got $numRecordsInBatch.")
+          }
+          // Skip the entire result if it is empty.
+          if (numRecordsInBatch > 0) {
+            numRecords += numRecordsInBatch
+            resultMap.put(nextResultIndex, (reader.bytesRead, messages.result()))
+            nextResultIndex += 1
+            nonEmpty |= true
+            stop |= stopOnFirstNonEmptyResponse
+          }
         }
       }
     }
