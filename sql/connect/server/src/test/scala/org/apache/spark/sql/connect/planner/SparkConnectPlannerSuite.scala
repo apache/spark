@@ -103,6 +103,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         Long.MaxValue,
         timeZoneId,
         true,
+        false,
         false)
       .next()
 
