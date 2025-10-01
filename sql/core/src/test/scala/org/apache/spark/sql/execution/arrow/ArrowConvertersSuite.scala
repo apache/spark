@@ -1779,7 +1779,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val ctx = TaskContext.empty()
 
     val batchIter = ArrowConverters.toBatchIterator(
-      inputRows.iterator, schema, 10, null, true, false, ctx)
+      inputRows.iterator, schema, 10, null, true, false, false, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
@@ -1875,7 +1875,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     // Use small batch size to create many batches
     val batchIter = ArrowConverters.toBatchIterator(
-      projectedRows.iterator, schema, 7, null, true, false, ctx)
+      projectedRows.iterator, schema, 7, null, true, false, false, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
@@ -1911,7 +1911,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val batchSize = 7
 
     val batchIter = ArrowConverters.toBatchIterator(
-      inputRows.iterator, schema, batchSize, null, true, false, ctx)
+      inputRows.iterator, schema, batchSize, null, true, false, false, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
