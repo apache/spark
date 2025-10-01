@@ -391,6 +391,74 @@ class ArrowPythonUDFLegacyTestsMixin(ArrowPythonUDFTestsMixin):
             self.assertEqual(result[0]["type_name"], "bytes")
             self.assertEqual(result[1]["type_name"], "bytes")
 
+    def test_udf_binary_type_in_nested_structures(self):
+        # For Arrow Python UDF with legacy conversion BinaryType is always mapped to bytes
+        # Test binary in array
+        def check_array_binary_type(arr):
+            return type(arr[0]).__name__
+
+        array_udf = udf(check_array_binary_type, returnType="string")
+        df_array = self.spark.createDataFrame(
+            [Row(arr=[b"hello", b"world"])],
+            schema=StructType([StructField("arr", ArrayType(BinaryType()))]),
+        )
+
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
+            result = df_array.select(array_udf(col("arr")).alias("type_name")).collect()
+            self.assertEqual(result[0]["type_name"], "bytes")
+
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
+            result = df_array.select(array_udf(col("arr")).alias("type_name")).collect()
+            self.assertEqual(result[0]["type_name"], "bytes")
+
+        # Test binary in map value
+        def check_map_binary_type(m):
+            return type(list(m.values())[0]).__name__
+
+        map_udf = udf(check_map_binary_type, returnType="string")
+        df_map = self.spark.createDataFrame(
+            [Row(m={"key": b"value"})],
+            schema=StructType([StructField("m", MapType(StringType(), BinaryType()))]),
+        )
+
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
+            result = df_map.select(map_udf(col("m")).alias("type_name")).collect()
+            self.assertEqual(result[0]["type_name"], "bytes")
+
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
+            result = df_map.select(map_udf(col("m")).alias("type_name")).collect()
+            self.assertEqual(result[0]["type_name"], "bytes")
+
+        # Test binary in struct
+        def check_struct_binary_type(s):
+            return type(s.binary_field).__name__
+
+        struct_udf = udf(check_struct_binary_type, returnType="string")
+        df_struct = self.spark.createDataFrame(
+            [Row(s=Row(binary_field=b"test", other_field="value"))],
+            schema=StructType(
+                [
+                    StructField(
+                        "s",
+                        StructType(
+                            [
+                                StructField("binary_field", BinaryType()),
+                                StructField("other_field", StringType()),
+                            ]
+                        ),
+                    )
+                ]
+            ),
+        )
+
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
+            result = df_struct.select(struct_udf(col("s")).alias("type_name")).collect()
+            self.assertEqual(result[0]["type_name"], "bytes")
+
+        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
+            result = df_struct.select(struct_udf(col("s")).alias("type_name")).collect()
+            self.assertEqual(result[0]["type_name"], "bytes")
+
 
 class ArrowPythonUDFNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
     @classmethod

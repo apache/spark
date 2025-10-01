@@ -428,6 +428,7 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         # Test with binary_as_bytes=False - should get bytearray objects
         with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
+
             def assert_bytearray_type(iterator):
                 count = 0
                 for row in iterator:
