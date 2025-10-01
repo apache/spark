@@ -953,7 +953,7 @@ class SparkSession:
         """
         Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
 
-        .. versionadded:: 2.0.0
+        .. versionadded:: 4.1.0
 
         Examples
         --------
@@ -982,7 +982,7 @@ class SparkSession:
 
         Specifically stop the SparkSession on exit of the with block.
 
-        .. versionadded:: 2.0.0
+        .. versionadded:: 4.1.0
 
         Examples
         --------
