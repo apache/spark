@@ -195,7 +195,7 @@ private[connect] object PipelinesHandler extends Logging {
             partitionCols = Option(dataset.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
             properties = dataset.getTablePropertiesMap.asScala.toMap,
-            baseOrigin = QueryOrigin(
+            origin = QueryOrigin(
               filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
                 dataset.getSourceCodeLocation.getFileName),
               line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(

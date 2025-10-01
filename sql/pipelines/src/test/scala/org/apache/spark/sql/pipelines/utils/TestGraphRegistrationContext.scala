@@ -20,19 +20,7 @@ package org.apache.spark.sql.pipelines.utils
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{LocalTempView, PersistedView => PersistedViewType, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.pipelines.graph.{
-  DataflowGraph,
-  FlowAnalysis,
-  FlowFunction,
-  GraphIdentifierManager,
-  GraphRegistrationContext,
-  PersistedView,
-  QueryContext,
-  QueryOrigin,
-  Table,
-  TemporaryView,
-  UnresolvedFlow
-}
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, FlowAnalysis, FlowFunction, GraphIdentifierManager, GraphRegistrationContext, PersistedView, QueryContext, QueryOrigin, QueryOriginType, Table, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -129,7 +117,6 @@ class TestGraphRegistrationContext(
       isStreamingTable: Boolean
   ): Unit = {
     // scalastyle:on
-    val tableIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
     val qualifiedIdentifier = GraphIdentifierManager
           .parseAndQualifyTableIdentifier(
             rawTableIdentifier = GraphIdentifierManager
@@ -144,7 +131,12 @@ class TestGraphRegistrationContext(
         specifiedSchema = specifiedSchema,
         partitionCols = partitionCols,
         properties = properties,
-        baseOrigin = baseOrigin,
+        origin = baseOrigin.merge(
+          QueryOrigin(
+            objectName = Option(qualifiedIdentifier.unquotedString),
+            objectType = Option(QueryOriginType.Table.toString)
+          )
+        ),
         format = format.orElse(Some("parquet")),
         normalizedPath = None,
         isStreamingTable = isStreamingTable
@@ -215,13 +207,20 @@ class TestGraphRegistrationContext(
       case _ => persistedViewIdentifier
     }
 
+    val viewOrigin: QueryOrigin = origin.merge(
+      QueryOrigin(
+        objectName = Option(viewIdentifier.unquotedString),
+        objectType = Option(QueryOriginType.View.toString)
+      )
+    )
+
     registerView(
       viewType match {
         case LocalTempView =>
           TemporaryView(
             identifier = viewIdentifier,
             comment = comment,
-            origin = origin,
+            origin = viewOrigin,
             properties = Map.empty,
             sqlText = sqlText
           )
@@ -229,7 +228,7 @@ class TestGraphRegistrationContext(
           PersistedView(
             identifier = viewIdentifier,
             comment = comment,
-            origin = origin,
+            origin = viewOrigin,
             properties = Map.empty,
             sqlText = sqlText
           )
@@ -298,7 +297,10 @@ class TestGraphRegistrationContext(
         ),
         sqlConf = Map.empty,
         once = once,
-        origin = QueryOrigin()
+        origin = QueryOrigin(
+          objectName = Option(flowIdentifier.unquotedString),
+          objectType = Option(QueryOriginType.Flow.toString)
+        )
       )
     )
   }

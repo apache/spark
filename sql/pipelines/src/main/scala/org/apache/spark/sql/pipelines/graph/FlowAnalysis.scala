@@ -53,8 +53,7 @@ object FlowAnalysis {
           allInputs = allInputs,
           availableInputs = availableInputs,
           queryContext = queryContext,
-          spark = SparkSession.active,
-          queryOrigin = queryOrigin
+          spark = SparkSession.active
         )
         val df = try {
           confs.foreach { case (k, v) => ctx.setConf(k, v) }
