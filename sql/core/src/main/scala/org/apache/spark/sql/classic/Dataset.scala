@@ -2072,7 +2072,9 @@ class Dataset[T] private[sql](
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val structType = schema  // capture it for closure
-    val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
+    val binaryAsBytes = sparkSession.sessionState.conf.pysparkBinaryAsBytes  // capture config value
+    val rdd = queryExecution.toRdd.map(row =>
+      EvaluatePython.toJava(row, structType, binaryAsBytes))
     EvaluatePython.javaToPython(rdd)
   }
 

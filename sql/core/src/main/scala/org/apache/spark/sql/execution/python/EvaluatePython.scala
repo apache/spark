@@ -56,47 +56,52 @@ object EvaluatePython {
   /**
    * Helper for converting from Catalyst type to java type suitable for Pickle.
    */
-  def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
-    case (null, _) => null
+  def toJava(
+      obj: Any,
+      dataType: DataType,
+      binaryAsBytes: Boolean = SQLConf.get.pysparkBinaryAsBytes): Any = {
+    (obj, dataType) match {
+      case (null, _) => null
 
-    case (row: InternalRow, struct: StructType) =>
-      val values = new Array[Any](row.numFields)
-      var i = 0
-      while (i < row.numFields) {
-        values(i) = toJava(row.get(i, struct.fields(i).dataType), struct.fields(i).dataType)
-        i += 1
-      }
-      new GenericRowWithSchema(values, struct)
+      case (row: InternalRow, struct: StructType) =>
+        val values = new Array[Any](row.numFields)
+        var i = 0
+        while (i < row.numFields) {
+          val field = struct.fields(i)
+          values(i) = toJava(row.get(i, field.dataType), field.dataType, binaryAsBytes)
+          i += 1
+        }
+        new GenericRowWithSchema(values, struct)
 
-    case (a: ArrayData, array: ArrayType) =>
-      val values = new java.util.ArrayList[Any](a.numElements())
-      a.foreach(array.elementType, (_, e) => {
-        values.add(toJava(e, array.elementType))
-      })
-      values
+      case (a: ArrayData, array: ArrayType) =>
+        val values = new java.util.ArrayList[Any](a.numElements())
+        a.foreach(array.elementType, (_, e) => {
+          values.add(toJava(e, array.elementType, binaryAsBytes))
+        })
+        values
 
-    case (map: MapData, mt: MapType) =>
-      val jmap = new java.util.HashMap[Any, Any](map.numElements())
-      map.foreach(mt.keyType, mt.valueType, (k, v) => {
-        jmap.put(toJava(k, mt.keyType), toJava(v, mt.valueType))
-      })
-      jmap
+      case (map: MapData, mt: MapType) =>
+        val jmap = new java.util.HashMap[Any, Any](map.numElements())
+        map.foreach(mt.keyType, mt.valueType, (k, v) => {
+          jmap.put(toJava(k, mt.keyType, binaryAsBytes), toJava(v, mt.valueType, binaryAsBytes))
+        })
+        jmap
 
-    case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType)
+      case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType, binaryAsBytes)
 
-    case (d: Decimal, _) => d.toJavaBigDecimal
+      case (d: Decimal, _) => d.toJavaBigDecimal
 
-    case (s: UTF8String, _: StringType) => s.toString
+      case (s: UTF8String, _: StringType) => s.toString
 
-    case (bytes: Array[Byte], BinaryType) =>
-      // Check config to decide whether to wrap bytes for conversion to Python bytes
-      if (SQLConf.get.pysparkBinaryAsBytes) {
-        new BytesWrapper(bytes)
-      } else {
-        bytes
-      }
+      case (bytes: Array[Byte], BinaryType) =>
+        if (binaryAsBytes) {
+          new BytesWrapper(bytes)
+        } else {
+          bytes
+        }
 
-    case (other, _) => other
+      case (other, _) => other
+    }
   }
 
   /**
