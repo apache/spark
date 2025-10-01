@@ -402,11 +402,39 @@ class PipelineCommand(google.protobuf.message.Message):
                 self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
             ) -> None: ...
 
+        class Response(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            FLOW_NAME_FIELD_NUMBER: builtins.int
+            flow_name: builtins.str
+            """Fully qualified flow name that uniquely identify a flow in the Dataflow graph."""
+            def __init__(
+                self,
+                *,
+                flow_name: builtins.str | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_flow_name", b"_flow_name", "flow_name", b"flow_name"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_flow_name", b"_flow_name", "flow_name", b"flow_name"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
+            ) -> typing_extensions.Literal["flow_name"] | None: ...
+
         DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
         FLOW_NAME_FIELD_NUMBER: builtins.int
         TARGET_DATASET_NAME_FIELD_NUMBER: builtins.int
         RELATION_FIELD_NUMBER: builtins.int
         SQL_CONF_FIELD_NUMBER: builtins.int
+        CLIENT_ID_FIELD_NUMBER: builtins.int
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to attach this flow to."""
@@ -416,12 +444,18 @@ class PipelineCommand(google.protobuf.message.Message):
         """Name of the dataset this flow writes to. Can be partially or fully qualified."""
         @property
         def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
-            """An unresolved relation that defines the dataset's flow."""
+            """An unresolved relation that defines the dataset's flow. Empty if the query function
+            that defines the flow cannot be analyzed at the time of flow definition.
+            """
         @property
         def sql_conf(
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """SQL configurations set when running this flow."""
+        client_id: builtins.str
+        """Identifier for the client making the request. The server uses this to determine what flow
+        evaluation request stream to dispatch evaluation requests to for this flow.
+        """
         @property
         def source_code_location(self) -> global___SourceCodeLocation:
             """The location in source code that this flow was defined."""
@@ -433,11 +467,14 @@ class PipelineCommand(google.protobuf.message.Message):
             target_dataset_name: builtins.str | None = ...,
             relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
             sql_conf: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+            client_id: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "_client_id",
+                b"_client_id",
                 "_dataflow_graph_id",
                 b"_dataflow_graph_id",
                 "_flow_name",
@@ -448,6 +485,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_source_code_location",
                 "_target_dataset_name",
                 b"_target_dataset_name",
+                "client_id",
+                b"client_id",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
                 "flow_name",
@@ -463,6 +502,8 @@ class PipelineCommand(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_client_id",
+                b"_client_id",
                 "_dataflow_graph_id",
                 b"_dataflow_graph_id",
                 "_flow_name",
@@ -473,6 +514,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_source_code_location",
                 "_target_dataset_name",
                 b"_target_dataset_name",
+                "client_id",
+                b"client_id",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
                 "flow_name",
@@ -487,6 +530,10 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"target_dataset_name",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_client_id", b"_client_id"]
+        ) -> typing_extensions.Literal["client_id"] | None: ...
         @typing.overload
         def WhichOneof(
             self,
@@ -673,12 +720,141 @@ class PipelineCommand(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_sql_text", b"_sql_text"]
         ) -> typing_extensions.Literal["sql_text"] | None: ...
 
+    class GetQueryFunctionExecutionSignalStream(google.protobuf.message.Message):
+        """Request to get the stream of query function execution signals for a graph. Responses should
+        be a stream of PipelineQueryFunctionExecutionSignal messages.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
+        CLIENT_ID_FIELD_NUMBER: builtins.int
+        dataflow_graph_id: builtins.str
+        """The graph to get the query function execution signal stream for."""
+        client_id: builtins.str
+        """Identifier for the client that is requesting the stream."""
+        def __init__(
+            self,
+            *,
+            dataflow_graph_id: builtins.str | None = ...,
+            client_id: builtins.str | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_client_id",
+                b"_client_id",
+                "_dataflow_graph_id",
+                b"_dataflow_graph_id",
+                "client_id",
+                b"client_id",
+                "dataflow_graph_id",
+                b"dataflow_graph_id",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_client_id",
+                b"_client_id",
+                "_dataflow_graph_id",
+                b"_dataflow_graph_id",
+                "client_id",
+                b"client_id",
+                "dataflow_graph_id",
+                b"dataflow_graph_id",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_client_id", b"_client_id"]
+        ) -> typing_extensions.Literal["client_id"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
+        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
+
+    class DefineFlowQueryFunctionResult(google.protobuf.message.Message):
+        """Request from the client to update the flow function evaluation result
+        for a previously un-analyzed flow.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        FLOW_NAME_FIELD_NUMBER: builtins.int
+        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
+        RELATION_FIELD_NUMBER: builtins.int
+        flow_name: builtins.str
+        """The fully qualified name of the flow being updated."""
+        dataflow_graph_id: builtins.str
+        """The ID of the graph this flow belongs to."""
+        @property
+        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            """An unresolved relation that defines the dataset's flow."""
+        def __init__(
+            self,
+            *,
+            flow_name: builtins.str | None = ...,
+            dataflow_graph_id: builtins.str | None = ...,
+            relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_dataflow_graph_id",
+                b"_dataflow_graph_id",
+                "_flow_name",
+                b"_flow_name",
+                "_relation",
+                b"_relation",
+                "dataflow_graph_id",
+                b"dataflow_graph_id",
+                "flow_name",
+                b"flow_name",
+                "relation",
+                b"relation",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_dataflow_graph_id",
+                b"_dataflow_graph_id",
+                "_flow_name",
+                b"_flow_name",
+                "_relation",
+                b"_relation",
+                "dataflow_graph_id",
+                b"dataflow_graph_id",
+                "flow_name",
+                b"flow_name",
+                "relation",
+                b"relation",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
+        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
+        ) -> typing_extensions.Literal["flow_name"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_relation", b"_relation"]
+        ) -> typing_extensions.Literal["relation"] | None: ...
+
     CREATE_DATAFLOW_GRAPH_FIELD_NUMBER: builtins.int
     DEFINE_DATASET_FIELD_NUMBER: builtins.int
     DEFINE_FLOW_FIELD_NUMBER: builtins.int
     DROP_DATAFLOW_GRAPH_FIELD_NUMBER: builtins.int
     START_RUN_FIELD_NUMBER: builtins.int
     DEFINE_SQL_GRAPH_ELEMENTS_FIELD_NUMBER: builtins.int
+    GET_QUERY_FUNCTION_EXECUTION_SIGNAL_STREAM_FIELD_NUMBER: builtins.int
+    DEFINE_FLOW_QUERY_FUNCTION_RESULT_FIELD_NUMBER: builtins.int
     @property
     def create_dataflow_graph(self) -> global___PipelineCommand.CreateDataflowGraph: ...
     @property
@@ -691,6 +867,14 @@ class PipelineCommand(google.protobuf.message.Message):
     def start_run(self) -> global___PipelineCommand.StartRun: ...
     @property
     def define_sql_graph_elements(self) -> global___PipelineCommand.DefineSqlGraphElements: ...
+    @property
+    def get_query_function_execution_signal_stream(
+        self,
+    ) -> global___PipelineCommand.GetQueryFunctionExecutionSignalStream: ...
+    @property
+    def define_flow_query_function_result(
+        self,
+    ) -> global___PipelineCommand.DefineFlowQueryFunctionResult: ...
     def __init__(
         self,
         *,
@@ -700,6 +884,10 @@ class PipelineCommand(google.protobuf.message.Message):
         drop_dataflow_graph: global___PipelineCommand.DropDataflowGraph | None = ...,
         start_run: global___PipelineCommand.StartRun | None = ...,
         define_sql_graph_elements: global___PipelineCommand.DefineSqlGraphElements | None = ...,
+        get_query_function_execution_signal_stream: global___PipelineCommand.GetQueryFunctionExecutionSignalStream
+        | None = ...,
+        define_flow_query_function_result: global___PipelineCommand.DefineFlowQueryFunctionResult
+        | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -712,10 +900,14 @@ class PipelineCommand(google.protobuf.message.Message):
             b"define_dataset",
             "define_flow",
             b"define_flow",
+            "define_flow_query_function_result",
+            b"define_flow_query_function_result",
             "define_sql_graph_elements",
             b"define_sql_graph_elements",
             "drop_dataflow_graph",
             b"drop_dataflow_graph",
+            "get_query_function_execution_signal_stream",
+            b"get_query_function_execution_signal_stream",
             "start_run",
             b"start_run",
         ],
@@ -731,10 +923,14 @@ class PipelineCommand(google.protobuf.message.Message):
             b"define_dataset",
             "define_flow",
             b"define_flow",
+            "define_flow_query_function_result",
+            b"define_flow_query_function_result",
             "define_sql_graph_elements",
             b"define_sql_graph_elements",
             "drop_dataflow_graph",
             b"drop_dataflow_graph",
+            "get_query_function_execution_signal_stream",
+            b"get_query_function_execution_signal_stream",
             "start_run",
             b"start_run",
         ],
@@ -749,6 +945,8 @@ class PipelineCommand(google.protobuf.message.Message):
             "drop_dataflow_graph",
             "start_run",
             "define_sql_graph_elements",
+            "get_query_function_execution_signal_stream",
+            "define_flow_query_function_result",
         ]
         | None
     ): ...
@@ -1029,3 +1227,26 @@ class SourceCodeLocation(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["line_number"] | None: ...
 
 global___SourceCodeLocation = SourceCodeLocation
+
+class PipelineQueryFunctionExecutionSignal(google.protobuf.message.Message):
+    """A signal from the server to the client to execute the query function for one or more flows, and
+    to register their results with the server.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FLOW_NAMES_FIELD_NUMBER: builtins.int
+    @property
+    def flow_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        flow_names: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["flow_names", b"flow_names"]
+    ) -> None: ...
+
+global___PipelineQueryFunctionExecutionSignal = PipelineQueryFunctionExecutionSignal
