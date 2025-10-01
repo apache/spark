@@ -757,8 +757,49 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
         withParquetFile(data) { file =>
           checkAnswer(spark.read.schema(readSchema).parquet(file),
-            Row(null) :: Row(null) :: Row(null) :: Nil
+            Row(Row(null, null)) :: Row(Row(null, null)) :: Row(null) :: Nil
           )
+        }
+      }
+    }
+  }
+
+  test("SPARK-53535: vectorized reader: missing all struct fields, struct with complex fields") {
+    val data = Seq(
+      Row(Row(Seq(11, 12, null, 14), Row("21", 22), Row(true)), 100),
+      Row(Row(Seq(11, 12, null, 14), Row("21", 22), Row(false)), 100),
+      Row(null, 100)
+    )
+
+    val tableSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_1", ArrayType(IntegerType, containsNull = true))
+        .add("_2", new StructType()
+          .add("_1", StringType)
+          .add("_2", IntegerType))
+        .add("_3", new StructType()
+          .add("_1", BooleanType)))
+      .add("_2", IntegerType)
+
+    val readSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_101", IntegerType)
+        .add("_102", LongType))
+
+    withTempPath { path =>
+      val file = path.getCanonicalPath
+      spark.createDataFrame(data.asJava, tableSchema).write.partitionBy("_2").parquet(file)
+
+      Seq(true, false).foreach { offheapEnabled =>
+        withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString
+        ) {
+          withAllParquetReaders {
+            checkAnswer(spark.read.schema(readSchema).parquet(file),
+              Row(Row(null, null), 100) :: Row(Row(null, null), 100) :: Row(null, 100) :: Nil
+            )
+          }
         }
       }
     }

@@ -2886,6 +2886,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |  required group f0 {
         |    optional float f02;
         |    optional double f03;
+        |    required int32 f00;
         |  }
         |}
       """.stripMargin)
@@ -3066,4 +3067,286 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           useFieldId = false)
       }
     }
+
+  testSchemaClipping(
+    "SPARK-53535: struct in struct missing in requested schema",
+    parquetSchema =
+      """message root {
+        |  required int32 f0;
+        |  required group f1 {
+        |    required group f10 {
+        |      required int32 f100;
+        |      required int32 f101;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+    catalystSchema = new StructType().add("f0", IntegerType, nullable = true),
+    expectedSchema =
+      """message root {
+        |  required int32 f0;
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "SPARK-53535: struct in struct, with missing field being requested",
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    required group f00 {
+        |      required int64 f000;
+        |      required int32 f001;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+    catalystSchema = new StructType()
+      .add("f0", new StructType()
+        .add("f01", IntegerType, nullable = true), nullable = true),
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional int32 f01;
+        |    required group f00 {
+        |      required int32 f001;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "SPARK-53535: missing struct with complex fields",
+    parquetSchema =
+      """message root {
+        |  optional group _1 {
+        |    optional group _1 (LIST) {
+        |      repeated group list {
+        |        optional int32 element;
+        |      }
+        |    }
+        |    optional group _2 {
+        |      optional binary _1 (UTF8);
+        |      optional int32 _2;
+        |    }
+        |    optional group _3 {
+        |      optional group _1 (LIST) {
+        |        repeated group list {
+        |          optional int32 element;
+        |        }
+        |      }
+        |      optional boolean _2;
+        |      optional int32 _3;
+        |    }
+        |    optional group _4 {
+        |      optional int64 _1;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+    catalystSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_101", IntegerType)
+        .add("_102", LongType)),
+    expectedSchema =
+      """message root {
+        |  optional group _1 {
+        |    optional int32 _101;
+        |    optional int64 _102;
+        |    optional group _3 {
+        |      optional boolean _2;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    s"SPARK-53535: various missing structs, cheapest type selection works as expected",
+    parquetSchema =
+      """message root {
+        |  optional group pickShortestType1 {
+        |    optional int64 long;
+        |    optional int32 int;
+        |    optional double double;
+        |  }
+        |  optional group pickShortestType2 {
+        |    optional int64 long;
+        |    optional int32 int;
+        |    optional boolean boolean;
+        |  }
+        |  optional group dontPickArrayOrMap {
+        |    optional int64 long;
+        |    optional group array (LIST) {
+        |      repeated group list {
+        |        optional boolean element;
+        |      }
+        |    }
+        |    optional group map (MAP) {
+        |      repeated group key_value {
+        |        required boolean key;
+        |        required int32 value;
+        |      }
+        |    }
+        |  }
+        |  optional group pickArrayOrMap {
+        |    optional group arrayOfArray (LIST) {
+        |      repeated group list {
+        |        optional group element (LIST) {
+        |          repeated group list {
+        |            optional boolean element;
+        |          }
+        |        }
+        |      }
+        |    }
+        |    optional group arrayOfLong (LIST) {
+        |      repeated group list {
+        |        optional int64 element;
+        |      }
+        |    }
+        |    optional group map (MAP) {
+        |      repeated group key_value {
+        |        required int32 key;
+        |        required binary value (UTF8);
+        |      }
+        |    }
+        |  }
+        |  optional group structNesting {
+        |    optional int64 long;
+        |    optional group struct {
+        |      optional int32 int;
+        |      optional group struct {
+        |        optional boolean boolean;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+    catalystSchema = new StructType()
+      .add("pickShortestType1", new StructType().add("missingColumn", IntegerType))
+      .add("pickShortestType2", new StructType().add("missingColumn", IntegerType))
+      .add("dontPickArrayOrMap", new StructType().add("missingColumn", IntegerType))
+      .add("pickArrayOrMap", new StructType().add("missingColumn", IntegerType))
+      .add("structNesting", new StructType().add("missingColumn", IntegerType)),
+    expectedSchema =
+      """message root {
+        |  optional group pickShortestType1 {
+        |    optional int32 missingColumn;
+        |    optional int32 int;
+        |  }
+        |  optional group pickShortestType2 {
+        |    optional int32 missingColumn;
+        |    optional boolean boolean;
+        |  }
+        |  optional group dontPickArrayOrMap {
+        |    optional int32 missingColumn;
+        |    optional int64 long;
+        |  }
+        |  optional group pickArrayOrMap {
+        |    optional int32 missingColumn;
+        |    optional group map (MAP) {
+        |      repeated group key_value {
+        |        required int32 key;
+        |      }
+        |    }
+        |  }
+        |  optional group structNesting {
+        |    optional int32 missingColumn;
+        |    optional group struct {
+        |      optional group struct {
+        |        optional boolean boolean;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "struct in struct missing in requested schema",
+    parquetSchema =
+      """message root {
+        |  required int32 f0;
+        |  required group f1 {
+        |    required group f10 {
+        |      required int32 f100;
+        |      required int32 f101;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+    catalystSchema = new StructType().add("f0", IntegerType, nullable = true),
+    expectedSchema =
+      """message root {
+        |  required int32 f0;
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "struct in struct, with missing field being requested",
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    required group f00 {
+        |      required int64 f000;
+        |      required int32 f001;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+    catalystSchema = new StructType()
+      .add("f0", new StructType()
+        .add("f01", IntegerType, nullable = true), nullable = true),
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional int32 f01;
+        |    required group f00 {
+        |      required int32 f001;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "missing struct with complex fields",
+    parquetSchema =
+      """message root {
+        |  optional group _1 {
+        |    optional group _1 (LIST) {
+        |      repeated group list {
+        |        optional int32 element;
+        |      }
+        |    }
+        |    optional group _2 {
+        |      optional binary _1 (UTF8);
+        |      optional int32 _2;
+        |    }
+        |    optional group _3 {
+        |      optional group _1 (LIST) {
+        |        repeated group list {
+        |          optional int32 element;
+        |        }
+        |      }
+        |      optional boolean _2;
+        |      optional int32 _3;
+        |    }
+        |    optional group _4 {
+        |      optional int64 _1;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+    catalystSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_101", IntegerType)
+        .add("_102", LongType)),
+    expectedSchema =
+      """message root {
+        |  optional group _1 {
+        |    optional int32 _101;
+        |    optional int64 _102;
+        |    optional group _3 {
+        |      optional boolean _2;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
 }
