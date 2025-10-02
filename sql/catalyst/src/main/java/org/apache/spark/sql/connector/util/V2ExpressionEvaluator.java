@@ -24,9 +24,9 @@ import java.util.Optional;
 import scala.jdk.javaapi.CollectionConverters;
 
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.BasePredicate;
 import org.apache.spark.sql.catalyst.expressions.BoundReference;
 import org.apache.spark.sql.catalyst.expressions.Expression;
+import org.apache.spark.sql.catalyst.expressions.InterpretedPredicate;
 import org.apache.spark.sql.connector.expressions.LiteralValue;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
@@ -368,8 +368,8 @@ public final class V2ExpressionEvaluator {
     if (catalystExpr.isEmpty()) {
       return Optional.empty();
     }
-    BasePredicate evaluator =
-        org.apache.spark.sql.catalyst.expressions.Predicate.create(catalystExpr.get());
+    InterpretedPredicate evaluator =
+        org.apache.spark.sql.catalyst.expressions.Predicate.createInterpreted(catalystExpr.get());
     return Optional.of(evaluator.eval(internalRow));
   }
 }
