@@ -1612,7 +1612,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
         )
-        import sys
 
         def generate_data_batches(batches):
             """
