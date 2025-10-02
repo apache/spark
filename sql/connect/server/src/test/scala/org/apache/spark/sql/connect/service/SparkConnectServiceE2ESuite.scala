@@ -350,14 +350,12 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val plan = proto.Plan
         .newBuilder()
         .setCompressedOperation(
-          proto.Plan.CompressedOperation.newBuilder()
+          proto.Plan.CompressedOperation
+            .newBuilder()
             .setData(ByteString.copyFrom(compressedRelation))
             .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
-            .setCompressionCodec(
-              proto.CompressionCodec.COMPRESSION_CODEC_ZSTD
-            )
-            .build()
-        )
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
         .build()
       val query = client.execute(plan)
       while (query.hasNext) query.next()
@@ -371,14 +369,12 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val plan = proto.Plan
         .newBuilder()
         .setCompressedOperation(
-          proto.Plan.CompressedOperation.newBuilder()
+          proto.Plan.CompressedOperation
+            .newBuilder()
             .setData(ByteString.copyFrom(compressedCommand))
             .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_COMMAND)
-            .setCompressionCodec(
-              proto.CompressionCodec.COMPRESSION_CODEC_ZSTD
-            )
-            .build()
-        )
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
         .build()
       val query = client.execute(plan)
       while (query.hasNext) query.next()
@@ -401,14 +397,12 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val plan = proto.Plan
         .newBuilder()
         .setCompressedOperation(
-          proto.Plan.CompressedOperation.newBuilder()
+          proto.Plan.CompressedOperation
+            .newBuilder()
             .setData(ByteString.copyFrom(compressedRelation))
             .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
-            .setCompressionCodec(
-              proto.CompressionCodec.COMPRESSION_CODEC_ZSTD
-            )
-            .build()
-        )
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
         .build()
       val query = client.execute(plan)
       while (query.hasNext) query.next()
@@ -421,14 +415,12 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val plan = proto.Plan
         .newBuilder()
         .setCompressedOperation(
-          proto.Plan.CompressedOperation.newBuilder()
+          proto.Plan.CompressedOperation
+            .newBuilder()
             .setData(ByteString.copyFrom(invalidBytes))
             .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
-            .setCompressionCodec(
-              proto.CompressionCodec.COMPRESSION_CODEC_ZSTD
-            )
-            .build()
-        )
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
         .build()
       val ex = intercept[SparkException] {
         val query = client.execute(plan)
@@ -444,14 +436,12 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val plan = proto.Plan
         .newBuilder()
         .setCompressedOperation(
-          proto.Plan.CompressedOperation.newBuilder()
+          proto.Plan.CompressedOperation
+            .newBuilder()
             .setData(ByteString.copyFrom(data))
             .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
-            .setCompressionCodec(
-              proto.CompressionCodec.COMPRESSION_CODEC_ZSTD
-            )
-            .build()
-        )
+            .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+            .build())
         .build()
       val ex = intercept[SparkException] {
         val query = client.execute(plan)
@@ -463,23 +453,19 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
   test("Large compressed plan errors out") {
     withClient { client =>
-      withSparkEnvConfs(
-        Connect.CONNECT_MAX_PLAN_SIZE.key -> "100"
-      ) {
+      withSparkEnvConfs(Connect.CONNECT_MAX_PLAN_SIZE.key -> "100") {
         val relation = buildPlan("SELECT '" + "Apache Spark" * 100 + "'").getRoot
         val compressedRelation = Zstd.compress(relation.toByteArray)
 
         val plan = proto.Plan
           .newBuilder()
           .setCompressedOperation(
-            proto.Plan.CompressedOperation.newBuilder()
+            proto.Plan.CompressedOperation
+              .newBuilder()
               .setData(ByteString.copyFrom(compressedRelation))
               .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
-              .setCompressionCodec(
-                proto.CompressionCodec.COMPRESSION_CODEC_ZSTD
-              )
-              .build()
-          )
+              .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+              .build())
           .build()
         val ex = intercept[SparkException] {
           val query = client.execute(plan)
@@ -492,23 +478,19 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
   test("Large compressed plan generated in streaming mode also errors out") {
     withClient { client =>
-      withSparkEnvConfs(
-        Connect.CONNECT_MAX_PLAN_SIZE.key -> "100"
-      ) {
+      withSparkEnvConfs(Connect.CONNECT_MAX_PLAN_SIZE.key -> "100") {
         val relation = buildPlan("SELECT '" + "Apache Spark" * 100 + "'").getRoot
         val compressedRelation = compressInZstdStreamingMode(relation.toByteArray)
 
         val plan = proto.Plan
           .newBuilder()
           .setCompressedOperation(
-            proto.Plan.CompressedOperation.newBuilder()
+            proto.Plan.CompressedOperation
+              .newBuilder()
               .setData(ByteString.copyFrom(compressedRelation))
               .setOpType(proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION)
-              .setCompressionCodec(
-                proto.CompressionCodec.COMPRESSION_CODEC_ZSTD
-              )
-              .build()
-          )
+              .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+              .build())
           .build()
         val ex = intercept[SparkException] {
           val query = client.execute(plan)

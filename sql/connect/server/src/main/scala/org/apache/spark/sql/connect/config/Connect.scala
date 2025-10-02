@@ -422,9 +422,10 @@ object Connect {
 
   private[spark] val CONNECT_MAX_PLAN_SIZE =
     buildStaticConf("spark.connect.maxPlanSize")
-      .doc("The maximum size of a (decompressed) proto plan that can be executed in Spark " +
-        "Connect. If the size of the plan exceeds this limit, an error will be thrown. " +
-        "The size is in bytes.")
+      .doc(
+        "The maximum size of a (decompressed) proto plan that can be executed in Spark " +
+          "Connect. If the size of the plan exceeds this limit, an error will be thrown. " +
+          "The size is in bytes.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
