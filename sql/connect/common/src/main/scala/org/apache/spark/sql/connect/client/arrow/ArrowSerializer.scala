@@ -496,10 +496,7 @@ object ArrowSerializer {
 
       case (JavaBeanEncoder(tag, fields), StructVectors(struct, vectors)) =>
         structSerializerFor(fields, struct, vectors) { (field, _) =>
-          val getter = methodLookup.findVirtual(
-            tag.runtimeClass,
-            field.readMethod.get,
-            MethodType.methodType(field.enc.clsTag.runtimeClass))
+          val getter = methodLookup.unreflect(tag.runtimeClass.getMethod(field.readMethod.get))
           o => getter.invoke(o)
         }
 

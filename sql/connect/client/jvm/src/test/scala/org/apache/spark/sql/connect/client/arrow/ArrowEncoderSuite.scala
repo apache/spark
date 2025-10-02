@@ -940,6 +940,20 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("SPARK-53790: bean encoders with specific generics") {
+    val encoder = JavaTypeInference.encoderFor(classOf[JavaBeanWithGenericsWrapper])
+    roundTripAndCheckIdentical(encoder) { () =>
+      val maybeNull = MaybeNull(3)
+      Iterator.tabulate(10)(i => {
+        val bean = new JavaBeanWithGenericsWrapper()
+        val inner = new JavaBeanWithGenerics[String]()
+        inner.setValue(maybeNull(i.toString))
+        bean.setValue(maybeNull(inner))
+        bean
+      })
+    }
+  }
+
   /* ******************************************************************** *
    * Arrow deserialization upcasting
    * ******************************************************************** */
@@ -1268,6 +1282,28 @@ class DummyBean {
 
   override def equals(obj: Any): Boolean = obj match {
     case bean: DummyBean => Objects.equals(bigInteger, bean.bigInteger)
+    case _ => false
+  }
+}
+
+class JavaBeanWithGenerics[T] {
+  @BeanProperty var value: T = _
+
+  override def hashCode(): Int = Objects.hashCode(value)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case bean: JavaBeanWithGenerics[_] => Objects.equals(value, bean.value)
+    case _ => false
+  }
+}
+
+class JavaBeanWithGenericsWrapper {
+  @BeanProperty var value: JavaBeanWithGenerics[String] = _
+
+  override def hashCode(): Int = Objects.hashCode(value)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case bean: JavaBeanWithGenericsWrapper => Objects.equals(value, bean.value)
     case _ => false
   }
 }

@@ -17,7 +17,7 @@
 package org.apache.spark.sql.connect.client.arrow
 
 import java.io.{ByteArrayInputStream, IOException}
-import java.lang.invoke.{MethodHandles, MethodType}
+import java.lang.invoke.{MethodHandle, MethodHandles, MethodType}
 import java.lang.reflect.Modifier
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInteger}
 import java.time._
@@ -386,10 +386,8 @@ object ArrowDeserializers {
           .map { field =>
             val vector = lookup(field.name)
             val deserializer = deserializerFor(field.enc, vector, timeZoneId)
-            val setter = methodLookup.findVirtual(
-              tag.runtimeClass,
-              field.writeMethod.get,
-              MethodType.methodType(classOf[Unit], field.enc.clsTag.runtimeClass))
+            val setter =
+              findSetter(tag.runtimeClass, field.writeMethod.get, field.enc.clsTag.runtimeClass)
             (bean: Any, i: Int) => setter.invoke(bean, deserializer.get(i))
           }
         new StructFieldSerializer[Any](struct) {
@@ -413,6 +411,16 @@ object ArrowDeserializers {
       case _ =>
         throw new RuntimeException(
           s"Unsupported Encoder($encoder)/Vector(${data.getClass}) combination.")
+    }
+  }
+
+  private def findSetter(refc: Class[_], name: String, ftype: Class[_]): MethodHandle = {
+    try {
+      methodLookup.findVirtual(refc, name, MethodType.methodType(classOf[Unit], ftype))
+    } catch {
+      case e: NoSuchMethodException =>
+        val superClass: Class[_] = ftype.getSuperclass
+        if (superClass != null) findSetter(refc, name, superClass) else throw e
     }
   }
 
