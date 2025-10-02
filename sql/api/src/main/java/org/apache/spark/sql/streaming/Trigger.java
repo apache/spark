@@ -22,10 +22,12 @@ import java.util.concurrent.TimeUnit;
 import scala.concurrent.duration.Duration;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.execution.streaming.AvailableNowTrigger$;
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
+import org.apache.spark.sql.execution.streaming.RealTimeTrigger;
 
 /**
  * Policy used to indicate how often results should be produced by a [[StreamingQuery]].
@@ -175,5 +177,57 @@ public class Trigger {
    */
   public static Trigger Continuous(String interval) {
     return ContinuousTrigger.apply(interval);
+  }
+
+  /**
+   * A trigger for real time mode, with batch at the specified duration.
+   *
+   */
+  @Experimental
+  public static Trigger RealTime(long batchDurationMs) {
+    return RealTimeTrigger.apply(batchDurationMs);
+  }
+
+  /**
+   * A trigger for real time mode, with batch at the specified duration.
+   *
+   */
+  @Experimental
+  public static Trigger RealTime(long batchDuration, TimeUnit timeUnit) {
+    return RealTimeTrigger.create(batchDuration, timeUnit);
+  }
+
+  /**
+   * A trigger for real time mode, with batch at the specified duration.
+   *
+   * {{{
+   *    import scala.concurrent.duration._
+   *    df.writeStream.trigger(Trigger.RealTime(10.seconds))
+   * }}}
+   */
+  @Experimental
+  public static Trigger RealTime(Duration batchDuration) {
+    return RealTimeTrigger.apply(batchDuration);
+  }
+
+  /**
+   * A trigger for real time mode, with batch at the specified duration.
+   *
+   * {{{
+   *    df.writeStream.trigger(Trigger.RealTime("10 seconds"))
+   * }}}
+   */
+  @Experimental
+  public static Trigger RealTime(String batchDuration) {
+    return RealTimeTrigger.apply(batchDuration);
+  }
+
+  /**
+   * A trigger for real time mode, with batch at the specified duration. The default duration is 5
+   * minutes.
+   */
+  @Experimental
+  public static Trigger RealTime() {
+    return RealTimeTrigger.apply();
   }
 }
