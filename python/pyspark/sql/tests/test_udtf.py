@@ -3051,13 +3051,11 @@ class BaseUDTFTestsMixin:
                 # Check the type of the binary input and return type name as string
                 yield (type(b).__name__,)
 
-        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
-            result = BinaryTypeUDTF(lit(b"test_bytes")).collect()
-            self.assertEqual(result[0]["type_name"], "bytes")
-
-        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
-            result = BinaryTypeUDTF(lit(b"test_bytearray")).collect()
-            self.assertEqual(result[0]["type_name"], "bytearray")
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = BinaryTypeUDTF(lit(b"test")).collect()
+                self.assertEqual(result[0]["type_name"], expected_type)
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
@@ -3086,13 +3084,10 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
                 yield (type(b).__name__,)
 
         # For Arrow Python UDTF with legacy conversion BinaryType is always mapped to bytes
-        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
-            result = BinaryTypeUDTF(lit(b"test_bytes")).collect()
-            self.assertEqual(result[0]["type_name"], "bytes")
-
-        with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
-            result = BinaryTypeUDTF(lit(b"test_bytearray")).collect()
-            self.assertEqual(result[0]["type_name"], "bytes")
+        for conf_value in ["true", "false"]:
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = BinaryTypeUDTF(lit(b"test")).collect()
+                self.assertEqual(result[0]["type_name"], "bytes")
 
     def test_eval_type(self):
         def upper(x: str):

@@ -2081,7 +2081,8 @@ class Dataset[T] private[sql](
   private[sql] def collectToPython(): Array[Any] = {
     EvaluatePython.registerPicklers()
     withAction("collectToPython", queryExecution) { plan =>
-      val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
+      val binaryAsBytes = sparkSession.sessionState.conf.pysparkBinaryAsBytes
+      val toJava: (Any) => Any = EvaluatePython.toJava(_, schema, binaryAsBytes)
       val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
         plan.executeCollect().iterator.map(toJava))
       PythonRDD.serveIterator(iter, "serve-DataFrame")
@@ -2091,7 +2092,8 @@ class Dataset[T] private[sql](
   private[sql] def tailToPython(n: Int): Array[Any] = {
     EvaluatePython.registerPicklers()
     withAction("tailToPython", queryExecution) { plan =>
-      val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
+      val binaryAsBytes = sparkSession.sessionState.conf.pysparkBinaryAsBytes
+      val toJava: (Any) => Any = EvaluatePython.toJava(_, schema, binaryAsBytes)
       val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
         plan.executeTail(n).iterator.map(toJava))
       PythonRDD.serveIterator(iter, "serve-DataFrame")
@@ -2104,7 +2106,9 @@ class Dataset[T] private[sql](
     EvaluatePython.registerPicklers()
     val numRows = _numRows.max(0).min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH - 1)
     val rows = getRows(numRows, truncate).map(_.toArray).toArray
-    val toJava: (Any) => Any = EvaluatePython.toJava(_, ArrayType(ArrayType(StringType)))
+    val binaryAsBytes = sparkSession.sessionState.conf.pysparkBinaryAsBytes
+    val toJava: (Any) => Any =
+      EvaluatePython.toJava(_, ArrayType(ArrayType(StringType)), binaryAsBytes)
     val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
       rows.iterator.map(toJava))
     PythonRDD.serveIterator(iter, "serve-GetRows")

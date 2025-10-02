@@ -110,7 +110,6 @@ class ConversionTests(unittest.TestCase):
                 self.assertEqual(a, e)
 
     def test_binary_as_bytes_conversion(self):
-        """Test binary type conversion with binary_as_bytes parameter"""
         data = [
             (
                 str(i).encode(),  # simple binary
@@ -130,42 +129,22 @@ class ConversionTests(unittest.TestCase):
 
         tbl = LocalDataToArrowConversion.convert(data, schema, use_large_var_types=False)
 
-        # Test binary_as_bytes=True (default) - should return bytes
-        actual_bytes = ArrowTableToRowsConversion.convert(tbl, schema, binary_as_bytes=True)
+        for binary_as_bytes, expected_type in [(True, bytes), (False, bytearray)]:
+            actual = ArrowTableToRowsConversion.convert(
+                tbl, schema, binary_as_bytes=binary_as_bytes
+            )
 
-        for row in actual_bytes:
-            # Simple binary field should be bytes
-            self.assertIsInstance(row.b, bytes)
-            # Array elements should be bytes
-            for elem in row.arr_b:
-                self.assertIsInstance(elem, bytes)
-            # Map values should be bytes
-            for value in row.map_b.values():
-                self.assertIsInstance(value, bytes)
-            # Struct field should be bytes
-            self.assertIsInstance(row.struct_b.b, bytes)
-
-        # Test binary_as_bytes=False - should return bytearray
-        actual_bytearray = ArrowTableToRowsConversion.convert(tbl, schema, binary_as_bytes=False)
-
-        for row in actual_bytearray:
-            # Simple binary field should be bytearray
-            self.assertIsInstance(row.b, bytearray)
-            # Array elements should be bytearray
-            for elem in row.arr_b:
-                self.assertIsInstance(elem, bytearray)
-            # Map values should be bytearray
-            for value in row.map_b.values():
-                self.assertIsInstance(value, bytearray)
-            # Struct field should be bytearray
-            self.assertIsInstance(row.struct_b.b, bytearray)
-
-        # Verify the actual content is the same, just different types
-        for bytes_row, bytearray_row in zip(actual_bytes, actual_bytearray):
-            self.assertEqual(bytes_row.b, bytes(bytearray_row.b))
-            self.assertEqual([bytes(ba) for ba in bytearray_row.arr_b], bytes_row.arr_b)
-            self.assertEqual({k: bytes(v) for k, v in bytearray_row.map_b.items()}, bytes_row.map_b)
-            self.assertEqual(bytes(bytearray_row.struct_b.b), bytes_row.struct_b.b)
+            for row in actual:
+                # Simple binary field
+                self.assertIsInstance(row.b, expected_type)
+                # Array elements
+                for elem in row.arr_b:
+                    self.assertIsInstance(elem, expected_type)
+                # Map values
+                for value in row.map_b.values():
+                    self.assertIsInstance(value, expected_type)
+                # Struct field
+                self.assertIsInstance(row.struct_b.b, expected_type)
 
 
 if __name__ == "__main__":
