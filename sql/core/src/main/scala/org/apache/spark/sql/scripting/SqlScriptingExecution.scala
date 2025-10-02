@@ -122,7 +122,7 @@ class SqlScriptingExecution(
 
       context.frames.remove(context.frames.size - 1)
 
-      // If the last frame is a handler, set leave statement to be the next one in the
+      // If the last frame is an EXIT handler, set leave statement to be the next one in the
       // innermost scope that should be exited.
       if (lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER
           && context.frames.nonEmpty) {
@@ -136,6 +136,8 @@ class SqlScriptingExecution(
         injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
       }
 
+      // If the last frame is an CONTINUE handler, leave the handler without injecting anyting,
+      // but skip the conditional statement if the exception originated from a conditional
       if (lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER
           && context.frames.nonEmpty) {
         // Remove the scope if handler is executed.

@@ -110,6 +110,11 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  * Conditional node in the execution tree. It is a conditional non-leaf node.
  */
 trait ConditionalStatementExec extends NonLeafStatementExec {
+  /**
+   * Used by CONTINUE HANDLER for all ConditionalStatementExec and by EXIT HANDLER for
+   * ForStatementExec to flag the statement as interrupted and subsequently force the
+   * hasNext method to return false (used for skipping the conditional statement).
+   */
   protected[scripting] var interrupted: Boolean = false
 }
 
