@@ -1461,7 +1461,6 @@ class RocksDB(
   private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
-    val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
       "put" -> DB_WRITE,
@@ -1496,6 +1495,11 @@ class RocksDB(
 
     // Use RocksDBMemoryManager to calculate the memory usage accounting
     val memoryUsage = RocksDBMemoryManager.getInstanceMemoryUsage(instanceUniqueId, getMemoryUsage)
+
+    val requestedPinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
+    val globalPinnedBlocksMemUsage = lruCache.getPinnedUsage()
+    val pinnedBlocksMemUsage = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+      instanceUniqueId, globalPinnedBlocksMemUsage, requestedPinnedBlocksMemUsage)
 
     RocksDBMetrics(
       numKeysOnLoadedVersion,

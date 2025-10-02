@@ -117,7 +117,42 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
       totalMemoryUsage / numBoundedInstances
     } else {
       // In unbounded memory mode, each instance has its own memory
+
+      // Question: Should we return 0L if the instance is not registed in instanceMemoryMap?
+      // but when it is not registed?
       totalMemoryUsage
+    }
+  }
+
+  /**
+   * Get the pinned blocks memory usage for a specific instance, accounting for bounded memory
+   * sharing.
+   * @param uniqueId The instance's unique identifier
+   * @param globalPinnedUsage The total pinned usage from the cache
+   * @return The adjusted pinned blocks memory usage accounting for sharing in bounded memory mode
+   */
+  def getInstancePinnedBlocksMemUsage(
+      uniqueId: String,
+      globalPinnedUsage: Long,
+      requestedPinnedUsage: Long): Long = {
+    if (!instanceMemoryMap.containsKey(uniqueId)) {
+      // Instance not registered, return 0
+      return 0L
+    }
+
+    val instanceInfo = instanceMemoryMap.get(uniqueId)
+    if (instanceInfo.isBoundedMemory) {
+      // In bounded memory mode, divide by the number of bounded instances
+      // since they share the same cache
+      val numBoundedInstances = getNumRocksDBInstances(true /* boundedMemory */)
+      if (numBoundedInstances > 0) {
+        globalPinnedUsage / numBoundedInstances
+      } else {
+        0L
+      }
+    } else {
+      // In unbounded memory mode, each instance has its own cache
+      requestedPinnedUsage
     }
   }
 
