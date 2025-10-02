@@ -1595,6 +1595,9 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
         self.arrow_max_bytes_per_batch = arrow_max_bytes_per_batch
         self.key_offsets = None
+        self.average_arrow_row_size = 0
+        self.total_bytes = 0
+        self.total_rows = 0
 
     def load_stream(self, stream):
         """
@@ -1611,14 +1614,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         )
         import sys
 
-        def average_row_size(record_batch: pa.RecordBatch) -> float:
-            total_bytes = 0
-            for col in record_batch.columns:
-                for buf in col.buffers():
-                    if buf is not None:
-                        total_bytes += buf.size
-            return total_bytes / record_batch.num_rows if record_batch.num_rows > 0 else 0.0
-
         def generate_data_batches(batches):
             """
             Deserialize ArrowRecordBatches and return a generator of Rows.
@@ -1630,13 +1625,20 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             same time. And data chunks from the same grouping key should appear sequentially.
             """
 
-            average_arrow_row_size = 0
             def row_stream():
                 for batch in batches:
                     # Short circuit batch size calculation if the batch size is
                     # unlimited as computing batch size is computationally expensive.
-                    if self.arrow_max_bytes_per_batch != 2**31 - 1:
-                        average_arrow_row_size = average_row_size(batch)
+                    if self.arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
+                        batch_bytes = sum(
+                            buf.size
+                            for col in batch.columns
+                            for buf in col.buffers()
+                            if buf is not None
+                        )
+                        self.total_bytes += batch_bytes
+                        self.total_rows += batch.num_rows
+                        self.average_arrow_row_size = self.total_bytes / self.total_rows
                     data_pandas = [
                         self.arrow_to_pandas(c, i)
                         for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
@@ -1651,7 +1653,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                     rows.append(row)
                     if (
                         len(rows) >= self.arrow_max_records_per_batch
-                        or len(rows) * average_arrow_row_size >= self.arrow_max_bytes_per_batch
+                        or len(rows) * self.average_arrow_row_size >= self.arrow_max_bytes_per_batch
                     ):
                         yield (batch_key, pd.DataFrame(rows))
                         rows = []
