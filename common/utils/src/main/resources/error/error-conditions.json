@@ -9144,11 +9144,6 @@
       "Failed to get block <blockId>, which is not a shuffle block"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3050" : {
-    "message" : [
-      "Cannot modify the value of a static config: <k>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3052" : {
     "message" : [
       "Unexpected resolved action: <other>"

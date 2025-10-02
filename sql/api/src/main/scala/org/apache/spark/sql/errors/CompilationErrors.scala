@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.errors
 
+import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SqlApiConf
 
@@ -130,6 +131,19 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
     new AnalysisException(
       errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
       messageParameters = Map.empty)
+  }
+
+  def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> SparkBuildInfo.spark_doc_root)
+    )
+  }
+
+  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
 }
 
