@@ -59,7 +59,7 @@ object EvaluatePython {
   def toJava(
       obj: Any,
       dataType: DataType,
-      binaryAsBytes: Boolean = SQLConf.get.pysparkBinaryAsBytes): Any = {
+      binaryAsBytes: Boolean): Any = {
     (obj, dataType) match {
       case (null, _) => null
 

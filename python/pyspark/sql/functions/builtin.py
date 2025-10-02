@@ -16627,14 +16627,14 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("abc",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e, sf.lit("utf-8")).alias('r')).collect()
-    [Row(r=bytearray(b'abc'))]
+    [Row(r=b'abc')]
 
     Example 2: Convert string to a timestamp without encoding specified
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("414243",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e).alias('r')).collect()
-    [Row(r=bytearray(b'ABC'))]
+    [Row(r=b'ABC')]
     """
     if format is not None:
         return _invoke_function_over_columns("to_binary", col, format)
@@ -17650,14 +17650,14 @@ def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("abc",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e, sf.lit("utf-8")).alias('r')).collect()
-    [Row(r=bytearray(b'abc'))]
+    [Row(r=b'abc')]
 
     Example 2: Convert string to a timestamp without encoding specified
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("414243",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e).alias('r')).collect()
-    [Row(r=bytearray(b'ABC'))]
+    [Row(r=b'ABC')]
 
     Example 3: Converion failure results in NULL when ANSI mode is on
 

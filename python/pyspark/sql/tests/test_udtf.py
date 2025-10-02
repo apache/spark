@@ -3046,17 +3046,17 @@ class BaseUDTFTestsMixin:
 
     def test_udtf_binary_type(self):
         @udtf(returnType="type_name: string")
-        class BinaryTypeUDF:
+        class BinaryTypeUDTF:
             def eval(self, b):
                 # Check the type of the binary input and return type name as string
                 yield (type(b).__name__,)
 
         with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
-            result = BinaryTypeUDF(lit(b"test_bytes")).collect()
+            result = BinaryTypeUDTF(lit(b"test_bytes")).collect()
             self.assertEqual(result[0]["type_name"], "bytes")
 
         with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
-            result = BinaryTypeUDF(lit(b"test_bytearray")).collect()
+            result = BinaryTypeUDTF(lit(b"test_bytearray")).collect()
             self.assertEqual(result[0]["type_name"], "bytearray")
 
 
@@ -3080,18 +3080,18 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
 class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_udtf_binary_type(self):
         @udtf(returnType="type_name: string")
-        class BinaryTypeUDF:
+        class BinaryTypeUDTF:
             def eval(self, b):
                 # Check the type of the binary input and return type name as string
                 yield (type(b).__name__,)
 
         # For Arrow Python UDTF with legacy conversion BinaryType is always mapped to bytes
         with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "true"}):
-            result = BinaryTypeUDF(lit(b"test_bytes")).collect()
+            result = BinaryTypeUDTF(lit(b"test_bytes")).collect()
             self.assertEqual(result[0]["type_name"], "bytes")
 
         with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": "false"}):
-            result = BinaryTypeUDF(lit(b"test_bytearray")).collect()
+            result = BinaryTypeUDTF(lit(b"test_bytearray")).collect()
             self.assertEqual(result[0]["type_name"], "bytes")
 
     def test_eval_type(self):
