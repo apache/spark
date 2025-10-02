@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.read.streaming;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.read.InputPartition;
-import org.apache.spark.sql.connector.read.Scan;
 
 /**
  * A {@link MicroBatchStream} for streaming queries with real time mode.
@@ -30,8 +29,8 @@ public interface SupportsRealTimeMode {
     /**
      * Returns a list of {@link InputPartition input partitions} given the start offset. Each
      * {@link InputPartition} represents a data split that can be processed by one Spark task. The
-     * number of input partitions returned here is the same as the number of RDD partitions this scan
-     * outputs.
+     * number of input partitions returned here is the same as the number of RDD partitions
+     * this scan outputs.
      */
     InputPartition[] planInputPartitions(Offset start);
 
