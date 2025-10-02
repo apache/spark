@@ -1432,6 +1432,32 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         proto_string_truncated_3 = self.connect._client._proto_to_string(plan3, True)
         self.assertTrue(len(proto_string_truncated_3) < 64000, len(proto_string_truncated_3))
 
+    def test_plan_compression(self):
+        self.assertTrue(self.connect._client._zstd_module is not None)
+        self.connect.range(1).count()
+        default_plan_compression_threshold = self.connect._client._plan_compression_threshold
+        self.assertTrue(default_plan_compression_threshold > 0)
+        self.assertTrue(self.connect._client._plan_compression_algorithm == "ZSTD")
+        try:
+            self.connect._client._plan_compression_threshold = 1000
+
+            # Small plan should not be compressed
+            cdf1 = self.connect.range(1).select(CF.lit("Apache Spark"))
+            plan1 = cdf1._plan.to_proto(self.connect._client)
+            self.assertTrue(plan1.root is not None)
+            self.assertTrue(cdf1.count() == 1)
+
+            # Large plan should be compressed
+            cdf2 = self.connect.range(1).select(CF.lit("Apache Spark" * 1000))
+            plan2 = cdf2._plan.to_proto(self.connect._client)
+            self.assertTrue(plan2.compressed_operation is not None)
+            # Test compressed relation
+            self.assertTrue(cdf2.count() == 1)
+            # Test compressed command
+            cdf2.createOrReplaceTempView("temp_view_cdf2")
+            self.assertTrue(self.connect.sql("SELECT * FROM temp_view_cdf2").count() == 1)
+        finally:
+            self.connect._client._plan_compression_threshold = default_plan_compression_threshold
 
 class SparkConnectGCTests(SparkConnectSQLTestCase):
     @classmethod

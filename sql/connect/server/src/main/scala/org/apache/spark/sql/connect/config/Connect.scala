@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkEnv
@@ -418,4 +419,33 @@ object Connect {
       .bytesConf(ByteUnit.BYTE)
       // 90% of the max message size by default to allow for some overhead.
       .createWithDefault((ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE * 0.9).toInt)
+
+  private[spark] val CONNECT_MAX_PLAN_SIZE =
+    buildStaticConf("spark.connect.maxPlanSize")
+      .doc("The maximum size of a (decompressed) proto plan that can be executed in Spark " +
+        "Connect. If the size of the plan exceeds this limit, an error will be thrown. " +
+        "The size is in bytes.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(512 * 1024 * 1024) // 512 MB
+
+  val CONNECT_SESSION_PLAN_COMPRESSION_THRESHOLD =
+    buildConf("spark.connect.session.planCompression.threshold")
+      .doc("The threshold in bytes for the size of proto plan to be compressed. " +
+        "If the size of proto plan is smaller than this threshold, it will not be compressed.")
+      .version("4.1.0")
+      .internal()
+      .intConf
+      .createWithDefault(10 * 1024 * 1024) // 10 MB
+
+  val CONNECT_PLAN_COMPRESSION_DEFAULT_ALGORITHM =
+    buildConf("spark.connect.session.planCompression.defaultAlgorithm")
+      .doc("The default algorithm of proto plan compression.")
+      .version("4.1.0")
+      .internal()
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(ConnectPlanCompressionAlgorithm.values.map(_.toString))
+      .createWithDefault(ConnectPlanCompressionAlgorithm.ZSTD.toString)
 }

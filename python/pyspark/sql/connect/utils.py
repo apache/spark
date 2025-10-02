@@ -37,6 +37,7 @@ def check_dependencies(mod_name: str) -> None:
         require_minimum_grpc_version()
         require_minimum_grpcio_status_version()
         require_minimum_googleapis_common_protos_version()
+        require_minimum_zstandard_version()
 
 
 def require_minimum_grpc_version() -> None:
@@ -92,6 +93,22 @@ def require_minimum_googleapis_common_protos_version() -> None:
             messageParameters={
                 "package_name": "googleapis-common-protos",
                 "minimum_version": str(minimum_common_protos_version),
+            },
+        ) from error
+
+
+def require_minimum_zstandard_version() -> None:
+    """Raise ImportError if zstandard is not installed"""
+    minimum_zstandard_version = "0.23.0"
+
+    try:
+        import zstandard  # noqa
+    except ImportError as error:
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "zstandard",
+                "minimum_version": str(minimum_zstandard_version),
             },
         ) from error
 

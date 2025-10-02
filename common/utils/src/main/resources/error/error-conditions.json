@@ -870,6 +870,24 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_INVALID_PLAN" : {
+    "message" : [
+      "The Spark Connect plan is invalid."
+    ],
+    "subClass" : {
+      "CANNOT_PARSE" : {
+        "message" : [
+          "Cannot decompress or parse the input plan (<errorMsg>)"
+        ]
+      },
+      "PLAN_SIZE_LARGER_THAN_MAX" : {
+        "message" : [
+          "The plan size is larger than max (<planSize> vs. <maxPlanSize>)"
+        ]
+      }
+    },
+    "sqlState" : "56K00"
+  },
   "CONNECT_ML" : {
     "message" : [
       "Generic Spark Connect ML error."
