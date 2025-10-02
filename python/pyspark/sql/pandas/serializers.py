@@ -1611,6 +1611,14 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         )
         import sys
 
+        def average_row_size(record_batch: pa.RecordBatch) -> float:
+            total_bytes = 0
+            for col in record_batch.columns:
+                for buf in col.buffers():
+                    if buf is not None:
+                        total_bytes += buf.size
+            return total_bytes / record_batch.num_rows if record_batch.num_rows > 0 else 0.0
+
         def generate_data_batches(batches):
             """
             Deserialize ArrowRecordBatches and return a generator of Rows.
@@ -1622,8 +1630,13 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             same time. And data chunks from the same grouping key should appear sequentially.
             """
 
+            average_arrow_row_size = 0
             def row_stream():
                 for batch in batches:
+                    # Short circuit batch size calculation if the batch size is
+                    # unlimited as computing batch size is computationally expensive.
+                    if self.arrow_max_bytes_per_batch != 2**31 - 1:
+                        average_arrow_row_size = average_row_size(batch)
                     data_pandas = [
                         self.arrow_to_pandas(c, i)
                         for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
@@ -1634,20 +1647,14 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
             for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
                 rows = []
-                accumulate_size = 0
                 for _, row in group_rows:
                     rows.append(row)
-                    # Short circuit batch size calculation if the batch size is
-                    # unlimited as computing batch size is computationally expensive.
-                    if self.arrow_max_bytes_per_batch != 2**31 - 1:
-                        accumulate_size += sum(sys.getsizeof(x) for x in row)
                     if (
                         len(rows) >= self.arrow_max_records_per_batch
-                        or accumulate_size >= self.arrow_max_bytes_per_batch
+                        or len(rows) * average_arrow_row_size >= self.arrow_max_bytes_per_batch
                     ):
                         yield (batch_key, pd.DataFrame(rows))
                         rows = []
-                        accumulate_size = 0
                 if rows:
                     yield (batch_key, pd.DataFrame(rows))
 
