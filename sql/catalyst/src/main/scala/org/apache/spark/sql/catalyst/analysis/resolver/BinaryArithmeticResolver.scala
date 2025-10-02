@@ -17,19 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.{
-  AnsiStringPromotionTypeCoercion,
-  AnsiTypeCoercion,
-  BinaryArithmeticWithDatetimeResolver,
-  DecimalPrecisionTypeCoercion,
-  DivisionTypeCoercion,
-  IntegralDivisionTypeCoercion,
-  StringPromotionTypeCoercion,
-  TypeCoercion
-}
+import org.apache.spark.sql.catalyst.analysis.BinaryArithmeticWithDatetimeResolver
 import org.apache.spark.sql.catalyst.expressions.{
   Add,
   BinaryArithmetic,
+  Cast,
   DateAdd,
   Divide,
   Expression,
@@ -37,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Subtract,
   SubtractDates
 }
-import org.apache.spark.sql.types.{DateType, StringType}
+import org.apache.spark.sql.types._
 
 /**
  * [[BinaryArithmeticResolver]] is invoked by [[ExpressionResolver]] in order to resolve
@@ -63,7 +55,7 @@ import org.apache.spark.sql.types.{DateType, StringType}
  *
  *     Cast(
  *         DatetimeSub(
- *             TimeAdd(
+ *             TimestampAddInterval(
  *                 Literal('4 11:11', StringType),
  *                 UnaryMinus(
  *                     Literal(Interval('4 22:12' DAY TO MINUTE), DayTimeIntervalType(0,2))
@@ -77,8 +69,8 @@ import org.apache.spark.sql.types.{DateType, StringType}
  * top-most node itself is not resolved recursively in order to avoid recursive calls to
  * [[BinaryArithmeticResolver]] and other sub-resolvers. To prevent a case where we resolve the
  * same node twice, we need to mark nodes that will act as a limit for the downwards traversal by
- * applying a [[ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY]] tag to them. These children
- * along with all the nodes below them are guaranteed to be resolved at this point. When
+ * applying a [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tag to them. These children along with
+ * all the nodes below them are guaranteed to be resolved at this point. When
  * [[ExpressionResolver]] reaches one of the tagged nodes, it returns identity rather than
  * resolving it. Finally, after resolving the subtree, we need to resolve the top-most node itself,
  * which in this case means applying a timezone, if necessary.
@@ -89,11 +81,6 @@ class BinaryArithmeticResolver(expressionResolver: ExpressionResolver)
     with CoercesExpressionTypes {
 
   private val traversals = expressionResolver.getExpressionTreeTraversals
-
-  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
-    BinaryArithmeticResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
-  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
-    BinaryArithmeticResolver.TYPE_COERCION_TRANSFORMATIONS
 
   override def resolve(unresolvedBinaryArithmetic: BinaryArithmetic): Expression = {
     val binaryArithmeticWithResolvedChildren: BinaryArithmetic =
@@ -117,8 +104,9 @@ class BinaryArithmeticResolver(expressionResolver: ExpressionResolver)
    * of nodes.
    */
   private def transformBinaryArithmeticNode(binaryArithmetic: BinaryArithmetic): Expression = {
+    val binaryArithmeticWithNullReplaced: Expression = replaceNullType(binaryArithmetic)
     val binaryArithmeticWithDateTypeReplaced: Expression =
-      replaceDateType(binaryArithmetic)
+      replaceDateType(binaryArithmeticWithNullReplaced)
     val binaryArithmeticWithTypeCoercion: Expression =
       coerceExpressionTypes(
         expression = binaryArithmeticWithDateTypeReplaced,
@@ -154,26 +142,29 @@ class BinaryArithmeticResolver(expressionResolver: ExpressionResolver)
       BinaryArithmeticWithDatetimeResolver.resolve(arithmetic)
     case other => other
   }
-}
 
-object BinaryArithmeticResolver {
-  // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
-    StringPromotionTypeCoercion.apply,
-    DecimalPrecisionTypeCoercion.apply,
-    DivisionTypeCoercion.apply,
-    IntegralDivisionTypeCoercion.apply,
-    TypeCoercion.ImplicitTypeCoercion.apply,
-    TypeCoercion.DateTimeOperationsTypeCoercion.apply
-  )
-
-  // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
-    AnsiStringPromotionTypeCoercion.apply,
-    DecimalPrecisionTypeCoercion.apply,
-    DivisionTypeCoercion.apply,
-    IntegralDivisionTypeCoercion.apply,
-    AnsiTypeCoercion.ImplicitTypeCoercion.apply,
-    AnsiTypeCoercion.AnsiDateTimeOperationsTypeCoercion.apply
-  )
+  /**
+   * Replaces NullType by a compatible type in arithmetic expressions over Datetime operands.
+   * This avoids recursive calls of [[BinaryArithmeticWithDatetimeResolver]] which converts
+   * unacceptable nulls of `NullType` to an expected types of datetime expressions at the
+   * first step, and replacing arithmetic `Add` and `Subtract` by the same datetime expressions
+   * on the following steps.
+   */
+  private def replaceNullType(expression: Expression): Expression = expression match {
+    case a @ Add(l, r, _) => (l.dataType, r.dataType) match {
+      case (_: DatetimeType, _: NullType) =>
+        a.copy(right = Cast(a.right, DayTimeIntervalType.DEFAULT))
+      case (_: NullType, _: DatetimeType) =>
+        a.copy(left = Cast(a.left, DayTimeIntervalType.DEFAULT))
+      case _ => a
+    }
+    case s @ Subtract(l, r, _) => (l.dataType, r.dataType) match {
+      case (_: NullType, _: DatetimeType) =>
+        s.copy(left = Cast(s.left, s.right.dataType))
+      case (_: DatetimeType, _: NullType) =>
+        s.copy(right = Cast(s.right, s.left.dataType))
+      case _ => s
+    }
+    case other => other
+  }
 }

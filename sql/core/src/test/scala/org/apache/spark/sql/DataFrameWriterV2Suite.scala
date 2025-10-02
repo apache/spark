@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.FakeSourceOne
 import org.apache.spark.sql.test.SharedSparkSession
@@ -874,5 +874,16 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         }
       }
     }
+  }
+
+  test("SPARK-52312: caching dataframe created from INSERT shouldn't re-execute the command") {
+    spark.sql("CREATE TABLE testcat.table_name (c1 int, c2 string) USING foo")
+
+    val insertDF = spark.sql("INSERT INTO testcat.table_name VALUES (1, 'a'), (2, 'b')")
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
+
+    // Caching the DataFrame created from INSERT should not re-execute the command
+    insertDF.cache()
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
   }
 }

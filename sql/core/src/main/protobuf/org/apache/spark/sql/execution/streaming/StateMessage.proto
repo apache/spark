@@ -74,6 +74,18 @@ message StateResponseWithMapIterator {
   bool requireNextFetch = 4;
 }
 
+message TimerInfo {
+  optional bytes key = 1;
+  int64 timestampMs = 2;
+}
+
+message StateResponseWithTimer {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  repeated TimerInfo timer = 3;
+  bool requireNextFetch = 4;
+}
+
 message StatefulProcessorCall {
   oneof method {
     SetHandleState setHandleState = 1;
@@ -115,7 +127,8 @@ message TimerValueRequest {
 }
 
 message ExpiryTimerRequest {
-  int64 expiryTimestampMs = 1;
+  string iteratorId = 1;
+  int64 expiryTimestampMs = 2;
 }
 
 message GetProcessingTime {

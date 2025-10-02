@@ -21,11 +21,10 @@ import java.util.Collections
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.SystemUtils
 import org.slf4j.Logger
 import sun.misc.{Signal, SignalHandler}
 
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 
 /**
@@ -58,7 +57,7 @@ private[spark] object SignalUtils extends Logging {
    * All actions for a given signal are run in a separate thread.
    */
   def register(signal: String)(action: => Boolean): Unit = {
-    if (SystemUtils.IS_OS_UNIX) {
+    if (Utils.isUnix) {
       register(signal, log"Failed to register signal handler for ${MDC(SIGNAL, signal)}",
         logStackTrace = true)(action)
     }

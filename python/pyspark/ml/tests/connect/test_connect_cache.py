@@ -48,20 +48,27 @@ class MLConnectCacheTests(ReusedConnectTestCase):
             "obj: class org.apache.spark.ml.classification.LinearSVCModel" in cache_info[0],
             cache_info,
         )
-        assert model._java_obj._ref_count == 1
+        # the `model._summary` holds another ref to the remote model.
+        assert model._java_obj._ref_count == 2
+
+        model_size = spark.client._query_model_size(model._java_obj.ref_id)
+        assert isinstance(model_size, int) and model_size > 0
 
         model2 = model.copy()
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 1)
-        assert model._java_obj._ref_count == 2
-        assert model2._java_obj._ref_count == 2
+        assert model._java_obj._ref_count == 3
+        assert model2._java_obj._ref_count == 3
 
         # explicitly delete the model
         del model
 
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 1)
-        assert model2._java_obj._ref_count == 1
+        # Note the copied model 'model2' also holds the `_summary` object,
+        # and the `_summary` object holds another ref to the remote model.
+        # so the ref count is 2.
+        assert model2._java_obj._ref_count == 2
 
         del model2
         cache_info = spark.client._get_ml_cache_info()
@@ -99,7 +106,6 @@ class MLConnectCacheTests(ReusedConnectTestCase):
             cache_info,
         )
 
-        # explicitly delete the model1
         del model1
 
         cache_info = spark.client._get_ml_cache_info()

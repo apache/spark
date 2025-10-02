@@ -178,6 +178,14 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
             infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.GROUPED_AGG
         )
 
+        def func() -> float:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func), "pandas"),
+            PandasUDFType.GROUPED_AGG,
+        )
+
     def test_type_annotation_negative(self):
         def func(col: str) -> pd.Series:
             pass
@@ -376,6 +384,19 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         self.assertEqual(
             infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR
         )
+
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_negative_with_arrow_udf(self):
+        import pyarrow as pa
+
+        with self.assertRaisesRegex(
+            Exception,
+            "Unsupported signature:.*pyarrow.lib.Array.",
+        ):
+
+            @pandas_udf("long")
+            def multiply_arrow(a: pa.Array, b: pa.Array) -> pa.Array:
+                return pa.compute.multiply(a, b)
 
 
 if __name__ == "__main__":

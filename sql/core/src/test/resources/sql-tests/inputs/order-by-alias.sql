@@ -35,3 +35,9 @@ SELECT a, b FROM testData ORDER BY a, EXISTS(SELECT b FROM testData);
 
 -- ORDER BY alias with invalid col in SELECT list
 SELECT a AS k, c FROM testData ORDER BY k;
+
+-- ORDER BY alias should prefer table columns over aliases
+SELECT 1 AS `2`, 2 FROM VALUES (2) t (`2`) ORDER BY `2`;
+SELECT 2, 1 AS `2` FROM VALUES (2) t (`2`) ORDER BY `2`;
+SELECT 1 AS `2` FROM VALUES (2) t (`2`) ORDER BY `2`;
+SELECT 2 FROM VALUES (2) t (`2`) ORDER BY `2`;

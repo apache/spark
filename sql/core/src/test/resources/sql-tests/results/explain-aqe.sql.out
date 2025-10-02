@@ -990,7 +990,7 @@ Output [1]: [col1#x]
 Accumulated: false
 
 (4) Filter
-Arguments: (col1#x < 9)
+Arguments: (isnotnull(col1#x) AND (col1#x < 9))
 
 (5) Project
 Arguments: [(col1#x + 1) AS (level + 1)#x]
@@ -1189,9 +1189,10 @@ struct<plan:string>
 
 == Analyzed Logical Plan ==
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/explain_temp5, false, [val#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/explain_temp5], Append, `spark_catalog`.`default`.`explain_temp5`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/explain_temp5), [key, val]
-+- Project [key#x, val#x]
-   +- SubqueryAlias spark_catalog.default.explain_temp4
-      +- Relation spark_catalog.default.explain_temp4[key#x,val#x] parquet
++- Project [key#x AS key#x, val#x AS val#x]
+   +- Project [key#x, val#x]
+      +- SubqueryAlias spark_catalog.default.explain_temp4
+         +- Relation spark_catalog.default.explain_temp4[key#x,val#x] parquet
 
 == Optimized Logical Plan ==
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/explain_temp5, false, [val#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/explain_temp5], Append, `spark_catalog`.`default`.`explain_temp5`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/explain_temp5), [key, val]

@@ -16,25 +16,46 @@
  */
 package org.apache.spark.sql.pipelines.logging
 
-import org.apache.spark.sql.pipelines.common.FlowStatus
+import java.sql.Timestamp
+
+import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
+import org.apache.spark.sql.pipelines.graph.QueryOrigin
 
 /**
  * An internal event that is emitted during the run of a pipeline.
  * @param id A globally unique id
  * @param timestamp The time of the event
  * @param origin Where the event originated from
+ * @param level Security level of the event
  * @param message A user friendly description of the event
  * @param details The details of the event
  * @param error An error that occurred during the event
  */
 case class PipelineEvent(
     id: String,
-    timestamp: String,
+    timestamp: Timestamp,
     origin: PipelineEventOrigin,
+    level: EventLevel,
     message: String,
     details: EventDetails,
-    error: Option[ErrorDetail]
-)
+    error: Option[Throwable]
+) {
+  /** Combines the message and error (if any) into a single string */
+  def messageWithError: String = {
+    if (error.nonEmpty) {
+      // Returns the message associated with a Throwable and all its causes
+      def getExceptionMessages(throwable: Throwable): Seq[String] = {
+        throwable.getMessage +:
+          Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
+      }
+      val errorMessages = getExceptionMessages(error.get)
+      s"""${message}
+         |Error: ${errorMessages.mkString("\n")}""".stripMargin
+    } else {
+      message
+    }
+  }
+}
 
 /**
  * Describes where the event originated from
@@ -45,36 +66,22 @@ case class PipelineEvent(
 case class PipelineEventOrigin(
     datasetName: Option[String],
     flowName: Option[String],
-    sourceCodeLocation: Option[SourceCodeLocation]
-)
-
-/**
- * Describes the location of the source code
- * @param path The path to the source code
- * @param lineNumber The line number of the source code
- * @param columnNumber The column number of the source code
- * @param endingLineNumber The ending line number of the source code
- * @param endingColumnNumber The ending column number of the source code
- */
-case class SourceCodeLocation(
-    path: Option[String],
-    lineNumber: Option[Int],
-    columnNumber: Option[Int],
-    endingLineNumber: Option[Int],
-    endingColumnNumber: Option[Int]
+    sourceCodeLocation: Option[QueryOrigin]
 )
 
 // Additional details about the PipelineEvent
-trait EventDetails
+sealed trait EventDetails
 
 // An event indicating that a flow has made progress and transitioned to a different state
 case class FlowProgress(status: FlowStatus) extends EventDetails
 
-// Additional details about the error that occurred during the event
-case class ErrorDetail(exceptions: Seq[SerializedException])
+// An event indicating that a run has made progress and transitioned to a different state
+case class RunProgress(state: RunState) extends EventDetails
 
-// An exception that was thrown during a pipeline run
-case class SerializedException(className: String, message: String, stack: Seq[StackFrame])
-
-// A stack frame of an exception
-case class StackFrame(declaringClass: String, methodName: String)
+// The severity level of the event.
+sealed trait EventLevel
+object EventLevel {
+  case object INFO extends EventLevel
+  case object WARN extends EventLevel
+  case object ERROR extends EventLevel
+}

@@ -33,7 +33,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 class InMemoryTable(
     name: String,
-    schema: StructType,
+    columns: Array[Column],
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String],
     override val constraints: Array[Constraint] = Array.empty,
@@ -43,9 +43,21 @@ class InMemoryTable(
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue)
-  extends InMemoryBaseTable(name, schema, partitioning, properties, constraints, distribution,
+  extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
     numRowsPerSplit) with SupportsDelete {
+
+  def this(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]) = {
+    this(
+      name,
+      CatalogV2Util.structTypeToV2Columns(schema),
+      partitioning,
+      properties)
+  }
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
     InMemoryTable.supportsFilters(filters)
@@ -59,28 +71,37 @@ class InMemoryTable(
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {
-    withData(data, schema)
+    withData(data, columns())
+  }
+
+  override def withData(data: Array[BufferedRows], columns: Array[Column]): InMemoryTable = {
+    withData(data, CatalogV2Util.v2ColumnsToStructType(columns))
   }
 
   override def withData(
       data: Array[BufferedRows],
       writeSchema: StructType): InMemoryTable = {
     dataMap.synchronized {
-      data.foreach(_.rows.foreach { row =>
-        val key = getKey(row, writeSchema)
-        dataMap += dataMap.get(key)
-          .map { splits =>
-            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-              splits :+ new BufferedRows(key)
-            } else {
-              splits
-            }
-            newSplits.last.withRow(row)
-            key -> newSplits
+      data.foreach {
+        bufferedRow => {
+          bufferedRow.rows.foreach { row =>
+            val key = getKey(row, writeSchema)
+            dataMap += dataMap.get(key)
+              .map { splits =>
+                val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
+                  (splits.last.schema != writeSchema)) {
+                  splits :+ new BufferedRows(key, writeSchema)
+                } else {
+                  splits
+                }
+                newSplits.last.withRow(row)
+                key -> newSplits
+              }
+              .getOrElse(key -> Seq(new BufferedRows(key, writeSchema).withRow(row)))
+            addPartitionKey(key)
           }
-          .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
-        addPartitionKey(key)
-      })
+        }
+      }
 
       if (data.exists(_.rows.exists(row => row.numFields == 1 &&
           row.getInt(0) == InMemoryTable.uncommittableValue()))) {
@@ -89,6 +110,12 @@ class InMemoryTable(
       increaseCurrentVersion()
       this
     }
+  }
+
+  override def alterTableWithData(
+      data: Array[BufferedRows],
+      newSchema: StructType): InMemoryTable = {
+    super.alterTableWithData(data, newSchema).asInstanceOf[InMemoryTable]
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, AgnosticExpressionPathEncoder, Codec, JavaSerializationCodec, KryoSerializationCodec}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder}
+import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{dataTypeForClass, externalDataTypeFor, isNativeEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, IsNull, Literal, MapKeys, MapValues, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, DecodeUsingSerializer, InitializeJavaBean, Invoke, NewInstance, StaticInvoke, UnresolvedCatalystToExternalMap, UnresolvedMapObjects, WrapOption}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharCodegenUtils, DateTimeUtils, IntervalUtils}
@@ -160,7 +160,7 @@ object DeserializerBuildHelper {
     StaticInvoke(
       DateTimeUtils.getClass,
       ObjectType(classOf[java.time.LocalTime]),
-      "microsToLocalTime",
+      "nanosToLocalTime",
       path :: Nil,
       returnNullable = false)
   }
@@ -250,19 +250,12 @@ object DeserializerBuildHelper {
     val walkedTypePath = WalkedTypePath().recordRoot(enc.clsTag.runtimeClass.getName)
     // Assumes we are deserializing the first column of a row.
     val input = GetColumnByOrdinal(0, enc.dataType)
-    enc match {
-      case AgnosticEncoders.RowEncoder(fields) =>
-        val children = fields.zipWithIndex.map { case (f, i) =>
-          createDeserializer(f.enc, GetStructField(input, i), walkedTypePath)
-        }
-        CreateExternalRow(children, enc.schema)
-      case _ =>
-        val deserializer = createDeserializer(
-          enc,
-          upCastToExpectedType(input, enc.dataType, walkedTypePath),
-          walkedTypePath)
-        expressionWithNullSafety(deserializer, enc.nullable, walkedTypePath)
-    }
+    val deserializer = createDeserializer(
+      enc,
+      upCastToExpectedType(input, enc.dataType, walkedTypePath),
+      walkedTypePath,
+      isTopLevel = true)
+    expressionWithNullSafety(deserializer, enc.nullable, walkedTypePath)
   }
 
   /**
@@ -274,11 +267,13 @@ object DeserializerBuildHelper {
    *            external representation.
    * @param path The expression which can be used to extract serialized value.
    * @param walkedTypePath The paths from top to bottom to access current field when deserializing.
+   * @param isTopLevel true if we are creating a deserializer for the top level value.
    */
   private def createDeserializer(
       enc: AgnosticEncoder[_],
       path: Expression,
-      walkedTypePath: WalkedTypePath): Expression = enc match {
+      walkedTypePath: WalkedTypePath,
+      isTopLevel: Boolean = false): Expression = enc match {
     case ae: AgnosticExpressionPathEncoder[_] =>
       ae.fromCatalyst(path)
     case _ if isNativeEncoder(enc) =>
@@ -419,13 +414,12 @@ object DeserializerBuildHelper {
         NewInstance(cls, arguments, Nil, propagateNull = false, dt, outerPointerGetter))
 
     case AgnosticEncoders.RowEncoder(fields) =>
-      val isExternalRow = !path.dataType.isInstanceOf[StructType]
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         val newTypePath = walkedTypePath.recordField(
           f.enc.clsTag.runtimeClass.getName,
           f.name)
         val deserializer = createDeserializer(f.enc, GetStructField(path, i), newTypePath)
-        if (isExternalRow) {
+        if (!isTopLevel) {
           exprs.If(
             Invoke(path, "isNullAt", BooleanType, exprs.Literal(i) :: Nil),
             exprs.Literal.create(null, externalDataTypeFor(f.enc)),
@@ -470,8 +464,8 @@ object DeserializerBuildHelper {
       Invoke(
         Literal.create(provider(), ObjectType(classOf[Codec[_, _]])),
         "decode",
-        ObjectType(tag.runtimeClass),
-        createDeserializer(encoder, path, walkedTypePath) :: Nil)
+        dataTypeForClass(tag.runtimeClass),
+        createDeserializer(encoder, path, walkedTypePath, isTopLevel) :: Nil)
   }
 
   private def deserializeArray(

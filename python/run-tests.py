@@ -212,9 +212,9 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python3.9", "pypy3"] if which(x)]
+    python_execs = [x for x in ["python3.11", "pypy3"] if which(x)]
 
-    if "python3.9" not in python_execs:
+    if "python3.11" not in python_execs:
         p = which("python3")
         if not p:
             LOGGER.error("No python3 executable found.  Exiting!")

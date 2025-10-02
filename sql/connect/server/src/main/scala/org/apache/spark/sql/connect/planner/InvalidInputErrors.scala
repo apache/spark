@@ -19,20 +19,19 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.mutable
 
+import com.google.protobuf.Descriptors.Descriptor
+import com.google.protobuf.Internal.EnumLite
+import com.google.protobuf.ProtocolMessageEnum
+
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.common.{InvalidCommandInput, InvalidPlanInput}
+import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.errors.DataTypeErrors.{quoteByDefault, toSQLType}
 import org.apache.spark.sql.types.DataType
 
 object InvalidInputErrors {
 
-  def unknownRelationNotSupported(rel: proto.Relation): InvalidPlanInput =
-    InvalidPlanInput(s"${rel.getUnknown} not supported.")
-
   def noHandlerFoundForExtension(): InvalidPlanInput =
     InvalidPlanInput("No handler found for extension")
-
-  def catalogTypeNotSupported(catType: proto.Catalog.CatTypeCase): InvalidPlanInput =
-    InvalidPlanInput(s"$catType not supported.")
 
   def invalidSQLWithReferences(query: proto.WithRelations): InvalidPlanInput =
     InvalidPlanInput(s"$query is not a valid relation for SQL with references")
@@ -60,9 +59,6 @@ object InvalidInputErrors {
   def functionEvalTypeNotSupported(evalType: Int): InvalidPlanInput =
     InvalidPlanInput(s"Function with EvalType: $evalType is not supported")
 
-  def functionIdNotSupported(functionId: Int): InvalidPlanInput =
-    InvalidPlanInput(s"Function with ID: $functionId is not supported")
-
   def groupingExpressionAbsentForKeyValueGroupedDataset(): InvalidPlanInput =
     InvalidPlanInput("The grouping expression cannot be absent for KeyValueGroupedDataset")
 
@@ -71,11 +67,6 @@ object InvalidInputErrors {
 
   def rowNotSupportedForUdf(errorType: String): InvalidPlanInput =
     InvalidPlanInput(s"Row is not a supported $errorType type for this UDF.")
-
-  def invalidUserDefinedOutputSchemaType(actualType: String): InvalidPlanInput =
-    InvalidPlanInput(
-      s"Invalid user-defined output schema type for TransformWithStateInPandas. " +
-        s"Expect a struct type, but got $actualType.")
 
   def notFoundCachedLocalRelation(hash: String, sessionUUID: String): InvalidPlanInput =
     InvalidPlanInput(
@@ -91,8 +82,10 @@ object InvalidInputErrors {
   def schemaRequiredForLocalRelation(): InvalidPlanInput =
     InvalidPlanInput("Schema for LocalRelation is required when the input data is not provided.")
 
-  def invalidSchema(schema: DataType): InvalidPlanInput =
-    InvalidPlanInput(s"Invalid schema $schema")
+  def invalidSchemaStringNonStructType(schema: String, dataType: DataType): InvalidPlanInput =
+    InvalidPlanInput(
+      "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      Map("inputSchema" -> quoteByDefault(schema), "dataType" -> toSQLType(dataType)))
 
   def invalidJdbcParams(): InvalidPlanInput =
     InvalidPlanInput("Invalid jdbc params, please specify jdbc url and table.")
@@ -103,14 +96,30 @@ object InvalidInputErrors {
   def multiplePathsNotSupportedForStreamingSource(): InvalidPlanInput =
     InvalidPlanInput("Multiple paths are not supported for streaming source")
 
-  def doesNotSupport(what: String): InvalidPlanInput =
-    InvalidPlanInput(s"Does not support $what")
+  def invalidEnum(protoEnum: Enum[_] with ProtocolMessageEnum): InvalidPlanInput =
+    InvalidPlanInput(
+      s"This enum value of ${protoEnum.getDescriptorForType.getFullName}" +
+        s" is invalid: ${protoEnum.name()}(${protoEnum.getNumber})")
 
-  def invalidSchemaDataType(dataType: DataType): InvalidPlanInput =
-    InvalidPlanInput(s"Invalid schema dataType $dataType")
+  def invalidOneOfField(
+      enumCase: Enum[_] with EnumLite,
+      descriptor: Descriptor): InvalidPlanInput = {
+    // If the oneOf field is not set, the enum number will be 0.
+    if (enumCase.getNumber == 0) {
+      InvalidPlanInput(
+        s"This oneOf field in ${descriptor.getFullName} is not set: ${enumCase.name()}")
+    } else {
+      InvalidPlanInput(
+        s"This oneOf field message in ${descriptor.getFullName} is not supported: " +
+          s"${enumCase.name()}(${enumCase.getNumber})")
+    }
+  }
 
-  def expressionIdNotSupported(exprId: Int): InvalidPlanInput =
-    InvalidPlanInput(s"Expression with ID: $exprId is not supported")
+  def cannotBeEmpty(fieldName: String, descriptor: Descriptor): InvalidPlanInput =
+    InvalidPlanInput(s"$fieldName in ${descriptor.getFullName} cannot be empty")
+
+  def invalidSchemaTypeNonStruct(dataType: DataType): InvalidPlanInput =
+    InvalidPlanInput("INVALID_SCHEMA_TYPE_NON_STRUCT", Map("dataType" -> toSQLType(dataType)))
 
   def lambdaFunctionArgumentCountInvalid(got: Int): InvalidPlanInput =
     InvalidPlanInput(s"LambdaFunction requires 1 ~ 3 arguments, but got $got ones!")
@@ -129,17 +138,8 @@ object InvalidInputErrors {
   def windowFunctionRequired(): InvalidPlanInput =
     InvalidPlanInput("WindowFunction is required in WindowExpression")
 
-  def unknownFrameType(
-      frameType: proto.Expression.Window.WindowFrame.FrameType): InvalidPlanInput =
-    InvalidPlanInput(s"Unknown FrameType $frameType")
-
   def lowerBoundRequiredInWindowFrame(): InvalidPlanInput =
     InvalidPlanInput("LowerBound is required in WindowFrame")
-
-  def unknownFrameBoundary(
-      boundary: proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase)
-      : InvalidPlanInput =
-    InvalidPlanInput(s"Unknown FrameBoundary $boundary")
 
   def upperBoundRequiredInWindowFrame(): InvalidPlanInput =
     InvalidPlanInput("UpperBound is required in WindowFrame")
@@ -153,26 +153,11 @@ object InvalidInputErrors {
   def intersectDoesNotSupportUnionByName(): InvalidPlanInput =
     InvalidPlanInput("Intersect does not support union_by_name")
 
-  def unsupportedSetOperation(op: Int): InvalidPlanInput =
-    InvalidPlanInput(s"Unsupported set operation $op")
-
-  def joinTypeNotSupported(t: proto.Join.JoinType): InvalidPlanInput =
-    InvalidPlanInput(s"Join type $t is not supported")
-
   def aggregateNeedsPlanInput(): InvalidPlanInput =
     InvalidPlanInput("Aggregate needs a plan input")
 
   def aggregateWithPivotRequiresPivot(): InvalidPlanInput =
     InvalidPlanInput("Aggregate with GROUP_TYPE_PIVOT requires a Pivot")
-
-  def runnerCannotBeEmptyInExecuteExternalCommand(): InvalidPlanInput =
-    InvalidPlanInput("runner cannot be empty in executeExternalCommand")
-
-  def commandCannotBeEmptyInExecuteExternalCommand(): InvalidPlanInput =
-    InvalidPlanInput("command cannot be empty in executeExternalCommand")
-
-  def unexpectedForeachBatchFunction(): InvalidPlanInput =
-    InvalidPlanInput("Unexpected foreachBatch function")
 
   def invalidWithRelationReference(): InvalidPlanInput =
     InvalidPlanInput("Invalid WithRelation reference")
@@ -180,29 +165,14 @@ object InvalidInputErrors {
   def assertionFailure(message: String): InvalidPlanInput =
     InvalidPlanInput(message)
 
-  def unsupportedMergeActionType(actionType: proto.MergeAction.ActionType): InvalidPlanInput =
-    InvalidPlanInput(s"Unsupported merge action type $actionType")
-
   def unresolvedNamedLambdaVariableRequiresNamePart(): InvalidPlanInput =
     InvalidPlanInput("UnresolvedNamedLambdaVariable requires at least one name part!")
 
   def usingColumnsOrJoinConditionSetInJoin(): InvalidPlanInput =
     InvalidPlanInput("Using columns or join conditions cannot be set at the same time in Join")
 
-  def invalidStateSchemaDataType(dataType: DataType): InvalidPlanInput =
-    InvalidPlanInput(s"Invalid state schema dataType $dataType for flatMapGroupsWithState")
-
   def sqlCommandExpectsSqlOrWithRelations(other: proto.Relation.RelTypeCase): InvalidPlanInput =
     InvalidPlanInput(s"SQL command expects either a SQL or a WithRelations, but got $other")
-
-  def unknownGroupType(groupType: proto.Aggregate.GroupType): InvalidPlanInput =
-    InvalidPlanInput(s"Unknown group type $groupType")
-
-  def dataSourceIdNotSupported(dataSourceId: Int): InvalidPlanInput =
-    InvalidPlanInput(s"Data source id $dataSourceId is not supported")
-
-  def unknownSubqueryType(subqueryType: proto.SubqueryExpression.SubqueryType): InvalidPlanInput =
-    InvalidPlanInput(s"Unknown subquery type $subqueryType")
 
   def reduceShouldCarryScalarScalaUdf(got: mutable.Buffer[proto.Expression]): InvalidPlanInput =
     InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $got")
@@ -210,20 +180,17 @@ object InvalidInputErrors {
   def unionByNameAllowMissingColRequiresByName(): InvalidPlanInput =
     InvalidPlanInput("UnionByName `allowMissingCol` can be true only if `byName` is true.")
 
-  def invalidBucketCount(numBuckets: Int): InvalidCommandInput =
-    InvalidCommandInput("INVALID_BUCKET_COUNT", Map("numBuckets" -> numBuckets.toString))
-
-  def invalidPythonUdtfReturnType(actualType: String): InvalidPlanInput =
-    InvalidPlanInput(
-      s"Invalid Python user-defined table function return type. " +
-        s"Expect a struct type, but got $actualType.")
-
-  def invalidUserDefinedOutputSchemaTypeForTransformWithState(
-      actualType: String): InvalidPlanInput =
-    InvalidPlanInput(
-      s"Invalid user-defined output schema type for TransformWithStateInPandas. " +
-        s"Expect a struct type, but got $actualType.")
-
   def unsupportedUserDefinedFunctionImplementation(clazz: Class[_]): InvalidPlanInput =
     InvalidPlanInput(s"Unsupported UserDefinedFunction implementation: ${clazz}")
+
+  def streamingQueryRunIdMismatch(
+      id: String,
+      runId: String,
+      serverRunId: String): InvalidPlanInput =
+    InvalidPlanInput(
+      s"Run id mismatch for query id $id. Run id in the request $runId " +
+        s"does not match one on the server $serverRunId. The query might have restarted.")
+
+  def streamingQueryNotFound(id: String): InvalidPlanInput =
+    InvalidPlanInput(s"Streaming query $id is not found")
 }

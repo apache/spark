@@ -25,7 +25,7 @@ import java.util.Locale
 import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -56,6 +56,9 @@ abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
   with AdaptiveSparkPlanHelper {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   override protected val v2Format = v2Source
@@ -75,6 +78,17 @@ abstract class DataSourceV2SQLSuite
 
   protected def analysisException(sqlText: String): AnalysisException = {
     intercept[AnalysisException](sql(sqlText))
+  }
+
+  test("EXPLAIN") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id int, data string)")
+      val explain = spark.sql(s"EXPLAIN EXTENDED SELECT * FROM $t").head().getString(0)
+      val relationPattern = raw".*RelationV2\[[^\]]*]\s+$t\s*$$".r
+      val relations = explain.split("\n").filter(_.contains("RelationV2"))
+      assert(relations.nonEmpty && relations.forall(line => relationPattern.matches(line.trim)))
+    }
   }
 }
 
@@ -645,8 +659,16 @@ class DataSourceV2SQLSuiteV1Filter
       assert(replaced.columns.length === 1,
         "Replaced table should have new schema.")
       val actual = replaced.columns.head
-      val expected = ColumnV2.create("id", LongType, false, null,
-        new ColumnDefaultValue("41 + 1", LiteralValue(42L, LongType)), null)
+      val expected = ColumnV2.create(
+        "id",
+        LongType,
+        false, /* not nullable */
+        null, /* no comment */
+        new ColumnDefaultValue(
+          "41 + 1",
+          LiteralValue(42L, LongType),
+          LiteralValue(42L, LongType)),
+        null /* no metadata */)
       assert(actual === expected,
         "Replaced table should have new schema with DEFAULT column metadata.")
     }

@@ -400,7 +400,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
         Seq("p1=1/p2=2/p3=3/file1", "p1=1/p2=3/p3=3/file1").foreach { fileName =>
           val file = new File(tempDir, fileName)
-          assert(file.getParentFile.exists() || file.getParentFile.mkdirs())
+          assert(file.getParentFile.exists() || Utils.createDirectory(file.getParentFile))
           util.stringToFile(file, fileName)
         }
 
@@ -682,8 +682,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     files.foreach {
       case (name, size) =>
         val file = new File(tempDir, name)
-        assert(file.getParentFile.exists() || file.getParentFile.mkdirs())
-        util.stringToFile(file, "*" * size)
+        assert(file.getParentFile.exists() || Utils.createDirectory(file.getParentFile))
+        util.stringToFile(file, "*".repeat(size))
     }
 
     val df = spark.read

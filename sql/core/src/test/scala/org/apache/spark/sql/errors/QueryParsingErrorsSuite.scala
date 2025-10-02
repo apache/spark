@@ -18,7 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -62,16 +62,16 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     )
   }
 
-  test("PARSE_SYNTAX_ERROR: Execute immediate syntax error with INTO specified") {
+  test("UNRESOLVED_COLUMN: Execute immediate with unresolved column in INTO clause") {
     val query = "EXECUTE IMMEDIATE 'SELCT 1707 WHERE ? = 1' INTO a USING 1"
     checkError(
-      exception = parseException(query),
-      condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'SELCT'", "hint" -> ""),
+      exception = intercept[AnalysisException](sql(query)),
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map("objectName" -> "`a`"),
       context = ExpectedContext(
-        start = 0,
-        stop = 56,
-        fragment = query)
+        start = 48,
+        stop = 48,
+        fragment = "a")
     )
   }
 

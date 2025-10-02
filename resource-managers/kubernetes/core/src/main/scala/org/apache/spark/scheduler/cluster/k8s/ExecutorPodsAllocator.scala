@@ -32,7 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
@@ -191,7 +191,7 @@ class ExecutorPodsAllocator(
     }
 
     if (timedOut.nonEmpty) {
-      logWarning(log"Executors with ids ${MDC(LogKeys.EXECUTOR_IDS, timedOut.mkString(","))}} " +
+      logWarning(log"Executors with ids ${MDC(LogKeys.EXECUTOR_IDS, timedOut.mkString(","))} " +
         log"were not detected in the Kubernetes cluster after " +
         log"${MDC(LogKeys.TIMEOUT, podCreationTimeout)} ms despite the fact that a previous " +
         log"allocation attempt tried to create them. The executors may have been deleted but the " +

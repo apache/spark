@@ -18,7 +18,6 @@
 import unittest
 from collections import defaultdict
 
-from pyspark.errors import RetriesExceeded
 from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
@@ -88,7 +87,7 @@ class RetryTests(unittest.TestCase):
 
     def test_exceed_retries(self):
         # Exceed the retries.
-        with self.assertRaises(RetriesExceeded):
+        with self.assertRaises(TestError):
             for attempt in Retrying(TestPolicy(max_retries=2)):
                 with attempt:
                     self.stub(5, grpc.StatusCode.INTERNAL)
@@ -117,7 +116,7 @@ class RetryTests(unittest.TestCase):
     def test_specific_exception_exceed_retries(self):
         # Exceed the retries.
         policy = TestPolicySpecificError(max_retries=2, specific_code=grpc.StatusCode.UNAVAILABLE)
-        with self.assertRaises(RetriesExceeded):
+        with self.assertRaises(TestError):
             for attempt in Retrying(policy):
                 with attempt:
                     self.stub(5, grpc.StatusCode.UNAVAILABLE)
@@ -157,13 +156,13 @@ class RetryTests(unittest.TestCase):
         policy1 = TestPolicySpecificError(max_retries=2, specific_code=grpc.StatusCode.INTERNAL)
         policy2 = TestPolicySpecificError(max_retries=4, specific_code=grpc.StatusCode.INTERNAL)
 
-        with self.assertRaises(RetriesExceeded):
+        with self.assertRaises(TestError):
             for attempt in Retrying([policy1, policy2]):
                 with attempt:
                     self.stub(10, grpc.StatusCode.INTERNAL)
 
-        self.assertEqual(self.call_wrap["attempts"], 7)
-        self.assertEqual(self.call_wrap["raised"], 7)
+        self.assertEqual(self.call_wrap["attempts"], 3)
+        self.assertEqual(self.call_wrap["raised"], 3)
 
 
 if __name__ == "__main__":

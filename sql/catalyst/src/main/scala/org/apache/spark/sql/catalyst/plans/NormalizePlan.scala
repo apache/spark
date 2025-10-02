@@ -19,16 +19,16 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.{
-  DeduplicateRelations,
-  GetViewColumnByNameAndOrdinal,
-  NormalizeableRelation
-}
+import org.apache.spark.sql.catalyst.analysis.NormalizeableRelation
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical._
 
+/**
+ * Object that handles normalization of operators and expressions. Used when comparing plans.
+ */
 object NormalizePlan extends PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedExpressions = normalizeExpressions(plan)
@@ -37,10 +37,15 @@ object NormalizePlan extends PredicateHelper {
   }
 
   /**
-   * Normalizes expressions in a plan, that either produces non-deterministic results or
-   * will be different between fixed-point and single-pass analyzer, due to the nature
-   * of bottom-up resolution. Before normalization, pre-process the plan by replacing all
-   * [[RuntimeReplaceable]] nodes with their replacements.
+   * Normalizes expressions in a plan, needed because of differences between fixed-point and
+   * single-pass resolver, due to the nature of bottom-up resolution. Before normalization,
+   * pre-process the plan by replacing all [[RuntimeReplaceable]] nodes with their replacements.
+   * Normalization includes:
+   * - Replacing [[SubqueryExpression]] plans with normalized versions.
+   * - Replacing [[CommonExpressionDef]] and [[CommonExpressionRef]] ids with 0 - needed because
+   *   these ids are different for every node.
+   * - Replacing [[ExpressionWithRandomSeed]] seeds with 0 - needed because these seeds are
+   *   randomly generated.
    */
   def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
@@ -121,6 +126,8 @@ object NormalizePlan extends PredicateHelper {
    * - CTERelationRef ids will be remapped based on the new CTERelationDef IDs. This is possible,
    *   because WithCTE returns cteDefs as first children, and the defs will be traversed before the
    *   refs.
+   * - Normalizes inner [[Project]] nodes by sorting project lists alphabetically.
+   * - Normalizes inner [[Aggregate]] nodes by sorting aggregate expressions lists alphabetically.
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     val cteIdNormalizer = new CteIdNormalizer
@@ -150,24 +157,42 @@ object NormalizePlan extends PredicateHelper {
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
       case project: Project
-          if project
-            .getTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION)
-            .isDefined =>
+          if project.getTagValue(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION).isDefined =>
         project.child
+
       case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
-        val newInnerProject = Project(
-          innerProject.projectList.sortBy(_.name),
-          innerProject.child
+        aggregate.copy(child = normalizeProjectListOrder(innerProject))
+
+      case project @ Project(_, innerProject: Project) =>
+        project.copy(child = normalizeProjectListOrder(innerProject))
+
+      case project @ Project(_, innerAggregate: Aggregate) =>
+        project.copy(child = normalizeAggregateListOrder(innerAggregate))
+
+      /**
+       * ORDER BY covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(_, sort @ Sort(_, _, innerAggregate: Aggregate, _)) =>
+        project.copy(child = sort.copy(child = normalizeAggregateListOrder(innerAggregate)))
+
+      /**
+       * HAVING covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(_, filter @ Filter(_, innerAggregate: Aggregate)) =>
+        project.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
+
+      /**
+       * HAVING ... ORDER BY covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(
+            _,
+            sort @ Sort(_, _, filter @ Filter(_, innerAggregate: Aggregate), _)
+          ) =>
+        project.copy(
+          child =
+            sort.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
         )
-        aggregate.copy(child = newInnerProject)
-      case Project(outerProjectList, innerProject: Project) =>
-        val newInnerProject = Project(
-          innerProject.projectList.sortBy(_.name),
-          innerProject.child
-        )
-        Project(normalizeProjectList(outerProjectList), newInnerProject)
-      case Project(projectList, child) =>
-        Project(normalizeProjectList(projectList), child)
+
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
       case localRelation: LocalRelation if !localRelation.data.isEmpty =>
         /**
@@ -204,17 +229,18 @@ object NormalizePlan extends PredicateHelper {
     case _ => condition // Don't reorder.
   }
 
-  private def normalizeProjectList(projectList: Seq[NamedExpression]): Seq[NamedExpression] = {
-    projectList
-      .map { e =>
-        e.transformUp {
-          case g: GetViewColumnByNameAndOrdinal => g.copy(viewDDL = None)
-        }
-      }
-      .asInstanceOf[Seq[NamedExpression]]
+  private def normalizeProjectListOrder(project: Project): Project = {
+    project.copy(projectList = project.projectList.sortBy(_.name))
+  }
+
+  private def normalizeAggregateListOrder(aggregate: Aggregate): Aggregate = {
+    aggregate.copy(aggregateExpressions = aggregate.aggregateExpressions.sortBy(_.name))
   }
 }
 
+/**
+ * Helper class used for normalization of CTE ids in the plan.
+ */
 class CteIdNormalizer {
   private var cteIdCounter: Long = 0
   private val oldToNewIdMapping = new HashMap[Long, Long]

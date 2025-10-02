@@ -22,7 +22,7 @@ import java.{util => ju}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ERROR, FROM_OFFSET, OFFSETS, TIP, TOPIC_PARTITIONS, UNTIL_OFFSET}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
@@ -112,6 +112,8 @@ private[kafka010] class KafkaSource(
 
   private var allDataForTriggerAvailableNow: PartitionOffsetMap = _
 
+  private var isTriggerAvailableNow = false
+
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
@@ -175,8 +177,13 @@ private[kafka010] class KafkaSource(
     val currentOffsets = currentPartitionOffsets.orElse(Some(initialPartitionOffsets))
 
     // Use the pre-fetched list of partition offsets when Trigger.AvailableNow is enabled.
-    val latest = if (allDataForTriggerAvailableNow != null) {
-      allDataForTriggerAvailableNow
+    val latest = if (isTriggerAvailableNow) {
+      if (allDataForTriggerAvailableNow != null) {
+        allDataForTriggerAvailableNow
+      } else {
+        allDataForTriggerAvailableNow = kafkaReader.fetchLatestOffsets(currentOffsets)
+        allDataForTriggerAvailableNow
+      }
     } else {
       kafkaReader.fetchLatestOffsets(currentOffsets)
     }
@@ -404,7 +411,7 @@ private[kafka010] class KafkaSource(
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {
-    allDataForTriggerAvailableNow = kafkaReader.fetchLatestOffsets(Some(initialPartitionOffsets))
+    isTriggerAvailableNow = true
   }
 }
 

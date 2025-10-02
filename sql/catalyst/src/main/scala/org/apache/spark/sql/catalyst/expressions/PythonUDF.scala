@@ -37,7 +37,8 @@ object PythonUDF {
     PythonEvalType.SQL_ARROW_BATCHED_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-    PythonEvalType.SQL_SCALAR_ARROW_UDF
+    PythonEvalType.SQL_SCALAR_ARROW_UDF,
+    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
@@ -45,9 +46,31 @@ object PythonUDF {
   }
 
   def isWindowPandasUDF(e: PythonFuncExpression): Boolean = {
-    // This is currently only `PythonUDAF` (which means SQL_GROUPED_AGG_PANDAS_UDF), but we might
+    // This is currently only `PythonUDAF` (which means SQL_GROUPED_AGG_PANDAS_UDF or
+    // SQL_GROUPED_AGG_ARROW_UDF), but we might
     // support new types in the future, e.g, N -> N transform.
     e.isInstanceOf[PythonUDAF]
+  }
+
+  def correctEvalType(udf: PythonUDF, pythonUDFArrowFallbackOnUDT: Boolean): Int = {
+    if (udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+      if (pythonUDFArrowFallbackOnUDT &&
+        (containsUDT(udf.dataType) || udf.children.exists(expr => containsUDT(expr.dataType)))) {
+        PythonEvalType.SQL_BATCHED_UDF
+      } else {
+        PythonEvalType.SQL_ARROW_BATCHED_UDF
+      }
+    } else {
+      udf.evalType
+    }
+  }
+
+  private def containsUDT(dataType: DataType): Boolean = dataType match {
+    case _: UserDefinedType[_] => true
+    case ArrayType(elementType, _) => containsUDT(elementType)
+    case StructType(fields) => fields.exists(field => containsUDT(field.dataType))
+    case MapType(keyType, valueType, _) => containsUDT(keyType) || containsUDT(valueType)
+    case _ => false
   }
 }
 
@@ -119,10 +142,9 @@ case class PythonUDAF(
     dataType: DataType,
     children: Seq[Expression],
     udfDeterministic: Boolean,
+    evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
-
-  override def evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
@@ -175,6 +197,7 @@ abstract class UnevaluableGenerator extends Generator {
  * @param pythonUDTFPartitionColumnIndexes holds the zero-based indexes of the projected results of
  *                                         all PARTITION BY expressions within the TABLE argument of
  *                                         the Python UDTF call, if applicable
+ * @param tableArguments holds whether an input argument is a table argument
  */
 case class PythonUDTF(
     name: String,
@@ -185,7 +208,8 @@ case class PythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
-    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
+    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None,
+    tableArguments: Option[Seq[Boolean]] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -214,7 +238,8 @@ case class UnresolvedPolymorphicPythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resolveElementMetadata: (PythonFunction, Seq[Expression]) => PythonUDTFAnalyzeResult,
-    resultId: ExprId = NamedExpression.newExprId)
+    resultId: ExprId = NamedExpression.newExprId,
+    tableArguments: Option[Seq[Boolean]] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val resolved = false

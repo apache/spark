@@ -19,10 +19,11 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.SystemUtils;
 import org.junit.jupiter.api.AfterAll;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
+
+import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.util.SparkSystemUtils$;
 
 public class LevelDBIteratorSuite extends DBIteratorSuite {
 
@@ -35,13 +36,13 @@ public class LevelDBIteratorSuite extends DBIteratorSuite {
       db.close();
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
+      JavaUtils.deleteQuietly(dbpath);
     }
   }
 
   @Override
   protected KVStore createStore() throws Exception {
-    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
+    assumeFalse(SparkSystemUtils$.MODULE$.isMacOnAppleSilicon());
     dbpath = File.createTempFile("test.", ".ldb");
     dbpath.delete();
     db = new LevelDB(dbpath);

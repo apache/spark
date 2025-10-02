@@ -19,7 +19,9 @@ CREATE TEMPORARY VIEW various_maps AS SELECT * FROM VALUES (
   map(float('NaN'), 1),
   map(float('NaN'), 2),
   map(float('Infinity'), 1),
-  map(float('Infinity'), 2)
+  map(float('Infinity'), 2),
+  map(float(0.0), 1),
+  map(float(-0.0), 1)
 ) AS various_maps(
   boolean_map,
   tinyint_map,
@@ -35,7 +37,8 @@ CREATE TEMPORARY VIEW various_maps AS SELECT * FROM VALUES (
   array_map1, array_map2,
   struct_map1, struct_map2,
   float_nan_map1, float_nan_map2,
-  float_infinity_map1, float_infinity_map2
+  float_infinity_map1, float_infinity_map2,
+  float_zero_map, float_neg_zero_map
 );
 
 SELECT map_zip_with(tinyint_map, smallint_map, (k, v1, v2) -> struct(k, v1, v2)) m
@@ -87,4 +90,7 @@ SELECT map_zip_with(float_nan_map1, float_nan_map2, (k, v1, v2) -> (v1, v2)) m
 FROM various_maps;
 
 SELECT map_zip_with(float_infinity_map1, float_infinity_map2, (k, v1, v2) -> (v1, v2)) m
+FROM various_maps;
+
+SELECT map_zip_with(float_zero_map, float_neg_zero_map, (k, v1, v2) -> (v1, v2)) m
 FROM various_maps;

@@ -17,18 +17,16 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.withPosition
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
-import org.apache.spark.sql.types.BooleanType
 
 /**
  * Resolves [[Filter]] node and its condition.
  */
 class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[Filter, LogicalPlan]
-    with ResolvesNameByHiddenOutput {
+    with ResolvesNameByHiddenOutput
+    with ValidatesFilter {
   private val scopes: NameScopeStack = resolver.getNameScopes
 
   /**
@@ -52,7 +50,11 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
 
     val resolvedFilter = Filter(resolvedCondition, resolvedChild)
 
-    checkValidFilter(unresolvedFilter, resolvedFilter)
+    validateFilter(
+      invalidExpressions = expressionResolver.getLastInvalidExpressionsInTheContextOfOperator,
+      unresolvedOperator = unresolvedFilter,
+      resolvedFilter = resolvedFilter
+    )
 
     val missingAttributes: Seq[Attribute] =
       scopes.current.resolveMissingAttributesByHiddenOutput(referencedAttributes)
@@ -63,47 +65,7 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     retainOriginalOutput(
       operator = finalFilter,
       missingExpressions = missingAttributes,
-      output = scopes.current.output,
-      hiddenOutput = scopes.current.hiddenOutput
+      scopes = scopes
     )
-  }
-
-  private def checkValidFilter(unresolvedFilter: Filter, resolvedFilter: Filter): Unit = {
-    withPosition(unresolvedFilter) {
-      val invalidExpressions = expressionResolver.getLastInvalidExpressionsInTheContextOfOperator
-      if (invalidExpressions.nonEmpty) {
-        throwInvalidWhereCondition(resolvedFilter, invalidExpressions)
-      }
-
-      if (resolvedFilter.condition.dataType != BooleanType) {
-        throwDataTypeMismatchFilterNotBoolean(resolvedFilter)
-      }
-    }
-  }
-
-  private def throwInvalidWhereCondition(
-      filter: Filter,
-      invalidExpressions: Seq[Expression]): Nothing = {
-    throw new AnalysisException(
-      errorClass = "INVALID_WHERE_CONDITION",
-      messageParameters = Map(
-        "condition" -> toSQLExpr(filter.condition),
-        "expressionList" -> invalidExpressions.map(_.sql).mkString(", ")
-      )
-    )
-  }
-
-  private def throwDataTypeMismatchFilterNotBoolean(filter: Filter): Nothing =
-    throw new AnalysisException(
-      errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
-      messageParameters = Map(
-        "sqlExpr" -> makeCommaSeparatedExpressionString(filter.expressions),
-        "filter" -> toSQLExpr(filter.condition),
-        "type" -> toSQLType(filter.condition.dataType)
-      )
-    )
-
-  private def makeCommaSeparatedExpressionString(expressions: Seq[Expression]): String = {
-    expressions.map(toSQLExpr).mkString(", ")
   }
 }

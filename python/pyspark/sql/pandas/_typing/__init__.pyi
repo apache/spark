@@ -20,6 +20,7 @@ from typing import (
     Any,
     Callable,
     Iterable,
+    Iterator,
     NewType,
     Tuple,
     Type,
@@ -59,9 +60,13 @@ PandasGroupedMapUDFTransformWithStateType = Literal[211]
 PandasGroupedMapUDFTransformWithStateInitStateType = Literal[212]
 GroupedMapUDFTransformWithStateType = Literal[213]
 GroupedMapUDFTransformWithStateInitStateType = Literal[214]
+ArrowGroupedMapIterUDFType = Literal[215]
 
 # Arrow UDFs
 ArrowScalarUDFType = Literal[250]
+ArrowScalarIterUDFType = Literal[251]
+ArrowGroupedAggUDFType = Literal[252]
+ArrowWindowAggUDFType = Literal[253]
 
 class ArrowVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: pyarrow.Array) -> pyarrow.Array: ...
@@ -133,6 +138,11 @@ ArrowScalarToScalarFunction = Union[
         ],
         pyarrow.Array,
     ],
+]
+
+ArrowScalarIterFunction = Union[
+    Callable[[Iterable[pyarrow.Array]], Iterable[pyarrow.Array]],
+    Callable[[Tuple[pyarrow.Array, ...]], Iterable[pyarrow.Array]],
 ]
 
 class PandasVariadicScalarToScalarFunction(Protocol):
@@ -422,10 +432,18 @@ PandasCogroupedMapFunction = Union[
     Callable[[Any, DataFrameLike, DataFrameLike], DataFrameLike],
 ]
 
-ArrowGroupedMapFunction = Union[
+ArrowGroupedMapTableFunction = Union[
     Callable[[pyarrow.Table], pyarrow.Table],
     Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table], pyarrow.Table],
 ]
+ArrowGroupedMapIterFunction = Union[
+    Callable[[Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]],
+    Callable[
+        [Tuple[pyarrow.Scalar, ...], Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]
+    ],
+]
+ArrowGroupedMapFunction = Union[ArrowGroupedMapTableFunction, ArrowGroupedMapIterFunction]
+
 ArrowCogroupedMapFunction = Union[
     Callable[[pyarrow.Table, pyarrow.Table], pyarrow.Table],
     Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table, pyarrow.Table], pyarrow.Table],

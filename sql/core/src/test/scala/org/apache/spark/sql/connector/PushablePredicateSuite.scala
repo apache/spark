@@ -17,39 +17,76 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysTrue, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.v2.PushablePredicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{BooleanType, TimestampType}
 
 class PushablePredicateSuite extends QueryTest with SharedSparkSession {
 
-  test("PushablePredicate None returned - flag on") {
-    withSQLConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> "true") {
-      val pushable = PushablePredicate.unapply(Literal.create("string"))
-      assert(!pushable.isDefined)
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
+
+  test("simple boolean expression should always return v2 Predicate") {
+    Seq(true, false).foreach { createV2Predicate =>
+      Seq(true, false).foreach { noAssert =>
+        withSQLConf(
+          SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> createV2Predicate.toString,
+          SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> noAssert.toString) {
+          val pushable = PushablePredicate.unapply(Literal.create(true))
+          assert(pushable.isDefined)
+          assert(pushable.get.isInstanceOf[AlwaysTrue])
+        }
+      }
     }
   }
 
-  test("PushablePredicate success - flag on") {
-    withSQLConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> "true") {
-      val pushable = PushablePredicate.unapply(Literal.create(true))
-      assert(pushable.isDefined)
+  test("non-boolean expression") {
+    Seq(true, false).foreach { createV2Predicate =>
+      Seq(true, false).foreach { noAssert =>
+        withSQLConf(
+          SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> createV2Predicate.toString,
+          SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> noAssert.toString) {
+          val catalystExpr = Literal.create("string")
+          if (noAssert) {
+            val pushable = PushablePredicate.unapply(catalystExpr)
+            assert(pushable.isEmpty)
+          } else {
+            intercept[java.lang.AssertionError] {
+              PushablePredicate.unapply(catalystExpr)
+            }
+          }
+        }
+      }
     }
   }
 
-  test("PushablePredicate success") {
-    withSQLConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> "false") {
-      val pushable = PushablePredicate.unapply(Literal.create(true))
-      assert(pushable.isDefined)
-    }
-  }
-
-  test("PushablePredicate throws") {
-    withSQLConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> "false") {
-      intercept[java.lang.AssertionError] {
-        PushablePredicate.unapply(Literal.create("string"))
+  test("non-trivial boolean expression") {
+    Seq(true, false).foreach { createV2Predicate =>
+      Seq(true, false).foreach { noAssert =>
+        withSQLConf(
+          SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> createV2Predicate.toString,
+          SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> noAssert.toString) {
+          val catalystExpr =
+            Cast(Cast(Literal.create("2025-01-01 00:00:00"), TimestampType), BooleanType)
+          if (createV2Predicate) {
+            val pushable = PushablePredicate.unapply(catalystExpr)
+            assert(pushable.isDefined)
+            assert(pushable.get.isInstanceOf[V2Predicate])
+          } else {
+            if (noAssert) {
+              val pushable = PushablePredicate.unapply(catalystExpr)
+              assert(pushable.isEmpty)
+            } else {
+              intercept[java.lang.AssertionError] {
+                PushablePredicate.unapply(catalystExpr)
+              }
+            }
+          }
+        }
       }
     }
   }

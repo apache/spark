@@ -19,18 +19,22 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, IntegerType, StringType}
+import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, StringType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -39,18 +43,22 @@ class DataSourceV2DataFrameSuite
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
-  before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
-  }
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set(SQLConf.ANSI_ENABLED, true)
+    .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
 
   after {
     spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.clear()
   }
 
   override protected val catalogAndNamespace: String = "testcat.ns1.ns2.tbls"
   override protected val v2Format: String = classOf[FakeV2Provider].getName
+
+  protected def catalog(name: String): InMemoryTableCatalog = {
+    val catalog = spark.sessionState.catalogManager.catalog(name)
+    catalog.asInstanceOf[InMemoryTableCatalog]
+  }
 
   override def verifyTable(tableName: String, expected: DataFrame): Unit = {
     checkAnswer(spark.table(tableName), expected)
@@ -346,196 +354,156 @@ class DataSourceV2DataFrameSuite
   test("create/replace table with complex foldable default values") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
-          sql(
-            s"""
-               |CREATE TABLE $tableName (
-               |  id INT,
-               |  salary INT DEFAULT (100 + 23),
-               |  dep STRING DEFAULT ('h' || 'r'),
-               |  active BOOLEAN DEFAULT CAST(1 AS BOOLEAN)
-               |) USING foo
-               |""".stripMargin)
-        }
-
-        checkDefaultValues(
-          createExec.columns,
-          Array(
-            null,
-            new ColumnDefaultValue(
-              "(100 + 23)",
-              new GeneralScalarExpression(
-                "+",
-                Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
-              LiteralValue(123, IntegerType)),
-            new ColumnDefaultValue(
-              "('h' || 'r')",
-              new GeneralScalarExpression(
-                "CONCAT",
-                Array(
-                  LiteralValue(UTF8String.fromString("h"), StringType),
-                  LiteralValue(UTF8String.fromString("r"), StringType))),
-              LiteralValue(UTF8String.fromString("hr"), StringType)),
-            new ColumnDefaultValue(
-              "CAST(1 AS BOOLEAN)",
-              new V2Cast(LiteralValue(1, IntegerType), IntegerType, BooleanType),
-              LiteralValue(true, BooleanType))))
-
-        val df1 = Seq(1).toDF("id")
-        df1.writeTo(tableName).append()
-
-        sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT ('i' || 't')")
-
-        val df2 = Seq(2).toDF("id")
-        df2.writeTo(tableName).append()
-
-        checkAnswer(
-          sql(s"SELECT * FROM $tableName"),
-          Seq(
-            Row(1, 123, "hr", true),
-            Row(2, 123, "it", true)))
-
-        val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
-          sql(
-            s"""
-               |REPLACE TABLE $tableName (
-               |  id INT,
-               |  salary INT DEFAULT (50 * 2),
-               |  dep STRING DEFAULT ('un' || 'known'),
-               |  active BOOLEAN DEFAULT CAST(0 AS BOOLEAN)
-               |) USING foo
-               |""".stripMargin)
-        }
-
-        checkDefaultValues(
-          replaceExec.columns,
-          Array(
-            null,
-            new ColumnDefaultValue(
-              "(50 * 2)",
-              new GeneralScalarExpression(
-                "*",
-                Array(LiteralValue(50, IntegerType), LiteralValue(2, IntegerType))),
-              LiteralValue(100, IntegerType)),
-            new ColumnDefaultValue(
-              "('un' || 'known')",
-              new GeneralScalarExpression(
-                "CONCAT",
-                Array(
-                  LiteralValue(UTF8String.fromString("un"), StringType),
-                  LiteralValue(UTF8String.fromString("known"), StringType))),
-              LiteralValue(UTF8String.fromString("unknown"), StringType)),
-            new ColumnDefaultValue(
-              "CAST(0 AS BOOLEAN)",
-              new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType),
-              LiteralValue(false, BooleanType))))
-
-        val df3 = Seq(1).toDF("id")
-        df3.writeTo(tableName).append()
-
-        checkAnswer(
-          sql(s"SELECT * FROM $tableName"),
-          Seq(Row(1, 100, "unknown", false)))
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""
+              |CREATE TABLE $tableName (
+              |  id INT,
+              |  salary INT DEFAULT (100 + 23),
+              |  dep STRING DEFAULT ('h' || 'r'),
+              |  active BOOLEAN DEFAULT CAST(1 AS BOOLEAN)
+              |) USING foo
+              |""".stripMargin)
       }
+
+      checkDefaultValues(
+        createExec.columns,
+        Array(
+          null,
+          new ColumnDefaultValue(
+            "(100 + 23)",
+            LiteralValue(123, IntegerType),
+            LiteralValue(123, IntegerType)),
+          new ColumnDefaultValue(
+            "('h' || 'r')",
+            LiteralValue(UTF8String.fromString("hr"), StringType),
+            LiteralValue(UTF8String.fromString("hr"), StringType)),
+          new ColumnDefaultValue(
+            "CAST(1 AS BOOLEAN)",
+            new AlwaysTrue,
+            LiteralValue(true, BooleanType))))
+
+      val df1 = Seq(1).toDF("id")
+      df1.writeTo(tableName).append()
+
+      sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT ('i' || 't')")
+
+      val df2 = Seq(2).toDF("id")
+      df2.writeTo(tableName).append()
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Seq(
+          Row(1, 123, "hr", true),
+          Row(2, 123, "it", true)))
+
+      val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
+        sql(
+          s"""
+              |REPLACE TABLE $tableName (
+              |  id INT,
+              |  salary INT DEFAULT (50 * 2),
+              |  dep STRING DEFAULT ('un' || 'known'),
+              |  active BOOLEAN DEFAULT CAST(0 AS BOOLEAN)
+              |) USING foo
+              |""".stripMargin)
+      }
+
+      checkDefaultValues(
+        replaceExec.columns,
+        Array(
+          null,
+          new ColumnDefaultValue(
+            "(50 * 2)",
+            LiteralValue(100, IntegerType),
+            LiteralValue(100, IntegerType)),
+          new ColumnDefaultValue(
+            "('un' || 'known')",
+            LiteralValue(UTF8String.fromString("unknown"), StringType),
+            LiteralValue(UTF8String.fromString("unknown"), StringType)),
+          new ColumnDefaultValue(
+            "CAST(0 AS BOOLEAN)",
+            new AlwaysFalse,
+            LiteralValue(false, BooleanType))))
+
+      val df3 = Seq(1).toDF("id")
+      df3.writeTo(tableName).append()
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Seq(Row(1, 100, "unknown", false)))
     }
   }
 
+
   test("alter table add column with complex foldable default values") {
     val tableName = "testcat.ns1.ns2.tbl"
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      withTable(tableName) {
-        sql(
-          s"""
-             |CREATE TABLE $tableName (
-             |  dummy INT
-             |) USING foo
-             |""".stripMargin)
+    withTable(tableName) {
+      sql(
+        s"""
+            |CREATE TABLE $tableName (
+            |  dummy INT
+            |) USING foo
+            |""".stripMargin)
 
-        val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(s"ALTER TABLE $tableName ADD COLUMNS (" +
-            s"salary INT DEFAULT (100 + 23), " +
-            s"dep STRING DEFAULT ('h' || 'r'), " +
-            s"active BOOLEAN DEFAULT CAST(1 AS BOOLEAN))")
-        }
-
-        checkDefaultValues(
-          alterExec.changes.map(_.asInstanceOf[AddColumn]).toArray,
-          Array(
-            new ColumnDefaultValue(
-              "(100 + 23)",
-              new GeneralScalarExpression(
-                "+",
-                Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
-              LiteralValue(123, IntegerType)),
-            new ColumnDefaultValue(
-              "('h' || 'r')",
-              new GeneralScalarExpression(
-                "CONCAT",
-                Array(
-                  LiteralValue(UTF8String.fromString("h"), StringType),
-                  LiteralValue(UTF8String.fromString("r"), StringType))),
-              LiteralValue(UTF8String.fromString("hr"), StringType)),
-            new ColumnDefaultValue(
-              "CAST(1 AS BOOLEAN)",
-              new V2Cast(LiteralValue(1, IntegerType), IntegerType, BooleanType),
-              LiteralValue(true, BooleanType))))
+      val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+        sql(s"ALTER TABLE $tableName ADD COLUMNS (" +
+          s"salary INT DEFAULT (100 + 23), " +
+          s"dep STRING DEFAULT ('h' || 'r'), " +
+          s"active BOOLEAN DEFAULT CAST(1 AS BOOLEAN))")
       }
+
+      checkDefaultValues(
+        alterExec.changes.map(_.asInstanceOf[AddColumn]).toArray,
+        Array(
+          new ColumnDefaultValue(
+            "(100 + 23)",
+            LiteralValue(123, IntegerType),
+            LiteralValue(123, IntegerType)),
+          new ColumnDefaultValue(
+            "('h' || 'r')",
+            LiteralValue(UTF8String.fromString("hr"), StringType),
+            LiteralValue(UTF8String.fromString("hr"), StringType)),
+          new ColumnDefaultValue(
+            "CAST(1 AS BOOLEAN)",
+            new AlwaysTrue,
+            LiteralValue(true, BooleanType))))
     }
   }
 
   test("alter table alter column with complex foldable default values") {
     val tableName = "testcat.ns1.ns2.tbl"
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      withTable(tableName) {
-        sql(
-          s"""
-             |CREATE TABLE $tableName (
-             |  salary INT DEFAULT (100 + 23),
-             |  dep STRING DEFAULT ('h' || 'r'),
-             |  active BOOLEAN DEFAULT CAST(1 AS BOOLEAN)
-             |) USING foo
-             |""".stripMargin)
+    withTable(tableName) {
+      sql(
+        s"""
+            |CREATE TABLE $tableName (
+            |  salary INT DEFAULT (100 + 23),
+            |  dep STRING DEFAULT ('h' || 'r'),
+            |  active BOOLEAN DEFAULT CAST(1 AS BOOLEAN)
+            |) USING foo
+            |""".stripMargin)
 
-        val alterExecCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(s"ALTER TABLE $tableName ALTER COLUMN salary SET DEFAULT (123 + 56)")
-        }
-        checkDefaultValue(
-          alterExecCol1.changes.collect {
-            case u: UpdateColumnDefaultValue => u
-          }.head,
+      val alterExecCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
+         sql(
+           s"""
+              |ALTER TABLE $tableName ALTER COLUMN
+              |  salary SET DEFAULT (123 + 56),
+              |  dep SET DEFAULT ('r' || 'l'),
+              |  active SET DEFAULT CAST(0 AS BOOLEAN)
+              |""".stripMargin)
+      }
+      checkDefaultValues(
+        alterExecCol1.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+        Array(
           new DefaultValue(
             "(123 + 56)",
-            new GeneralScalarExpression(
-              "+",
-              Array(LiteralValue(123, IntegerType), LiteralValue(56, IntegerType)))))
-
-        val alterExecCol2 = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT ('r' || 'l')")
-        }
-        checkDefaultValue(
-          alterExecCol2.changes.collect {
-            case u: UpdateColumnDefaultValue => u
-          }.head,
+            LiteralValue(179, IntegerType)),
           new DefaultValue(
             "('r' || 'l')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("r"), StringType),
-                LiteralValue(UTF8String.fromString("l"), StringType)))))
-
-        val alterExecCol3 = executeAndKeepPhysicalPlan[AlterTableExec] {
-          sql(s"ALTER TABLE $tableName ALTER COLUMN active SET DEFAULT CAST(0 AS BOOLEAN)")
-        }
-        checkDefaultValue(
-          alterExecCol3.changes.collect {
-            case u: UpdateColumnDefaultValue => u
-          }.head,
+            LiteralValue(UTF8String.fromString("rl"), StringType)),
           new DefaultValue(
             "CAST(0 AS BOOLEAN)",
-            new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType)))
-      }
+            new AlwaysFalse)))
     }
   }
 
@@ -666,13 +634,9 @@ class DataSourceV2DataFrameSuite
         sql(s"ALTER TABLE $tableName ALTER COLUMN cat SET DEFAULT current_catalog()")
       }
 
-      checkDefaultValue(
-        alterExec.changes.collect {
-          case u: UpdateColumnDefaultValue => u
-        }.head,
-        new DefaultValue(
-          "current_catalog()",
-          null /* No V2 Expression */))
+      checkDefaultValues(
+        alterExec.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+        Array(new DefaultValue("current_catalog()", null /* No V2 Expression */)))
 
       val df1 = Seq(1).toDF("dummy")
       df1.writeTo(tableName).append()
@@ -680,6 +644,215 @@ class DataSourceV2DataFrameSuite
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
         Seq(Row(1, "spark_catalog")))
+    }
+  }
+
+  test("create/replace table default value expression should have a cast") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  col1 int,
+             |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
+             |  col3 double DEFAULT 1)
+             |""".stripMargin)
+      }
+      checkDefaultValues(
+        createExec.columns,
+        Array(
+          null,
+          new ColumnDefaultValue(
+            "'2018-11-17 13:33:33'",
+            LiteralValue(1542490413000000L, TimestampType),
+            LiteralValue(1542490413000000L, TimestampType)),
+          new ColumnDefaultValue(
+            "1",
+            LiteralValue(1.0, DoubleType),
+            LiteralValue(1.0, DoubleType))))
+
+      val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
+        sql(
+          s"""
+             |REPLACE TABLE $tableName (
+             |  col1 int,
+             |  col2 timestamp DEFAULT '2022-02-23 05:55:55',
+             |  col3 double DEFAULT (1 + 1))
+             |""".stripMargin)
+      }
+      checkDefaultValues(
+        replaceExec.columns,
+        Array(
+          null,
+          new ColumnDefaultValue(
+            "'2022-02-23 05:55:55'",
+            LiteralValue(1645624555000000L, TimestampType),
+            LiteralValue(1645624555000000L, TimestampType)),
+          new ColumnDefaultValue(
+            "(1 + 1)",
+            LiteralValue(2.0, DoubleType),
+            LiteralValue(2.0, DoubleType))))
+    }
+  }
+
+
+  test("alter table default value expression should have a cast") {
+    val tableName = "testcat.ns1.ns2.tbl"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName (col1 int) using foo")
+        val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+          sql(
+            s"""
+               |ALTER TABLE $tableName ADD COLUMNS (
+               |  col2 timestamp DEFAULT '2018-11-17 13:33:33',
+               |  col3 double DEFAULT 1)
+               |""".stripMargin)
+        }
+
+        checkDefaultValues(
+          alterExec.changes.map(_.asInstanceOf[AddColumn]).toArray,
+          Array(
+            new ColumnDefaultValue(
+              "'2018-11-17 13:33:33'",
+              LiteralValue(1542490413000000L, TimestampType),
+              LiteralValue(1542490413000000L, TimestampType)),
+            new ColumnDefaultValue(
+              "1",
+              LiteralValue(1.0, DoubleType),
+              LiteralValue(1.0, DoubleType))))
+
+        val alterCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
+          sql(
+            s"""
+               |ALTER TABLE $tableName ALTER COLUMN
+               |  col2 SET DEFAULT '2022-02-23 05:55:55',
+               |  col3 SET DEFAULT (1 + 1)
+               |""".stripMargin)
+        }
+        checkDefaultValues(
+          alterCol1.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+          Array(
+            new DefaultValue("'2022-02-23 05:55:55'",
+              LiteralValue(1645624555000000L, TimestampType)),
+            new DefaultValue(
+              "(1 + 1)",
+              LiteralValue(2.0, DoubleType))))
+      }
+  }
+
+  test("write with supported expression-based default values") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val columns = Array(
+        Column.create("c1", IntegerType),
+        Column.create(
+          "c2",
+          IntegerType,
+          false, /* not nullable */
+          null, /* no comment */
+          new ColumnDefaultValue(
+            new GeneralScalarExpression(
+              "+",
+              Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+            LiteralValue(123, IntegerType)),
+          "{}"))
+      val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+      catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
+      val df = Seq(1, 2, 3).toDF("c1")
+      df.writeTo(tableName).append()
+      checkAnswer(
+        spark.table(tableName),
+        Seq(Row(1, 123), Row(2, 123), Row(3, 123)))
+    }
+  }
+
+  test("write with unsupported expression-based default values (no SQL provided)") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val columns = Array(
+        Column.create("c1", IntegerType),
+        Column.create(
+          "c2",
+          IntegerType,
+          false, /* not nullable */
+          null, /* no comment */
+          new ColumnDefaultValue(
+            ApplyTransform(
+              "UNKNOWN_TRANSFORM",
+              Seq(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+            LiteralValue(123, IntegerType)),
+          "{}"))
+      val e = intercept[SparkException] {
+        val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+        catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
+        val df = Seq(1, 2, 3).toDF("c1")
+        df.writeTo(tableName).append()
+      }
+      assert(e.getMessage.contains("connector expression couldn't be converted to Catalyst"))
+    }
+  }
+
+  test("write with unsupported expression-based default values (with SQL provided)") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val columns = Array(
+        Column.create("c1", IntegerType),
+        Column.create(
+          "c2",
+          IntegerType,
+          false, /* not nullable */
+          null, /* no comment */
+          new ColumnDefaultValue(
+            "100 + 23",
+            ApplyTransform(
+              "INVALID_TRANSFORM",
+              Seq(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+            LiteralValue(123, IntegerType)),
+          "{}"))
+      val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+      catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
+      val df = Seq(1, 2, 3).toDF("c1")
+      df.writeTo(tableName).append()
+    }
+  }
+
+  test("SPARK-52860: insert with schema evolution") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTable(tableName) {
+          val tableInfo = new TableInfo.Builder().
+            withColumns(
+              Array(Column.create("c1", IntegerType)))
+            .withProperties(
+              Map("accept-any-schema" -> "true").asJava)
+            .build()
+          catalog("testcat").createTable(ident, tableInfo)
+
+          val data = Seq((1, "a"), (2, "b"), (3, "c"))
+          val df = if (caseSensitive) {
+            data.toDF("c1", "C1")
+          } else {
+            data.toDF("c1", "c2")
+          }
+          df.writeTo(tableName).append()
+          checkAnswer(spark.table(tableName), df)
+
+          val cols = catalog("testcat").loadTable(ident).columns()
+          val expectedCols = if (caseSensitive) {
+            Array(
+              Column.create("c1", IntegerType),
+              Column.create("C1", StringType))
+          } else {
+            Array(
+              Column.create("c1", IntegerType),
+              Column.create("c2", StringType))
+          }
+          assert(cols === expectedCols)
+        }
+      }
     }
   }
 
@@ -718,13 +891,18 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  private def checkDefaultValue(
-      column: UpdateColumnDefaultValue,
-      expectedDefault: DefaultValue): Unit = {
-    assert(
-      column.newCurrentDefault() == expectedDefault,
-        s"Default value mismatch for column '${column.toString}': " +
-        s"expected $expectedDefault but found ${column.newCurrentDefault()}")
+  private def checkDefaultValues(
+      columns: Array[UpdateColumnDefaultValue],
+      expectedDefaultValues: Array[DefaultValue]): Unit = {
+    assert(columns.length == expectedDefaultValues.length)
+
+    columns.zip(expectedDefaultValues).foreach {
+      case (column, expectedDefault) =>
+        assert(
+          column.newCurrentDefault() == expectedDefault,
+          s"Default value mismatch for column '${column.toString}': " +
+            s"expected $expectedDefault but found ${column.newCurrentDefault}")
+    }
   }
 
   private def checkDropDefaultValue(

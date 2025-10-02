@@ -383,7 +383,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     // Create the executor's working directory
     val executorDir = new File(worker.workDir, appId + "/" + execId)
 
-    if (!executorDir.exists && !executorDir.mkdirs()) {
+    if (!executorDir.exists && !Utils.createDirectory(executorDir)) {
       throw new IOException("Failed to create directory " + executorDir)
     }
     executorDir.setLastModified(System.currentTimeMillis - (1000 * 120))

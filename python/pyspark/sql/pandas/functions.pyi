@@ -37,6 +37,9 @@ from pyspark.sql.pandas._typing import (
     PandasScalarUDFType,
     ArrowScalarToScalarFunction,
     ArrowScalarUDFType,
+    ArrowScalarIterFunction,
+    ArrowScalarIterUDFType,
+    ArrowGroupedAggUDFType,
 )
 
 from pyspark import since as since  # noqa: F401
@@ -51,6 +54,8 @@ class PandasUDFType:
 
 class ArrowUDFType:
     SCALAR: ArrowScalarUDFType
+    SCALAR_ITER: ArrowScalarIterUDFType
+    GROUPED_AGG: ArrowGroupedAggUDFType
 
 @overload
 def arrow_udf(
@@ -70,6 +75,24 @@ def arrow_udf(
 def arrow_udf(
     *, returnType: DataTypeOrString, functionType: ArrowScalarUDFType
 ) -> Callable[[ArrowScalarToScalarFunction], UserDefinedFunctionLike]: ...
+@overload
+def arrow_udf(
+    f: ArrowScalarIterFunction,
+    returnType: Union[AtomicDataTypeOrString, ArrayType],
+    functionType: ArrowScalarIterUDFType,
+) -> UserDefinedFunctionLike: ...
+@overload
+def arrow_udf(
+    f: Union[AtomicDataTypeOrString, ArrayType], returnType: ArrowScalarIterUDFType
+) -> Callable[[ArrowScalarIterFunction], UserDefinedFunctionLike]: ...
+@overload
+def arrow_udf(
+    *, returnType: Union[AtomicDataTypeOrString, ArrayType], functionType: ArrowScalarIterUDFType
+) -> Callable[[ArrowScalarIterFunction], UserDefinedFunctionLike]: ...
+@overload
+def arrow_udf(
+    f: Union[AtomicDataTypeOrString, ArrayType], *, functionType: ArrowScalarIterUDFType
+) -> Callable[[ArrowScalarIterFunction], UserDefinedFunctionLike]: ...
 @overload
 def pandas_udf(
     f: PandasScalarToScalarFunction,

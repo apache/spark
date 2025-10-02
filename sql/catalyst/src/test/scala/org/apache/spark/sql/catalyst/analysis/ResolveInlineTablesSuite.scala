@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CurrentTime, CurrentTimestamp, Literal, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, EvalInlineTables}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.types.{LongType, NullType, TimestampType, TimeType}
 
 /**
@@ -121,7 +121,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
         Seq(CurrentTime())
       )
     )
-    val resolved = ResolveInlineTables(table)
+    val resolved = ResolveInlineTables(ResolveTimeZone(table))
     assert(resolved.isInstanceOf[ResolvedInlineTable],
       "Expected an inline table to be resolved into a ResolvedInlineTable")
 

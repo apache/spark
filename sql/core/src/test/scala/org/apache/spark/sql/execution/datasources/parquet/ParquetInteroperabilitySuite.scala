@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.io.File
 import java.time.ZoneOffset
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.sql.Row
@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
   test("parquet files with different physical schemas but share the same logical schema") {
@@ -177,7 +178,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       // match the column names of the file from impala
       val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
       df.write.parquet(tableDir.getAbsolutePath)
-      FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
+      Utils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { int96TimestampConversion =>
         withAllParquetReaders {
@@ -229,8 +230,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // sure the test is configured correctly.
               assert(parts.size == 2)
               parts.foreach { part =>
-                val oneFooter =
-                  ParquetFooterReader.readFooter(hadoopConf, part.getPath, NO_FILTER)
+                val oneFooter = ParquetFooterReader.readFooter(
+                  HadoopInputFile.fromStatus(part, hadoopConf), NO_FILTER)
                 assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
                 val typeName = oneFooter
                   .getFileMetaData.getSchema.getColumns.get(0).getPrimitiveType.getPrimitiveTypeName

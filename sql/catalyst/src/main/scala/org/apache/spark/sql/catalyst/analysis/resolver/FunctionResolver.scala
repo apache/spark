@@ -124,7 +124,10 @@ class FunctionResolver(
         if (!withNewSeed.seedExpression.foldable) {
           throwSeedExpressionIsUnfoldable(expressionWithRandomSeed)
         }
-        withNewSeed
+        coerceExpressionTypes(
+          expression = withNewSeed,
+          expressionTreeTraversal = traversals.current
+        )
       case inheritAnalysisRules: InheritAnalysisRules =>
         val resolvedInheritAnalysisRules =
           withResolvedChildren(inheritAnalysisRules, expressionResolver.resolve _)

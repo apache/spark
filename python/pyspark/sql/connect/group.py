@@ -35,6 +35,7 @@ from pyspark.util import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
+from pyspark.sql.pandas.typehints import infer_group_arrow_eval_type_from_func
 from pyspark.sql.types import NumericType, StructType
 
 import pyspark.sql.connect.plan as plan
@@ -472,13 +473,22 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_vectorized_udf(func, PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF)
+        try:
+            # Try to infer the eval type from type hints
+            eval_type = infer_group_arrow_eval_type_from_func(func)
+        except Exception:
+            warnings.warn("Cannot infer the eval type from type hints. ", UserWarning)
+
+        if eval_type is None:
+            eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+
+        _validate_vectorized_udf(func, eval_type)
         if isinstance(schema, str):
             schema = cast(StructType, self._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
-            evalType=PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+            evalType=eval_type,
         )
 
         res = DataFrame(
@@ -583,8 +593,12 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.group
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.connect.group.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.connect.group.GroupedData.agg.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.group tests")

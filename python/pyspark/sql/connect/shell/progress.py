@@ -30,7 +30,7 @@ try:
     from IPython.utils.terminal import get_terminal_size
 except ImportError:
 
-    def get_terminal_size(defaultx: Any = None, defaulty: Any = None) -> Any:
+    def get_terminal_size(defaultx: Any = None, defaulty: Any = None) -> Any:  # type: ignore[misc]
         return (80, 25)
 
 

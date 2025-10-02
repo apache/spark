@@ -112,7 +112,7 @@ jobs:
             ui=false
             docs=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           precondition="
             {
               \"build\": \"$build\",
@@ -122,6 +122,8 @@ jobs:
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
+              \"java17\" : \"$build\",
+              \"java25\" : \"$build\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
@@ -240,7 +242,7 @@ jobs:
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
           - >-
-            core, unsafe, kvstore, avro, utils,
+            core, unsafe, kvstore, avro, utils, utils-java,
             network-common, network-shuffle, repl, launcher,
             examples, sketch, variant
           - >-
@@ -360,7 +362,7 @@ jobs:
     - name: Install Python packages (Python 3.11)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect') || contains(matrix.modules, 'yarn')
       run: |
-        python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
+        python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.5'
         python3.11 -m pip list
     # Run the tests.
     - name: Run tests
@@ -497,7 +499,8 @@ jobs:
     if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # TODO(SPARK-53605): Restore pyspark execution timeout to 2 hours after fixing test_pandas_transform_with_state
+    timeout-minutes: 150
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
     strategy:
@@ -511,7 +514,7 @@ jobs:
           - >-
             pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger
           - >-
-            pyspark-mllib, pyspark-ml, pyspark-ml-connect
+            pyspark-mllib, pyspark-ml, pyspark-ml-connect, pyspark-pipelines
           - >-
             pyspark-connect
           - >-
@@ -519,13 +522,9 @@ jobs:
           - >-
             pyspark-pandas-slow
           - >-
-            pyspark-pandas-connect-part0
+            pyspark-pandas-connect-part0, pyspark-pandas-connect-part3
           - >-
-            pyspark-pandas-connect-part1
-          - >-
-            pyspark-pandas-connect-part2
-          - >-
-            pyspark-pandas-connect-part3
+            pyspark-pandas-connect-part1, pyspark-pandas-connect-part2
         exclude:
           # Always run if pyspark == 'true', even infra-image is skip (such as non-master job)
           # In practice, the build will run in individual PR, but not against the individual commit
@@ -605,8 +604,9 @@ jobs:
       run: |
         for py in $(echo $PYTHON_TO_TEST | tr "," "\n")
         do
-          echo $py
+          $py --version
           $py -m pip list
+          echo ""
         done
     - name: Install Conda for pip packaging test
       if: contains(matrix.modules, 'pyspark-errors')
@@ -766,7 +766,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.11 -m pip install 'black==23.12.1' 'protobuf==5.29.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.11 -m pip install 'black==23.12.1' 'protobuf==5.29.5' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.11 -m pip list
     - name: Python CodeGen check for branch-3.5
       if: inputs.branch == 'branch-3.5'
@@ -787,8 +787,6 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
       NOLINT_ON_COMPILE: false
-      PYSPARK_DRIVER_PYTHON: python3.9
-      PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
@@ -849,10 +847,17 @@ jobs:
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
-    - name: Scala structured logging check
+    - name: Scala structured logging check for branch-3.5 and branch-4.0
+      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: |
         if [ -f ./dev/structured_logging_style.py ]; then
             python3.9 ./dev/structured_logging_style.py
+        fi
+    - name: Scala structured logging check
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      run: |
+        if [ -f ./dev/structured_logging_style.py ]; then
+            python3.11 ./dev/structured_logging_style.py
         fi
     - name: Java linter
       run: ./dev/lint-java
@@ -865,10 +870,18 @@ jobs:
         # Should delete this section after SPARK 3.5 EOL.
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.56.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
-    - name: List Python packages
+    - name: List Python packages for branch-3.5 and branch-4.0
+      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: python3.9 -m pip list
-    - name: Python linter
+    - name: List Python packages
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      run: python3.11 -m pip list
+    - name: Python linter for branch-3.5 and branch-4.0
+      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
+    - name: Python linter
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      run: PYTHON_EXECUTABLE=python3.11 ./dev/lint-python
     # Should delete this section after SPARK 3.5 EOL.
     - name: Install dependencies for Python code generation check for branch-3.5
       if: inputs.branch == 'branch-3.5'
@@ -905,6 +918,42 @@ jobs:
       run: ./R/install-dev.sh
     - name: R linter
       run: ./dev/lint-r
+
+  java17:
+    needs: [precondition]
+    if: fromJson(needs.precondition.outputs.required).java17 == 'true'
+    name: Java 17 build with Maven
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with:
+        distribution: zulu
+        java-version: 17
+    - name: Build with Maven
+      run: |
+        export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MAVEN_CLI_OPTS="--no-transfer-progress"
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl clean install
+
+  java25:
+    needs: [precondition]
+    if: fromJson(needs.precondition.outputs.required).java25 == 'true'
+    name: Java 25 build with Maven
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with:
+        distribution: zulu
+        java-version: 25
+    - name: Build with Maven
+      run: |
+        export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MAVEN_CLI_OPTS="--no-transfer-progress"
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl clean install
 
   # Documentation build
   docs:
@@ -985,10 +1034,14 @@ jobs:
         # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
         python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' 'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
-        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly<6.0.0'
+        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.22' pyarrow pandas 'plotly<6.0.0'
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
-    - name: List Python packages
+    - name: List Python packages for branch-3.5 and branch-4.0
+      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: python3.9 -m pip list
+    - name: List Python packages
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      run: python3.11 -m pip list
     - name: Install dependencies for documentation generation
       run: |
         # Keep the version of Bundler here in sync with the following locations:
@@ -997,7 +1050,8 @@ jobs:
         gem install bundler -v 2.4.22
         cd docs
         bundle install --retry=100
-    - name: Run documentation build
+    - name: Run documentation build for branch-3.5 and branch-4.0
+      if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: |
         # We need this link to make sure `python3` points to `python3.9` which contains the prerequisite packages.
         ln -s "$(which python3.9)" "/usr/local/bin/python3"
@@ -1010,6 +1064,30 @@ jobs:
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
+        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
+        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
+        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
+        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
+        echo "SKIP_RDOC: $SKIP_RDOC"
+        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
+        cd docs
+        bundle exec jekyll build
+    - name: Run documentation build
+      if: inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0'
+      run: |
+        # We need this link to make sure `python3` points to `python3.11` which contains the prerequisite packages.
+        ln -s "$(which python3.11)" "/usr/local/bin/python3"
+        # Build docs first with SKIP_API to ensure they are buildable without requiring any
+        # language docs to be built beforehand.
+        cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
+        if [ -f "./dev/is-changed.py" ]; then
+          # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
+          pyspark_modules=`cd dev && python3.11 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
+          if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
+          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
+        fi
+        export PYSPARK_DRIVER_PYTHON=python3.11
+        export PYSPARK_PYTHON=python3.11
         # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
         echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
         echo "SKIP_SCALADOC: $SKIP_SCALADOC"
@@ -1246,9 +1324,9 @@ jobs:
           sudo apt update
           sudo apt-get install r-base
       - name: Start Minikube
-        uses: medyagh/setup-minikube@v0.0.19
+        uses: medyagh/setup-minikube@v0.0.20
         with:
-          kubernetes-version: "1.33.0"
+          kubernetes-version: "1.34.0"
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           cpus: 2
           memory: 6144m
@@ -1266,8 +1344,10 @@ jobs:
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
           if [[ "${{ inputs.branch }}" == 'branch-3.5' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
-          else
+          elif [[ "${{ inputs.branch }}" == 'branch-4.0' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.11.0/installer/volcano-development.yaml || true
+          else
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.12.2/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"

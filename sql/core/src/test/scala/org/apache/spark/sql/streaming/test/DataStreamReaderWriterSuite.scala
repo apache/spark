@@ -34,7 +34,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset.ofRows
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.{Offset, Sink, Source}
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamingQueryException, StreamTest}
@@ -567,7 +568,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("MemorySink can recover from a checkpoint in Complete Mode") {
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
+    Utils.createDirectory(checkpointDir)
     assert(checkpointDir.exists())
     testMemorySinkCheckpointRecovery(checkpointLoc, provideInWriter = true)
   }
@@ -575,7 +576,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("SPARK-18927: MemorySink can recover from a checkpoint provided in conf in Complete Mode") {
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
+    Utils.createDirectory(checkpointDir)
     assert(checkpointDir.exists())
     withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointLoc) {
       testMemorySinkCheckpointRecovery(checkpointLoc, provideInWriter = false)
@@ -588,7 +589,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     val df = ms.toDF().toDF("a")
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
+    Utils.createDirectory(checkpointDir)
     assert(checkpointDir.exists())
 
     val e = intercept[AnalysisException] {

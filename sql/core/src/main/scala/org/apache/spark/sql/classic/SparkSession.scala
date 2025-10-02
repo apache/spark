@@ -31,7 +31,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME, CONFIG}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
@@ -40,7 +40,7 @@ import org.apache.spark.sql
 import org.apache.spark.sql.{Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -450,8 +450,8 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
+          // Check for SQL scripting with positional parameters before creating parameterized query
           if (parsedPlan.isInstanceOf[CompoundBody]) {
-            // Positional parameters are not supported for SQL scripting.
             throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
           }
           PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
@@ -508,6 +508,45 @@ class SparkSession private(
   override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
+
+  /**
+   * Executes a SQL query substituting parameters by the given arguments with optional names,
+   * returning the result as a `DataFrame`. This method allows the inner query to determine
+   * whether to use positional or named parameters based on its parameter markers.
+   */
+  private[sql] def sql(sqlText: String, args: Array[_], paramNames: Array[String]): DataFrame = {
+    sql(sqlText, args, paramNames, new QueryPlanningTracker)
+  }
+
+  /**
+   * Internal implementation of unified parameter API with tracker.
+   */
+  private[sql] def sql(
+      sqlText: String,
+      args: Array[_],
+      paramNames: Array[String],
+      tracker: QueryPlanningTracker): DataFrame =
+    withActive {
+      val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+        if (args.nonEmpty) {
+          // Check for SQL scripting with positional parameters before creating parameterized query
+          if (parsedPlan.isInstanceOf[CompoundBody] && paramNames.isEmpty) {
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          }
+          // Create a general parameter query that can handle both positional and named parameters
+          // The query itself will determine which type to use based on its parameter markers
+          GeneralParameterizedQuery(
+            parsedPlan,
+            args.map(lit(_).expr).toImmutableArraySeq,
+            paramNames.toImmutableArraySeq
+          )
+        } else {
+          parsedPlan
+        }
+      }
+      Dataset.ofRows(self, plan, tracker)
+    }
 
   /** @inheritdoc */
   override def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])

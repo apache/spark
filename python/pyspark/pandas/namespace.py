@@ -76,6 +76,7 @@ from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
     default_session,
+    is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
     name_like_string,
@@ -3630,7 +3631,11 @@ def to_numeric(arg, errors="raise"):
     """
     if isinstance(arg, Series):
         if errors == "coerce":
-            return arg._with_new_scol(arg.spark.column.cast("float"))
+            spark_session = arg._internal.spark_frame.sparkSession
+            if is_ansi_mode_enabled(spark_session):
+                return arg._with_new_scol(arg.spark.column.try_cast("float"))
+            else:
+                return arg._with_new_scol(arg.spark.column.cast("float"))
         elif errors == "raise":
             scol = arg.spark.column
             scol_casted = scol.cast("float")
@@ -3874,7 +3879,6 @@ def _test() -> None:
     from pyspark.sql import SparkSession
     import pyspark.pandas.namespace
     from pandas.util.version import Version
-    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
@@ -3887,10 +3891,6 @@ def _test() -> None:
     globs = pyspark.pandas.namespace.__dict__.copy()
     globs["ps"] = pyspark.pandas
     globs["sf"] = F
-
-    if is_ansi_mode_test:
-        del pyspark.pandas.namespace.melt.__doc__
-        del pyspark.pandas.namespace.to_numeric.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]")

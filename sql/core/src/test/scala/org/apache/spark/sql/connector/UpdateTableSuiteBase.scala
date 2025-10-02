@@ -19,8 +19,9 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableChange, TableInfo}
+import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
@@ -62,6 +63,59 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, 300, "hr", "explicit-text"),
         Row(4, 400, "software", "explicit-text"),
         Row(5, 500, "hr", null)))
+  }
+
+  test("update table with expression-based default values") {
+    val columns = Array(
+      Column.create("pk", IntegerType),
+      Column.create("salary", IntegerType),
+      Column.create("dep", StringType))
+    val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+    catalog.createTable(ident, tableInfo)
+
+    append("pk INT, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    val addColumn = TableChange.addColumn(
+      Array("value"),
+      IntegerType,
+      false, /* not nullable */
+      null, /* no comment */
+      null, /* no position */
+      new ColumnDefaultValue(
+        new GeneralScalarExpression(
+          "+",
+          Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+        LiteralValue(123, IntegerType)))
+    catalog.alterTable(ident, addColumn)
+
+    append("pk INT, salary INT, dep STRING, value INT",
+      """{ "pk": 4, "salary": 400, "dep": "hr", "value": -4 }
+        |{ "pk": 5, "salary": 500, "dep": "hr", "value": -5 }
+        |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", 123),
+        Row(2, 200, "software", 123),
+        Row(3, 300, "hr", 123),
+        Row(4, 400, "hr", -4),
+        Row(5, 500, "hr", -5)))
+
+    sql(s"UPDATE $tableNameAsString SET value = DEFAULT WHERE pk >= 5")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", 123),
+        Row(2, 200, "software", 123),
+        Row(3, 300, "hr", 123),
+        Row(4, 400, "hr", -4),
+        Row(5, 500, "hr", 123)))
   }
 
   test("EXPLAIN only update") {
@@ -556,6 +610,25 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "id": 2, "value": 2.0,  "dep": "software" }
         |{ "pk": 3, "id": 3, "value": 2.0, "dep": "hr" }
         |""".stripMargin)
+
+    // rand() always generates values in [0, 1) range
+    sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")
+
+    checkAnswer(
+      sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
+      Row(2) :: Nil)
+  }
+
+  test("SPARK-53538: update with nondeterministic assignments and no wholestage codegen") {
+    val extraColCount = SQLConf.get.wholeStageMaxNumFields - 4
+    val schema = "pk INT NOT NULL, id INT, value DOUBLE, dep STRING, " +
+      ((1 to extraColCount).map(i => s"col$i INT").mkString(", "))
+    val data = (1 to 3).map { i =>
+      s"""{ "pk": $i, "id": $i, "value": 2.0, "dep": "hr", """ +
+        ((1 to extraColCount).map(j => s""""col$j": $i""").mkString(", ")) +
+      "}"
+    }.mkString("\n")
+    createAndInitTable(schema, data)
 
     // rand() always generates values in [0, 1) range
     sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")

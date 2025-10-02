@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Sort}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -89,14 +88,6 @@ class ExpressionResolver(
   private var lastInvalidExpressionsInTheContextOfOperator: Option[Seq[Expression]] = None
 
   /**
-   * This field contains the aliases of [[AggregateExpression]]s that were extracted during the
-   * most recent expression tree resolution. It is populated in
-   * [[resolveExpressionTreeInOperatorImpl]] when [[ExpressionTreeTraversal]] is popped from the
-   * stack.
-   */
-  private var lastExtractedAggregateExpressionAliases: Option[Seq[Alias]] = None
-
-  /**
    * This is a flag indicating that we are re-analyzing a resolved [[OuterReference]] subtree. It's
    * managed by [[handleResolvedOuterReference]].
    */
@@ -134,7 +125,6 @@ class ExpressionResolver(
 
   private val aliasResolver = new AliasResolver(this)
   private val timezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(this)
-  private val conditionalExpressionResolver = new ConditionalExpressionResolver(this)
   private val binaryArithmeticResolver = new BinaryArithmeticResolver(this)
   private val limitLikeExpressionValidator = new LimitLikeExpressionValidator
   private val aggregateExpressionResolver = new AggregateExpressionResolver(resolver, this)
@@ -144,11 +134,10 @@ class ExpressionResolver(
     aggregateExpressionResolver,
     binaryArithmeticResolver
   )
-  private val timeAddResolver = new TimeAddResolver(this)
-  private val unaryMinusResolver = new UnaryMinusResolver(this)
   private val subqueryExpressionResolver = new SubqueryExpressionResolver(this, resolver)
   private val ordinalResolver = new OrdinalResolver(this)
   private val lcaResolver = new LateralColumnAliasResolver(this)
+  private val semiStructuredExtractResolver = new SemiStructuredExtractResolver(this)
 
   /**
    * Get the expression tree traversal stack.
@@ -192,13 +181,6 @@ class ExpressionResolver(
    */
   def getLastInvalidExpressionsInTheContextOfOperator: Seq[Expression] =
     lastInvalidExpressionsInTheContextOfOperator.getOrElse(Seq.empty)
-
-  /**
-   * Returns all aliases of [[AggregateExpression]]s that were extracted during the most recent
-   * expression tree resolution.
-   */
-  def getLastExtractedAggregateExpressionAliases: Seq[Alias] =
-    lastExtractedAggregateExpressionAliases.getOrElse(Seq.empty)
 
   /**
    * Resolve `unresolvedExpression` which is a child of `parentOperator`. This is the main entry
@@ -277,16 +259,16 @@ class ExpressionResolver(
             subqueryExpressionResolver.resolveScalarSubquery(unresolvedScalarSubquery)
           case unresolvedListQuery: ListQuery =>
             subqueryExpressionResolver.resolveListQuery(unresolvedListQuery)
-          case unresolvedTimeAdd: TimeAdd =>
-            timeAddResolver.resolve(unresolvedTimeAdd)
+          case unresolvedTimestampAdd: TimestampAddInterval =>
+            resolveExpressionGenericallyWithTimezoneWithTypeCoercion(unresolvedTimestampAdd)
           case unresolvedUnaryMinus: UnaryMinus =>
-            unaryMinusResolver.resolve(unresolvedUnaryMinus)
+            resolveExpressionGenericallyWithTypeCoercion(unresolvedUnaryMinus)
           case createNamedStruct: CreateNamedStruct =>
             resolveExpressionGenerically(createNamedStruct)
           case sortOrder: SortOrder =>
             resolveExpressionGenerically(sortOrder)
           case unresolvedConditionalExpression: ConditionalExpression =>
-            conditionalExpressionResolver.resolve(unresolvedConditionalExpression)
+            resolveExpressionGenericallyWithTypeCoercion(unresolvedConditionalExpression)
           case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
             resolveGetViewColumnByNameAndOrdinal(getViewColumnByNameAndOrdinal)
           case getTimeField: GetTimeField =>
@@ -301,6 +283,8 @@ class ExpressionResolver(
             resolveUpCast(unresolvedUpCast)
           case unresolvedCollation: UnresolvedCollation =>
             resolveCollation(unresolvedCollation)
+          case semiStructuredExtract: SemiStructuredExtract =>
+            semiStructuredExtractResolver.resolve(semiStructuredExtract)
           case expression: Expression =>
             resolveExpressionGenericallyWithTypeCoercion(expression)
         }
@@ -541,12 +525,17 @@ class ExpressionResolver(
    * Validate if `expression` is under supported operator or not. In case it's not, add `expression`
    * to the [[ExpressionTreeTraversal.invalidExpressionsInTheContextOfOperator]] list to throw
    * error later, when [[getLastInvalidExpressionsInTheContextOfOperator]] is called by the
-   * [[Resolver]].
+   * [[Resolver]]. Here, we avoid adding [[AggregateExpressions]] when they are under a [[Sort]] or
+   * [[Filter]] on top of [[Aggregate]] as they are not transformed to attributes at the moment.
+   * Please see [[UnsupportedExpressionInOperatorValidation.isExpressionInUnsupportedOperator]] for
+   * more info.
    */
   def validateExpressionUnderSupportedOperator(expression: Expression): Unit = {
     if (UnsupportedExpressionInOperatorValidation.isExpressionInUnsupportedOperator(
-        expression,
-        traversals.current.parentOperator
+        expression = expression,
+        operator = traversals.current.parentOperator,
+        isFilterOnTopOfAggregate = traversals.current.isFilterOnTopOfAggregate,
+        isSortOnTopOfAggregate = traversals.current.isSortOnTopOfAggregate
       )) {
       traversals.current.invalidExpressionsInTheContextOfOperator.add(expression)
     }
@@ -558,7 +547,12 @@ class ExpressionResolver(
       inProjectList: Boolean = false,
       resolvingGroupingExpressions: Boolean = false
   ): (Expression, ExpressionResolutionContext) = {
-    traversals.withNewTraversal(parentOperator) {
+    traversals.withNewTraversal(
+      parentOperator = parentOperator,
+      defaultCollation = resolver.getViewResolver.getDefaultCollation,
+      isFilterOnTopOfAggregate = isFilterOnTopOfAggregate(parentOperator),
+      isSortOnTopOfAggregate = isSortOnTopOfAggregate(parentOperator)
+    ) {
       expressionResolutionContextStack.push(
         new ExpressionResolutionContext(
           isRoot = true,
@@ -573,8 +567,6 @@ class ExpressionResolver(
         lastReferencedAttributes = Some(traversals.current.referencedAttributes)
         lastInvalidExpressionsInTheContextOfOperator =
           Some(traversals.current.invalidExpressionsInTheContextOfOperator.asScala.toSeq)
-        lastExtractedAggregateExpressionAliases =
-          Some(traversals.current.extractedAggregateExpressionAliases.asScala.toSeq)
 
         (resolvedExpression, expressionResolutionContextStack.peek())
       } finally {
@@ -591,15 +583,10 @@ class ExpressionResolver(
         aliasResolver.resolve(unresolvedAlias)
       case unresolvedAttribute: UnresolvedAttribute =>
         resolveAttribute(unresolvedAttribute)
-      case unresolvedStar: UnresolvedStar =>
-        // We don't support edge cases of star usage, e.g. `WHERE col1 IN (*)`
-        throw new ExplicitlyUnsupportedResolverFeature("Star outside of Project list")
       case attributeReference: AttributeReference =>
         handleResolvedAttributeReference(attributeReference)
       case outerReference: OuterReference =>
         handleResolvedOuterReference(outerReference)
-      case _: UnresolvedNamedLambdaVariable =>
-        throw new ExplicitlyUnsupportedResolverFeature("Lambda variables")
       case _ =>
         withPosition(unresolvedNamedExpression) {
           throwUnsupportedSinglePassAnalyzerFeature(unresolvedNamedExpression)
@@ -653,6 +640,9 @@ class ExpressionResolver(
    * In case that attribute is resolved as a literal function (i.e. result is [[CurrentDate]]),
    * perform additional resolution on it.
    *
+   * In case result of the previous step is a recursive data type, we coerce it to stay compatible
+   * with the fixed-point analyzer.
+   *
    * If the attribute is at the top of the project list (which is indicated by
    * [[ExpressionResolutionContext.isTopOfProjectList]]), we preserve the [[Alias]] or remove it
    * otherwise.
@@ -674,11 +664,11 @@ class ExpressionResolver(
               .resolvingGroupingExpressions && traversals.current.groupByAliases
         ),
         canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
-        shouldPreferTableColumnsOverAliases = shouldPreferTableColumnsOverAliases,
+        shouldPreferHiddenOutput = traversals.current.isFilterOnTopOfAggregate,
+        canResolveNameByHiddenOutputInSubquery =
+          subqueryRegistry.currentScope.aggregateExpressionsExtractor.isDefined,
         canReferenceAggregatedAccessOnlyAttributes =
-          expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression,
-        shouldReplaceHiddenOutputCandidatesWitAggregateListAliases =
-          shouldReplaceHiddenOutputCandidatesWitAggregateListAliases
+          expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression
       )
 
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)
@@ -695,7 +685,7 @@ class ExpressionResolver(
           case Some(lateralAttributeReference) =>
             scopes.current.lcaRegistry
               .markAttributeLaterallyReferenced(lateralAttributeReference)
-            candidate.setTagValue(ExpressionResolver.SINGLE_PASS_IS_LCA, ())
+            candidate.setTagValue(ResolverTag.SINGLE_PASS_IS_LCA, ())
             expressionResolutionContext.hasLateralColumnAlias = true
           case None =>
         }
@@ -709,11 +699,16 @@ class ExpressionResolver(
         case other => other
       }
 
+      val coercedCandidate = candidateOrLiteralFunction match {
+        case extractValue: ExtractValue => coerceRecursiveDataTypes(extractValue)
+        case other => other
+      }
+
       val properlyAliasedExpressionTree =
         if (expressionResolutionContext.isTopOfProjectList && nameTarget.aliasName.isDefined) {
-          Alias(candidateOrLiteralFunction, nameTarget.aliasName.get)()
+          Alias(coercedCandidate, nameTarget.aliasName.get)()
         } else {
-          candidateOrLiteralFunction
+          coercedCandidate
         }
 
       properlyAliasedExpressionTree match {
@@ -724,21 +719,49 @@ class ExpressionResolver(
       }
     }
 
+  /**
+   * Coerces recursive types ([[ExtractValue]] expressions) in a bottom up manner. For example:
+   *
+   * {{{
+   * CREATE OR REPLACE TABLE t(col MAP<BIGINT, DOUBLE>);
+   * SELECT col.field FROM t;
+   * }}}
+   *
+   * In this example we need to cast inner field from `String` to `BIGINT`, thus analyzed plan
+   * should look like:
+   *
+   * {{{
+   * Project [col#x[cast(field as bigint)] AS field#x]
+   * +- SubqueryAlias spark_catalog.default.t
+   *    +- Relation spark_catalog.default.t[col#x] parquet
+   * }}}
+   *
+   * This is needed to stay compatible with the fixed-point implementation.
+   */
+  private def coerceRecursiveDataTypes(extractValue: ExtractValue): Expression = {
+    extractValue.transformUp {
+      case field => coerceExpressionTypes(field, traversals.current)
+    }
+  }
+
+  private def isFilterOnTopOfAggregate(parentOperator: LogicalPlan): Boolean = {
+    parentOperator match {
+      case _: Filter if scopes.current.baseAggregate.isDefined => true
+      case _ => false
+    }
+  }
+
+  private def isSortOnTopOfAggregate(parentOperator: LogicalPlan): Boolean = {
+    parentOperator match {
+      case _: Sort if scopes.current.baseAggregate.isDefined => true
+      case _ => false
+    }
+  }
+
   private def canResolveNameByHiddenOutput = traversals.current.parentOperator match {
     case operator @ (_: Filter | _: Sort) => true
     case other => false
   }
-
-  private def shouldPreferTableColumnsOverAliases = traversals.current.parentOperator match {
-    case _: Sort => true
-    case _ => false
-  }
-
-  private def shouldReplaceHiddenOutputCandidatesWitAggregateListAliases =
-    traversals.current.parentOperator match {
-      case _: Sort => true
-      case _ => false
-    }
 
   /**
    * [[AttributeReference]] is already resolved if it's passed to us from DataFrame `col(...)`
@@ -808,9 +831,20 @@ class ExpressionResolver(
   }
 
   /**
-   * [[Literal]] resolution doesn't require any specific resolution logic at this point.
+   * [[Literal]]s inside a View's body with an explicitly set default collation
+   * should be resolved by modifying their [[Literal.dataType]], replacing all occurrences of
+   * the companion object [[StringType]] with a [[StringType]] with default collation.
+   *
+   * In other cases, no specific resolution logic is required.
    */
-  private def resolveLiteral(literal: Literal): Expression = literal
+  private def resolveLiteral(literal: Literal): Expression = {
+    traversals.current.defaultCollation match {
+      case Some(defaultCollation) =>
+        DefaultCollationTypeCoercion(literal, defaultCollation)
+      case None =>
+        literal
+    }
+  }
 
   /**
    * [[SubqueryExpression]]s are special case of [[Predicate and require special resolution logic.
@@ -1013,8 +1047,12 @@ class ExpressionResolver(
       TypeCoercionValidation.failOnTypeCheckResult(resolvedExpression)
     }
 
-    if (!resolvedExpression.resolved) {
-      throwSinglePassFailedToResolveExpression(resolvedExpression)
+    resolvedExpression match {
+      case runtimeReplaceable: RuntimeReplaceable if !runtimeReplaceable.replacement.resolved =>
+        throwFailedToResolveRuntimeReplaceableExpression(runtimeReplaceable)
+      case expression if !expression.resolved =>
+        throwSinglePassFailedToResolveExpression(resolvedExpression)
+      case _ =>
     }
 
     validateExpressionUnderSupportedOperator(resolvedExpression)
@@ -1052,10 +1090,12 @@ class ExpressionResolver(
       context = expression.origin.getQueryContext,
       summary = expression.origin.context.summary()
     )
-}
 
-object ExpressionResolver {
-  private val AMBIGUOUS_SELF_JOIN_METADATA = Seq("__dataset_id", "__col_position")
-  val SINGLE_PASS_SUBTREE_BOUNDARY = TreeNodeTag[Unit]("single_pass_subtree_boundary")
-  val SINGLE_PASS_IS_LCA = TreeNodeTag[Unit]("single_pass_is_lca")
+  private def throwFailedToResolveRuntimeReplaceableExpression(
+      runtimeReplaceable: RuntimeReplaceable) = {
+    throw SparkException.internalError(
+      s"Cannot resolve the runtime replaceable expression ${toSQLExpr(runtimeReplaceable)}. " +
+      s"The replacement is unresolved: ${toSQLExpr(runtimeReplaceable.replacement)}."
+    )
+  }
 }

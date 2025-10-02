@@ -36,11 +36,20 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key)
+    super.afterAll()
+  }
+
   // Tests setup
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.ANSI_ENABLED.key, "true")
-      .set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   // Helpers
@@ -75,7 +84,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   // Handler tests
-  test("duplicate handler for the same condition") {
+  test("duplicate EXIT/EXIT handler for the same condition") {
     val sqlScript =
       """
         |BEGIN
@@ -101,7 +110,85 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       parameters = Map("condition" -> "DUPLICATE_CONDITION"))
   }
 
-  test("duplicate handler for the same sqlState") {
+  test("duplicate EXIT/CONTINUE handler for the same condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE duplicate_condition CONDITION FOR SQLSTATE '12345';
+        |  DECLARE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR duplicate_condition
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR duplicate_condition
+        |  BEGIN
+        |    SET flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "DUPLICATE_CONDITION"))
+  }
+
+  test("duplicate CONTINUE/EXIT handler for the same condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE duplicate_condition CONDITION FOR SQLSTATE '12345';
+        |  DECLARE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR duplicate_condition
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR duplicate_condition
+        |  BEGIN
+        |    SET flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "DUPLICATE_CONDITION"))
+  }
+
+  test("duplicate CONTINUE/CONTINUE handler for the same condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE duplicate_condition CONDITION FOR SQLSTATE '12345';
+        |  DECLARE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR duplicate_condition
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR duplicate_condition
+        |  BEGIN
+        |    SET flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.CONDITION",
+      parameters = Map("condition" -> "DUPLICATE_CONDITION"))
+  }
+
+  test("duplicate EXIT/EXIT handler for the same sqlState") {
     val sqlScript =
       """
         |BEGIN
@@ -111,6 +198,81 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    SET flag = 1;
         |  END;
         |  DECLARE EXIT HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SET flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.SQLSTATE",
+      parameters = Map("sqlState" -> "12345"))
+  }
+
+  test("duplicate EXIT/CONTINUE handler for the same sqlState") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SET flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.SQLSTATE",
+      parameters = Map("sqlState" -> "12345"))
+  }
+
+  test("duplicate CONTINUE/EXIT handler for the same sqlState") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SET flag = 2;
+        |  END;
+        |  SELECT 1/0;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        verifySqlScriptResult(sqlScript, Seq.empty)
+      },
+      condition = "DUPLICATE_EXCEPTION_HANDLER.SQLSTATE",
+      parameters = Map("sqlState" -> "12345"))
+  }
+
+  test("duplicate CONTINUE/CONTINUE handler for the same sqlState") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '12345'
+        |  BEGIN
+        |    SET flag = 1;
+        |  END;
+        |  DECLARE CONTINUE HANDLER FOR SQLSTATE '12345'
         |  BEGIN
         |    SET flag = 2;
         |  END;
@@ -182,7 +344,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
-  test("handler - exit resolve in the same block") {
+  test("exit handler - exit resolve in the same block") {
     val sqlScript =
       """
         |BEGIN
@@ -206,6 +368,35 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(2)),    // select
       Seq(Row(3)),    // select
       Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue after the statement that caused the exception") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SELECT flag;
+        |    SET flag = 1;
+        |  END;
+        |  SELECT 2;
+        |  SELECT 3;
+        |  SELECT 1/0;
+        |  SELECT 4;
+        |  SELECT 5;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
       Seq(Row(1))     // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected = expected)
@@ -237,6 +428,37 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(2)),    // select
       Seq(Row(3)),    // select
       Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue after the if statement when if condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SELECT flag;
+        |    SET flag = 1;
+        |  END;
+        |  SELECT 2;
+        |  SELECT 3;
+        |  IF (1 > 1/0) THEN
+        |    SELECT 4;
+        |  END IF;
+        |  SELECT 5;
+        |  SELECT 6;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(5)),    // select
+      Seq(Row(6)),    // select
       Seq(Row(1))     // select flag from the outer body
     )
     verifySqlScriptResult(sqlScript, expected = expected)
@@ -623,6 +845,530 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_SQLSTATE",
       parameters = Map("sqlState" -> "X22012"))
+  }
+
+  test("handler - correct handler is chosen based on the full error condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITHOUT_SUGGESTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITH_SUGGESTION
+        |  BEGIN
+        |    SELECT 3;
+        |  END;
+        |  SELECT X;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)) // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("handler - full condition takes precedence before main error class") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN
+          |  BEGIN
+          |    SELECT 1;
+          |  END;
+          |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITH_SUGGESTION
+          |  BEGIN
+          |    SELECT 2;
+          |  END;
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  SELECT d FROM t;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(2)) // select
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("handler - catch the main error class without subclass") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN
+          |  BEGIN
+          |    SELECT 1;
+          |  END;
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  SELECT d FROM t;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(1)) // select
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("exit handler - exit resolve when if condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    IF 1 > 1/0 THEN
+        |      SELECT 10;
+        |    END IF;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when if condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    IF 1 > 1/0 THEN
+        |      SELECT 10;
+        |    END IF;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("exit handler - exit resolve when simple case variable computation fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE 1/0
+        |      WHEN flag THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when simple case variable computation fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE 1/0
+        |      WHEN flag THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("exit handler - exit resolve when simple case condition computation fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE flag
+        |      WHEN 1/0 THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when simple case condition computation fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE flag
+        |      WHEN 1/0 THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("exit handler - exit resolve when simple case condition types are mismatch") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR CAST_INVALID_INPUT
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE flag
+        |      WHEN 'teststr' THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when simple case condition types are mismatch") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR CAST_INVALID_INPUT
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE flag
+        |      WHEN 'teststr' THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("exit handler - exit resolve when searched case condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE
+        |      WHEN flag = 1/0 THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when searched case condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE
+        |      WHEN flag = 1/0 THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("exit handler - exit resolve when while condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    WHILE 1 > 1/0 DO
+        |      SELECT 10;
+        |    END WHILE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when while condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    WHILE 1 > 1/0 DO
+        |      SELECT 10;
+        |    END WHILE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when select fails in REPEAT statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    SELECT 2;
+        |    REPEAT
+        |      SELECT 3;
+        |    UNTIL
+        |      1 = 1/0
+        |    END REPEAT;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)),    // select
+      Seq(Row(3)),    // select
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("exit handler - exit resolve when select fails in FOR statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    FOR iter AS (SELECT 1/0) DO
+        |      SELECT 10;
+        |    END FOR;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when select fails in FOR statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    FOR iter AS (SELECT 1/0) DO
+        |      SELECT 10;
+        |    END FOR;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - continue when select fails inside FOR statement body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    FOR iter AS SELECT 1 DO
+        |      SELECT 1/0;
+        |      SELECT 4;
+        |    END FOR;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(4)),    // select
+      Seq(Row(5)),    // select
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
   }
 
   // Tests
@@ -2462,7 +3208,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |          SELECT varL3;
         |          SELECT 1/0;
         |        END;
-
         |        SELECT 5;
         |        SELECT 1/0;
         |        SELECT 6;
@@ -2484,5 +3229,368 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1))
     )
     verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("local variable - multiple variables declared at once") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE localVar1, localVar2, localVar3, localVar4 = 1;
+        |    SELECT localVar1;
+        |    SELECT lbl1.localVar1;
+        |    SELECT localVar2;
+        |    SELECT lbl1.localVar2;
+        |    SELECT localVar3;
+        |    SELECT lbl1.localVar3;
+        |    SELECT localVar4;
+        |    SELECT lbl1.localVar4;
+        |  END;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)), // select localVar1
+      Seq(Row(1)), // select lbl1.localVar1
+      Seq(Row(1)), // select localVar2
+      Seq(Row(1)), // select lbl1.localVar2
+      Seq(Row(1)), // select localVar3
+      Seq(Row(1)), // select lbl1.localVar3
+      Seq(Row(1)), // select localVar4
+      Seq(Row(1)) // select lbl1.localVar4
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - same variable declared twice within same DECLARE statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE var1, vAr1 = 23;
+        |  END;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+    checkError(
+      exception = e,
+      condition = "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+      parameters = Map("variableName" -> toSQLId("lbl1.var1"))
+    )
+  }
+
+  test("local variable - same variable declared twice within same DECLARE OR REPLACE statement") {
+    val sqlScript =
+      """
+        |DECLARE OR REPLACE var1, vAr1 = 23
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      spark.sql(sqlScript)
+    }
+    checkError(
+      exception = e,
+      condition = "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+      parameters = Map("variableName" -> toSQLId("system.session.var1"))
+    )
+  }
+
+  test("local variable - variable declared via IDENTIFIER construct," +
+    "as well as a regular variable within the same DECLARE") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE proxy = "var1";
+        |    DECLARE IDENTIFIER(proxy), var2 = 3;
+        |    SELECT proxy;
+        |    SELECT lbl1.proxy;
+        |    SELECT var1;
+        |    SELECT lbl1.var1;
+        |    SELECT var2;
+        |    SELECT lbl1.var2;
+        |  END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row("var1")), // select proxy
+      Seq(Row("var1")), // select lbl1.proxy
+      Seq(Row(3)), // select var1
+      Seq(Row(3)), // select lbl1.var1
+      Seq(Row(3)), // select var2
+      Seq(Row(3)) // select lbl1.var2
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("Exception handler in a FOR loop - with condition") {
+    withTable("t") {
+      withView("v") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE cnt = 0;
+            |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+            |  CREATE VIEW v AS SELECT a, b FROM t WHERE c > 0;
+            |  FOR tables AS (SELECT * FROM VALUES ('v'), ('v') AS tbl(name)) DO
+            |    lbl: BEGIN
+            |      DECLARE EXIT HANDLER FOR EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE
+            |         BEGIN SET cnt = cnt + 1; END;
+            |      ALTER TABLE IDENTIFIER(tables.name) DEFAULT COLLATION UTF8_LCASE;
+            |    END;
+            |  END FOR;
+            |  SELECT cnt;
+            |END
+            |""".stripMargin
+        val expected = Seq(
+          Seq(Row(2)) // select cnt
+        )
+        verifySqlScriptResult(sqlScript, expected)
+      }
+    }
+  }
+
+  test("Exception handler in a FOR loop - with SQL state") {
+    withTable("t") {
+      withView("v") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE cnt = 0;
+            |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+            |  CREATE VIEW v AS SELECT a, b FROM t WHERE c > 0;
+            |  FOR tables AS (SELECT * FROM VALUES ('v'), ('v') AS tbl(name)) DO
+            |    BEGIN
+            |      DECLARE EXIT HANDLER FOR SQLSTATE '42809'
+            |         BEGIN SET cnt = cnt + 1; END;
+            |      ALTER TABLE IDENTIFIER(tables.name) DEFAULT COLLATION UTF8_LCASE;
+            |    END;
+            |  END FOR;
+            |  SELECT cnt;
+            |END
+            |""".stripMargin
+        val expected = Seq(
+          Seq(Row(2)) // select cnt
+        )
+        verifySqlScriptResult(sqlScript, expected)
+      }
+    }
+  }
+
+  test("Exception in a last statement in if/else") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  IF true THEN
+        |    SELECT 1/0;
+        |  END IF;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in simple case") {
+    val commands =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  CASE 1
+        |    WHEN 1 THEN
+        |      SELECT 1/0;
+        |  END CASE;
+        |  SELECT 2;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("Exception in a last statement in searched case") {
+    val commands =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  CASE
+        |    WHEN 1=1 THEN
+        |      SELECT 1/0;
+        |  END CASE;
+        |  SELECT 2;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("Exception in a last statement in - while") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  WHILE i < 2 DO
+        |    SELECT 1/0;
+        |  END WHILE;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in - repeat") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  REPEAT
+        |    SELECT 1/0;
+        |  UNTIL i = 2
+        |  END REPEAT;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in loop") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  LOOP
+        |    SELECT 1/0;
+        |  END LOOP;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in for") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  FOR row AS (SELECT * FROM VALUES (1), (2), (3) AS tbl(i)) DO
+        |    SELECT 1/0;
+        |  END FOR;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Integer literal column in FOR query") {
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript1, Seq(Seq(Row(2))))
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 DO
+        |    SELECT x.`1`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, Seq(Seq(Row(1))))
+  }
+
+  test("Column with space in FOR query") {
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT 1 AS `Space Column` DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(sqlScript1, expected)
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 AS `Space Column` DO
+        |    SELECT x.`Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, expected)
+  }
+
+  test("FOR query referencing table with space") {
+    withTable("test_tbl") {
+      sql("CREATE TABLE test_tbl (`Space Column` INT) USING parquet")
+      sql("INSERT INTO test_tbl VALUES (1)")
+      val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT * FROM test_tbl DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      val expected = Seq(Seq(Row(1)))
+      verifySqlScriptResult(sqlScript1, expected)
+
+      val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT * FROM test_tbl DO
+        |    SELECT x.`Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      verifySqlScriptResult(sqlScript2, expected)
+    }
   }
 }

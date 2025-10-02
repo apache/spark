@@ -137,12 +137,12 @@ if [[ "$1" == "finalize" ]]; then
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
-  svn update "pyspark_client-$RELEASE_VERSION.tar.gz"
-  svn update "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
+  svn update "pyspark_client-$PYSPARK_VERSION.tar.gz"
+  svn update "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
   twine upload -u __token__ -p $PYPI_API_TOKEN \
     --repository-url https://upload.pypi.org/legacy/ \
-    "pyspark_client-$RELEASE_VERSION.tar.gz" \
-    "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
+    "pyspark_client-$PYSPARK_VERSION.tar.gz" \
+    "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
@@ -157,10 +157,327 @@ if [[ "$1" == "finalize" ]]; then
   git commit -m "Add docs for Apache Spark $RELEASE_VERSION"
   git push origin HEAD:asf-site
   cd ..
-  rm -rf spark-website
-  svn rm --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Remove RC artifacts" --no-auth-cache \
-    "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs"
   echo "docs uploaded"
+
+  echo "Uploading release docs to spark-website"
+  cd spark-website
+
+  # 1. Add download link to documentation.md
+  python3 <<EOF
+import re
+
+release_version = "${RELEASE_VERSION}"
+is_preview = bool(re.search(r'-preview\d*$', release_version))
+base_version = re.sub(r'-preview\d*$', '', release_version)
+
+stable_newline = f'  <li><a href="{{{{site.baseurl}}}}/docs/{release_version}/">Spark {release_version}</a></li>'
+preview_newline = f'  <li><a href="{{{{site.baseurl}}}}/docs/{release_version}/">Spark {release_version}</a></li>'
+
+inserted = False
+
+def parse_version(v):
+    return [int(p) for p in v.strip().split(".")]
+
+def vercmp(v1, v2):
+    a = parse_version(v1)
+    b = parse_version(v2)
+    return (a > b) - (a < b)
+
+with open("documentation.md") as f:
+    lines = f.readlines()
+
+with open("documentation.md", "w") as f:
+    if is_preview:
+        in_preview_section = False
+        for i, line in enumerate(lines):
+            if '<p>Documentation for preview releases:</p>' in line:
+                in_preview_section = True
+                f.write(line)
+                continue
+
+            if in_preview_section and re.search(r'docs/\d+\.\d+\.\d+-preview\d*/', line):
+                existing_version = re.search(r'docs/(\d+\.\d+\.\d+-preview\d*)/', line).group(1)
+
+                if existing_version == release_version:
+                    inserted = True  # Already exists, don't add
+                elif not inserted:
+                    base_existing = re.sub(r'-preview\d*$', '', existing_version)
+                    preview_num_existing = int(re.search(r'preview(\d*)', existing_version).group(1) or "0")
+                    preview_num_new = int(re.search(r'preview(\d*)', release_version).group(1) or "0")
+
+                    if (vercmp(base_version, base_existing) > 0) or \
+                       (vercmp(base_version, base_existing) == 0 and preview_num_new >= preview_num_existing):
+                        f.write(preview_newline + "\n")
+                        inserted = True
+
+                f.write(line)
+                continue
+
+            if in_preview_section and "</ul>" in line and not inserted:
+                f.write(preview_newline + "\n")
+                inserted = True
+            f.write(line)
+    else:
+        for line in lines:
+            match = re.search(r'docs/(\d+\.\d+\.\d+)/', line)
+            if not inserted and match:
+                existing_version = match.group(1)
+                if vercmp(release_version, existing_version) >= 0:
+                    f.write(stable_newline + "\n")
+                    inserted = True
+            f.write(line)
+        if not inserted:
+            f.write(stable_newline + "\n")
+EOF
+
+  echo "Edited documentation.md"
+
+  # 2. Add download link to js/downloads.js
+  if [[ "$RELEASE_VERSION" =~ -preview[0-9]*$ ]]; then
+    echo "Skipping js/downloads.js for preview release: $RELEASE_VERSION"
+  else
+    RELEASE_DATE=$(TZ=America/Los_Angeles date +"%m/%d/%Y")
+    IFS='.' read -r rel_maj rel_min rel_patch <<< "$RELEASE_VERSION"
+    NEW_PACKAGES="packagesV14"
+    if [[ "$rel_maj" -ge 4 ]]; then
+      NEW_PACKAGES="packagesV15"
+    fi
+
+    python3 <<EOF
+import re
+
+release_version = "${RELEASE_VERSION}"
+release_date = "${RELEASE_DATE}"
+new_packages = "${NEW_PACKAGES}"
+newline = f'addRelease("{release_version}", new Date("{release_date}"), {new_packages}, true);'
+
+new_major, new_minor, new_patch = [int(p) for p in release_version.split(".")]
+
+def parse_version(v):
+    return [int(p) for p in v.strip().split(".")]
+
+def vercmp(v1, v2):
+    a = parse_version(v1)
+    b = parse_version(v2)
+    return (a > b) - (a < b)
+
+inserted = replaced = False
+
+with open("js/downloads.js") as f:
+    lines = f.readlines()
+
+with open("js/downloads.js", "w") as f:
+    for line in lines:
+        m = re.search(r'addRelease\("(\d+\.\d+\.\d+)"', line)
+        if m:
+            existing_version = m.group(1)
+            cmp_result = vercmp(release_version, existing_version)
+            ex_major, ex_minor, ex_patch = parse_version(existing_version)
+
+            if cmp_result == 0:
+                f.write(newline + "\n")
+                replaced = True
+            elif not replaced and ex_major == new_major and ex_minor == new_minor:
+                f.write(newline + "\n")
+                replaced = True
+            elif not replaced and not inserted and cmp_result > 0:
+                f.write(newline + "\n")
+                f.write(line)
+                inserted = True
+            else:
+                f.write(line)
+        else:
+            f.write(line)
+    if not replaced and not inserted:
+        f.write(newline + "\n")
+EOF
+
+    echo "Edited js/downloads.js"
+  fi
+
+  # 3. Add news post
+  RELEASE_DATE=$(TZ=America/Los_Angeles date +"%Y-%m-%d")
+  FILENAME="news/_posts/${RELEASE_DATE}-spark-${RELEASE_VERSION//./-}-released.md"
+  mkdir -p news/_posts
+
+  if [[ "$RELEASE_VERSION" =~ -preview[0-9]*$ ]]; then
+    BASE_VERSION="${RELEASE_VERSION%%-preview*}"
+    cat > "$FILENAME" <<EOF
+---
+layout: post
+title: Preview release of Spark ${BASE_VERSION}
+categories:
+- News
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  _edit_last: '4'
+  _wpas_done_all: '1'
+---
+To enable wide-scale community testing of the upcoming Spark ${BASE_VERSION} release, the Apache Spark community has posted a
+<a href="${RELEASE_LOCATION}/spark-${RELEASE_VERSION}">Spark ${RELEASE_VERSION} release</a>.
+This preview is not a stable release in terms of either API or functionality, but it is meant to give the community early
+access to try the code that will become Spark ${BASE_VERSION}. If you would like to test the release,
+please <a href="${RELEASE_LOCATION}/spark-${RELEASE_VERSION}">download</a> it, and send feedback using either
+<a href="https://spark.apache.org/community.html">mailing lists</a> or
+<a href="https://issues.apache.org/jira/browse/SPARK/?selectedTab=com.atlassian.jira.jira-projects-plugin:summary-panel">JIRA</a>.
+The documentation is available at the <a href="https://spark.apache.org/docs/${RELEASE_VERSION}/">link</a>.
+
+We'd like to thank our contributors and users for their contributions and early feedback to this release. This release would not have been possible without you.
+EOF
+
+  else
+    cat > "$FILENAME" <<EOF
+---
+layout: post
+title: Spark ${RELEASE_VERSION} released
+categories:
+- News
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  _edit_last: '4'
+  _wpas_done_all: '1'
+---
+We are happy to announce the availability of <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION}.html" title="Spark Release ${RELEASE_VERSION}">Apache Spark ${RELEASE_VERSION}</a>! Visit the <a href="{{site.baseurl}}/releases/spark-release-${RELEASE_VERSION}.html" title="Spark Release ${RELEASE_VERSION}">release notes</a> to read about the new features, or <a href="{{site.baseurl}}/downloads.html">download</a> the release today.
+EOF
+  fi
+
+  echo "Created $FILENAME"
+
+  # 4. Add release notes with Python to extract JIRA version ID
+  if [[ "$RELEASE_VERSION" =~ -preview[0-9]*$ ]]; then
+    echo "Skipping JIRA release notes for preview release: $RELEASE_VERSION"
+  else
+    RELEASE_DATE=$(TZ=America/Los_Angeles date +"%Y-%m-%d")
+    JIRA_PROJECT_ID=12315420
+    JIRA_URL="https://issues.apache.org/jira/rest/api/2/project/SPARK/versions"
+    JSON=$(curl -s "$JIRA_URL")
+
+    VERSION_ID=$(python3 - <<EOF
+import sys, json
+
+release_version = "${RELEASE_VERSION}"
+json_str = """$JSON"""
+
+try:
+    versions = json.loads(json_str)
+except Exception as e:
+    print(f"Error parsing JSON: {e}", file=sys.stderr)
+    sys.exit(1)
+
+version_id = ""
+for v in versions:
+    if v.get("name") == release_version:
+        version_id = v.get("id", "")
+        break
+
+print(version_id)
+EOF
+    )
+
+    if [[ -z "$VERSION_ID" ]]; then
+      echo "Error: Couldn't find JIRA version ID for $RELEASE_VERSION" >&2
+    fi
+
+    JIRA_LINK="https://issues.apache.org/jira/secure/ReleaseNote.jspa?projectId=${JIRA_PROJECT_ID}&version=${VERSION_ID}"
+
+    IFS='.' read -r rel_maj rel_min rel_patch <<< "$RELEASE_VERSION"
+    if [[ "$rel_patch" -eq 0 ]]; then
+      ACKNOWLEDGE="patches and features to this release."
+      BODY="Apache Spark ${RELEASE_VERSION} is a new feature release. It introduces new functionality and improvements. We encourage users to try it and provide feedback."
+    else
+      ACKNOWLEDGE="patches to this release."
+      BODY="Apache Spark ${RELEASE_VERSION} is a maintenance release containing security and correctness fixes. This release is based on the branch-${rel_maj}.${rel_min} maintenance branch of Spark. We strongly recommend all ${rel_maj}.${rel_min} users to upgrade to this stable release."
+    fi
+
+    BODY+="
+
+You can find the list of resolved issues and detailed changes in the [JIRA release notes](${JIRA_LINK}).
+
+We would like to acknowledge all community members for contributing ${ACKNOWLEDGE}"
+
+    FILENAME="releases/_posts/${RELEASE_DATE}-spark-release-${RELEASE_VERSION}.md"
+    mkdir -p releases/_posts
+    cat > "$FILENAME" <<EOF
+---
+layout: post
+title: Spark Release ${RELEASE_VERSION}
+categories: []
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  _edit_last: '4'
+  _wpas_done_all: '1'
+---
+
+${BODY}
+EOF
+
+    echo "Created $FILENAME"
+  fi
+
+  # 5. Build the website
+  bundle install
+  bundle exec jekyll build
+
+  # 6. Update latest or preview symlink
+  IFS='.' read -r rel_maj rel_min rel_patch <<< "$RELEASE_VERSION"
+
+  if [[ "$RELEASE_VERSION" =~ -preview[0-9]*$ ]]; then
+    LINK_PATH="site/docs/preview"
+
+    ln -sfn "$RELEASE_VERSION" "$LINK_PATH"
+    echo "Updated symlink $LINK_PATH -> $RELEASE_VERSION (preview release)"
+
+  else
+    LINK_PATH="site/docs/latest"
+
+    if [[ "$rel_patch" -eq 0 ]]; then
+      if [[ -L "$LINK_PATH" ]]; then
+        CURRENT_TARGET=$(readlink "$LINK_PATH")
+      else
+        CURRENT_TARGET=""
+      fi
+
+      if [[ "$CURRENT_TARGET" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IFS='.' read -r cur_maj cur_min cur_patch <<< "$CURRENT_TARGET"
+
+        if [[ "$rel_maj" -gt "$cur_maj" ]]; then
+          ln -sfn "$RELEASE_VERSION" "$LINK_PATH"
+          echo "Updated symlink $LINK_PATH -> $RELEASE_VERSION (major version increased)"
+        elif [[ "$rel_maj" -eq "$cur_maj" && "$rel_min" -gt "$cur_min" ]]; then
+          ln -sfn "$RELEASE_VERSION" "$LINK_PATH"
+          echo "Updated symlink $LINK_PATH -> $RELEASE_VERSION (minor version increased)"
+        else
+          echo "Symlink $LINK_PATH points to $CURRENT_TARGET with equal or newer major.minor, no change"
+        fi
+      else
+        echo "No valid existing version target."
+      fi
+    else
+      echo "Patch release detected ($RELEASE_VERSION), not updating symlink"
+    fi
+  fi
+
+  git add .
+  git commit -m "Add release docs for Apache Spark $RELEASE_VERSION"
+  git push origin HEAD:asf-site
+  cd ..
+  echo "release docs uploaded"
+  rm -rf spark-website
+
+  # Moves the docs from dev directory to release directory.
+  echo "Moving Spark docs to the release directory"
+  svn mv --username "$ASF_USERNAME" --password "$ASF_PASSWORD" -m"Apache Spark $RELEASE_VERSION" \
+    --no-auth-cache "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs/_site" "$RELEASE_LOCATION/docs/$RELEASE_VERSION"
+  echo "Spark docs moved"
 
   # Moves the binaries from dev directory to release directory.
   echo "Moving Spark binaries to the release directory"
@@ -175,6 +492,75 @@ if [[ "$1" == "finalize" ]]; then
   (cd svn-spark && svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Update KEYS")
   echo "KEYS sync'ed"
   rm -rf svn-spark
+
+  # TODO: Test it in the actual release
+  # Release artifacts in the Nexus repository
+  # Find latest orgapachespark-* repo for this release version
+  REPO_ID=$(curl --retry 10 --retry-all-errors -s -u "$ASF_USERNAME:$ASF_PASSWORD" \
+    https://repository.apache.org/service/local/staging/profile_repositories | \
+    grep -A 5 "<repositoryId>orgapachespark-" | \
+    awk '/<repositoryId>/ { id = $0 } /<description>/ && $0 ~ /Apache Spark '"$RELEASE_VERSION"'/ { print id }' | \
+    grep -oP '(?<=<repositoryId>)orgapachespark-[0-9]+(?=</repositoryId>)' | \
+    sort -V | tail -n 1)
+
+  if [[ -z "$REPO_ID" ]]; then
+    echo "No matching staging repository found for Apache Spark $RELEASE_VERSION"
+    exit 1
+  fi
+
+  echo "Using repository ID: $REPO_ID"
+
+  # Release the repository
+  curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+    -H "Content-Type: application/json" \
+    -X POST https://repository.apache.org/service/local/staging/bulk/promote \
+    -d "{\"data\": {\"stagedRepositoryIds\": [\"$REPO_ID\"], \"description\": \"Apache Spark $RELEASE_VERSION\"}}"
+
+  # Wait for release to complete
+  echo "Waiting for release to complete..."
+  while true; do
+    STATUS=$(curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+      https://repository.apache.org/service/local/staging/repository/$REPO_ID | \
+      grep -oPm1 "(?<=<type>)[^<]+")
+    echo "Current state: $STATUS"
+    if [[ "$STATUS" == "released" ]]; then
+      echo "Release complete."
+      break
+    elif [[ "$STATUS" == "release_failed" || "$STATUS" == "error" ]]; then
+      echo "Release failed."
+      exit 1
+    elif [[ "$STATUS" == "open" ]]; then
+      echo "Repository is still open. Cannot release. Please close it first."
+      exit 1
+    fi
+    sleep 10
+  done
+
+  # Drop the repository after release
+  curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+    -H "Content-Type: application/json" \
+    -X POST https://repository.apache.org/service/local/staging/bulk/drop \
+    -d "{\"data\": {\"stagedRepositoryIds\": [\"$REPO_ID\"], \"description\": \"Dropped after release\"}}"
+
+  echo "Done."
+
+  # Remove old releases from the mirror
+  # Extract major.minor prefix
+  RELEASE_SERIES=$(echo "$RELEASE_VERSION" | cut -d. -f1-2)
+  
+  # Fetch existing dist URLs
+  OLD_VERSION=$(svn ls https://dist.apache.org/repos/dist/release/spark/ | \
+    grep "^spark-$RELEASE_SERIES" | \
+    grep -v "^spark-$RELEASE_VERSION/" | \
+    sed 's#/##' | sed 's/^spark-//' | \
+    sort -V | tail -n 1)
+  
+  if [[ -n "$OLD_VERSION" ]]; then
+    echo "Removing old version: spark-$OLD_VERSION"
+    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
+  else
+    echo "No previous $RELEASE_SERIES version found to remove. Manually remove it if there is."
+  fi
 
   exit 0
 fi
@@ -598,6 +984,99 @@ if [[ "$1" == "publish-release" ]]; then
       -H "Content-Type:application/xml" -v \
       $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
     echo "Closed Nexus staging repository: $staged_repo_id"
+
+    echo "Sending the RC vote email"
+    EMAIL_TO="dev@spark.apache.org"
+    EMAIL_SUBJECT="[VOTE] Release Spark ${SPARK_VERSION} (RC${SPARK_RC_COUNT})"
+
+    # Calculate deadline in Pacific Time (PST/PDT)
+    DEADLINE=$(TZ=America/Los_Angeles date -d "+73 hour" "+%a, %d %b %Y %H:%M:%S %Z")
+    PYSPARK_VERSION=`echo "$RELEASE_VERSION" |  sed -e "s/-/./" -e "s/preview/dev/"`
+
+    JIRA_API_URL="https://issues.apache.org/jira/rest/api/2/project/SPARK/versions"
+    SPARK_VERSION_BASE=$(echo "$SPARK_VERSION" | sed 's/-preview[0-9]*//')
+    JIRA_VERSION_ID=$(curl -s "$JIRA_API_URL" | \
+      # Split JSON objects by replacing '},{' with a newline-separated pattern
+      tr '}' '\n' | \
+      # Find the block containing the exact version name
+      grep -F "\"name\":\"$SPARK_VERSION_BASE\"" -A 5 | \
+      # Extract the line with "id"
+      grep '"id"' | \
+      # Extract the numeric id value (assuming "id":"123456")
+      sed -E 's/.*"id":"?([0-9]+)"?.*/\1/' | \
+      head -1)
+
+    # Configure msmtp
+    cat > ~/.msmtprc <<EOF
+defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        ~/.msmtp.log
+
+account        apache
+host           mail-relay.apache.org
+port           587
+from           $ASF_USERNAME@apache.org
+user           $ASF_USERNAME
+password       $ASF_PASSWORD
+
+account default : apache
+EOF
+
+    chmod 600 ~/.msmtprc
+
+    # Compose and send the email
+    {
+      echo "From: $ASF_USERNAME@apache.org"
+      echo "To: $EMAIL_TO"
+      echo "Subject: $EMAIL_SUBJECT"
+      echo
+      echo "Please vote on releasing the following candidate as Apache Spark version ${SPARK_VERSION}."
+      echo
+      echo "The vote is open until ${DEADLINE} and passes if a majority +1 PMC votes are cast, with"
+      echo "a minimum of 3 +1 votes."
+      echo
+      echo "[ ] +1 Release this package as Apache Spark ${SPARK_VERSION}"
+      echo "[ ] -1 Do not release this package because ..."
+      echo
+      echo "To learn more about Apache Spark, please see https://spark.apache.org/"
+      echo
+      echo "The tag to be voted on is ${GIT_REF} (commit ${git_hash}):"
+      echo "https://github.com/apache/spark/tree/${GIT_REF}"
+      echo
+      echo "The release files, including signatures, digests, etc. can be found at:"
+      echo "https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-bin/"
+      echo
+      echo "Signatures used for Spark RCs can be found in this file:"
+      echo "https://downloads.apache.org/spark/KEYS"
+      echo
+      echo "The staging repository for this release can be found at:"
+      echo "https://repository.apache.org/content/repositories/${staged_repo_id}/"
+      echo
+      echo "The documentation corresponding to this release can be found at:"
+      echo "https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-docs/"
+      echo
+      echo "The list of bug fixes going into ${SPARK_VERSION} can be found at the following URL:"
+      echo "https://issues.apache.org/jira/projects/SPARK/versions/${JIRA_VERSION_ID}"
+      echo
+      echo "FAQ"
+      echo
+      echo "========================="
+      echo "How can I help test this release?"
+      echo "========================="
+      echo
+      echo "If you are a Spark user, you can help us test this release by taking"
+      echo "an existing Spark workload and running on this release candidate, then"
+      echo "reporting any regressions."
+      echo
+      echo "If you're working in PySpark you can set up a virtual env and install"
+      echo "the current RC via \"pip install https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-bin/pyspark-${PYSPARK_VERSION}.tar.gz\""
+      echo "and see if anything important breaks."
+      echo "In the Java/Scala, you can add the staging repository to your project's resolvers and test"
+      echo "with the RC (make sure to clean up the artifact cache before/after so"
+      echo "you don't end up building with an out of date RC going forward)."
+    } | msmtp -t
   fi
 
   popd

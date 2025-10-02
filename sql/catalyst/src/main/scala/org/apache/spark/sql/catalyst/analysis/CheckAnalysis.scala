@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.analysis.ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg, Median, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
@@ -437,51 +438,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
-          case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
-            w.failAnalysis(
-              errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
-              messageParameters = Map("windowExpr" -> toSQLExpr(w)))
-
-          case w @ WindowExpression(wf: FrameLessOffsetWindowFunction,
-            WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
-             if order.isEmpty || !frame.isOffset =>
-            w.failAnalysis(
-              errorClass = "WINDOW_FUNCTION_AND_FRAME_MISMATCH",
-              messageParameters = Map(
-                "funcName" -> toSQLExpr(wf),
-                "windowExpr" -> toSQLExpr(w)))
-
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
             if agg.isDistinct && listAgg.needSaveOrderValue =>
             throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
               listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
 
           case w: WindowExpression =>
-            // Only allow window functions with an aggregate expression or an offset window
-            // function or a Pandas window UDF.
-            w.windowFunction match {
-              case agg @ AggregateExpression(fun: ListAgg, _, _, _, _)
-                // listagg(...) WITHIN GROUP (ORDER BY ...) OVER (ORDER BY ...) is unsupported
-                if fun.orderingFilled && (w.windowSpec.orderSpec.nonEmpty ||
-                  w.windowSpec.frameSpecification !=
-                  SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)) =>
-                agg.failAnalysis(
-                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
-                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
-              case agg @ AggregateExpression(
-                _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
-                if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
-                    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
-                agg.failAnalysis(
-                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
-                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
-              case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
-                  _: AggregateWindowFunction => // OK
-              case other =>
-                other.failAnalysis(
-                  errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
-                  messageParameters = Map("sqlExpr" -> toSQLExpr(other)))
-            }
+            WindowResolution.validateResolvedWindowExpression(w)
 
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
@@ -569,7 +532,19 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 messageParameters = Map.empty)
             }
 
-          case a: Aggregate => ExprUtils.assertValidAggregation(a)
+          case a: Aggregate =>
+            a.groupingExpressions.foreach(
+              expression =>
+                if (!expression.deterministic) {
+                  throw SparkException.internalError(
+                    msg = s"Non-deterministic expression '${toSQLExpr(expression)}' should not " +
+                      "appear in grouping expression.",
+                    context = expression.origin.getQueryContext,
+                    summary = expression.origin.context.summary
+                  )
+                }
+            )
+            ExprUtils.assertValidAggregation(a)
 
           case CollectMetrics(name, metrics, _, _) =>
             if (name == null || name.isEmpty) {
@@ -747,7 +722,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case c: CreateVariable
               if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
-            val ident = c.name.asInstanceOf[ResolvedIdentifier]
+            val ident = c.names(0).asInstanceOf[ResolvedIdentifier]
             val varName = toSQLId(
               (ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
                 .toImmutableArraySeq)
@@ -915,6 +890,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map(
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
+          case j @ LateralJoin(_, right, _, _)
+              if j.getTagValue(LateralJoin.BY_TABLE_ARGUMENT).isEmpty =>
+            right.plan.foreach {
+              case Generate(pyudtf: PythonUDTF, _, _, _, _, _)
+                  if pyudtf.evalType == PythonEvalType.SQL_ARROW_UDTF =>
+                  j.failAnalysis(
+                    errorClass = "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED",
+                    messageParameters = Map.empty)
+              case _ =>
+            }
+
           case _ => // Analysis successful!
         }
     }
@@ -947,30 +933,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     if (expr.plan.isStreaming) {
       plan.failAnalysis("INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY", Map.empty)
     }
-    assertNoRecursiveCTE(expr.plan)
     checkAnalysis0(expr.plan)
     ValidateSubqueryExpression(plan, expr)
   }
 
-  private def assertNoRecursiveCTE(plan: LogicalPlan): Unit = {
-    plan.foreach {
-      case r: CTERelationRef if r.recursive =>
-        throw new AnalysisException(
-          errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
-          messageParameters = Map.empty)
-      case p => p.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach {
-        expr => expr.foreach {
-          case s: SubqueryExpression => assertNoRecursiveCTE(s.plan)
-          case _ =>
-        }
-      }
-    }
-  }
-
   /**
    * Validate that collected metrics names are unique. The same name cannot be used for metrics
-   * with different results. However multiple instances of metrics with with same result and name
-   * are allowed (e.g. self-joins).
+   * with different results. However, multiple instances of metrics with same result and name are
+   * allowed (e.g. self-joins).
    */
   private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
     val metricsMap = mutable.Map.empty[String, CollectMetrics]

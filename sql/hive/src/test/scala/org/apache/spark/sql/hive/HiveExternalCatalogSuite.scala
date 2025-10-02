@@ -103,7 +103,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       """.stripMargin)
 
     val newSchema = new StructType().add("a", "string").add("b", "string").add("c", "string")
-    catalog.alterTableDataSchema("db1", "t", newSchema)
+    catalog.alterTableSchema("db1", "t", newSchema)
 
     assert(catalog.getTable("db1", "t").schema == newSchema)
     val bucketString = externalCatalog.client.runSqlHive("DESC FORMATTED db1.t")
@@ -234,7 +234,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     val newSchema = StructType(Seq(
       StructField("col1", StringType("UTF8_LCASE"))
     ))
-    catalog.alterTableDataSchema("db1", tableName, newSchema)
+    catalog.alterTableSchema("db1", tableName, newSchema)
 
     val alteredRawTable = externalCatalog.getRawTable("db1", tableName)
     assert(DataTypeUtils.sameType(alteredRawTable.schema, noCollationsSchema))

@@ -20,17 +20,21 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.DateTimeException
 import java.util.Locale
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
-import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber}
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, IntegerType, ObjectType, TimeType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, LongType, ObjectType, TimeType}
+import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -206,8 +210,7 @@ case class MinutesOfTime(child: Expression)
     Seq(child.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -266,8 +269,7 @@ case class HoursOfTime(child: Expression)
     Seq(child.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -315,9 +317,11 @@ object HourExpressionBuilder extends ExpressionBuilder {
 case class SecondsOfTimeWithFraction(child: Expression)
   extends RuntimeReplaceable
   with ExpectsInputTypes {
-
   override def replacement: Expression = {
-
+    val precision = child.dataType match {
+      case TimeType(p) => p
+      case _ => TimeType.MIN_PRECISION
+    }
     StaticInvoke(
       classOf[DateTimeUtils.type],
       DecimalType(8, 6),
@@ -325,10 +329,8 @@ case class SecondsOfTimeWithFraction(child: Expression)
       Seq(child, Literal(precision)),
       Seq(child.dataType, IntegerType))
   }
-  private val precision: Int = child.dataType.asInstanceOf[TimeType].precision
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimeType(precision))
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -350,8 +352,7 @@ case class SecondsOfTime(child: Expression)
     Seq(child.dataType)
   )
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*))
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
 
   override def children: Seq[Expression] = Seq(child)
 
@@ -429,16 +430,24 @@ object SecondExpressionBuilder extends ExpressionBuilder {
   group = "datetime_funcs",
   since = "4.1.0"
 )
-case class CurrentTime(child: Expression = Literal(TimeType.MICROS_PRECISION))
-  extends UnaryExpression with FoldableUnevaluable with ImplicitCastInputTypes {
+case class CurrentTime(
+    child: Expression = Literal(TimeType.MICROS_PRECISION),
+    timeZoneId: Option[String] = None) extends UnaryExpression
+  with TimeZoneAwareExpression with ImplicitCastInputTypes with CodegenFallback {
 
   def this() = {
-    this(Literal(TimeType.MICROS_PRECISION))
+    this(Literal(TimeType.MICROS_PRECISION), None)
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+  def this(child: Expression) = {
+    this(child, None)
+  }
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
 
   override def nullable: Boolean = false
+
+  override def foldable: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = {
     // Check foldability
@@ -496,11 +505,19 @@ case class CurrentTime(child: Expression = Literal(TimeType.MICROS_PRECISION))
 
   override def prettyName: String = "current_time"
 
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
+
+  override def eval(input: InternalRow): Any = {
+    val currentTimeOfDayNanos = DateTimeUtils.instantToNanosOfDay(java.time.Instant.now(), zoneId)
+    DateTimeUtils.truncateTimeToPrecision(currentTimeOfDayNanos, precision)
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -540,11 +557,195 @@ case class MakeTime(
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
     TimeType(TimeType.MICROS_PRECISION),
-    "timeToMicros",
+    "makeTime",
     children,
     inputTypes
   )
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): MakeTime =
     copy(hours = newChildren(0), minutes = newChildren(1), secsAndMicros = newChildren(2))
+}
+
+/**
+ * Adds day-time interval to time.
+ */
+case class TimeAddInterval(time: Expression, interval: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def left: Expression = time
+  override def right: Expression = interval
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType, DayTimeIntervalType)
+
+  override def replacement: Expression = {
+    val (timePrecision, intervalEndField) = (time.dataType, interval.dataType) match {
+      case (TimeType(p), DayTimeIntervalType(_, endField)) => (p, endField)
+      case _ => throw SparkException.internalError("Unexpected input types: " +
+        s"time type ${time.dataType.sql}, interval type ${interval.dataType.sql}.")
+    }
+    val intervalPrecision = if (intervalEndField < SECOND) {
+      TimeType.MIN_PRECISION
+    } else {
+      TimeType.MICROS_PRECISION
+    }
+    val targetPrecision = Math.max(timePrecision, intervalPrecision)
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      TimeType(targetPrecision),
+      "timeAddInterval",
+      Seq(time, Literal(timePrecision), interval, Literal(intervalEndField),
+        Literal(targetPrecision)),
+      Seq(AnyTimeType, IntegerType, DayTimeIntervalType, ByteType, IntegerType),
+      propagateNull = nullIntolerant)
+  }
+
+  override protected def withNewChildrenInternal(
+      newTime: Expression, newInterval: Expression): TimeAddInterval =
+    copy(time = newTime, interval = newInterval)
+}
+
+/**
+ * Returns a day-time interval between time values.
+ */
+case class SubtractTimes(left: Expression, right: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType, AnyTimeType)
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    DayTimeIntervalType(HOUR, SECOND),
+    "subtractTimes",
+    children,
+    inputTypes,
+    propagateNull = nullIntolerant)
+
+  override def toString: String = s"$left - $right"
+  override def sql: String = s"${left.sql} - ${right.sql}"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): SubtractTimes =
+    copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Returns the difference between two times, measured in specified units.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(unit, start, end) - Gets the difference between the times in the specified units.
+  """,
+  arguments = """
+    Arguments:
+      * unit - the unit of the difference between the given times
+          - "HOUR"
+          - "MINUTE"
+          - "SECOND"
+          - "MILLISECOND"
+          - "MICROSECOND"
+      * start - a starting TIME expression
+      * end - an ending TIME expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', TIME'20:30:29', TIME'21:30:28');
+       0
+      > SELECT _FUNC_('HOUR', TIME'20:30:29', TIME'21:30:29');
+       1
+      > SELECT _FUNC_('HOUR', TIME'20:30:29', TIME'12:00:00');
+       -8
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+case class TimeDiff(
+    unit: Expression,
+    start: Expression,
+    end: Expression)
+  extends TernaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes {
+
+  override def first: Expression = unit
+  override def second: Expression = start
+  override def third: Expression = end
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), AnyTimeType, AnyTimeType)
+
+  override def dataType: DataType = LongType
+
+  override def prettyName: String = "time_diff"
+
+  override protected def withNewChildrenInternal(
+      newUnit: Expression, newStart: Expression, newEnd: Expression): TimeDiff = {
+    copy(unit = newUnit, start = newStart, end = newEnd)
+  }
+
+  override def replacement: Expression = {
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      dataType,
+      "timeDiff",
+      Seq(unit, start, end),
+      Seq(unit.dataType, start.dataType, end.dataType)
+    )
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(unit, time) - Returns `time` truncated to the `unit`.
+  """,
+  arguments = """
+    Arguments:
+      * unit - the unit to truncate to
+          - "HOUR" - zero out the minutes and seconds with fraction part
+          - "MINUTE" - zero out the seconds with fraction part
+          - "SECOND" - zero out the fraction part of seconds
+          - "MILLISECOND" - zero out the microseconds
+          - "MICROSECOND" - zero out the nanoseconds
+      * time - a TIME expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', TIME'09:32:05.359');
+       09:00:00
+      > SELECT _FUNC_('MILLISECOND', TIME'09:32:05.123456');
+       09:32:05.123
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+case class TimeTrunc(unit: Expression, time: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override def left: Expression = unit
+  override def right: Expression = time
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), AnyTimeType)
+
+  override def dataType: DataType = time.dataType
+
+  override def prettyName: String = "time_trunc"
+
+  override protected def withNewChildrenInternal(
+      newUnit: Expression, newTime: Expression): TimeTrunc =
+    copy(unit = newUnit, time = newTime)
+
+  override def replacement: Expression = {
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      dataType,
+      "timeTrunc",
+      Seq(unit, time),
+      Seq(unit.dataType, time.dataType)
+    )
+  }
 }

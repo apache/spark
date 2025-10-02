@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, Un
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -1147,6 +1148,12 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     hashMap
   }
 
+  private lazy val normalizer: Any => Any = keyType match {
+    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
+    case _ => identity
+  }
+
   private def getKeysWithIndexesFastAsJava(
       keys1: ArrayData,
       keys2: ArrayData
@@ -1155,7 +1162,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     for ((z, array) <- Array((0, keys1), (1, keys2))) {
       var i = 0
       while (i < array.numElements()) {
-        val key = array.get(i, keyType)
+        val key = normalizer(array.get(i, keyType))
         Option(hashMap.get(key)) match {
           case Some(indexes) =>
             if (indexes(z).isEmpty) {

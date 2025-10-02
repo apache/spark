@@ -395,7 +395,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         File file = spillWriters.removeFirst().getFile();
         if (file != null && file.exists() && !file.delete()) {
           logger.error("Was unable to delete spill file {}",
-            MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
+            MDC.of(LogKeys.PATH, file.getAbsolutePath()));
         }
       }
     }
@@ -897,7 +897,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       if (file != null && file.exists()) {
         if (!file.delete()) {
           logger.error("Was unable to delete spill file {}",
-            MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
+            MDC.of(LogKeys.PATH, file.getAbsolutePath()));
         }
       }
     }

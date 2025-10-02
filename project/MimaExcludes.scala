@@ -39,7 +39,13 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.getSizeInBytes"),
 
     // [SPARK-52221][SQL] Refactor SqlScriptingLocalVariableManager into more generic context manager
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager"),
+
+    // [SPARK-53391][CORE] Remove unused PrimitiveKeyOpenHashMap
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.collection.PrimitiveKeyOpenHashMap*"),
+
+    // [SPARK-54041][SQL] Enable Direct Passthrough Partitioning in the DataFrame API
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.repartitionById")
   )
 
   // Default exclude rules
@@ -50,6 +56,7 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
     ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.kafka010.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.memory.*"),
@@ -60,11 +67,16 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.classic.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connect.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.scripting.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.types.variant.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.ui.flamegraph.*"),
     // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
     // Avro source implementation is internal.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
+
 
     // SPARK-43169: shaded and generated protobuf code
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
@@ -76,6 +88,13 @@ object MimaExcludes {
 
     // SPARK-51267: Match local Spark Connect server logic between Python and Scala
     ProblemFilters.exclude[MissingFieldProblem]("org.apache.spark.launcher.SparkLauncher.SPARK_LOCAL_REMOTE"),
+
+    // SPARK-53138: Split common/utils Java code into a new module common/utils-java
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContextType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.*"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.network.util.ByteUnit"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.network.util.JavaUtils"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&

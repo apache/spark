@@ -85,7 +85,7 @@ private[sql] trait DataTypeErrorsBase {
     else value.toString
   }
 
-  protected def quoteByDefault(elem: String): String = {
+  protected[sql] def quoteByDefault(elem: String): String = {
     "\"" + elem + "\""
   }
 

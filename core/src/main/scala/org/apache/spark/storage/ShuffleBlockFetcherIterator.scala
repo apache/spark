@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{InputStream, IOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.{LinkedBlockingDeque, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.CheckedInputStream
 import javax.annotation.concurrent.GuardedBy
@@ -30,13 +30,12 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.util.{Failure, Success}
 
 import io.netty.util.internal.OutOfDirectMemoryError
-import org.apache.commons.io.IOUtils
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
@@ -132,7 +131,7 @@ final class ShuffleBlockFetcherIterator(
    * A queue to hold our results. This turns the asynchronous model provided by
    * [[org.apache.spark.network.BlockTransferService]] into a synchronous model (iterator).
    */
-  private[this] val results = new LinkedBlockingQueue[FetchResult]
+  private[this] val results = new LinkedBlockingDeque[FetchResult]()
 
   /**
    * Current [[FetchResult]] being processed. We track this so we can release the current buffer
@@ -358,7 +357,7 @@ final class ShuffleBlockFetcherIterator(
                 results.put(FallbackOnPushMergedFailureResult(
                   block, address, infoMap(blockId)._1, remainingBlocks.isEmpty))
               } else {
-                results.put(FailureFetchResult(block, infoMap(blockId)._2, address, e))
+                results.putFirst(FailureFetchResult(block, infoMap(blockId)._2, address, e))
               }
           }
         }
@@ -594,7 +593,8 @@ final class ShuffleBlockFetcherIterator(
                 log"Error occurred while fetching local blocks, ${MDC(ERROR, ce.getMessage)}")
             case ex: Exception => logError("Error occurred while fetching local blocks", ex)
           }
-          results.put(FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
+          results.putFirst(
+            FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
           return
       }
     }
@@ -615,7 +615,7 @@ final class ShuffleBlockFetcherIterator(
       case e: Exception =>
         // If we see an exception, stop immediately.
         logError(s"Error occurred while fetching local blocks", e)
-        results.put(FailureFetchResult(blockId, mapIndex, blockManagerId, e))
+        results.putFirst(FailureFetchResult(blockId, mapIndex, blockManagerId, e))
         false
     }
   }
@@ -668,7 +668,7 @@ final class ShuffleBlockFetcherIterator(
             val bmId = bmIds.head
             val blockInfoSeq = hostLocalBlocksWithMissingDirs(bmId)
             val (blockId, _, mapIndex) = blockInfoSeq.head
-            results.put(FailureFetchResult(blockId, mapIndex, bmId, throwable))
+            results.putFirst(FailureFetchResult(blockId, mapIndex, bmId, throwable))
         }
       }
     }
@@ -1407,7 +1407,7 @@ private class BufferReleasingInputStream(
         val diagnosisResponse = checkedInOpt.map { checkedIn =>
           iterator.diagnoseCorruption(checkedIn, address, blockId)
         }
-        IOUtils.closeQuietly(this)
+        Utils.closeQuietly(this)
         // We'd never retry the block whatever the cause is since the block has been
         // partially consumed by downstream RDDs.
         iterator.throwFetchFailedException(blockId, mapIndex, address, e, diagnosisResponse)

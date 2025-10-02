@@ -60,18 +60,23 @@ if typing.TYPE_CHECKING:
         ArrowMapIterUDFType,
         PandasGroupedMapUDFWithStateType,
         ArrowGroupedMapUDFType,
+        ArrowGroupedMapIterUDFType,
         ArrowCogroupedMapUDFType,
         PandasGroupedMapUDFTransformWithStateType,
         PandasGroupedMapUDFTransformWithStateInitStateType,
         GroupedMapUDFTransformWithStateType,
         GroupedMapUDFTransformWithStateInitStateType,
         ArrowScalarUDFType,
+        ArrowScalarIterUDFType,
+        ArrowGroupedAggUDFType,
+        ArrowWindowAggUDFType,
     )
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
+        SQLArrowUDTFType,
     )
     from pyspark.serializers import Serializer
     from pyspark.sql import SparkSession
@@ -646,12 +651,17 @@ class PythonEvalType:
     SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
         214
     )
+    SQL_GROUPED_MAP_ARROW_ITER_UDF: "ArrowGroupedMapIterUDFType" = 215
 
     # Arrow UDFs
     SQL_SCALAR_ARROW_UDF: "ArrowScalarUDFType" = 250
+    SQL_SCALAR_ARROW_ITER_UDF: "ArrowScalarIterUDFType" = 251
+    SQL_GROUPED_AGG_ARROW_UDF: "ArrowGroupedAggUDFType" = 252
+    SQL_WINDOW_AGG_ARROW_UDF: "ArrowWindowAggUDFType" = 253
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
+    SQL_ARROW_UDTF: "SQLArrowUDTFType" = 302
 
 
 def _create_local_socket(sock_info: "JavaArray") -> "io.BufferedRWPair":

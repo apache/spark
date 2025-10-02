@@ -33,6 +33,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.common.config.ConnectCommon
+import org.apache.spark.util.SparkSystemUtils
 
 /**
  * Conceptually the remote spark session that communicates with the server.
@@ -707,12 +708,11 @@ object SparkConnectClient {
    */
   private def genUserAgent(value: String): String = {
     val scalaVersion = Properties.versionNumberString
-    val jvmVersion = System.getProperty("java.version").split("_")(0)
+    val jvmVersion = SparkSystemUtils.javaVersion.split("_")(0)
     val osName = {
-      val os = System.getProperty("os.name").toLowerCase(Locale.ROOT)
-      if (os.contains("mac")) "darwin"
-      else if (os.contains("linux")) "linux"
-      else if (os.contains("win")) "windows"
+      if (SparkSystemUtils.isMac) "darwin"
+      else if (SparkSystemUtils.isLinux) "linux"
+      else if (SparkSystemUtils.isWindows) "windows"
       else "unknown"
     }
     List(

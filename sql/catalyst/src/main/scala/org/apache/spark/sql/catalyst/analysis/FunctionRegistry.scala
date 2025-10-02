@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -463,6 +464,7 @@ object FunctionRegistry {
     expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
     expression[TryToBinary]("try_to_binary"),
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
+    expressionBuilder("try_to_date", TryToDateExpressionBuilder, setAlias = true),
     expressionBuilder("try_to_time", TryToTimeExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
@@ -527,6 +529,11 @@ object FunctionRegistry {
     expressionBuilder("mode", ModeBuilder),
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
+    expression[ApproxTopK]("approx_top_k"),
+    expression[ThetaSketchAgg]("theta_sketch_agg"),
+    expression[ThetaUnionAgg]("theta_union_agg"),
+    expression[ThetaIntersectionAgg]("theta_intersection_agg"),
+    expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -652,6 +659,7 @@ object FunctionRegistry {
     expressionBuilder("second", SecondExpressionBuilder),
     expression[ParseToTimestamp]("to_timestamp"),
     expression[ParseToDate]("to_date"),
+    expression[TimeDiff]("time_diff"),
     expression[ToTime]("to_time"),
     expression[ToBinary]("to_binary"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
@@ -672,8 +680,9 @@ object FunctionRegistry {
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
     expression[MakeTime]("make_time"),
-    expression[MakeTimestamp]("make_timestamp"),
-    expression[TryMakeTimestamp]("try_make_timestamp"),
+    expression[TimeTrunc]("time_trunc"),
+    expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
+    expressionBuilder("try_make_timestamp", TryMakeTimestampExpressionBuilder),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
@@ -785,6 +794,11 @@ object FunctionRegistry {
     expression[EqualNull]("equal_null"),
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
+    expression[ThetaSketchEstimate]("theta_sketch_estimate"),
+    expression[ThetaUnion]("theta_union"),
+    expression[ThetaDifference]("theta_difference"),
+    expression[ThetaIntersection]("theta_intersection"),
+    expression[ApproxTopKEstimate]("approx_top_k_estimate"),
 
     // grouping sets
     expression[Grouping]("grouping"),
@@ -870,6 +884,7 @@ object FunctionRegistry {
     castAlias("decimal", DecimalType.USER_DEFAULT),
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
+    castAlias("time", TimeType()),
     castAlias("binary", BinaryType),
     castAlias("string", StringType),
 
@@ -1017,9 +1032,9 @@ object FunctionRegistry {
       name: String,
       builder: T,
       expressions: Seq[Expression]) : Seq[Expression] = {
-    val rearrangedExpressions = if (!builder.functionSignature.isEmpty) {
+    val rearrangedExpressions = if (builder.functionSignature.isDefined) {
       val functionSignature = builder.functionSignature.get
-      builder.rearrange(functionSignature, expressions, name)
+      builder.rearrange(functionSignature, expressions, name, SQLConf.get.resolver)
     } else {
       expressions
     }

@@ -60,9 +60,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
             def eval(self, a: int):
                 yield a + 1,
 
-        with self.assertRaisesRegex(
-            InvalidPlanInput, "Invalid Python user-defined table function return type."
-        ):
+        with self.assertRaisesRegex(InvalidPlanInput, "Invalid.*type"):
             TestUDTF(lit(1)).collect()
 
     @unittest.skip("Spark Connect does not support broadcast but the test depends on it.")

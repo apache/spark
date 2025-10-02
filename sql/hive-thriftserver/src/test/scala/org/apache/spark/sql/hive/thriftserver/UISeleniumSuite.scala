@@ -18,11 +18,10 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
@@ -75,7 +74,7 @@ class UISeleniumSuite
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
 
-      Files.asCharSink(new File(s"$tempLog4jConf/log4j2.properties"), StandardCharsets.UTF_8).write(
+      Files.writeString(new File(s"$tempLog4jConf/log4j2.properties").toPath,
         """rootLogger.level = info
           |rootLogger.appenderRef.file.ref = console
           |appender.console.type = Console

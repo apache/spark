@@ -181,7 +181,7 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     checkResolverGuard("SELECT * FROM (SELECT * FROM (SELECT * FROM VALUES(1)))", shouldPass = true)
   }
 
-  for(setOperation <- Seq("UNION", "INTERSECT", "EXCEPT")) {
+  for (setOperation <- Seq("UNION", "INTERSECT", "EXCEPT")) {
     test(s"$setOperation ALL") {
       checkResolverGuard(
         s"SELECT * FROM VALUES(1) $setOperation ALL SELECT * FROM VALUES(2)",
@@ -232,6 +232,7 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
 
   test("Group by") {
     checkResolverGuard("SELECT col1, count(col1) FROM VALUES(1) GROUP BY ALL", shouldPass = true)
+    checkResolverGuard("SELECT * FROM VALUES(1,2,3) GROUP BY ALL", shouldPass = true)
     checkResolverGuard("SELECT col1 FROM VALUES(1) GROUP BY 1", shouldPass = true)
     checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) GROUP BY 1, col1", shouldPass = true)
   }
@@ -279,6 +280,24 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     checkResolverGuard("DESCRIBE QUERY SELECT * FROM VALUES (1)", shouldPass = true)
   }
 
+  test("HAVING") {
+    checkResolverGuard(
+      "SELECT col1 FROM VALUES(1) GROUP BY col1 HAVING col1 > 1",
+      shouldPass = true
+    )
+  }
+
+  test("TABLESAMPLE") {
+    checkResolverGuard(
+      "SELECT * FROM (VALUES (1), (2), (3)) TABLESAMPLE (40 PERCENT)",
+      shouldPass = true
+    )
+  }
+
+  test("Semi-structured extract") {
+    checkResolverGuard("SELECT PARSE_JSON('{\"a\":1}'):a", shouldPass = true)
+  }
+
   // Queries that shouldn't pass the OperatorResolverGuard
 
   test("Unsupported literal functions") {
@@ -299,9 +318,26 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("UDFs") {
-    sql("CREATE FUNCTION supermario(x INT) RETURNS INT RETURN x + 3")
-    checkResolverGuard("SELECT supermario(2)", shouldPass = false)
+  test("UDF") {
+    withSqlFunction("supermario") {
+      sql("CREATE FUNCTION supermario(x INT) RETURNS INT RETURN x + 3")
+
+      checkResolverGuard("SELECT supermario(2)", shouldPass = false)
+    }
+  }
+
+  test("UDF in a database with the same name as a built-in function") {
+    withDatabase("upper") {
+      sql("CREATE DATABASE IF NOT EXISTS upper")
+
+      withSqlFunction("supermario") {
+        sql("USE DATABASE upper")
+
+        sql("CREATE FUNCTION supermario(x INT) RETURNS INT RETURN x + 3")
+
+        checkResolverGuard("SELECT upper.supermario(2)", shouldPass = false)
+      }
+    }
   }
 
   test("PLAN_ID_TAG") {
@@ -311,6 +347,19 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     plan.asInstanceOf[Project].projectList.head.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
 
     checkResolverGuard(plan, shouldPass = false)
+  }
+
+  test("Star outside of Project list") {
+    checkResolverGuard("SELECT * FROM VALUES (1, 2) WHERE 3 IN (*)", shouldPass = false)
+  }
+
+  test("Lambda variable") {
+    checkResolverGuard(
+      "SELECT array_sort(array(2, 1), (p1, p2) -> IF(p1 > p2, 1, 0))",
+      shouldPass = false
+    )
+    checkResolverGuard("SELECT transform(array(2, 1), x -> x * 2)", shouldPass = false)
+    checkResolverGuard("SELECT filter(array(2, 1), x -> x > 0)", shouldPass = false)
   }
 
   test("Catch ExplicitlyUnsupportedResolverFeature exceptions") {
@@ -341,7 +390,7 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
   }
 
   private def checkResolverGuard(query: String, shouldPass: Boolean): Unit = {
-    checkResolverGuard(spark.sql(query).queryExecution.logical, shouldPass)
+    checkResolverGuard(spark.sessionState.sqlParser.parsePlan(query), shouldPass)
   }
 
   private def checkResolverGuard(
@@ -387,6 +436,14 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
       body
     } finally {
       sql("DROP TEMPORARY VARIABLE session_variable;")
+    }
+  }
+
+  private def withSqlFunction[R](name: String)(body: => R): R = {
+    try {
+      body
+    } finally {
+      spark.sql(s"DROP FUNCTION IF EXISTS $name")
     }
   }
 }

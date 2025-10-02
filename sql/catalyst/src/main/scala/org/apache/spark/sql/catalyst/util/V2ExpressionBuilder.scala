@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
@@ -37,12 +38,21 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
   def build(): Option[V2Expression] = generateExpression(e, isPredicate)
 
   def buildPredicate(): Option[V2Predicate] = {
-
     if (isPredicate) {
-      val translated = build()
+      val translated0 = build()
+      val conf = SQLConf.get
+      val alwaysCreateV2Predicate = conf.getConf(SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE)
+      val translated = if (alwaysCreateV2Predicate && e.dataType == BooleanType) {
+        translated0.map {
+          case p: V2Predicate => p
+          case other => new V2Predicate("BOOLEAN_EXPRESSION", Array(other))
+        }
+      } else {
+        translated0
+      }
 
       val modifiedExprOpt = if (
-        SQLConf.get.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
+        conf.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
           && translated.isDefined
           && !translated.get.isInstanceOf[V2Predicate]) {
 
@@ -74,11 +84,21 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _ => false
   }
 
+  private def translateLiteral(l: Literal): V2Expression = l match {
+    case Literal(true, BooleanType) => new AlwaysTrue()
+    case Literal(false, BooleanType) => new AlwaysFalse()
+    case other => LiteralValue(other.value, other.dataType)
+  }
+
   private def generateExpression(
       expr: Expression, isPredicate: Boolean = false): Option[V2Expression] = expr match {
-    case Literal(true, BooleanType) => Some(new AlwaysTrue())
-    case Literal(false, BooleanType) => Some(new AlwaysFalse())
-    case Literal(value, dataType) => Some(LiteralValue(value, dataType))
+    case literal: Literal => Some(translateLiteral(literal))
+    case _ if expr.contextIndependentFoldable
+        && SQLConf.get.getConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING) =>
+      // If the expression is context independent foldable, we can convert it to a literal.
+      // This is useful for increasing the coverage of V2 expressions.
+      val constantExpr = ConstantFolding.constantFolding(expr)
+      generateExpression(constantExpr, isPredicate)
     case col @ ColumnOrField(nameParts) =>
       val ref = FieldReference(nameParts)
       if (isPredicate && col.dataType.isInstanceOf[BooleanType]) {

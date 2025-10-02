@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.rules
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
@@ -59,10 +58,19 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
     if (!newPlan.fastEquals(oldPlan)) {
       if (logRules.isEmpty || logRules.get.contains(ruleName)) {
         def message(): MessageWithContext = {
+          val oldPlanStringWithOutput = oldPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          val newPlanStringWithOutput = newPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          // scalastyle:off line.size.limit
           log"""
              |=== Applying Rule ${MDC(RULE_NAME, ruleName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
+             |
+             |Output Information:
+             |${MDC(QUERY_PLAN, sideBySide(oldPlanStringWithOutput, newPlanStringWithOutput).mkString("\n"))}
            """.stripMargin
+           // scalastyle:on line.size.limit
         }
 
         logBasedOnLevel(logLevel)(message())
@@ -74,10 +82,19 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
     if (logBatches.isEmpty || logBatches.get.contains(batchName)) {
       def message(): MessageWithContext = {
         if (!oldPlan.fastEquals(newPlan)) {
+          val oldPlanStringWithOutput = oldPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          val newPlanStringWithOutput = newPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          // scalastyle:off line.size.limit
           log"""
              |=== Result of Batch ${MDC(BATCH_NAME, batchName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
+             |
+             |Output Information:
+             |${MDC(QUERY_PLAN, sideBySide(oldPlanStringWithOutput, newPlanStringWithOutput).mkString("\n"))}
           """.stripMargin
+          // scalastyle:on line.size.limit
         } else {
           log"Batch ${MDC(BATCH_NAME, batchName)} has no effect."
         }

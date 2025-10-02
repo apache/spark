@@ -40,7 +40,11 @@ import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
+import org.apache.spark.sql.execution.streaming.runtime.{StreamingExecutionRelation, StreamingRelation, StreamingRelationExec}
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
@@ -644,7 +648,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
           if aggExpressions.forall(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
-        Seq(execution.python.AggregateInPandasExec(
+        Seq(execution.python.ArrowAggregatePythonExec(
           groupingExpressions,
           aggExpressions,
           resultExpressions,
@@ -671,7 +675,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case PhysicalWindow(
         WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child) =>
-        execution.python.WindowInPandasExec(
+        execution.python.ArrowWindowPythonExec(
           windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
 
       case _ => Nil
@@ -689,8 +693,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _ => Nil
     }
   }
-
-  protected lazy val singleRowRdd = session.sparkContext.parallelize(Seq(InternalRow()), 1)
 
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -1047,14 +1049,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         GlobalLimitExec(child = planLater(child), offset = offset) :: Nil
       case union: logical.Union =>
         execution.UnionExec(union.children.map(planLater)) :: Nil
-      case u @ logical.UnionLoop(id, anchor, recursion, limit, maxDepth) =>
+      case u @ logical.UnionLoop(id, anchor, recursion, _, limit, maxDepth) =>
         execution.UnionLoopExec(id, anchor, recursion, u.output, limit, maxDepth) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(
           generator, g.requiredChildOutput, outer,
           g.qualifiedGeneratorOutput, planLater(child)) :: Nil
       case _: logical.OneRowRelation =>
-        execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
+        execution.OneRowRelationExec() :: Nil
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>

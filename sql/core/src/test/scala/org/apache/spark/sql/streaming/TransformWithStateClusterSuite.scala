@@ -20,9 +20,10 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.{Dataset, Encoders, Row, SparkSession}
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 
 case class FruitState(
     name: String,
@@ -132,6 +133,7 @@ trait TransformWithStateClusterSuiteBase extends SparkFunSuite {
  * Test suite spawning local cluster with multiple executors to test serde of stateful
  * processors along with use of implicit encoders, if applicable in transformWithState operator.
  */
+@SlowSQLTest
 class TransformWithStateClusterSuite extends StreamTest with TransformWithStateClusterSuiteBase {
   testWithAndWithoutImplicitEncoders("streaming with transformWithState - " +
    "without initial state") { (spark, useImplicits) =>

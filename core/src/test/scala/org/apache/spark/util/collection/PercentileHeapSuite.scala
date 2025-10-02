@@ -57,28 +57,4 @@ class PercentileHeapSuite extends SparkFunSuite {
       }
     }
   }
-
-  ignore("benchmark") {
-    val input: Seq[Int] = 0 until 1000
-    val numRuns = 1000
-
-    def kernel(): Long = {
-      val shuffled = Random.shuffle(input).toArray
-      val start = System.nanoTime()
-      val h = new PercentileHeap(0.95)
-      shuffled.foreach { x =>
-        h.insert(x)
-        for (_ <- 0 until h.size()) h.percentile()
-      }
-      System.nanoTime() - start
-    }
-    for (_ <- 0 until numRuns) kernel()  // warmup
-
-    var elapsed: Long = 0
-    for (_ <- 0 until numRuns) elapsed += kernel()
-    val perOp = elapsed / (numRuns * input.length)
-    // scalastyle:off println
-    println(s"$perOp ns per op on heaps of size ${input.length}")
-    // scalastyle:on println
-  }
 }

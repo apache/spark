@@ -46,7 +46,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 if should_test_connect:
-    from pyspark.sql.connect.proto import Expression as ProtoExpression
+    from pyspark.sql.connect.proto import ExecutePlanResponse, Expression as ProtoExpression
     from pyspark.sql.connect.column import Column
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
@@ -134,6 +134,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         data = dumps(cdf)
         cdf2 = loads(data)
         self.assertEqual(cdf.collect(), cdf2.collect())
+
+    def test_window_spec_serialization(self):
+        from pyspark.sql.connect.window import Window
+        from pyspark.serializers import CPickleSerializer
+
+        pickle_ser = CPickleSerializer()
+        w = Window.partitionBy("some_string").orderBy("value")
+        b = pickle_ser.dumps(w)
+        w2 = pickle_ser.loads(b)
+        self.assertEqual(str(w), str(w2))
 
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
@@ -1507,6 +1517,75 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
         gc.collect()
 
         eventually(catch_assertions=True)(condition)()
+
+    def test_arrow_batch_result_chunking(self):
+        # Two cases are tested here:
+        # (a) client preferred chunk size is set: the server should respect it
+        # (b) client preferred chunk size is not set: the server should use its own max chunk size
+        for preferred_chunk_size_optional, max_chunk_size_optional in ((1024, None), (None, 1024)):
+            sql_query = "select id, CAST(id + 0.5 AS DOUBLE) from range(0, 2000, 1, 4)"
+            cdf = self.connect.sql(sql_query)
+            sdf = self.spark.sql(sql_query)
+
+            original_verify_response_integrity = self.connect._client._verify_response_integrity
+            captured_chunks = []
+
+            def patched_verify_response_integrity(response):
+                original_verify_response_integrity(response)
+                if isinstance(response, ExecutePlanResponse) and response.HasField("arrow_batch"):
+                    captured_chunks.append(response.arrow_batch)
+
+            try:
+                # Patch the response verifier for testing to access the chunked arrow batch
+                # responses.
+                self.connect._client._verify_response_integrity = patched_verify_response_integrity
+                # Override the chunk size to 1024 bytes for testing
+                if preferred_chunk_size_optional:
+                    self.connect._client._preferred_arrow_chunk_size = preferred_chunk_size_optional
+                if max_chunk_size_optional:
+                    self.connect.conf.set(
+                        "spark.connect.session.resultChunking.maxChunkSize",
+                        max_chunk_size_optional,
+                    )
+
+                # Execute the query, and assert the results are correct.
+                self.assertEqual(cdf.collect(), sdf.collect())
+
+                # Verify the metadata of arrow batch chunks.
+                def split_into_batches(chunks):
+                    batches = []
+                    i = 0
+                    n = len(chunks)
+                    while i < n:
+                        num_chunks = chunks[i].num_chunks_in_batch
+                        batch = chunks[i : i + num_chunks]
+                        batches.append(batch)
+                        i += num_chunks
+                    return batches
+
+                batches = split_into_batches(captured_chunks)
+                # There are 4 batches (partitions) in total.
+                self.assertEqual(len(batches), 4)
+                for batch in batches:
+                    # In this example, the max chunk size is set to a small value, so each Arrow
+                    # batch should be split into multiple chunks.
+                    self.assertTrue(len(batch) > 5)
+                    row_count = batch[0].row_count
+                    row_start_offset = batch[0].start_offset
+                    for i, chunk in enumerate(batch):
+                        self.assertEqual(chunk.chunk_index, i)
+                        self.assertEqual(chunk.num_chunks_in_batch, len(batch))
+                        self.assertEqual(chunk.row_count, row_count)
+                        self.assertEqual(chunk.start_offset, row_start_offset)
+                        self.assertTrue(len(chunk.data) > 0)
+                        self.assertTrue(
+                            len(chunk.data)
+                            <= (preferred_chunk_size_optional or max_chunk_size_optional)
+                        )
+            finally:
+                self.connect._client._verify_response_integrity = original_verify_response_integrity
+                self.connect._client._preferred_arrow_chunk_size = None
+                self.connect.conf.unset("spark.connect.session.resultChunking.maxChunkSize")
 
 
 if __name__ == "__main__":

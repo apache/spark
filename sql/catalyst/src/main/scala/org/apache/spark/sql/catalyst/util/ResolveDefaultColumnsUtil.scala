@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
@@ -32,7 +34,7 @@ import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{CatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -262,7 +264,12 @@ object ResolveDefaultColumns extends QueryErrorsBase
       field: StructField,
       statementType: String,
       metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY): Expression = {
-    analyze(field.name, field.dataType, field.metadata.getString(metadataKey), statementType)
+    field.metadata.getExpression[Expression](metadataKey) match {
+      case (sql, Some(expr)) =>
+        analyze(field.name, field.dataType, expr, sql, statementType)
+      case (sql, _) =>
+        analyze(field.name, field.dataType, sql, statementType)
+    }
   }
 
   /**
@@ -373,27 +380,33 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
     // Parse the expression.
-    val expr = Literal.fromSQL(defaultSQL) match {
-      // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
-      // hence we need to add timezone to the cast if necessary
-      case c: Cast if c.child.resolved && c.needsTimeZone =>
-        c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
-      case e: Expression => e
-    }
+    val resolvedExpr = Try(Literal.fromSQL(defaultSQL)) match {
+      case Success(literal) =>
+        val expr = literal match {
+          // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
+          // hence we need to add timezone to the cast if necessary
+          case c: Cast if c.child.resolved && c.needsTimeZone =>
+            c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
+          case e: Expression => e
+        }
 
-    // Check invariants
-    if (expr.containsPattern(PLAN_EXPRESSION)) {
-      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-        "", field.name, defaultSQL)
-    }
+        // Check invariants
+        if (expr.containsPattern(PLAN_EXPRESSION)) {
+          throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+            "", field.name, defaultSQL)
+        }
 
-    val resolvedExpr = expr match {
-      case _: ExprLiteral => expr
-      case c: Cast if c.resolved => expr
-      case _ =>
+        expr match {
+          case _: ExprLiteral => expr
+          case c: Cast if c.resolved => expr
+          case _ =>
+            fallbackResolveExistenceDefaultValue(field)
+        }
+
+      case Failure(_) =>
+        // If Literal.fromSQL fails, use fallback resolution
         fallbackResolveExistenceDefaultValue(field)
     }
-
     coerceDefaultValue(resolvedExpr, field.dataType, "", field.name, defaultSQL)
   }
 
@@ -432,20 +445,20 @@ object ResolveDefaultColumns extends QueryErrorsBase
       targetType: DataType,
       colName: String): Option[Expression] = {
     expr match {
-      case l: Literal if !Seq(targetType, l.dataType).exists(_ match {
+      case e if e.foldable && !Seq(targetType, e.dataType).exists(_ match {
         case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
         case _ => false
       }) =>
-        val casted = Cast(l, targetType, Some(conf.sessionLocalTimeZone), evalMode = EvalMode.TRY)
+        val casted = Cast(e, targetType, Some(conf.sessionLocalTimeZone), evalMode = EvalMode.TRY)
         try {
           Option(casted.eval(EmptyRow)).map(Literal(_, targetType))
         } catch {
-          case e @ ( _: SparkThrowable | _: RuntimeException) =>
-            logWarning(log"Failed to cast default value '${MDC(COLUMN_DEFAULT_VALUE, l)}' " +
+          case NonFatal(ex) =>
+            logWarning(log"Failed to cast default value '${MDC(COLUMN_DEFAULT_VALUE, e)}' " +
               log"for column ${MDC(COLUMN_NAME, colName)} " +
-              log"from ${MDC(COLUMN_DATA_TYPE_SOURCE, l.dataType)} " +
+              log"from ${MDC(COLUMN_DATA_TYPE_SOURCE, e.dataType)} " +
               log"to ${MDC(COLUMN_DATA_TYPE_TARGET, targetType)} " +
-              log"due to ${MDC(ERROR, e.getMessage)}", e)
+              log"due to ${MDC(ERROR, ex.getMessage)}", ex)
             None
         }
       case _ => None
@@ -565,6 +578,14 @@ object ResolveDefaultColumns extends QueryErrorsBase
       }
     }
     rows.toSeq
+  }
+
+  /** If any fields in a schema have default values, appends them to the result. */
+  def getDescribeMetadata(cols: Array[Column]): Seq[(String, String, String)] = {
+    cols.filter(_.defaultValue() != null).flatMap { col =>
+      ("", "", "") :: ("# Column Default Values", "", "") ::
+        (col.name, col.dataType.simpleString, col.defaultValue().getSql) :: Nil
+    }.toSeq
   }
 
   /**

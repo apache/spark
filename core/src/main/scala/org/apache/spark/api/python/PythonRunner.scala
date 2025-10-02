@@ -32,7 +32,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
-import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
 import org.apache.spark.internal.LogKeys.TASK_NAME
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
@@ -66,12 +66,17 @@ private[spark] object PythonEvalType {
   val SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF = 212
   val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF = 213
   val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF = 214
+  val SQL_GROUPED_MAP_ARROW_ITER_UDF = 215
 
   // Arrow UDFs
   val SQL_SCALAR_ARROW_UDF = 250
+  val SQL_SCALAR_ARROW_ITER_UDF = 251
+  val SQL_GROUPED_AGG_ARROW_UDF = 252
+  val SQL_WINDOW_AGG_ARROW_UDF = 253
 
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
+  val SQL_ARROW_UDTF = 302
 
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
@@ -90,13 +95,19 @@ private[spark] object PythonEvalType {
     case SQL_COGROUPED_MAP_ARROW_UDF => "SQL_COGROUPED_MAP_ARROW_UDF"
     case SQL_TABLE_UDF => "SQL_TABLE_UDF"
     case SQL_ARROW_TABLE_UDF => "SQL_ARROW_TABLE_UDF"
+    case SQL_ARROW_UDTF => "SQL_ARROW_UDTF"
     case SQL_TRANSFORM_WITH_STATE_PANDAS_UDF => "SQL_TRANSFORM_WITH_STATE_PANDAS_UDF"
     case SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF =>
       "SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF"
     case SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF => "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF"
     case SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF =>
       "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF"
+
+    // Arrow UDFs
     case SQL_SCALAR_ARROW_UDF => "SQL_SCALAR_ARROW_UDF"
+    case SQL_SCALAR_ARROW_ITER_UDF => "SQL_SCALAR_ARROW_ITER_UDF"
+    case SQL_GROUPED_AGG_ARROW_UDF => "SQL_GROUPED_AGG_ARROW_UDF"
+    case SQL_WINDOW_AGG_ARROW_UDF => "SQL_WINDOW_AGG_ARROW_UDF"
   }
 }
 
@@ -166,6 +177,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
   protected val idleTimeoutSeconds: Long = conf.get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
   protected val killOnIdleTimeout: Boolean = conf.get(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
+  protected val tracebackDumpIntervalSeconds: Long =
+    conf.get(PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
@@ -262,6 +275,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     if (faultHandlerEnabled) {
       envVars.put("PYTHON_FAULTHANDLER_DIR", faultHandlerLogDir.toString)
+    }
+    if (tracebackDumpIntervalSeconds > 0L) {
+      envVars.put("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", tracebackDumpIntervalSeconds.toString)
     }
     // allow the user to set the batch size for the BatchedSerializer on UDFs
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)

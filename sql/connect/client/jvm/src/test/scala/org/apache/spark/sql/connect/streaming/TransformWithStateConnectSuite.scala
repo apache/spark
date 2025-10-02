@@ -26,17 +26,22 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Encoders, Row}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.{ListState, MapState, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode, TimerValues, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQueryException, TimeMode, TimerValues, TTLConfig, ValueState}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SparkFileUtils
 
 case class InputRowForConnectTest(key: String, value: String)
 case class OutputRowForConnectTest(key: String, value: String)
+case class StateRowForConnectTestWithIntType(count: Int)
 case class StateRowForConnectTest(count: Long)
+case class StateRowForConnectTestWithTwoLongs(count: Long, count2: Long)
+case class StateRowForConnectTestWithReorder(count2: Long, count: Long)
 
 // A basic stateful processor which will return the occurrences of key
 class BasicCountStatefulProcessor
@@ -63,6 +68,97 @@ class BasicCountStatefulProcessor
       }
     }
     _countState.update(StateRowForConnectTest(count))
+    Iterator(OutputRowForConnectTest(key, count.toString))
+  }
+}
+
+// A basic stateful processor which will return the occurrences of key.
+// Count State is a Int type.
+class CountStatefulProcessorWithInt
+    extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
+    with Logging {
+  @transient protected var _countState: ValueState[StateRowForConnectTestWithIntType] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[StateRowForConnectTestWithIntType](
+      "countState",
+      Encoders.product[StateRowForConnectTestWithIntType],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InputRowForConnectTest],
+      timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
+    val count = inputRows.toSeq.length + {
+      if (_countState.exists()) {
+        _countState.get().count
+      } else {
+        0
+      }
+    }
+    _countState.update(StateRowForConnectTestWithIntType(count))
+    Iterator(OutputRowForConnectTest(key, count.toString))
+  }
+}
+
+// A stateful processor with Two Longs as state
+// which will return the occurrences of key to test TWS schema evolution
+class CountStatefulProcessorTwoLongs
+    extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
+    with Logging {
+  @transient protected var _countState: ValueState[StateRowForConnectTestWithTwoLongs] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[StateRowForConnectTestWithTwoLongs](
+      "countState",
+      Encoders.product[StateRowForConnectTestWithTwoLongs],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InputRowForConnectTest],
+      timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
+    val count = inputRows.toSeq.length + {
+      if (_countState.exists()) {
+        _countState.get().count
+      } else {
+        0L
+      }
+    }
+    _countState.update(StateRowForConnectTestWithTwoLongs(count, count))
+    Iterator(OutputRowForConnectTest(key, count.toString))
+  }
+}
+
+// A stateful processor with Two Longs as state.
+// Reorder the field Sequence inside StateRowForConnectTestWithTwoLongs.
+// which will return the occurrences of key to test TWS schema evolution
+class CountStatefulProcessorWithReorder
+    extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
+    with Logging {
+  @transient protected var _countState: ValueState[StateRowForConnectTestWithReorder] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[StateRowForConnectTestWithReorder](
+      "countState",
+      Encoders.product[StateRowForConnectTestWithReorder],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InputRowForConnectTest],
+      timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
+    val count = inputRows.toSeq.length + {
+      if (_countState.exists()) {
+        _countState.get().count
+      } else {
+        0L
+      }
+    }
+    _countState.update(StateRowForConnectTestWithReorder(count, count))
     Iterator(OutputRowForConnectTest(key, count.toString))
   }
 }
@@ -488,13 +584,140 @@ class TransformWithStateConnectSuite
     }
   }
 
+  private def runSchemaEvolutionTest(
+      firstProcessor: StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest],
+      secondProcessor: StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest])
+      : Unit = {
+    withSQLConf(
+      (twsAdditionalSQLConf ++
+        Seq("spark.sql.streaming.stateStore.encodingFormat" -> "avro")): _*) {
+      val session: SparkSession = spark
+      import session.implicits._
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val checkpointPath = s"$path/cpt"
+        val dataPath = s"$path/data"
+        val targetPath = s"$path/tgt"
+
+        testData
+          .toDS()
+          .toDF("key", "value")
+          .repartition(3)
+          .write
+          .mode("append")
+          .parquet(dataPath)
+
+        val testSchema =
+          StructType(Array(StructField("key", StringType), StructField("value", StringType)))
+
+        val q1 = spark.readStream
+          .schema(testSchema)
+          .option("maxFilesPerTrigger", 1)
+          .parquet(dataPath)
+          .as[InputRowForConnectTest]
+          .groupByKey(x => x.key)
+          .transformWithState[OutputRowForConnectTest](
+            firstProcessor,
+            TimeMode.None(),
+            OutputMode.Update())
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointPath)
+          .option("path", targetPath)
+          .start()
+
+        try {
+          q1.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            checkDatasetUnorderly(
+              spark.read.format("parquet").load(targetPath).as[(String, String)],
+              ("a", "1"),
+              ("a", "2"),
+              ("b", "1"))
+          }
+        } finally {
+          q1.stop()
+        }
+
+        testData
+          .toDS()
+          .toDF("key", "value")
+          .repartition(3)
+          .write
+          .mode("append")
+          .parquet(dataPath)
+
+        val q2 = spark.readStream
+          .schema(testSchema)
+          .option("maxFilesPerTrigger", 1)
+          .parquet(dataPath)
+          .as[InputRowForConnectTest]
+          .groupByKey(x => x.key)
+          .transformWithState[OutputRowForConnectTest](
+            secondProcessor,
+            TimeMode.None(),
+            OutputMode.Update())
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointPath)
+          .option("path", targetPath)
+          .start()
+
+        try {
+          q2.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            checkDatasetUnorderly(
+              spark.read.format("parquet").load(targetPath).as[(String, String)],
+              ("a", "1"),
+              ("a", "2"),
+              ("b", "1"),
+              ("a", "3"),
+              ("a", "4"),
+              ("b", "2"))
+          }
+        } finally {
+          q2.stop()
+        }
+      }
+    }
+  }
+
+  test("transformWithState - add fields schema evolution") {
+    runSchemaEvolutionTest(new BasicCountStatefulProcessor, new CountStatefulProcessorTwoLongs)
+  }
+
+  test("transformWithState - remove fields schema evolution") {
+    runSchemaEvolutionTest(new CountStatefulProcessorTwoLongs, new BasicCountStatefulProcessor)
+  }
+
+  test("transformWithState - reorder fields schema evolution") {
+    runSchemaEvolutionTest(
+      new CountStatefulProcessorTwoLongs,
+      new CountStatefulProcessorWithReorder)
+  }
+
+  test("transformWithState - upcast fields schema evolution") {
+    runSchemaEvolutionTest(new CountStatefulProcessorWithInt, new BasicCountStatefulProcessor)
+  }
+
+  test("transformWithState - downcast fields would fail") {
+    val e = intercept[StreamingQueryException] {
+      runSchemaEvolutionTest(new BasicCountStatefulProcessor, new CountStatefulProcessorWithInt)
+    }
+    assert(
+      e.getCause
+        .asInstanceOf[SparkUnsupportedOperationException]
+        .getCondition == "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION")
+  }
+
   /* Utils functions for tests */
   def prepareInputData(inputPath: String, col1: Seq[String], col2: Seq[Int]): File = {
     // Ensure the parent directory exists
     val file = Paths.get(inputPath).toFile
     val parentDir = file.getParentFile
     if (parentDir != null && !parentDir.exists()) {
-      parentDir.mkdirs()
+      SparkFileUtils.createDirectory(parentDir)
     }
 
     val writer = new BufferedWriter(new FileWriter(inputPath))

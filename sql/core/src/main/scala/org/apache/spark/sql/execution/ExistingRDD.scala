@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{LOGICAL_PLAN_COLUMNS, OPTIMIZED_PLAN_COLUMNS}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Encoder
@@ -229,10 +229,36 @@ object LogicalRDD extends Logging {
     }
   }
 
+  // A version of buildOutputAssocForRewrite which doesn't assume that the names are the same,
+  // because the new output can have different names. Used when copying the LogicalRDD with a new
+  // output
+  private[sql] def buildOutputAssocForRewriteWithNewOutput(
+      source: Seq[Attribute],
+      destination: Seq[Attribute]): Option[Map[Attribute, Attribute]] = {
+    val rewrite = source.zip(destination).flatMap { case (attr1, attr2) =>
+      if (attr1.dataType == attr2.dataType) {
+        Some(attr1 -> attr2)
+      } else {
+        None
+      }
+    }.toMap
+
+    if (rewrite.size == source.size) {
+      Some(rewrite)
+    } else {
+      None
+    }
+  }
+
   private[sql] def rewriteStatsAndConstraints(
       logicalPlan: LogicalPlan,
-      optimizedPlan: LogicalPlan): (Option[Statistics], Option[ExpressionSet]) = {
-    val rewrite = buildOutputAssocForRewrite(optimizedPlan.output, logicalPlan.output)
+      optimizedPlan: LogicalPlan,
+      sameOutput: Boolean = true): (Option[Statistics], Option[ExpressionSet]) = {
+    val rewrite = if (sameOutput) {
+      buildOutputAssocForRewrite(optimizedPlan.output, logicalPlan.output)
+    } else {
+      buildOutputAssocForRewriteWithNewOutput(optimizedPlan.output, logicalPlan.output)
+    }
 
     rewrite.map { rw =>
       val rewrittenStatistics = rewriteStatistics(optimizedPlan.stats, rw)
@@ -318,4 +344,47 @@ case class RDDScanExec(
   }
 
   override def getStream: Option[SparkDataStream] = stream
+}
+
+/**
+ * A physical plan node for `OneRowRelation` for scans with no 'FROM' clause.
+ *
+ * We do not extend `RDDScanExec` in order to avoid complexity due to `TreeNode.makeCopy` and
+ * `TreeNode`'s general use of reflection.
+ */
+case class OneRowRelationExec() extends LeafExecNode
+  with InputRDDCodegen {
+
+  override val nodeName: String = s"Scan OneRowRelation"
+
+  override val output: Seq[Attribute] = Nil
+
+  private val rdd: RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    session
+      .sparkContext
+      .parallelize(Seq(""), 1)
+      .mapPartitionsInternal { _ =>
+        val proj = UnsafeProjection.create(Seq.empty[Expression])
+        Iterator(proj.apply(InternalRow.empty)).map { r =>
+          numOutputRows += 1
+          r
+        }
+      }
+  }
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = rdd
+
+  override def simpleString(maxFields: Int): String = s"$nodeName[]"
+
+  override def inputRDD: RDD[InternalRow] = rdd
+
+  override protected val createUnsafeProjection: Boolean = false
+
+  override protected def doCanonicalize(): SparkPlan = {
+    super.doCanonicalize().asInstanceOf[OneRowRelationExec].copy()
+  }
 }

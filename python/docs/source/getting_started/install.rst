@@ -30,7 +30,7 @@ and building from the source.
 Python Versions Supported
 -------------------------
 
-Python 3.9 and above.
+Python 3.10 and above.
 
 
 Using PyPI
@@ -84,19 +84,23 @@ Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 Note that this installation of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
 
-Making Spark Connect by default
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Making Spark Connect the default
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you want to make Spark Connect default, you can install and additional library via `PyPI (pyspark-connect) <https://pypi.org/project/pyspark-connect/>`_, execute the following command:
+If you want to make Spark Connect the default, you can install an additional library via `PyPI (pyspark-connect) <https://pypi.org/project/pyspark-connect/>`_. Execute the following command:
 
 .. code-block:: bash
 
     pip install pyspark-connect
 
-It will automatically install ``pyspark`` library as well as dependencies that are necessary for Spark Connect.
+This will automatically install the ``pyspark`` library, as well as dependencies that are necessary for Spark Connect.
 If you want to customize ``pyspark``, you need to install ``pyspark`` with the instructions above in advance.
 
-This package supports both ``spark.master`` (``--master``) with a locally running Spark Connect server, and ``spark.remote`` (``--remote``) including local clusters, e.g., ``local[*]`` as well as connection URIs such as ``sc://localhost``. See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
+This package supports both:
+- ``spark.master`` (``--master``) with a locally running Spark Connect server
+- ``spark.remote`` (``--remote``) including local clusters, e.g., ``local[*]`` as well as connection URIs such as ``sc://localhost``.
+
+See also `Quickstart: Spark Connect <quickstart_connect.html>`_ for how to use it.
 
 
 Python Spark Connect Client
@@ -139,7 +143,7 @@ the same session as pyspark (you can install in several steps too).
 
 .. code-block:: bash
 
-    conda install -c conda-forge pyspark  # can also add "python=3.9 some_package [etc.]" here
+    conda install -c conda-forge pyspark  # can also add "python=3.10 some_package [etc.]" here
 
 Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
 separately by the community; while new versions generally get packaged quickly, the
@@ -221,8 +225,8 @@ Installable with ``pip install "pyspark[connect]"``.
 ========================== ================= ==========================
 Package                    Supported version Note
 ========================== ================= ==========================
-`pandas`                   >=2.0.0           Required for Spark Connect
-`pyarrow`                  >=11.0.0          Required for Spark Connect
+`pandas`                   >=2.2.0           Required for Spark Connect
+`pyarrow`                  >=15.0.0          Required for Spark Connect
 `grpcio`                   >=1.67.0          Required for Spark Connect
 `grpcio-status`            >=1.67.0          Required for Spark Connect
 `googleapis-common-protos` >=1.65.0          Required for Spark Connect
@@ -237,8 +241,8 @@ Installable with ``pip install "pyspark[sql]"``.
 ========= ================= ======================
 Package   Supported version Note
 ========= ================= ======================
-`pandas`  >=2.0.0           Required for Spark SQL
-`pyarrow` >=11.0.0          Required for Spark SQL
+`pandas`  >=2.2.0           Required for Spark SQL
+`pyarrow` >=15.0.0          Required for Spark SQL
 ========= ================= ======================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -255,7 +259,7 @@ Installable with ``pip install "pyspark[pandas_on_spark]"``.
 Package   Supported version Note
 ========= ================= ================================
 `pandas`  >=2.2.0           Required for Pandas API on Spark
-`pyarrow` >=11.0.0          Required for Pandas API on Spark
+`pyarrow` >=15.0.0          Required for Pandas API on Spark
 ========= ================= ================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -273,7 +277,7 @@ Installable with ``pip install "pyspark[ml]"``.
 ======= ================= ======================================
 Package Supported version Note
 ======= ================= ======================================
-`numpy` >=1.21            Required for MLlib DataFrame-based API
+`numpy` >=1.22            Required for MLlib DataFrame-based API
 ======= ================= ======================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -293,5 +297,22 @@ Installable with ``pip install "pyspark[mllib]"``.
 ======= ================= ==================
 Package Supported version Note
 ======= ================= ==================
-`numpy` >=1.21            Required for MLlib
+`numpy` >=1.22            Required for MLlib
 ======= ================= ==================
+
+Declarative Pipelines
+^^^^^^^^^^^^^^^^^^^^^
+
+Installable with ``pip install "pyspark[pipelines]"``. Includes all dependencies for both Spark SQL and Spark Connect, because Declarative Pipelines is built on top of both.
+
+========================== ================= ===================================================
+Package                    Supported version Note
+========================== ================= ===================================================
+`pandas`                   >=2.2.0           Required for Spark Connect and Spark SQL
+`pyarrow`                  >=15.0.0          Required for Spark Connect and Spark SQL
+`grpcio`                   >=1.67.0          Required for Spark Connect
+`grpcio-status`            >=1.67.0          Required for Spark Connect
+`googleapis-common-protos` >=1.65.0          Required for Spark Connect
+`pyyaml`                   >=3.11            Required for spark-pipelines command line interface
+`graphviz`                 >=0.20            Optional for Spark Connect
+========================== ================= ===================================================

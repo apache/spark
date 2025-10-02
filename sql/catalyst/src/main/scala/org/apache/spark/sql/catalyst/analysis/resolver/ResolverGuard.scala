@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedAlias,
   UnresolvedAttribute,
   UnresolvedFunction,
+  UnresolvedHaving,
   UnresolvedInlineTable,
   UnresolvedOrdinal,
   UnresolvedRelation,
@@ -144,6 +145,10 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         true
       case repartition: Repartition =>
         checkRepartition(repartition)
+      case having: UnresolvedHaving =>
+        checkHaving(having)
+      case sample: Sample =>
+        checkSample(sample)
       case _ =>
         false
     }
@@ -169,8 +174,6 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         checkUnresolvedCast(unresolvedCast)
       case unresolvedUpCast: UpCast =>
         checkUnresolvedUpCast(unresolvedUpCast)
-      case unresolvedStar: UnresolvedStar =>
-        checkUnresolvedStar(unresolvedStar)
       case unresolvedAlias: UnresolvedAlias =>
         checkUnresolvedAlias(unresolvedAlias)
       case unresolvedAttribute: UnresolvedAttribute =>
@@ -195,6 +198,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
         checkUnresolvedFunction(unresolvedFunction)
       case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
         checkGetViewColumnBynameAndOrdinal(getViewColumnByNameAndOrdinal)
+      case semiStructuredExtract: SemiStructuredExtract =>
+        checkSemiStructuredExtract(semiStructuredExtract)
       case expression if isGenerallySupportedExpression(expression) =>
         expression.children.forall(checkExpression)
       case _ =>
@@ -220,13 +225,23 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   }
 
   private def checkProject(project: Project) = {
-    checkOperator(project.child) && project.projectList.forall(checkExpression)
+    checkOperator(project.child) && project.projectList.forall {
+      case _: UnresolvedStar =>
+        true
+      case other =>
+        checkExpression(other)
+    }
   }
 
   private def checkAggregate(aggregate: Aggregate) = {
     checkOperator(aggregate.child) &&
     aggregate.groupingExpressions.forall(checkExpression) &&
-    aggregate.aggregateExpressions.forall(checkExpression)
+    aggregate.aggregateExpressions.forall {
+      case _: UnresolvedStar =>
+        true
+      case other =>
+        checkExpression(other)
+    }
   }
 
   private def checkJoin(join: Join) = {
@@ -268,7 +283,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   private def checkUnresolvedInlineTable(unresolvedInlineTable: UnresolvedInlineTable) =
     unresolvedInlineTable.rows.forall(_.forall(checkExpression))
 
-  private def checkUnresolvedRelation(unresolvedRelation: UnresolvedRelation) = true
+  private def checkUnresolvedRelation(unresolvedRelation: UnresolvedRelation) =
+    !unresolvedRelation.isStreaming
 
   private def checkResolvedInlineTable(resolvedInlineTable: ResolvedInlineTable) =
     resolvedInlineTable.rows.forall(_.forall(checkExpression))
@@ -307,8 +323,6 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
 
   private def checkUnresolvedUpCast(upCast: UpCast) = checkExpression(upCast.child)
 
-  private def checkUnresolvedStar(unresolvedStar: UnresolvedStar) = true
-
   private def checkUnresolvedAlias(unresolvedAlias: UnresolvedAlias) =
     checkExpression(unresolvedAlias.child)
 
@@ -332,6 +346,7 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   }
 
   private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) =
+    unresolvedFunction.nameParts.size == 1 &&
     !ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(unresolvedFunction.nameParts.head) &&
     // UDFs are not supported
     FunctionRegistry.functionSet.contains(
@@ -359,8 +374,18 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
   private def checkGetViewColumnBynameAndOrdinal(
       getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal) = true
 
+  private def checkSemiStructuredExtract(semiStructuredExtract: SemiStructuredExtract) =
+    checkExpression(semiStructuredExtract.child)
+
   private def checkRepartition(repartition: Repartition) = {
     checkOperator(repartition.child)
+  }
+
+  private def checkHaving(having: UnresolvedHaving) =
+    checkExpression(having.havingCondition) && checkOperator(having.child)
+
+  private def checkSample(sample: Sample) = {
+    checkOperator(sample.child)
   }
 
   /**
@@ -415,8 +440,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
           _: RegExpCount | _: RegExpSubStr | _: RegExpInStr =>
         true
       // JSON
-      case _: JsonToStructs | _: StructsToJson | _: SchemaOfJson | _: JsonObjectKeys |
-          _: LengthOfJsonArray =>
+      case _: GetJsonObject | _: JsonTuple | _: JsonToStructs | _: StructsToJson |
+          _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray =>
         true
       // CSV
       case _: SchemaOfCsv | _: StructsToCsv | _: CsvToStructs =>
@@ -448,6 +473,8 @@ class ResolverGuard(catalogManager: CatalogManager) extends SQLConfHelper {
     } else if (conf.getConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY) !=
       LegacyBehaviorPolicy.CORRECTED) {
       Some("legacyCTEPrecedencePolicy")
+    } else if (conf.getConfString("pipelines.id", null) != null) {
+      Some("dlt")
     } else {
       None
     }
@@ -505,19 +532,24 @@ object ResolverGuard {
     map += ("array_sort", ())
     map += ("transform", ())
     // Functions that require generator support.
+    map += ("collations", ())
     map += ("explode", ())
     map += ("explode_outer", ())
     map += ("inline", ())
     map += ("inline_outer", ())
+    map += ("json_tuple", ())
     map += ("posexplode", ())
     map += ("posexplode_outer", ())
+    map += ("stack", ())
+    map += ("sql_keywords", ())
+    map += ("variant_explode", ())
+    map += ("variant_explode_outer", ())
     // Functions that require session/time window resolution.
     map += ("session_window", ())
     map += ("window", ())
     map += ("window_time", ())
     // Functions that are not resolved properly.
     map += ("collate", ())
-    map += ("json_tuple", ())
     // Functions that produce wrong schemas/plans because of alias assignment.
     map += ("from_json", ())
     map += ("schema_of_json", ())

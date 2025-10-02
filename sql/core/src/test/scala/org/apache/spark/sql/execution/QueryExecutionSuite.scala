@@ -20,7 +20,7 @@ import scala.collection.mutable
 import scala.io.Source
 import scala.util.Try
 
-import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator, SaveMode}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, UnsafeRow}
@@ -238,7 +238,8 @@ class QueryExecutionSuite extends SharedSparkSession {
       }
     }
     Seq("=== Applying Rule org.apache.spark.sql.execution",
-        "=== Result of Batch Preparations ===").foreach { expectedMsg =>
+        "=== Result of Batch Preparations ===",
+        "Output Information:").foreach { expectedMsg =>
       assert(testAppender.loggingEvents.exists(
         _.getMessage.getFormattedMessage.contains(expectedMsg)))
     }
@@ -326,37 +327,87 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-47764: Cleanup shuffle dependencies - DoNotCleanup mode") {
-    val plan = spark.range(100).repartition(10).logicalPlan
-    val df = Dataset.ofRows(spark, plan, DoNotCleanup)
-    df.collect()
+  test("SPARK-53413: Cleanup shuffle dependencies for commands") {
+    Seq(true, false).foreach { adaptiveEnabled => {
+      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
+        (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
+        val plan = spark.range(100).repartition(10).logicalPlan
+        val df = Dataset.ofRows(spark, plan)
+        df.write.format("noop").mode(SaveMode.Overwrite).save()
 
-    val blockManager = spark.sparkContext.env.blockManager
-    assert(blockManager.migratableResolver.getStoredShuffles().nonEmpty)
-    assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
-    cleanupShuffles()
+        val blockManager = spark.sparkContext.env.blockManager
+        assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+        assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-53413: Cleanup shuffle dependencies for DataWritingCommandExec") {
+    withTempDir { dir =>
+      Seq(true, false).foreach { adaptiveEnabled => {
+        withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
+          (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
+          val plan = spark.range(100).repartition(10).logicalPlan
+          val df = Dataset.ofRows(spark, plan)
+          // V1 API write
+          df.write.format("csv").mode(SaveMode.Overwrite).save(dir.getCanonicalPath)
+
+          val blockManager = spark.sparkContext.env.blockManager
+          assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+          assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-47764: Cleanup shuffle dependencies - DoNotCleanup mode") {
+    Seq(true, false).foreach { adaptiveEnabled => {
+      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
+        val plan = spark.range(100).repartition(10).logicalPlan
+        val df = Dataset.ofRows(spark, plan, DoNotCleanup)
+        df.collect()
+
+        val blockManager = spark.sparkContext.env.blockManager
+        assert(blockManager.migratableResolver.getStoredShuffles().nonEmpty)
+        assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+        cleanupShuffles()
+        }
+      }
+    }
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - SkipMigration mode") {
-    val plan = spark.range(100).repartition(10).logicalPlan
-    val df = Dataset.ofRows(spark, plan, SkipMigration)
-    df.collect()
+    Seq(true, false).foreach { adaptiveEnabled => {
+      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
+        val plan = spark.range(100).repartition(10).logicalPlan
+        val df = Dataset.ofRows(spark, plan, SkipMigration)
+        df.collect()
 
-    val blockManager = spark.sparkContext.env.blockManager
-    assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
-    assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
-    cleanupShuffles()
+        val blockManager = spark.sparkContext.env.blockManager
+        assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+        assert(blockManager.diskBlockManager.getAllBlocks().nonEmpty)
+        cleanupShuffles()
+        }
+      }
+    }
   }
 
   test("SPARK-47764: Cleanup shuffle dependencies - RemoveShuffleFiles mode") {
-    val plan = spark.range(100).repartition(10).logicalPlan
-    val df = Dataset.ofRows(spark, plan, RemoveShuffleFiles)
-    df.collect()
+    Seq(true, false).foreach { adaptiveEnabled => {
+      withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString)) {
+        val plan = spark.range(100).repartition(10).logicalPlan
+        val df = Dataset.ofRows(spark, plan, RemoveShuffleFiles)
+        df.collect()
 
-    val blockManager = spark.sparkContext.env.blockManager
-    assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
-    assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
-    cleanupShuffles()
+        val blockManager = spark.sparkContext.env.blockManager
+        assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+        assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+        cleanupShuffles()
+        }
+      }
+    }
   }
 
   test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
@@ -437,6 +488,15 @@ class QueryExecutionSuite extends SharedSparkSession {
             "Declarative Pipeline.")
         )
       }
+    }
+  }
+
+  test("determineShuffleCleanupMode should return correct mode based on SQL configuration") {
+    withSQLConf((SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "false")) {
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === DoNotCleanup)
+    }
+    withSQLConf((SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "true")) {
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === RemoveShuffleFiles)
     }
   }
 

@@ -19,13 +19,13 @@ import os
 import random
 import time
 import unittest
-from datetime import date, datetime, timezone
+import datetime
 from decimal import Decimal
+from typing import Iterator, Tuple
 
 from pyspark.util import PythonEvalType
 
-# TODO: import arrow_udf from public API
-from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType
+from pyspark.sql.functions import arrow_udf, ArrowUDFType
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     IntegerType,
@@ -43,13 +43,16 @@ from pyspark.sql.types import (
     Row,
     MapType,
     BinaryType,
+    YearMonthIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -62,6 +65,18 @@ class ScalarArrowUDFTestsMixin:
         @arrow_udf("double")
         def random_udf(v):
             return pa.array(np.random.random(len(v)))
+
+        return random_udf.asNondeterministic()
+
+    @property
+    def nondeterministic_arrow_iter_udf(self):
+        import pyarrow as pa
+        import numpy as np
+
+        @arrow_udf("double", ArrowUDFType.SCALAR_ITER)
+        def random_udf(it):
+            for v in it:
+                yield pa.array(np.random.random(len(v)))
 
         return random_udf.asNondeterministic()
 
@@ -85,7 +100,7 @@ class ScalarArrowUDFTestsMixin:
         df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
 
         tokenize = arrow_udf(
-            lambda s: pa.array([pa.compute.ascii_split_whitespace(s).to_pylist()]),
+            lambda s: pa.array([[v] for v in pa.compute.ascii_split_whitespace(s).to_pylist()]),
             ArrayType(ArrayType(StringType())),
         )
 
@@ -292,16 +307,17 @@ class ScalarArrowUDFTestsMixin:
         def build_date(y, m, d):
             assert all(isinstance(x, pa.Array) for x in [y, m, d])
             dates = [
-                date(int(y[i].as_py()), int(m[i].as_py()), int(d[i].as_py())) for i in range(len(y))
+                datetime.date(int(y[i].as_py()), int(m[i].as_py()), int(d[i].as_py()))
+                for i in range(len(y))
             ]
             return pa.array(dates, pa.date32())
 
         result = df.select(build_date("y", "m", "d").alias("date"))
         self.assertEqual(
             [
-                Row(date=date(2022, 1, 5)),
-                Row(date=date(2023, 2, 6)),
-                Row(date=date(2024, 3, 7)),
+                Row(date=datetime.date(2022, 1, 5)),
+                Row(date=datetime.date(2023, 2, 6)),
+                Row(date=datetime.date(2024, 3, 7)),
             ],
             result.collect(),
         )
@@ -348,14 +364,14 @@ class ScalarArrowUDFTestsMixin:
         def build_ts(y, m, d, h, mi, s):
             assert all(isinstance(x, pa.Array) for x in [y, m, d, h, mi, s])
             dates = [
-                datetime(
+                datetime.datetime(
                     int(y[i].as_py()),
                     int(m[i].as_py()),
                     int(d[i].as_py()),
                     int(h[i].as_py()),
                     int(mi[i].as_py()),
                     int(s[i].as_py()),
-                    tzinfo=timezone.utc,
+                    tzinfo=datetime.timezone.utc,
                 )
                 for i in range(len(y))
             ]
@@ -364,9 +380,9 @@ class ScalarArrowUDFTestsMixin:
         result = df.select(build_ts("y", "m", "d", "h", "mi", "s").alias("ts"))
         self.assertEqual(
             [
-                Row(ts=datetime(2022, 1, 5, 7, 0, 1)),
-                Row(ts=datetime(2023, 2, 6, 8, 1, 2)),
-                Row(ts=datetime(2024, 3, 7, 9, 2, 3)),
+                Row(ts=datetime.datetime(2022, 1, 5, 7, 0, 1)),
+                Row(ts=datetime.datetime(2023, 2, 6, 8, 1, 2)),
+                Row(ts=datetime.datetime(2024, 3, 7, 9, 2, 3)),
             ],
             result.collect(),
         )
@@ -388,7 +404,7 @@ class ScalarArrowUDFTestsMixin:
         def build_ts(y, m, d, h, mi, s):
             assert all(isinstance(x, pa.Array) for x in [y, m, d, h, mi, s])
             dates = [
-                datetime(
+                datetime.datetime(
                     int(y[i].as_py()),
                     int(m[i].as_py()),
                     int(d[i].as_py()),
@@ -403,18 +419,142 @@ class ScalarArrowUDFTestsMixin:
         result = df.select(build_ts("y", "m", "d", "h", "mi", "s").alias("ts"))
         self.assertEqual(
             [
-                Row(ts=datetime(2022, 1, 5, 15, 0, 1)),
-                Row(ts=datetime(2023, 2, 6, 16, 1, 2)),
-                Row(ts=datetime(2024, 3, 7, 17, 2, 3)),
+                Row(ts=datetime.datetime(2022, 1, 5, 15, 0, 1)),
+                Row(ts=datetime.datetime(2023, 2, 6, 16, 1, 2)),
+                Row(ts=datetime.datetime(2024, 3, 7, 17, 2, 3)),
             ],
             result.collect(),
         )
+
+    def test_arrow_udf_input_times(self):
+        import pyarrow as pa
+
+        df = self.spark.sql(
+            """
+            SELECT * FROM VALUES
+            (1, TIME '12:34:56'),
+            (2, TIME '1:2:3'),
+            (3, TIME '0:58:59')
+            AS tab(i, ts)
+            """
+        )
+
+        @arrow_udf("int")
+        def extract_second(v):
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.Time64Array), type(v)
+            return pa.array([t.as_py().second for t in v], pa.int32())
+
+        result = df.select(extract_second("ts").alias("sec"))
+        self.assertEqual(
+            [
+                Row(sec=56),
+                Row(sec=3),
+                Row(sec=59),
+            ],
+            result.collect(),
+        )
+
+    def test_arrow_udf_output_times(self):
+        import pyarrow as pa
+
+        df = self.spark.sql(
+            """
+            SELECT * FROM VALUES
+            (12, 34, 56),
+            (1, 2, 3),
+            (0, 58, 59)
+            AS tab(h, mi, s)
+            """
+        )
+
+        @arrow_udf("time")
+        def build_time(h, mi, s):
+            assert all(isinstance(x, pa.Array) for x in [h, mi, s])
+            dates = [
+                datetime.time(
+                    int(h[i].as_py()),
+                    int(mi[i].as_py()),
+                    int(s[i].as_py()),
+                )
+                for i in range(len(h))
+            ]
+            return pa.array(dates, pa.time64("ns"))
+
+        result = df.select(build_time("h", "mi", "s").alias("t"))
+        self.assertEqual(
+            [
+                Row(t=datetime.time(12, 34, 56)),
+                Row(t=datetime.time(1, 2, 3)),
+                Row(t=datetime.time(0, 58, 59)),
+            ],
+            result.collect(),
+        )
+
+    def test_arrow_udf_input_variant(self):
+        import pyarrow as pa
+
+        @arrow_udf("int")
+        def scalar_f(v: pa.Array) -> pa.Array:
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.StructArray)
+            assert isinstance(v.field("metadata"), pa.BinaryArray)
+            assert isinstance(v.field("value"), pa.BinaryArray)
+            return pa.compute.binary_length(v.field("value"))
+
+        @arrow_udf("int")
+        def iter_f(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for v in it:
+                assert isinstance(v, pa.Array)
+                assert isinstance(v, pa.StructArray)
+                assert isinstance(v.field("metadata"), pa.BinaryArray)
+                assert isinstance(v.field("value"), pa.BinaryArray)
+                yield pa.compute.binary_length(v.field("value"))
+
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        expected = [Row(l=2) for i in range(10)]
+
+        for f in [scalar_f, iter_f]:
+            result = df.select(f("v").alias("l")).collect()
+            self.assertEqual(result, expected)
+
+    def test_arrow_udf_output_variant(self):
+        # referring to test_udf_with_variant_output in test_pandas_udf_scalar
+        import pyarrow as pa
+
+        # referring to_arrow_type in to pyspark.sql.pandas.types
+        fields = [
+            pa.field("value", pa.binary(), nullable=False),
+            pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+        ]
+
+        @arrow_udf("variant")
+        def scalar_f(v: pa.Array) -> pa.Array:
+            assert isinstance(v, pa.Array)
+            v = pa.array([bytes([12, i.as_py()]) for i in v], pa.binary())
+            m = pa.array([bytes([1, 0, 0]) for i in v], pa.binary())
+            return pa.StructArray.from_arrays([v, m], fields=fields)
+
+        @arrow_udf("variant")
+        def iter_f(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for v in it:
+                assert isinstance(v, pa.Array)
+                v = pa.array([bytes([12, i.as_py()]) for i in v])
+                m = pa.array([bytes([1, 0, 0]) for i in v])
+                yield pa.StructArray.from_arrays([v, m], fields=fields)
+
+        df = self.spark.range(0, 10)
+        expected = [Row(l=i) for i in range(10)]
+
+        for f in [scalar_f, iter_f]:
+            result = df.select(f("id").cast("int").alias("l")).collect()
+            self.assertEqual(result, expected)
 
     def test_arrow_udf_null_boolean(self):
         data = [(True,), (True,), (None,), (False,)]
         schema = StructType().add("bool", BooleanType())
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             bool_f = arrow_udf(lambda x: x, BooleanType(), udf_type)
             res = df.select(bool_f(F.col("bool")))
             self.assertEqual(df.collect(), res.collect())
@@ -423,7 +563,7 @@ class ScalarArrowUDFTestsMixin:
         data = [(None,), (2,), (3,), (4,)]
         schema = StructType().add("byte", ByteType())
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             byte_f = arrow_udf(lambda x: x, ByteType(), udf_type)
             res = df.select(byte_f(F.col("byte")))
             self.assertEqual(df.collect(), res.collect())
@@ -432,7 +572,7 @@ class ScalarArrowUDFTestsMixin:
         data = [(None,), (2,), (3,), (4,)]
         schema = StructType().add("short", ShortType())
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             short_f = arrow_udf(lambda x: x, ShortType(), udf_type)
             res = df.select(short_f(F.col("short")))
             self.assertEqual(df.collect(), res.collect())
@@ -441,7 +581,7 @@ class ScalarArrowUDFTestsMixin:
         data = [(None,), (2,), (3,), (4,)]
         schema = StructType().add("int", IntegerType())
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             int_f = arrow_udf(lambda x: x, IntegerType(), udf_type)
             res = df.select(int_f(F.col("int")))
             self.assertEqual(df.collect(), res.collect())
@@ -450,7 +590,7 @@ class ScalarArrowUDFTestsMixin:
         data = [(None,), (2,), (3,), (4,)]
         schema = StructType().add("long", LongType())
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             long_f = arrow_udf(lambda x: x, LongType(), udf_type)
             res = df.select(long_f(F.col("long")))
             self.assertEqual(df.collect(), res.collect())
@@ -459,7 +599,7 @@ class ScalarArrowUDFTestsMixin:
         data = [(3.0,), (5.0,), (-1.0,), (None,)]
         schema = StructType().add("float", FloatType())
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             float_f = arrow_udf(lambda x: x, FloatType(), udf_type)
             res = df.select(float_f(F.col("float")))
             self.assertEqual(df.collect(), res.collect())
@@ -468,7 +608,7 @@ class ScalarArrowUDFTestsMixin:
         data = [(3.0,), (5.0,), (-1.0,), (None,)]
         schema = StructType().add("double", DoubleType())
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             double_f = arrow_udf(lambda x: x, DoubleType(), udf_type)
             res = df.select(double_f(F.col("double")))
             self.assertEqual(df.collect(), res.collect())
@@ -477,7 +617,7 @@ class ScalarArrowUDFTestsMixin:
         data = [(Decimal(3.0),), (Decimal(5.0),), (Decimal(-1.0),), (None,)]
         schema = StructType().add("decimal", DecimalType(38, 18))
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             decimal_f = arrow_udf(lambda x: x, DecimalType(38, 18), udf_type)
             res = df.select(decimal_f(F.col("decimal")))
             self.assertEqual(df.collect(), res.collect())
@@ -486,7 +626,7 @@ class ScalarArrowUDFTestsMixin:
         data = [("foo",), (None,), ("bar",), ("bar",)]
         schema = StructType().add("str", StringType())
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             str_f = arrow_udf(lambda x: x, StringType(), udf_type)
             res = df.select(str_f(F.col("str")))
             self.assertEqual(df.collect(), res.collect())
@@ -495,7 +635,7 @@ class ScalarArrowUDFTestsMixin:
         data = [(bytearray(b"a"),), (None,), (bytearray(b"bb"),), (bytearray(b"ccc"),)]
         schema = StructType().add("binary", BinaryType())
         df = self.spark.createDataFrame(data, schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             binary_f = arrow_udf(lambda x: x, BinaryType(), udf_type)
             res = df.select(binary_f(F.col("binary")))
             self.assertEqual(df.collect(), res.collect())
@@ -504,14 +644,14 @@ class ScalarArrowUDFTestsMixin:
         data = [([1, 2],), (None,), (None,), ([3, 4],), (None,)]
         array_schema = StructType([StructField("array", ArrayType(IntegerType()))])
         df = self.spark.createDataFrame(data, schema=array_schema)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             array_f = arrow_udf(lambda x: x, ArrayType(IntegerType()), udf_type)
             result = df.select(array_f(F.col("array")))
             self.assertEqual(df.collect(), result.collect())
 
     def test_arrow_udf_empty_partition(self):
         df = self.spark.createDataFrame([Row(id=1)]).repartition(2)
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             f = arrow_udf(lambda x: x, LongType(), udf_type)
             res = df.select(f(F.col("id")))
             self.assertEqual(df.collect(), res.collect())
@@ -523,20 +663,24 @@ class ScalarArrowUDFTestsMixin:
             F.col("id").alias("long"),
             F.col("id").cast("float").alias("float"),
             F.col("id").cast("double").alias("double"),
-            # F.col("id").cast("decimal").alias("decimal"),
+            F.col("id").cast("decimal").alias("decimal1"),
+            F.col("id").cast("decimal(10, 0)").alias("decimal2"),
+            F.col("id").cast("decimal(38, 18)").alias("decimal3"),
             F.col("id").cast("boolean").alias("bool"),
         )
 
         def f(x):
             return x
 
-        for udf_type in [ArrowUDFType.SCALAR]:
+        for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
             str_f = arrow_udf(f, "string", udf_type)
             int_f = arrow_udf(f, "integer", udf_type)
             long_f = arrow_udf(f, "long", udf_type)
             float_f = arrow_udf(f, "float", udf_type)
             double_f = arrow_udf(f, "double", udf_type)
-            # decimal_f = arrow_udf(f, "decimal(38, 18)", udf_type)
+            decimal1_f = arrow_udf(f, "decimal", udf_type)
+            decimal2_f = arrow_udf(f, "decimal(10, 0)", udf_type)
+            decimal3_f = arrow_udf(f, "decimal(38, 18)", udf_type)
             bool_f = arrow_udf(f, "boolean", udf_type)
             res = df.select(
                 str_f(F.col("str")),
@@ -544,7 +688,9 @@ class ScalarArrowUDFTestsMixin:
                 long_f(F.col("long")),
                 float_f(F.col("float")),
                 double_f(F.col("double")),
-                # decimal_f("decimal"),
+                decimal1_f("decimal1"),
+                decimal2_f("decimal2"),
+                decimal3_f("decimal3"),
                 bool_f(F.col("bool")),
             )
             self.assertEqual(df.collect(), res.collect())
@@ -575,6 +721,22 @@ class ScalarArrowUDFTestsMixin:
         self.assertEqual(expected.collect(), res1.collect())
         self.assertEqual(expected.collect(), res2.collect())
 
+        @arrow_udf(LongType())
+        def scalar_iter_add(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
+            for a, b in it:
+                yield pa.compute.add(a, b)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
+        new_add = self.spark.udf.register("add1", scalar_iter_add)
+
+        res3 = df.select(new_add(F.col("a"), F.col("b")))
+        res4 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+        )
+        expected = df.select(F.expr("a + b"))
+        self.assertEqual(expected.collect(), res3.collect())
+        self.assertEqual(expected.collect(), res4.collect())
+
     def test_catalog_register_arrow_udf_basic(self):
         import pyarrow as pa
 
@@ -600,6 +762,22 @@ class ScalarArrowUDFTestsMixin:
         expected = df.select(F.expr("a + b"))
         self.assertEqual(expected.collect(), res1.collect())
         self.assertEqual(expected.collect(), res2.collect())
+
+        @arrow_udf(LongType())
+        def scalar_iter_add(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
+            for a, b in it:
+                yield pa.compute.add(a, b)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
+        new_add = self.spark.catalog.registerFunction("add1", scalar_iter_add)
+
+        res3 = df.select(new_add(F.col("a"), F.col("b")))
+        res4 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+        )
+        expected = df.select(F.expr("a + b"))
+        self.assertEqual(expected.collect(), res3.collect())
+        self.assertEqual(expected.collect(), res4.collect())
 
     def test_udf_register_nondeterministic_arrow_udf(self):
         import pyarrow as pa
@@ -637,6 +815,7 @@ class ScalarArrowUDFTestsMixin:
         [row] = self.spark.sql("SELECT randomArrowUDF(1)").collect()
         self.assertEqual(row[0], 7)
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_nondeterministic_arrow_udf(self):
         import pyarrow as pa
 
@@ -645,12 +824,12 @@ class ScalarArrowUDFTestsMixin:
         def scalar_plus_ten(v):
             return pa.compute.add(v, 10)
 
-        # @arrow_udf("double", ArrowUDFType.SCALAR_ITER)
-        # def iter_plus_ten(it):
-        #     for v in it:
-        #         yield pa.compute.add(v, 10)
+        @arrow_udf("double", ArrowUDFType.SCALAR_ITER)
+        def iter_plus_ten(it):
+            for v in it:
+                yield pa.compute.add(v, 10)
 
-        for plus_ten in [scalar_plus_ten]:
+        for plus_ten in [scalar_plus_ten, iter_plus_ten]:
             random_udf = self.nondeterministic_arrow_udf
 
             df = self.spark.range(10).withColumn("rand", random_udf("id"))
@@ -659,12 +838,13 @@ class ScalarArrowUDFTestsMixin:
             self.assertEqual(random_udf.deterministic, False)
             self.assertTrue(result1["plus_ten(rand)"].equals(result1["rand"] + 10))
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_nondeterministic_arrow_udf_in_aggregate(self):
         with self.quiet():
             df = self.spark.range(10)
             for random_udf in [
                 self.nondeterministic_arrow_udf,
-                # self.nondeterministic_vectorized_iter_udf,
+                self.nondeterministic_arrow_iter_udf,
             ]:
                 with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                     df.groupby("id").agg(F.sum(random_udf("id"))).collect()
@@ -672,27 +852,57 @@ class ScalarArrowUDFTestsMixin:
                     df.agg(F.sum(random_udf("id"))).collect()
 
     def test_arrow_udf_chained(self):
-        import pyarrow as pa
+        import pyarrow.compute as pc
 
-        scalar_f = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
-        scalar_g = arrow_udf(lambda x: pa.compute.subtract(x, 1), LongType())
+        scalar_f = arrow_udf(lambda x: pc.add(x, 1), LongType())
+        scalar_g = arrow_udf(lambda x: pc.subtract(x, 1), LongType())
+
+        iter_f = arrow_udf(
+            lambda it: map(lambda x: pc.add(x, 1), it),
+            LongType(),
+            ArrowUDFType.SCALAR_ITER,
+        )
+        iter_g = arrow_udf(
+            lambda it: map(lambda x: pc.subtract(x, 1), it),
+            LongType(),
+            ArrowUDFType.SCALAR_ITER,
+        )
 
         df = self.spark.range(10)
         expected = df.select(F.col("id").alias("res")).collect()
 
-        res = df.select(scalar_g(scalar_f(F.col("id"))).alias("res"))
-        self.assertEqual(expected, res.collect())
+        for f, g in [
+            (scalar_f, scalar_g),
+            (iter_f, iter_g),
+            (scalar_f, iter_g),
+            (iter_f, scalar_g),
+        ]:
+            res = df.select(g(f(F.col("id"))).alias("res"))
+            self.assertEqual(expected, res.collect())
 
     def test_arrow_udf_chained_ii(self):
-        import pyarrow as pa
+        import pyarrow.compute as pc
 
-        scalar_f = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
+        scalar_f = arrow_udf(lambda x: pc.add(x, 1), LongType())
+
+        iter_f = arrow_udf(
+            lambda it: map(lambda x: pc.add(x, 1), it),
+            LongType(),
+            ArrowUDFType.SCALAR_ITER,
+        )
 
         df = self.spark.range(10)
         expected = df.select((F.col("id") + 3).alias("res")).collect()
 
-        res = df.select(scalar_f(scalar_f(scalar_f("id"))).alias("res"))
-        self.assertEqual(expected, res.collect())
+        for f1, f2, f3 in [
+            (scalar_f, scalar_f, scalar_f),
+            (iter_f, iter_f, iter_f),
+            (scalar_f, iter_f, scalar_f),
+            (iter_f, scalar_f, scalar_f),
+            (iter_f, iter_f, iter_f),
+        ]:
+            res = df.select(f1(f2(f3(F.col("id")))).alias("res"))
+            self.assertEqual(expected, res.collect())
 
     def test_arrow_udf_chained_iii(self):
         import pyarrow as pa
@@ -701,11 +911,34 @@ class ScalarArrowUDFTestsMixin:
         scalar_g = arrow_udf(lambda x: pa.compute.subtract(x, 1), LongType())
         scalar_m = arrow_udf(lambda x, y: pa.compute.multiply(x, y), LongType())
 
+        iter_f = arrow_udf(
+            lambda it: map(lambda x: pa.compute.add(x, 1), it),
+            LongType(),
+            ArrowUDFType.SCALAR_ITER,
+        )
+        iter_g = arrow_udf(
+            lambda it: map(lambda x: pa.compute.subtract(x, 1), it),
+            LongType(),
+            ArrowUDFType.SCALAR_ITER,
+        )
+
+        @arrow_udf(LongType())
+        def iter_m(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
+            for a, b in it:
+                yield pa.compute.multiply(a, b)
+
         df = self.spark.range(10)
         expected = df.select(((F.col("id") + 1) * (F.col("id") - 1)).alias("res")).collect()
 
-        res = df.select(scalar_m(scalar_f(F.col("id")), scalar_g(F.col("id"))).alias("res"))
-        self.assertEqual(expected, res.collect())
+        for f, g, m in [
+            (scalar_f, scalar_g, scalar_m),
+            (iter_f, iter_g, iter_m),
+            (scalar_f, iter_g, scalar_m),
+            (iter_f, scalar_g, scalar_m),
+            (iter_f, scalar_g, iter_m),
+        ]:
+            res = df.select(m(f(F.col("id")), g(F.col("id"))).alias("res"))
+            self.assertEqual(expected, res.collect())
 
     def test_arrow_udf_chained_struct_type(self):
         import pyarrow as pa
@@ -716,15 +949,27 @@ class ScalarArrowUDFTestsMixin:
         def scalar_f(id):
             return pa.StructArray.from_arrays([id, id.cast(pa.string())], names=["id", "str"])
 
+        @arrow_udf(return_type)
+        def iter_f(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for id in it:
+                yield pa.StructArray.from_arrays([id, id.cast(pa.string())], names=["id", "str"])
+
         scalar_g = arrow_udf(lambda x: x, return_type)
+        iter_g = arrow_udf(lambda x: x, return_type, ArrowUDFType.SCALAR_ITER)
 
         df = self.spark.range(10)
         expected = df.select(
             F.struct(F.col("id"), F.col("id").cast("string").alias("str")).alias("res")
         ).collect()
 
-        res = df.select(scalar_g(scalar_f(F.col("id"))).alias("res"))
-        self.assertEqual(expected, res.collect())
+        for f, g in [
+            (scalar_f, scalar_g),
+            (iter_f, iter_g),
+            (scalar_f, iter_g),
+            (iter_f, scalar_g),
+        ]:
+            res = df.select(g(f(F.col("id"))).alias("res"))
+            self.assertEqual(expected, res.collect())
 
     def test_arrow_udf_named_arguments(self):
         import pyarrow as pa
@@ -833,6 +1078,99 @@ class ScalarArrowUDFTestsMixin:
         ):
             with self.subTest(query_no=i):
                 self.assertEqual(expected, df.collect())
+
+    def test_arrow_iter_udf_single_column(self):
+        import pyarrow as pa
+
+        @arrow_udf(LongType())
+        def add_one(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for s in it:
+                yield pa.compute.add(s, 1)
+
+        df = self.spark.range(10)
+        expected = df.select((F.col("id") + 1).alias("res")).collect()
+
+        result = df.select(add_one("id").alias("res"))
+        self.assertEqual(expected, result.collect())
+
+    def test_arrow_iter_udf_two_columns(self):
+        import pyarrow as pa
+
+        @arrow_udf(LongType())
+        def multiple(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
+            for a, b in it:
+                yield pa.compute.multiply(a, b)
+
+        df = self.spark.range(10).select(
+            F.col("id").alias("a"),
+            (F.col("id") + 1).alias("b"),
+        )
+
+        expected = df.select((F.col("a") * F.col("b")).alias("res")).collect()
+
+        result = df.select(multiple("a", "b").alias("res"))
+        self.assertEqual(expected, result.collect())
+
+    def test_arrow_iter_udf_three_columns(self):
+        import pyarrow as pa
+
+        @arrow_udf(LongType())
+        def multiple(it: Iterator[Tuple[pa.Array, pa.Array, pa.Array]]) -> Iterator[pa.Array]:
+            for a, b, c in it:
+                yield pa.compute.multiply(pa.compute.multiply(a, b), c)
+
+        df = self.spark.range(10).select(
+            F.col("id").alias("a"),
+            (F.col("id") + 1).alias("b"),
+            (F.col("id") + 2).alias("c"),
+        )
+
+        expected = df.select((F.col("a") * F.col("b") * F.col("c")).alias("res")).collect()
+
+        result = df.select(multiple("a", "b", "c").alias("res"))
+        self.assertEqual(expected, result.collect())
+
+    def test_return_type_coercion(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10)
+
+        scalar_long = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
+        result1 = df.select(scalar_long("id").alias("res"))
+        self.assertEqual(10, len(result1.collect()))
+
+        # long -> int coercion
+        scalar_int1 = arrow_udf(lambda x: pa.compute.add(x, 1), IntegerType())
+        result2 = df.select(scalar_int1("id").alias("res"))
+        self.assertEqual(10, len(result2.collect()))
+
+        # long -> int coercion, overflow
+        scalar_int2 = arrow_udf(lambda x: pa.compute.add(x, 2147483647), IntegerType())
+        result3 = df.select(scalar_int2("id").alias("res"))
+        with self.assertRaises(Exception):
+            # pyarrow.lib.ArrowInvalid:
+            # Integer value 2147483652 not in range: -2147483648 to 2147483647
+            result3.collect()
+
+    def test_unsupported_return_types(self):
+        import pyarrow as pa
+
+        with self.quiet():
+            for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
+                with self.assertRaisesRegex(
+                    NotImplementedError,
+                    "Invalid return type.*scalar Arrow UDF.*ArrayType.*YearMonthIntervalType",
+                ):
+                    arrow_udf(lambda x: x, ArrayType(YearMonthIntervalType()), udf_type)
+
+                with self.assertRaisesRegex(
+                    NotImplementedError,
+                    "Invalid return type.*scalar Arrow UDF.*ArrayType.*YearMonthIntervalType",
+                ):
+
+                    @arrow_udf(ArrayType(YearMonthIntervalType()))
+                    def func_a(a: pa.Array) -> pa.Array:
+                        return a
 
 
 class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):

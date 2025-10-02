@@ -21,7 +21,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, CompoundPlanStatement, ExceptionHandlerType, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, OneRowRelation, Project, RepeatStatement, SearchedCaseStatement, SimpleCaseStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, CompoundPlanStatement, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, OneRowRelation, Project, RepeatStatement, SearchedCaseStatement, SimpleCaseStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -87,17 +87,11 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           args,
           context)
 
-      // Execution node of handler.
-      val handlerScopeLabel = if (handler.handlerType == ExceptionHandlerType.EXIT) {
-        Some(compoundBody.label.get)
-      } else {
-        None
-      }
-
+      // Scope label should be Some(compoundBody.label.get) for both handler types
       val handlerExec = new ExceptionHandlerExec(
         handlerBodyExec,
         handler.handlerType,
-        handlerScopeLabel)
+        Some(compoundBody.label.get))
 
       // For each condition handler is defined for, add corresponding key value pair
       // to the conditionHandlerMap.
@@ -122,12 +116,21 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
       // Get NOT FOUND handler.
       notFoundHandler = if (handler.exceptionHandlerTriggers.notFound) {
-        Some(handlerExec)
+        if (notFoundHandler.isDefined) {
+          throw SqlScriptingErrors.duplicateHandlerForSameCondition(CurrentOrigin.get, "NOT FOUND")
+        } else {
+          Some(handlerExec)
+        }
       } else None
 
       // Get SQLEXCEPTION handler.
       sqlExceptionHandler = if (handler.exceptionHandlerTriggers.sqlException) {
-        Some(handlerExec)
+        if (sqlExceptionHandler.isDefined) {
+          throw SqlScriptingErrors
+            .duplicateHandlerForSameCondition(CurrentOrigin.get, "SQLEXCEPTION")
+        } else {
+          Some(handlerExec)
+        }
       } else None
     })
 

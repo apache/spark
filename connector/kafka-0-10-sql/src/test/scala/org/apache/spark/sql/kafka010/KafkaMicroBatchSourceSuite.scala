@@ -29,22 +29,23 @@ import scala.io.Source
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
 import org.apache.kafka.clients.producer.{ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.matchers.should._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{Dataset, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED}
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
+import org.apache.spark.sql.execution.streaming.runtime.{MicroBatchExecution, StreamExecution, StreamingExecutionRelation}
+import org.apache.spark.sql.execution.streaming.runtime.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED}
 import org.apache.spark.sql.functions.{count, expr, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
@@ -1729,7 +1730,7 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     testStream(query)(
       StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
@@ -2069,6 +2070,44 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     val topic = topicPrefix + "-suffix"
     testFromGlobalTimestampWithNoMatchingStartingOffset(topic,
       "subscribePattern" -> s"$topicPrefix-.*")
+  }
+
+  test("SPARK-53560: no crash looping during uncommitted batch retry in AvailableNow trigger") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, (1 to 7).map(_.toString).toArray, Some(0))
+    def udfFailOn7(x: Int): Int = {
+      if (x == 7) throw new RuntimeException("error for 7")
+      x
+    }
+    val kafka =
+      spark.readStream.format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", topic)
+        .option("startingOffsets", "earliest")
+        .load()
+        .select(expr("CAST(CAST(value AS STRING) AS INT)").as("value"))
+        .as[Int]
+        .map(udfFailOn7)
+
+    withTempDir { dir =>
+      testStream(kafka)(
+        StartStream(Trigger.AvailableNow, checkpointLocation = dir.getAbsolutePath),
+        ExpectFailure[SparkException] { e =>
+          assert(e.getMessage.contains("error for 7"))
+        },
+        AssertOnQuery { q =>
+          testUtils.addPartitions(topic, 2)
+          !q.isActive
+        },
+        StartStream(Trigger.AvailableNow, checkpointLocation = dir.getAbsolutePath),
+        // Getting this error means the query has passed the planning stage, so
+        // verifyEndOffsetForTriggerAvailableNow succeeds.
+        ExpectFailure[SparkException] { e =>
+          assert(e.getMessage.contains("error for 7"))
+        }
+      )
+    }
   }
 
   private def testFromSpecificTimestampsWithNoMatchingStartingOffset(

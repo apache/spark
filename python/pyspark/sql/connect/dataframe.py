@@ -22,6 +22,7 @@ from pyspark.errors.exceptions.base import (
     PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -43,6 +44,7 @@ from typing import (
 )
 
 import copy
+import os
 import sys
 import random
 import pyarrow as pa
@@ -69,6 +71,7 @@ from pyspark.errors import (
     PySparkRuntimeError,
 )
 from pyspark.util import PythonEvalType
+from pyspark.serializers import CPickleSerializer
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.conversion import ArrowTableToRowsConversion
@@ -79,6 +82,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    DirectShufflePartitionID,
     SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
@@ -141,6 +145,7 @@ class DataFrame(ParentDataFrame):
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
+        self._cached_schema_serialized: Optional[bytes] = None
         self._execution_info: Optional["ExecutionInfo"] = None
 
     def __reduce__(self) -> Tuple:
@@ -436,6 +441,38 @@ class DataFrame(ParentDataFrame):
                     "arg_type": type(numPartitions).__name__,
                 },
             )
+        res._cached_schema = self._cached_schema
+        return res
+
+    def repartitionById(
+        self, numPartitions: int, partitionIdCol: "ColumnOrName"
+    ) -> ParentDataFrame:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
+            raise PySparkTypeError(
+                errorClass="NOT_INT",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_type": type(numPartitions).__name__,
+                },
+            )
+        if numPartitions <= 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_value": str(numPartitions),
+                },
+            )
+
+        partition_connect_col = cast(ConnectColumn, F._to_col(partitionIdCol))
+        direct_partition_expr = DirectShufflePartitionID(partition_connect_col._expr)
+        direct_partition_col = ConnectColumn(direct_partition_expr)
+        res = DataFrame(
+            plan.RepartitionByExpression(self._plan, numPartitions, [direct_partition_col]),
+            self._session,
+        )
         res._cached_schema = self._cached_schema
         return res
 
@@ -1737,7 +1774,9 @@ class DataFrame(ParentDataFrame):
                 # }
 
                 # validate the column name
-                if not hasattr(self._session, "is_mock_session"):
+                if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" and not hasattr(
+                    self._session, "is_mock_session"
+                ):
                     from pyspark.sql.connect.types import verify_col_name
 
                     # Try best to verify the column name with cached schema
@@ -1836,11 +1875,24 @@ class DataFrame(ParentDataFrame):
         if self._cached_schema is None:
             query = self._plan.to_proto(self._session.client)
             self._cached_schema = self._session.client.schema(query)
+            try:
+                self._cached_schema_serialized = CPickleSerializer().dumps(self._schema)
+            except Exception as e:
+                logger.warn(f"DataFrame schema pickle dumps failed with exception: {e}.")
+                self._cached_schema_serialized = None
         return self._cached_schema
 
     @property
     def schema(self) -> StructType:
-        return copy.deepcopy(self._schema)
+        # self._schema call will cache the schema and serialize it if it is not cached yet.
+        _schema = self._schema
+        if self._cached_schema_serialized is not None:
+            try:
+                return CPickleSerializer().loads(self._cached_schema_serialized)
+            except Exception as e:
+                logger.warn(f"DataFrame schema pickle loads failed with exception: {e}.")
+        # In case of pickle ser/de failure, fallback to deepcopy approach.
+        return copy.deepcopy(_schema)
 
     @functools.cache
     def isLocal(self) -> bool:
@@ -2285,6 +2337,7 @@ def _test() -> None:
     from pyspark.util import is_remote_only
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.dataframe
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.
@@ -2295,6 +2348,13 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.pandas_api.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

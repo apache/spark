@@ -97,6 +97,37 @@ SELECT * FROM t LIMIT 60;
 
 DROP VIEW ZeroAndOne;
 
+-- limited recursion allowed to stop from failing by putting LIMIT ALL
+WITH RECURSIVE t(n) MAX RECURSION LEVEL 100 AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+SELECT * FROM t LIMIT ALL;
+
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+SELECT * FROM t LIMIT ALL;
+
+-- One reference is limit all but other isn't. Should fail.
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+   (SELECT n FROM t LIMIT ALL) UNION ALL (SELECT n FROM t);
+
+-- One references are limit all.
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+   (SELECT n FROM t LIMIT ALL) UNION ALL (SELECT n FROM t LIMIT ALL);
+
 -- terminate recursion with LIMIT
 WITH RECURSIVE r(level) AS (
   VALUES 0
@@ -182,6 +213,13 @@ WITH
   )
 SELECT * FROM t2;
 
+-- Self reference is inside OneRowSubquery
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT (SELECT n+1 FROM t1 WHERE n<5)
+)
+SELECT * FROM t1 LIMIT 5;
 
 -- recursive reference in a nested CTE
 WITH RECURSIVE
@@ -587,3 +625,202 @@ WITH RECURSIVE t1 AS (
     UNION ALL
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1;
+
+-- Recursive CTE with multiple of the same reference in the anchor, which get referenced differently subsequent iterations.
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte;
+
+-- Previous query without converting to local relations
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0;
+
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y) AS (
+    SELECT x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte;
+
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
+
+-- Recursive CTE with multiple of the same reference in the anchor, which get referenced as different variables in subsequent iterations.
+WITH RECURSIVE tmp(x) AS (
+    values (1), (2), (3), (4), (5)
+), rcte(x, y, z, t) AS (
+    SELECT x, x, x, x FROM tmp WHERE x = 1
+    UNION ALL
+    SELECT x + 1, x, y + 1, y FROM rcte WHERE x < 5
+)
+SELECT * FROM rcte;
+
+-- Non-deterministic query with rand with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(rand(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(rand(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with uniform with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(UNIFORM(1, 6, 82374) AS INT)
+    UNION ALL
+    SELECT CAST(UNIFORM(1, 6, 237685) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with randn with seed
+WITH RECURSIVE randoms(val) AS (
+    SELECT CAST(floor(randn(82374) * 5 + 1) AS INT)
+    UNION ALL
+    SELECT CAST(floor(randn(237685) * 5 + 1) AS INT)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with randstr
+WITH RECURSIVE randoms(val) AS (
+    SELECT randstr(10, 82374)
+    UNION ALL
+    SELECT randstr(10, 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with UUID
+WITH RECURSIVE randoms(val) AS (
+    SELECT UUID(82374)
+    UNION ALL
+    SELECT UUID(237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Non-deterministic query with shuffle
+WITH RECURSIVE randoms(val) AS (
+    SELECT ARRAY(1,2,3,4,5)
+    UNION ALL
+    SELECT SHUFFLE(ARRAY(1,2,3,4,5), 237685)
+    FROM randoms
+)
+SELECT val FROM randoms LIMIT 5;
+
+-- Type coercion where the anchor is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, CAST(1 AS BIGINT)
+    UNION ALL
+    SELECT n+1, n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Type coercion where the recursion is wider
+WITH RECURSIVE t1(n, m) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Recursive CTE with nullable recursion and non-recursive anchor
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT CASE WHEN n < 5 THEN n + 1 ELSE NULL END FROM t1
+)
+SELECT * FROM t1 LIMIT 25;
+
+-- Two calls to same rCTE with and without limit
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1 WHERE n < 5
+)
+SELECT (SELECT SUM(n) FROM (SELECT * FROM t1)), (SELECT SUM(n) FROM (SELECT * FROM t1 LIMIT 3));
+
+-- Two calls to same infinite rCTE with different limits
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1
+)
+SELECT (SELECT SUM(n) FROM (SELECT * FROM t1 LIMIT 5)), (SELECT SUM(n) FROM (SELECT * FROM t1 LIMIT 3));
+
+-- Two calls to same infinite rCTE from another rCTE
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1
+), t2(m) AS (
+    SELECT (SELECT SUM(n) FROM (SELECT n FROM t1 LIMIT 10) AS sums)
+    UNION ALL
+    SELECT m + (SELECT SUM(n) FROM (SELECT n FROM t1 LIMIT 3) AS sums) FROM t2
+)
+SELECT * FROM t2 LIMIT 20;
+
+-- Two calls to recursive CTE with single limit pushed to both
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t1
+)
+    ((SELECT n FROM t1) UNION ALL (SELECT n FROM t1)) LIMIT 20;
+
+-- Recursive CTE with self reference inside Window function
+WITH RECURSIVE win(id, val) AS (
+    SELECT 1, CAST(10 AS BIGINT)
+    UNION ALL
+    SELECT id + 1, SUM(val) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+    FROM win WHERE id < 3
+)
+SELECT * FROM win;
+
+WITH RECURSIVE t1(n) AS (
+    SELECT 1
+    UNION ALL
+    (SELECT n + 1 FROM t1 WHERE n < 5 ORDER BY n)
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n) AS (
+    SELECT 1 FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1 AS (
+    SELECT 1 AS n FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n) AS (
+    WITH t2(m) AS (SELECT 1)
+    SELECT 1 FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1 AS (
+    WITH t2(m) AS (SELECT 1)
+    SELECT 1 AS n FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Query with recursion that gets optimized to empty relation
+WITH RECURSIVE t AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + m
+    FROM (SELECT 2 as m) subq
+             JOIN t ON n = m
+    WHERE n <> m
+)
+SELECT * FROM t;

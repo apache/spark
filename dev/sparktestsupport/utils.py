@@ -47,6 +47,12 @@ def determine_modules_for_files(filenames):
     for filename in filenames:
         if filename.endswith("README.md"):
             continue
+        if filename in (
+            "scalastyle-config.xml",
+            "dev/checkstyle.xml",
+            "dev/checkstyle-suppressions.xml",
+        ):
+            continue
         if ("GITHUB_ACTIONS" not in os.environ) and filename.startswith(".github"):
             continue
         matched_at_least_one_module = False
@@ -112,7 +118,8 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
      'pyspark-pandas', 'pyspark-pandas-connect-part0', 'pyspark-pandas-connect-part1',
      'pyspark-pandas-connect-part2', 'pyspark-pandas-connect-part3', 'pyspark-pandas-slow',
-     'pyspark-sql', 'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-pipelines', 'pyspark-sql', 'pyspark-testing', 'repl', 'sparkr', 'sql',
+     'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
@@ -120,7 +127,8 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
      'pyspark-pandas', 'pyspark-pandas-connect-part0', 'pyspark-pandas-connect-part1',
      'pyspark-pandas-connect-part2', 'pyspark-pandas-connect-part3', 'pyspark-pandas-slow',
-     'pyspark-sql', 'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-pipelines', 'pyspark-sql', 'pyspark-testing', 'repl', 'sparkr', 'sql',
+     'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
@@ -128,9 +136,9 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'protobuf', 'pyspark-connect',
      'pyspark-core', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib', 'pyspark-pandas',
      'pyspark-pandas-connect-part0', 'pyspark-pandas-connect-part1', 'pyspark-pandas-connect-part2',
-     'pyspark-pandas-connect-part3', 'pyspark-pandas-slow', 'pyspark-resource', 'pyspark-sql',
-     'pyspark-streaming', 'pyspark-testing', 'repl', 'root', 'sparkr', 'sql', 'sql-kafka-0-10',
-     'streaming', 'streaming-kafka-0-10', 'streaming-kinesis-asl']
+     'pyspark-pandas-connect-part3', 'pyspark-pandas-slow', 'pyspark-pipelines', 'pyspark-resource',
+     'pyspark-sql', 'pyspark-streaming', 'pyspark-testing', 'repl', 'root', 'sparkr', 'sql',
+     'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10', 'streaming-kinesis-asl']
     """
     modules_to_test = set()
     for module in changed_modules:

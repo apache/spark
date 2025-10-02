@@ -18,9 +18,14 @@
 package org.apache.spark.sql.connect.client
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import com.google.rpc.RetryInfo
 import io.grpc.{Status, StatusRuntimeException}
+import io.grpc.protobuf.StatusProto
+
+import org.apache.spark.internal.Logging
 
 /**
  * [[RetryPolicy]] configure the retry mechanism in [[GrpcRetryHandler]]
@@ -33,8 +38,27 @@ import io.grpc.{Status, StatusRuntimeException}
  *   Maximal value of the exponential backoff (ms).
  * @param backoffMultiplier
  *   Multiplicative base of the exponential backoff.
+ * @param jitter
+ *   Sample a random value uniformly from the range [0, jitter] and add it to the backoff.
+ * @param minJitterThreshold
+ *   Minimal value of the backoff to add random jitter.
  * @param canRetry
  *   Function that determines whether a retry is to be performed in the event of an error.
+ * @param name
+ *   Name of the policy.
+ * @param recognizeServerRetryDelay
+ *   Per gRPC standard, the server can send error messages that contain `RetryInfo` message with
+ *   `retry_delay` field indicating that the client should wait for at least `retry_delay` amount
+ *   of time before retrying again, see:
+ *   https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L91
+ *
+ * If this flag is set to true, RetryPolicy will use `RetryInfo.retry_delay` field in the backoff
+ * computation. Server's `retry_delay` can override client's `maxBackoff`.
+ *
+ * This flag does not change which errors are retried, only how the backoff is computed.
+ * `DefaultPolicy` additionally has a rule for retrying any error that contains `RetryInfo`.
+ * @param maxServerRetryDelay
+ *   Limit for the server-provided `retry_delay`.
  */
 case class RetryPolicy(
     maxRetries: Option[Int] = None,
@@ -44,14 +68,16 @@ case class RetryPolicy(
     jitter: FiniteDuration = FiniteDuration(0, "s"),
     minJitterThreshold: FiniteDuration = FiniteDuration(0, "s"),
     canRetry: Throwable => Boolean,
-    name: String) {
+    name: String,
+    recognizeServerRetryDelay: Boolean = false,
+    maxServerRetryDelay: Option[FiniteDuration] = None) {
 
   def getName: String = name
 
   def toState: RetryPolicy.RetryPolicyState = new RetryPolicy.RetryPolicyState(this)
 }
 
-object RetryPolicy {
+object RetryPolicy extends Logging {
   def defaultPolicy(): RetryPolicy = RetryPolicy(
     name = "DefaultPolicy",
     // Please synchronize changes here with Python side:
@@ -65,7 +91,9 @@ object RetryPolicy {
     backoffMultiplier = 4.0,
     jitter = FiniteDuration(500, "ms"),
     minJitterThreshold = FiniteDuration(2, "s"),
-    canRetry = defaultPolicyRetryException)
+    canRetry = defaultPolicyRetryException,
+    recognizeServerRetryDelay = true,
+    maxServerRetryDelay = Some(FiniteDuration(10, "min")))
 
   // list of policies to be used by this client
   def defaultPolicies(): Seq[RetryPolicy] = List(defaultPolicy())
@@ -77,7 +105,7 @@ object RetryPolicy {
     private var nextWait: Duration = policy.initialBackoff
 
     // return waiting time until next attempt, or None if has exceeded max retries
-    def nextAttempt(): Option[Duration] = {
+    def nextAttempt(e: Throwable): Option[Duration] = {
       if (policy.maxRetries.isDefined && numberAttempts >= policy.maxRetries.get) {
         return None
       }
@@ -88,6 +116,14 @@ object RetryPolicy {
       nextWait = nextWait * policy.backoffMultiplier
       if (policy.maxBackoff.isDefined) {
         nextWait = nextWait min policy.maxBackoff.get
+      }
+
+      if (policy.recognizeServerRetryDelay) {
+        extractRetryDelay(e).foreach { retryDelay =>
+          logDebug(s"The server has sent a retry delay of $retryDelay ms.")
+          val retryDelayLimited = retryDelay min policy.maxServerRetryDelay.getOrElse(retryDelay)
+          currentWait = currentWait max retryDelayLimited
+        }
       }
 
       if (currentWait >= policy.minJitterThreshold) {
@@ -127,8 +163,33 @@ object RetryPolicy {
         if (statusCode == Status.Code.UNAVAILABLE) {
           return true
         }
+
+        // All errors messages containing `RetryInfo` should be retried.
+        if (extractRetryInfo(e).isDefined) {
+          return true
+        }
+
         false
       case _ => false
     }
+  }
+
+  private def extractRetryInfo(e: Throwable): Option[RetryInfo] = {
+    e match {
+      case e: StatusRuntimeException =>
+        Option(StatusProto.fromThrowable(e))
+          .flatMap(status =>
+            status.getDetailsList.asScala
+              .find(_.is(classOf[RetryInfo]))
+              .map(_.unpack(classOf[RetryInfo])))
+      case _ => None
+    }
+  }
+
+  private def extractRetryDelay(e: Throwable): Option[FiniteDuration] = {
+    extractRetryInfo(e)
+      .flatMap(retryInfo => Option(retryInfo.getRetryDelay))
+      .map(retryDelay =>
+        FiniteDuration(retryDelay.getSeconds, "s") + FiniteDuration(retryDelay.getNanos, "ns"))
   }
 }

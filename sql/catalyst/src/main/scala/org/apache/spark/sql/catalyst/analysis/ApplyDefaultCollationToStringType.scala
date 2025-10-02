@@ -17,12 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_COLLATION
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.{CharType, DataType, StringType, VarcharType}
 
 /**
  * Resolves string types in logical plans by assigning them the appropriate collation. The
@@ -33,12 +38,12 @@ import org.apache.spark.sql.types.{DataType, StringType}
  */
 object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val planWithResolvedDefaultCollation = resolveDefaultCollation(plan)
+    val preprocessedPlan = resolveDefaultCollation(pruneRedundantAlterColumnTypes(plan))
 
-    fetchDefaultCollation(planWithResolvedDefaultCollation) match {
+    fetchDefaultCollation(preprocessedPlan) match {
       case Some(collation) =>
-        transform(planWithResolvedDefaultCollation, StringType(collation))
-      case None => planWithResolvedDefaultCollation
+        transform(preprocessedPlan, StringType(collation))
+      case None => preprocessedPlan
     }
   }
 
@@ -114,16 +119,33 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
           if tableSpec.collation.isEmpty =>
           createTable.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
-        case replaceTable@ReplaceTable(
-        ResolvedIdentifier(catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
+
+        case replaceTable@ReplaceTable(ResolvedIdentifier(
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
           if tableSpec.collation.isEmpty =>
           replaceTable.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
+
+        case createView@CreateView(ResolvedIdentifier(
+        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _)
+          if createView.collation.isEmpty =>
+          createView.copy(
+            collation = getCollationFromSchemaMetadata(catalog, identifier.namespace()))
+
+        // We match against ResolvedPersistentView because temporary views don't have a
+        // schema/catalog.
+        case alterViewAs@AlterViewAs(resolvedPersistentView@ResolvedPersistentView(
+        catalog: SupportsNamespaces, identifier, _), _, _)
+          if resolvedPersistentView.metadata.collation.isEmpty =>
+          val newResolvedPersistentView = resolvedPersistentView.copy(
+            metadata = resolvedPersistentView.metadata.copy(
+              collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
+          alterViewAs.copy(child = newResolvedPersistentView)
         case other =>
           other
       }
     } catch {
-      case _: NoSuchNamespaceException =>
+      case NonFatal(_) =>
         plan
     }
   }
@@ -151,19 +173,76 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
       case p if isCreateOrAlterPlan(p) || AnalysisContext.get.collation.isDefined =>
         transformPlan(p, newType)
 
-      case addCols: AddColumns =>
+      case addCols@AddColumns(_: ResolvedTable, _) =>
         addCols.copy(columnsToAdd = replaceColumnTypes(addCols.columnsToAdd, newType))
 
-      case replaceCols: ReplaceColumns =>
+      case replaceCols@ReplaceColumns(_: ResolvedTable, _) =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, newType))
 
-      case a @ AlterColumns(_, specs: Seq[AlterColumnSpec]) =>
+      case a @ AlterColumns(ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
         val newSpecs = specs.map {
-          case spec if spec.newDataType.isDefined && hasDefaultStringType(spec.newDataType.get) =>
+          case spec if shouldApplyDefaultCollationToAlterColumn(spec) =>
             spec.copy(newDataType = Some(replaceDefaultStringType(spec.newDataType.get, newType)))
           case col => col
         }
         a.copy(specs = newSpecs)
+    }
+  }
+
+  /**
+   * The column type should not be changed if the original column type is [[StringType]] and the new
+   * type is the default [[StringType]] (i.e., [[StringType]] without an explicit collation).
+   *
+   * Query Example:
+   * {{{
+   *   CREATE TABLE t (c1 STRING COLLATE UNICODE)
+   *   ALTER TABLE t ALTER COLUMN c1 TYPE STRING -- c1 will remain STRING COLLATE UNICODE
+   * }}}
+   */
+  private def pruneRedundantAlterColumnTypes(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case alterColumns@AlterColumns(
+      ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
+        val resolvedSpecs = specs.map { spec =>
+          if (spec.newDataType.isDefined && isStringTypeColumn(spec.column) &&
+            isDefaultStringType(spec.newDataType.get)) {
+            spec.copy(newDataType = None)
+          } else {
+            spec
+          }
+        }
+        val newAlterColumns = CurrentOrigin.withOrigin(alterColumns.origin) {
+          alterColumns.copy(specs = resolvedSpecs)
+        }
+        newAlterColumns.copyTagsFrom(alterColumns)
+        newAlterColumns
+      case _ =>
+        plan
+    }
+  }
+
+  private def shouldApplyDefaultCollationToAlterColumn(
+      alterColumnSpec: AlterColumnSpec): Boolean = {
+    alterColumnSpec.newDataType.isDefined &&
+      // Applies the default collation only if the original column's type is not StringType.
+      !isStringTypeColumn(alterColumnSpec.column) &&
+      hasDefaultStringType(alterColumnSpec.newDataType.get)
+  }
+
+  /**
+   * Checks whether the field's [[DataType]] is [[StringType]].
+   */
+  private def isStringTypeColumn(fieldName: FieldName): Boolean = {
+    fieldName match {
+      case ResolvedFieldName(_, field) =>
+        CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType) match {
+          case _: CharType => false
+          case _: VarcharType => false
+          case _: StringType => true
+          case _ => false
+        }
+      case UnresolvedFieldName(name) =>
+        throw SparkException.internalError(s"Unexpected UnresolvedFieldName: $name")
     }
   }
 
