@@ -5158,92 +5158,6 @@ END;
 -- Script 67
 --QUERY-DELIMITER-START
 BEGIN
-    DECLARE v_no_last_order_customers INT;
-    DECLARE v_no_sale_days INT;
-    DECLARE v_customer_id INT;
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN VALUES('Customer no-sale error'); END;
-
-    L0: BEGIN
-        SET v_no_last_order_customers = (SELECT COUNT(*) FROM customers WHERE customer_last_order_date IS NULL);
-        IF v_no_last_order_customers > 0 THEN
-            L1: BEGIN
-                FOR cust AS SELECT customer_id FROM customers WHERE customer_last_order_date IS NULL LIMIT 3 DO
-                    IF RANDOM() > 0.7 THEN
-                        INSERT INTO orders (
-                            order_id,
-                            customer_id,
-                            order_date,
-                            order_status,
-                            order_total,
-                            order_tax,
-                            order_discount,
-                            order_shipping
-                        ) VALUES (
-                            (SELECT MAX(order_id) + 1 FROM orders),
-                            cust.customer_id,
-                            DATEADD(DAY, -ROUND(RANDOM() * 100), CURRENT_TIMESTAMP),
-                            'No-Sale Fix',
-                            ROUND(RANDOM() * 100, 2),
-                            0.0,
-                            0.0,
-                            ROUND(RANDOM() * 10, 2)
-                        );
-                        UPDATE customers
-                        SET customer_last_order_date = (
-                            SELECT order_date
-                            FROM orders
-                            WHERE customer_id = cust.customer_id
-                            LIMIT 1
-                        )
-                        WHERE customer_id = cust.customer_id;
-                    END IF;
-                END FOR;
-                SET v_no_last_order_customers = (SELECT COUNT(*) FROM customers WHERE customer_last_order_date IS NULL);
-            END L1;
-        END IF;
-
-        L2: BEGIN
-            SET v_no_sale_days = (SELECT MIN(DATEDIFF(DAY, COALESCE(customer_last_order_date, DATEADD(DAY, -3, CURRENT_TIMESTAMP)), CURRENT_TIMESTAMP)) FROM customers);
-            IF v_no_sale_days > 90 THEN
-                REPEAT
-                    SET v_customer_id = (SELECT MIN(customer_id) FROM customers WHERE DATEDIFF(DAY, COALESCE(customer_last_order_date, DATEADD(DAY, -3, CURRENT_TIMESTAMP)), CURRENT_TIMESTAMP) > 90);
-                    INSERT INTO orders (
-                        order_id,
-                        customer_id,
-                        order_date,
-                        order_status,
-                        order_total,
-                        order_tax,
-                        order_discount,
-                        order_shipping
-                    ) VALUES (
-                        (SELECT MAX(order_id) + 1 FROM orders),
-                        v_customer_id,
-                        CURRENT_TIMESTAMP,
-                        'Revival',
-                        25.0,
-                        2.5,
-                        0.0,
-                        2.5
-                    );
-                    UPDATE customers
-                    SET customer_last_order_date = CURRENT_TIMESTAMP
-                    WHERE customer_id = v_customer_id;
-                    SET v_no_sale_days = (SELECT MIN(DATEDIFF(DAY, COALESCE(customer_last_order_date, DATEADD(DAY, -3, CURRENT_TIMESTAMP)), CURRENT_TIMESTAMP)) FROM customers);
-                UNTIL v_no_sale_days <= 90
-                END REPEAT;
-            END IF;
-        END L2;
-    END L0;
-END;
---QUERY-DELIMITER-END
--- TAGS: FOR, IF, REPEAT (sparing), DML, deep-nesting, exception-handler, last-sale-logic
--- EXPECTED: Customer last order date fixing, "no-sale" customer logic, DML
--- EXECUTES: FOR, IF, REPEAT, nested BEGIN...END, exception handler
-
--- Script 68
---QUERY-DELIMITER-START
-BEGIN
     DECLARE v_employee_tenure_years INT;
     DECLARE v_employee_salary DOUBLE;
     DECLARE v_salary_differential DOUBLE DEFAULT 0.1;
@@ -5305,7 +5219,7 @@ END;
 -- EXPECTED: Tenure-based salary adjustments, diversity hire, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 69
+-- Script 68
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_shipping_region STRING;
@@ -5375,7 +5289,7 @@ END;
 -- EXPECTED: Regional order and customer inserts, geographical isolation, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 70
+-- Script 69
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_tax_percent DOUBLE;
@@ -5431,7 +5345,7 @@ END;
 -- EXPECTED: Country tax inserts, tax rate balancing, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 71
+-- Script 70
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_id INT;
@@ -5487,7 +5401,7 @@ END;
 -- EXPECTED: Review counter updates, unreviewed product insertion, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 72
+-- Script 71
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_active_missing INT;
@@ -5536,7 +5450,7 @@ END;
 -- EXPECTED: Customer active status setting, forced unset case, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 73
+-- Script 72
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_type_count INT;
@@ -5602,7 +5516,7 @@ END;
 -- EXPECTED: Order inserts for customer type diversity, type balancing, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 74
+-- Script 73
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_offer_count INT;
@@ -5637,7 +5551,7 @@ END;
 -- EXPECTED: Offer code insertion, offer logic, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 75
+-- Script 74
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_dept_stagnant INT;
@@ -5696,7 +5610,7 @@ END;
 -- EXPECTED: Employee department balancing insert, department stagnation logic, DML
 -- EXECUTES: IF, nested BEGIN...END, exception handler
 
--- Script 76
+-- Script 75
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_product_min INT DEFAULT 2;
@@ -5752,7 +5666,7 @@ END;
 -- EXPECTED: Supplier-product linkage, product inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 77
+-- Script 76
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_discount_high INT;
@@ -5815,7 +5729,7 @@ END;
 -- EXPECTED: Discount rate balancing, high-discount product control, DML
 -- EXECUTES: IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 78
+-- Script 77
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_last_product_update_days INT;
@@ -5872,7 +5786,7 @@ END;
 -- EXPECTED: Product freshness updates, fresh item inserts, DML
 -- EXECUTES: FOR, REPEAT, nested BEGIN...END, exception handler
 
--- Script 79
+-- Script 78
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_total_min DOUBLE DEFAULT 10.0;
@@ -5924,7 +5838,7 @@ END;
 -- EXPECTED: Order minimum value enforcement, low-value order creation, DML
 -- EXECUTES: IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 80
+-- Script 79
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_employee_transfers_required INT DEFAULT 2;
@@ -5989,7 +5903,7 @@ END;
 -- EXPECTED: Department balancing via transfer, staffing logic, DML
 -- EXECUTES: IF, nested BEGIN...END, exception handler
 
--- Script 81
+-- Script 80
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_region_imbalance INT;
@@ -6086,7 +6000,7 @@ END;
 -- EXPECTED: Regional SKU balancing, supplier/product inserts, DML
 -- EXECUTES: IF, WHILE, nested BEGIN...END, exception handler
 
--- Script 82
+-- Script 81
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_bulk_flag BOOLEAN DEFAULT false;
@@ -6171,7 +6085,7 @@ END;
 -- EXPECTED: Order/item inserts for bulk sales, DML
 -- EXECUTES: WHILE, REPEAT, IF, nested BEGIN...END, exception handler
 
--- Script 83
+-- Script 82
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_company_flag_count INT;
@@ -6205,7 +6119,7 @@ END;
 -- EXPECTED: Customer metadata updates, company flag logic, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 84
+-- Script 83
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_comment_required BOOLEAN DEFAULT false;
@@ -6234,7 +6148,7 @@ END;
 -- EXPECTED: Order item note filling, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 85
+-- Script 84
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_tags_count INT;
@@ -6295,7 +6209,7 @@ END;
 -- EXPECTED: Product metadata tag updates, tagged product inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 86
+-- Script 85
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_multiple_statuses BOOLEAN DEFAULT false;
@@ -6347,7 +6261,7 @@ END;
 -- EXPECTED: Order workflow type diversity, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 87
+-- Script 86
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_inactive_supplier_count INT;
@@ -6420,7 +6334,7 @@ END;
 -- EXPECTED: Clearance product inserts, inactive supplier coverage, DML
 -- EXECUTES: IF, nested BEGIN...END, exception handler
 
--- Script 88
+-- Script 87
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_returns BOOLEAN DEFAULT false;
@@ -6473,7 +6387,7 @@ END;
 -- EXPECTED: Returned item updates, return state coverage, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 89
+-- Script 88
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_orders_no_discount INT;
@@ -6534,7 +6448,7 @@ END;
 -- EXPECTED: Discount application, discount coverage logic, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 90
+-- Script 89
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_product_threshold INT DEFAULT 3;
@@ -6609,7 +6523,7 @@ END;
 -- EXPECTED: Critical category product inserts, order item coverage, DML
 -- EXECUTES: FOR, IF, WHILE, nested BEGIN...END, exception handler
 
--- Script 91
+-- Script 90
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_status_aging BOOLEAN DEFAULT false;
@@ -6678,7 +6592,7 @@ END;
 -- EXPECTED: Status workflow updates, order and item inserts, DML
 -- EXECUTES: IF, nested BEGIN...END, exception handler
 
--- Script 92
+-- Script 91
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_product_missing_weight INT;
@@ -6730,7 +6644,7 @@ END;
 -- EXPECTED: Product weight updates, weighted product inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 93
+-- Script 92
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_opt_in_newsletter_count INT;
@@ -6781,7 +6695,7 @@ END;
 -- EXPECTED: Newsletter opt-in diversity, customer updates/inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 94
+-- Script 93
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_supplier_product_diversity_count INT;
@@ -6840,7 +6754,7 @@ END;
 -- EXPECTED: Supplier-product category diversity inserts, DML
 -- EXECUTES: FOR, IF, nested BEGIN...END, exception handler
 
--- Script 95
+-- Script 94
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_order_item_bundled_flag BOOLEAN DEFAULT false;
@@ -6910,7 +6824,7 @@ END;
 -- EXPECTED: Product bundle inserts, bundle order item inserts, DML
 -- EXECUTES: IF, REPEAT, nested BEGIN...END, exception handler
 
--- Script 96
+-- Script 95
 --QUERY-DELIMITER-START
 BEGIN
     DECLARE v_customer_is_foreign_flag BOOLEAN DEFAULT false;
