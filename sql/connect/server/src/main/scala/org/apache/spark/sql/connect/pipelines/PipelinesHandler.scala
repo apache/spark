@@ -195,7 +195,11 @@ private[connect] object PipelinesHandler extends Logging {
             partitionCols = Option(dataset.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
             properties = dataset.getTablePropertiesMap.asScala.toMap,
-            baseOrigin = QueryOrigin(
+            origin = QueryOrigin(
+              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
+                dataset.getSourceCodeLocation.getFileName),
+              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
+                dataset.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(qualifiedIdentifier.unquotedString),
               language = Option(Python())),
@@ -212,6 +216,10 @@ private[connect] object PipelinesHandler extends Logging {
             identifier = viewIdentifier,
             comment = Option(dataset.getComment),
             origin = QueryOrigin(
+              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
+                dataset.getSourceCodeLocation.getFileName),
+              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
+                dataset.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
               language = Option(Python())),
@@ -281,6 +289,10 @@ private[connect] object PipelinesHandler extends Logging {
         once = false,
         queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
         origin = QueryOrigin(
+          filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
+            flow.getSourceCodeLocation.getFileName),
+          line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
+            flow.getSourceCodeLocation.getLineNumber),
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
           language = Option(Python()))))
