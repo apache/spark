@@ -3870,14 +3870,51 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("test default value conflicting with special column name") {
+  test("test default value special column name conflicting with real column name") {
     val t = "testcat.ns.t"
     withTable("t") {
       sql(s"""CREATE table $t (
          c1 STRING,
-         c2 TIMESTAMP,
-         c3 BOOLEAN DEFAULT FALSE,
-         current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+         current_date DATE DEFAULT CURRENT_DATE,
+         current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         current_time time DEFAULT CURRENT_TIME,
+         current_user STRING DEFAULT CURRENT_USER,
+         session_user STRING DEFAULT SESSION_USER,
+         user STRING DEFAULT USER,
+         current_database STRING DEFAULT CURRENT_DATABASE(),
+         current_catalog STRING DEFAULT CURRENT_CATALOG())""")
+      sql(s"INSERT INTO $t (c1) VALUES ('a')")
+      val result = sql(s"SELECT * FROM $t").collect()
+      assert(result.length == 1)
+      assert(result(0).getString(0) == "a")
+      assert(result(0).get(1) != null)
+      assert(result(0).get(2) != null)
+      assert(result(0).get(3) != null)
+      assert(result(0).get(4) != null)
+      assert(result(0).get(5) != null)
+      assert(result(0).get(6) != null)
+      assert(result(0).get(7) != null)
+      assert(result(0).get(8) != null)
+    }
+  }
+
+  test("test default value should not refer to real column") {
+    val t = "testcat.ns.t"
+    withTable("t") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"""CREATE table $t (
+           c1 STRING,
+           current_timestamp TIMESTAMP DEFAULT c1)""")
+        },
+        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        parameters = Map(
+          "statement" -> "CREATE TABLE",
+          "colName" -> "`current_timestamp`",
+          "defaultValue" -> "c1"
+        ),
+        sqlState = Some("42623")
+      )
     }
   }
 

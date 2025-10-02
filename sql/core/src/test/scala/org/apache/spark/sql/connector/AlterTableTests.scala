@@ -1590,4 +1590,96 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           Row(1, Map(Row(20, null) -> Row("d", null)), "sales")))
     }
   }
+
+  test("Add column with special column name default value conflicting with column name") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      // There is a default value that is a special column name 'current_timestamp'.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN s timestamp DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        val result = sql(s"SELECT * FROM $t").collect()
+        assert(result.length == 1)
+        assert(!result(0).getBoolean(0))
+        assert(result(0).getTimestamp(1) != null)
+      }
+      // There is a default value with special column name 'current_user' but in uppercase.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN s string DEFAULT CURRENT_USER")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        val result = sql(s"SELECT * FROM $t").collect()
+        assert(result.length == 1)
+        assert(!result(0).getBoolean(0))
+        assert(result(0).getString(1) != null)
+      }
+      // There is a default value with special column name same as current column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (b boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN current_timestamp timestamp DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(b) VALUES(false)")
+        val result = sql(s"SELECT * FROM $t").collect()
+        assert(result.length == 1)
+        assert(!result(0).getBoolean(0))
+        assert(result(0).getTimestamp(1) != null)
+      }
+      // There is a default value with special column name same as another column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (current_date boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN s date DEFAULT current_date")
+        sql(s"INSERT INTO $t(current_date) VALUES(false)")
+        val result = sql(s"SELECT * FROM $t").collect()
+        assert(result.length == 1)
+        assert(!result(0).getBoolean(0))
+        assert(result(0).getDate(1) != null)
+      }
+    }
+  }
+
+  test("Set default value for existing column conflicting with special column names") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      // There is a default value that is a special column name 'current_timestamp'.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean, s timestamp) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN s SET DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        val result = sql(s"SELECT * FROM $t").collect()
+        assert(result.length == 1)
+        assert(!result(0).getBoolean(0))
+        assert(result(0).getTimestamp(1) != null)
+      }
+      // There is a default value with special column name 'current_user' but in uppercase.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean, s string) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN s SET DEFAULT CURRENT_USER")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        val result = sql(s"SELECT * FROM $t").collect()
+        assert(result.length == 1)
+        assert(!result(0).getBoolean(0))
+        assert(result(0).getString(1) != null)
+      }
+      // There is a default value with special column name same as current column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (current_timestamp timestamp, b boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN current_timestamp SET DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(b) VALUES(false)")
+        val result = sql(s"SELECT * FROM $t").collect()
+        assert(result.length == 1)
+        assert(result(0).getTimestamp(0) != null)
+        assert(!result(0).getBoolean(1))
+      }
+      // There is a default value with special column name same as another column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (current_date boolean, s date) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN s SET DEFAULT current_date")
+        sql(s"INSERT INTO $t(current_date) VALUES(false)")
+        val result = sql(s"SELECT * FROM $t").collect()
+        assert(result.length == 1)
+        assert(!result(0).getBoolean(0))
+        assert(result(0).getDate(1) != null)
+      }
+    }
+  }
 }

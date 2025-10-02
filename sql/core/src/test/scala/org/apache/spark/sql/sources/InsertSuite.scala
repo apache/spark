@@ -1097,6 +1097,44 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t select false, default")
       checkAnswer(spark.table("t"), Row(false, 42L))
     }
+    // There is a default value that is a special column name 'current_timestamp'.
+    withTable("t") {
+      sql("create table t(i boolean, s timestamp default current_timestamp) using parquet")
+      sql("insert into t(i) values(false)")
+      val result = spark.table("t").collect()
+      assert(result.length == 1)
+      assert(!result(0).getBoolean(0))
+      assert(result(0).getTimestamp(1) != null)
+    }
+    // There is a default value with special column name 'current_user' but in uppercase.
+    withTable("t") {
+      sql("create table t(i boolean, s string default CURRENT_USER) using parquet")
+      sql("insert into t(i) values(false)")
+      val result = spark.table("t").collect()
+      assert(result.length == 1)
+      assert(!result(0).getBoolean(0))
+      assert(result(0).getString(1) != null)
+    }
+    // There is a default value with special column name same as current column name
+    withTable("t") {
+      sql("create table t(current_timestamp timestamp default current_timestamp, b boolean) " +
+        "using parquet")
+      sql("insert into t(b) values(false)")
+      val result = spark.table("t").collect()
+      assert(result.length == 1)
+      assert(result(0).getTimestamp(0) != null)
+      assert(!result(0).getBoolean(1))
+    }
+    // There is a default value with special column name same as another column name
+    withTable("t") {
+      sql("create table t(current_date boolean, s date default current_date) " +
+        "using parquet")
+      sql("insert into t(current_date) values(false)")
+      val result = spark.table("t").collect()
+      assert(result.length == 1)
+      assert(!result(0).getBoolean(0))
+      assert(result(0).getDate(1) != null)
+    }
     // There is a complex query plan in the SELECT query in the INSERT INTO statement.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint default 42) using parquet")
