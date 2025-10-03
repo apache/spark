@@ -35,6 +35,7 @@ limitations under the License.
 """
 import builtins
 import collections.abc
+import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
@@ -234,6 +235,7 @@ class PipelineCommand(google.protobuf.message.Message):
         SCHEMA_FIELD_NUMBER: builtins.int
         FORMAT_FIELD_NUMBER: builtins.int
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
+        EXTENSION_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to attach this dataset to."""
         dataset_name: builtins.str
@@ -264,6 +266,13 @@ class PipelineCommand(google.protobuf.message.Message):
         @property
         def source_code_location(self) -> global___SourceCodeLocation:
             """The location in source code that this dataset was defined."""
+        @property
+        def extension(self) -> google.protobuf.any_pb2.Any:
+            """Reserved field for protocol extensions.
+            Used to support forward-compatibility by carrying additional fields
+            that are not yet defined in this version of the proto. During planning, the
+            engine will resolve and dispatch the concrete command contained in this field.
+            """
         def __init__(
             self,
             *,
@@ -276,6 +285,7 @@ class PipelineCommand(google.protobuf.message.Message):
             schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             format: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
+            extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -302,6 +312,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"dataset_name",
                 "dataset_type",
                 b"dataset_type",
+                "extension",
+                b"extension",
                 "format",
                 b"format",
                 "schema",
@@ -335,6 +347,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"dataset_name",
                 "dataset_type",
                 b"dataset_type",
+                "extension",
+                b"extension",
                 "format",
                 b"format",
                 "partition_cols",
@@ -436,6 +450,7 @@ class PipelineCommand(google.protobuf.message.Message):
         SQL_CONF_FIELD_NUMBER: builtins.int
         CLIENT_ID_FIELD_NUMBER: builtins.int
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
+        EXTENSION_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to attach this flow to."""
         flow_name: builtins.str
@@ -459,6 +474,13 @@ class PipelineCommand(google.protobuf.message.Message):
         @property
         def source_code_location(self) -> global___SourceCodeLocation:
             """The location in source code that this flow was defined."""
+        @property
+        def extension(self) -> google.protobuf.any_pb2.Any:
+            """Reserved field for protocol extensions.
+            Used to support forward-compatibility by carrying additional fields
+            that are not yet defined in this version of the proto. During planning, the
+            engine will resolve and dispatch the concrete command contained in this field.
+            """
         def __init__(
             self,
             *,
@@ -469,6 +491,7 @@ class PipelineCommand(google.protobuf.message.Message):
             sql_conf: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             client_id: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
+            extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -489,6 +512,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"client_id",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
+                "extension",
+                b"extension",
                 "flow_name",
                 b"flow_name",
                 "relation",
@@ -518,6 +543,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"client_id",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
+                "extension",
+                b"extension",
                 "flow_name",
                 b"flow_name",
                 "relation",
@@ -855,6 +882,7 @@ class PipelineCommand(google.protobuf.message.Message):
     DEFINE_SQL_GRAPH_ELEMENTS_FIELD_NUMBER: builtins.int
     GET_QUERY_FUNCTION_EXECUTION_SIGNAL_STREAM_FIELD_NUMBER: builtins.int
     DEFINE_FLOW_QUERY_FUNCTION_RESULT_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def create_dataflow_graph(self) -> global___PipelineCommand.CreateDataflowGraph: ...
     @property
@@ -875,6 +903,13 @@ class PipelineCommand(google.protobuf.message.Message):
     def define_flow_query_function_result(
         self,
     ) -> global___PipelineCommand.DefineFlowQueryFunctionResult: ...
+    @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """Reserved field for protocol extensions.
+        Used to support forward-compatibility by carrying additional command types
+        that are not yet defined in this version of the proto. During planning, the
+        engine will resolve and dispatch the concrete command contained in this field.
+        """
     def __init__(
         self,
         *,
@@ -888,6 +923,7 @@ class PipelineCommand(google.protobuf.message.Message):
         | None = ...,
         define_flow_query_function_result: global___PipelineCommand.DefineFlowQueryFunctionResult
         | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -906,6 +942,8 @@ class PipelineCommand(google.protobuf.message.Message):
             b"define_sql_graph_elements",
             "drop_dataflow_graph",
             b"drop_dataflow_graph",
+            "extension",
+            b"extension",
             "get_query_function_execution_signal_stream",
             b"get_query_function_execution_signal_stream",
             "start_run",
@@ -929,6 +967,8 @@ class PipelineCommand(google.protobuf.message.Message):
             b"define_sql_graph_elements",
             "drop_dataflow_graph",
             b"drop_dataflow_graph",
+            "extension",
+            b"extension",
             "get_query_function_execution_signal_stream",
             b"get_query_function_execution_signal_stream",
             "start_run",
