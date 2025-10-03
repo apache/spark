@@ -3898,6 +3898,19 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("test default value special column name nested in function") {
+    val t = "testcat.ns.t"
+    withTable("t") {
+      sql(s"""CREATE table $t (
+         c1 STRING,
+         current_date DATE DEFAULT DATE_ADD(current_date, 7))""")
+      sql(s"INSERT INTO $t (c1) VALUES ('a')")
+      val result = sql(s"SELECT * FROM $t").collect()
+      assert(result.length == 1)
+      assert(result(0).getString(0) == "a")
+    }
+  }
+
   test("test default value should not refer to real column") {
     val t = "testcat.ns.t"
     withTable("t") {
@@ -3907,7 +3920,7 @@ class DataSourceV2SQLSuiteV1Filter
            c1 STRING,
            current_timestamp TIMESTAMP DEFAULT c1)""")
         },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`current_timestamp`",

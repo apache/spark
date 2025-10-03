@@ -175,13 +175,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             u.copy(child = newChild)
           }
 
-        case d @ DefaultValueExpression(u: UnresolvedAttribute, _, _) =>
-          d.copy(child = LiteralFunctionResolution.resolve(u.nameParts)
-            .map {
-              case Alias(child, _) if !isTopLevel => child
-              case other => other
-            }
-            .getOrElse(u))
+        case d @ DefaultValueExpression(c: Expression, _, _) =>
+          d.copy(child = resolveLiteralColumns(c))
 
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
@@ -200,6 +195,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
         expr
+    }
+  }
+
+  private def resolveLiteralColumns(e: Expression) = {
+    e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+      case u @ UnresolvedAttribute(nameParts) =>
+        LiteralFunctionResolution.resolve(nameParts).getOrElse(u)
     }
   }
 
