@@ -30,3 +30,7 @@ org.apache.spark.sql.streaming.sources.FakeWriteOnly
 org.apache.spark.sql.streaming.sources.FakeNoWrite
 org.apache.spark.sql.streaming.sources.FakeWriteSupportingExternalMetadata
 org.apache.spark.sql.streaming.sources.FakeWriteSupportProviderV1Fallback
+
+# Streaming pushdown test sources
+org.apache.spark.sql.streaming.sources.PushdownStreamingSourceV1
+org.apache.spark.sql.streaming.sources.PushdownStreamingSourceV2

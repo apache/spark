@@ -62,14 +62,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
     case r: DataSourceV2Relation =>
       ScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(r.options))
+    case r: StreamingDataSourceV2Relation =>
+      StreamingScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(r.options))
   }
 
   private def pushDownFilters(plan: LogicalPlan) = plan.transform {
     // update the scan builder with filter push down and return a new plan with filter pushed
-    case Filter(condition, sHolder: ScanBuilderHolder) =>
+    case Filter(condition, sHolder: BaseScanBuilderHolder) =>
       val filters = splitConjunctivePredicates(condition)
       val normalizedFilters =
-        DataSourceStrategy.normalizeExprs(filters, sHolder.relation.output)
+        DataSourceStrategy.normalizeExprs(filters, sHolder.output)
       val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
         normalizedFilters.partition(SubqueryExpression.hasSubquery)
 
@@ -590,15 +592,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
+    case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: BaseScanBuilderHolder) =>
       // column pruning
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
       val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
-      val (scan, output) = PushDownUtils.pruneColumns(
-        sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
+      val (scan, output) = sHolder match {
+        case b: ScanBuilderHolder =>
+          PushDownUtils.pruneColumns(b.builder, b.relation, normalizedProjects, normalizedFilters)
+        case s: StreamingScanBuilderHolder =>
+          PushDownUtils.pruneColumns(s.builder, s.relation, normalizedProjects, normalizedFilters)
+      }
 
       logInfo(
         log"""
@@ -607,7 +613,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val wrappedScan = getWrappedScan(scan, sHolder)
 
-      val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
+      val scanRelation: LogicalPlan = sHolder match {
+        case b: ScanBuilderHolder =>
+          DataSourceV2ScanRelation(b.relation, wrappedScan, output)
+        case s: StreamingScanBuilderHolder =>
+          // For streaming we keep a scan relation without stream here; planning will attach stream
+          StreamingDataSourceV2ScanRelation(s.relation, wrappedScan, output, null)
+      }
 
       val projectionOverSchema =
         ProjectionOverSchema(output.toStructType, AttributeSet(output))
@@ -789,7 +801,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     DataSourceStrategy.normalizeExprs(expressions, output)
   }
 
-  private def getWrappedScan(scan: Scan, sHolder: ScanBuilderHolder): Scan = {
+  private def getWrappedScan(scan: Scan, sHolder: BaseScanBuilderHolder): Scan = {
     scan match {
       case v1: V1Scan =>
         val pushedFilters = sHolder.builder match {
@@ -803,7 +815,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def getPushedDownOperators(sHolder: ScanBuilderHolder): PushedDownOperators = {
+  private def getPushedDownOperators(sHolder: BaseScanBuilderHolder): PushedDownOperators = {
     val optRelationName = Option.when(sHolder.joinedRelations.length <= 1)(sHolder.relation.name)
     PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
       sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates,
@@ -811,10 +823,52 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 }
 
+sealed trait BaseScanBuilderHolder extends LeafNode {
+  var output: Seq[AttributeReference]
+  val relation: DataSourceV2RelationBase
+  val builder: ScanBuilder
+
+  var pushedLimit: Option[Int]
+  var pushedOffset: Option[Int]
+  var sortOrders: Seq[V2SortOrder]
+  var pushedSample: Option[TableSampleInfo]
+  var pushedPredicates: Seq[Predicate]
+  var pushedAggregate: Option[Aggregation]
+  var pushedAggOutputMap: AttributeMap[Expression]
+  var joinedRelations: Seq[DataSourceV2RelationBase]
+  var joinedRelationsPushedDownOperators: Seq[PushedDownOperators]
+  var pushedJoinOutputMap: AttributeMap[Expression]
+}
+
 case class ScanBuilderHolder(
     var output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
-    builder: ScanBuilder) extends LeafNode {
+    builder: ScanBuilder) extends BaseScanBuilderHolder {
+  var pushedLimit: Option[Int] = None
+
+  var pushedOffset: Option[Int] = None
+
+  var sortOrders: Seq[V2SortOrder] = Seq.empty[V2SortOrder]
+
+  var pushedSample: Option[TableSampleInfo] = None
+
+  var pushedPredicates: Seq[Predicate] = Seq.empty[Predicate]
+
+  var pushedAggregate: Option[Aggregation] = None
+
+  var pushedAggOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
+
+  var joinedRelations: Seq[DataSourceV2RelationBase] = Seq(relation)
+
+  var joinedRelationsPushedDownOperators: Seq[PushedDownOperators] = Seq.empty[PushedDownOperators]
+
+  var pushedJoinOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
+}
+
+case class StreamingScanBuilderHolder(
+    var output: Seq[AttributeReference],
+    relation: StreamingDataSourceV2Relation,
+    builder: ScanBuilder) extends BaseScanBuilderHolder {
   var pushedLimit: Option[Int] = None
 
   var pushedOffset: Option[Int] = None

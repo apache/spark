@@ -72,10 +72,10 @@ class ContinuousExecution(
   private val failure: AtomicReference[Throwable] = new AtomicReference[Throwable](null)
 
   override val logicalPlan: WriteToContinuousDataSource = {
-    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
+    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    val _logicalPlan = analyzedPlan.transform {
+    val basePlan = analyzedPlan.transform {
       case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output,
         catalog, identifier, _) =>
         val dsStr = if (ds.nonEmpty) s"[${ds.get}]" else ""
@@ -89,14 +89,25 @@ class ContinuousExecution(
           logInfo(log"Reading table [${MDC(STREAMING_TABLE, table)}] " +
             log"from DataSourceV2 named '${MDC(STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
             log"${MDC(STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-          // TODO: operator pushdown.
-          val scan = table.newScanBuilder(options).build()
-          val stream = scan.toContinuousStream(metadataPath)
           val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)
-          StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
+          relation
         })
     }
+
+    // Run V2ScanRelationPushDown here (during analysis) instead of relying on the optimizer.
+    // Continuous processing needs an actual V2 Scan early so we can materialize the
+    // ContinuousStream via scan.toContinuousStream, enumerate sources, and wire up checkpoint
+    // metadata paths before planning/execution. If we waited for the optimizer, a Scan might not
+    // yet exist at this point, which would prevent creating the stream and collecting sources
+    // reliably for offset tracking and recovery.
+    val _logicalPlan = org.apache.spark.sql.execution.datasources.v2.V2ScanRelationPushDown
+      .apply(basePlan)
+      .transform {
+        case r @ StreamingDataSourceV2ScanRelation(rel, scan, out, null, None, None) =>
+          val stream = scan.toContinuousStream(rel.metadataPath)
+          r.copy(stream = stream)
+      }
 
     sources = _logicalPlan.collect {
       case r: StreamingDataSourceV2ScanRelation => r.stream.asInstanceOf[ContinuousStream]

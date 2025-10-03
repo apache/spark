@@ -181,7 +181,7 @@ object PushDownUtils {
    */
   def pruneColumns(
       scanBuilder: ScanBuilder,
-      relation: DataSourceV2Relation,
+      relation: DataSourceV2RelationBase,
       projects: Seq[NamedExpression],
       filters: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
     val exprs = projects ++ filters
@@ -208,13 +208,13 @@ object PushDownUtils {
         // the underlying table schema
         scan -> toOutputAttrs(scan.readSchema(), relation)
 
-      case _ => scanBuilder.build() -> relation.output
+      case _ => scanBuilder.build() -> relation.output.asInstanceOf[Seq[AttributeReference]]
     }
   }
 
   def toOutputAttrs(
       schema: StructType,
-      relation: DataSourceV2Relation): Seq[AttributeReference] = {
+      relation: DataSourceV2RelationBase): Seq[AttributeReference] = {
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     toAttributes(cleaned).map {

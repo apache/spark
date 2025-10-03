@@ -24,25 +24,31 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.execution.streaming.runtime.{RateStreamOffset, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
-import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
+import org.apache.spark.sql.sources.{DataSourceRegister, Filter, StreamSinkProvider}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 @SlowSQLTest
-class FakeDataStream extends MicroBatchStream with ContinuousStream {
+class FakeDataStream(
+    val requiredSchema: StructType = null,
+    val pushedV1Filters: Array[Filter] = Array.empty,
+    val predicates: Array[Predicate] = Array.empty) extends MicroBatchStream with ContinuousStream {
   override def deserializeOffset(json: String): Offset = RateStreamOffset(Map())
   override def commit(end: Offset): Unit = {}
   override def stop(): Unit = {}
@@ -60,6 +66,234 @@ class FakeDataStream extends MicroBatchStream with ContinuousStream {
   }
   override def createContinuousReaderFactory(): ContinuousPartitionReaderFactory = {
     throw new IllegalStateException("fake source - cannot actually read")
+  }
+}
+
+class PushdownStreamingScanBuilderV1
+  extends ScanBuilder
+    with Scan
+    with SupportsPushDownFilters
+    with SupportsPushDownRequiredColumns {
+
+  import org.apache.spark.sql.sources._
+  import org.apache.spark.sql.types._
+
+  private val fullSchema = StructType(Seq(
+    StructField("i", IntegerType),
+    StructField("j", IntegerType)))
+  var requiredSchema: StructType = fullSchema
+  var pushedV1Filters: Array[Filter] = Array.empty
+
+  override def pruneColumns(schema: StructType): Unit = {
+    requiredSchema = schema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+    val (supported, _) = filters.partition {
+      case GreaterThan("i", _: Int) => true
+      case _ => false
+    }
+    this.pushedV1Filters = supported
+    filters
+  }
+
+  override def pushedFilters(): Array[Filter] = pushedV1Filters
+
+  override def build(): Scan = this
+
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+    new FakeDataStream(requiredSchema, pushedV1Filters, Array.empty)
+  override def toContinuousStream(checkpointLocation: String): ContinuousStream =
+    new FakeDataStream(requiredSchema, pushedV1Filters, Array.empty)
+}
+
+class PushdownStreamingScanBuilderV2
+  extends ScanBuilder
+    with Scan
+    with SupportsPushDownV2Filters
+    with SupportsPushDownRequiredColumns {
+
+  var requiredSchema: StructType = PushdownStreamingSourceV2.fullSchema
+  var predicates: Array[Predicate] = Array.empty
+
+  override def pruneColumns(schema: StructType): Unit = {
+    requiredSchema = schema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    val (supported, _) = predicates.partition(_.name() == "=")
+    this.predicates = supported
+    predicates
+  }
+
+  override def pushedPredicates(): Array[Predicate] = predicates
+
+  override def build(): Scan = this
+
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+    new FakeDataStream(requiredSchema, Array.empty, predicates)
+  override def toContinuousStream(checkpointLocation: String): ContinuousStream =
+    new FakeDataStream(requiredSchema, Array.empty, predicates)
+}
+
+object PushdownStreamingSourceV1 {
+  @volatile var lastBuilder: PushdownStreamingScanBuilderV1 = _
+  val fullSchema = StructType(Seq(
+    StructField("i", IntegerType),
+    StructField("j", IntegerType),
+    StructField("k", LongType)
+  ))
+}
+
+class PushdownStreamingSourceV1
+  extends DataSourceRegister
+    with SimpleTableProvider {
+  override def shortName(): String = "pushdown-streaming-v1"
+  override def getTable(options: CaseInsensitiveStringMap): Table = new Table with SupportsRead {
+    override def name(): String = "pushdown_streaming_v1"
+    override def schema(): StructType = PushdownStreamingSourceV1.fullSchema
+    override def capabilities(): util.Set[TableCapability] =
+      util.EnumSet.of(MICRO_BATCH_READ, CONTINUOUS_READ)
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      val b = new PushdownStreamingScanBuilderV1
+      PushdownStreamingSourceV1.lastBuilder = b
+      b
+    }
+  }
+}
+
+object PushdownStreamingSourceV2 {
+  @volatile var lastBuilder: PushdownStreamingScanBuilderV2 = _
+  val fullSchema = StructType(Seq(
+    StructField("i", IntegerType),
+    StructField("j", IntegerType),
+    StructField("k", LongType)
+  ))
+}
+
+class PushdownStreamingSourceV2
+  extends DataSourceRegister
+    with SimpleTableProvider {
+  override def shortName(): String = "pushdown-streaming-v2"
+  override def getTable(options: CaseInsensitiveStringMap): Table = new Table with SupportsRead {
+    override def name(): String = "pushdown_streaming_v2"
+    override def schema(): StructType = PushdownStreamingSourceV2.fullSchema
+    override def capabilities(): util.Set[TableCapability] =
+      util.EnumSet.of(MICRO_BATCH_READ, CONTINUOUS_READ)
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      val b = new PushdownStreamingScanBuilderV2
+      PushdownStreamingSourceV2.lastBuilder = b
+      b
+    }
+  }
+}
+
+class StreamingDataSourceV2PushdownSuite extends StreamTest {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    val fakeCheckpoint = Utils.createTempDir()
+    spark.conf.set(SQLConf.CHECKPOINT_LOCATION.key, fakeCheckpoint.getCanonicalPath)
+  }
+
+  test("streaming v2 pushdown: v1 filters and column pruning (micro-batch)") {
+    val q = spark.readStream
+      .format("pushdown-streaming-v1")
+      .load()
+      .where("i > 3")
+      .select("j")
+      .writeStream
+      .format("fake-write-microbatch-continuous")
+      .trigger(Trigger.AvailableNow())
+      .start()
+
+    try {
+      eventually(timeout(streamingTimeout)) {
+        val stream = q.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
+          case r: StreamingDataSourceV2ScanRelation => r.stream
+        }.head.asInstanceOf[FakeDataStream]
+        assert(stream.requiredSchema.fieldNames.sorted.sameElements(Array("i", "j")))
+        assert(stream.pushedV1Filters.map(_.toString).sameElements(Array("GreaterThan(i,3)")))
+      }
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming v2 pushdown: v2 predicates and column pruning (micro-batch)") {
+    val q = spark.readStream
+      .format("pushdown-streaming-v2")
+      .load()
+      .where("i = 5")
+      .select("j")
+      .writeStream
+      .format("fake-write-microbatch-continuous")
+      .trigger(Trigger.AvailableNow())
+      .start()
+
+    try {
+      eventually(timeout(streamingTimeout)) {
+        val stream = q.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
+          case r: StreamingDataSourceV2ScanRelation => r.stream
+        }.head.asInstanceOf[FakeDataStream]
+        assert(stream.requiredSchema.fieldNames.sorted.sameElements(Array("i", "j")))
+        assert(stream.predicates.map(_.toString()).sameElements(Array("i = 5")))
+      }
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming v2 pushdown: v1 filters and column pruning (continuous)") {
+    val q = spark.readStream
+      .format("pushdown-streaming-v1")
+      .load()
+      .where("i > 100")
+      .select("j")
+      .writeStream
+      .format("fake-write-microbatch-continuous")
+      .trigger(Trigger.Continuous(1000))
+      .start()
+
+    try {
+      eventually(timeout(streamingTimeout)) {
+        val stream = q.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
+          case r: StreamingDataSourceV2ScanRelation => r.stream
+        }.head.asInstanceOf[FakeDataStream]
+        assert(stream.requiredSchema.fieldNames.sorted.sameElements(Array("i", "j")))
+        assert(stream.pushedV1Filters.map(_.toString).sameElements(Array("GreaterThan(i,100)")))
+      }
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming v2 pushdown: v2 predicates and column pruning (continuous)") {
+    val q = spark.readStream
+      .format("pushdown-streaming-v2")
+      .load()
+      .where("i = 500")
+      .select("j")
+      .writeStream
+      .format("fake-write-microbatch-continuous")
+      .trigger(Trigger.Continuous(1000))
+      .start()
+
+    try {
+      eventually(timeout(streamingTimeout)) {
+        val stream = q.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
+          case r: StreamingDataSourceV2ScanRelation => r.stream
+        }.head.asInstanceOf[FakeDataStream]
+        assert(stream.requiredSchema.fieldNames.sorted.sameElements(Array("i", "j")))
+        assert(stream.predicates.map(_.toString()).sameElements(Array("i = 500")))
+      }
+    } finally {
+      q.stop()
+    }
   }
 }
 

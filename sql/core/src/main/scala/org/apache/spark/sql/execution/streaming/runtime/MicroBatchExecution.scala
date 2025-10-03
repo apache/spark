@@ -158,7 +158,7 @@ class MicroBatchExecution(
     var nextSourceId = 0L
     val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
     val v2ToExecutionRelationMap = MutableMap[StreamingRelationV2, StreamingExecutionRelation]()
-    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
+    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
     // We transform each distinct streaming relation into a StreamingExecutionRelation, keeping a
     // map as we go to ensure each identical relation gets the same StreamingExecutionRelation
     // object. For each microbatch, the StreamingExecutionRelation will be replaced with a logical
@@ -171,7 +171,7 @@ class MicroBatchExecution(
       Utils.stringToSeq(sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders)
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    val _logicalPlan = analyzedPlan.transform {
+    val basePlan = analyzedPlan.transform {
       case streamingRelation @ StreamingRelation(dataSourceV1, sourceName, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
           // Materialize source to avoid creating it in every batch
@@ -196,12 +196,9 @@ class MicroBatchExecution(
             logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-            // TODO: operator pushdown.
-            val scan = table.newScanBuilder(options).build()
-            val stream = scan.toMicroBatchStream(metadataPath)
             val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)
-            StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
+            relation
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
@@ -222,6 +219,23 @@ class MicroBatchExecution(
           })
         }
     }
+    // Run V2ScanRelationPushDown here (during analysis) rather than relying on the optimizer.
+    // Micro-batch execution needs a concrete V2 Scan early so we can materialize the
+    // MicroBatchStream via scan.toMicroBatchStream, enumerate sources, and wire up checkpoint
+    // metadata paths before planning/execution and trigger initialization. If we waited for the
+    // optimizer, a Scan might not yet exist here, which would prevent creating the stream and
+    // reliably collecting sources for offset tracking and recovery. This also applies DSv2
+    // filter/column pushdown while building scans.
+    val pushedPlan = org.apache.spark.sql.execution.datasources.v2.V2ScanRelationPushDown
+      .apply(basePlan)
+      .transform {
+        case r @ StreamingDataSourceV2ScanRelation(rel, scan, out, null, None, None) =>
+          val stream = scan.toMicroBatchStream(rel.metadataPath)
+          r.copy(stream = stream)
+      }
+
+    val _logicalPlan = pushedPlan
+
     sources = _logicalPlan.collect {
       // v1 source
       case s: StreamingExecutionRelation => s.source
