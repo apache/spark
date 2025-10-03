@@ -110,13 +110,19 @@ private[sql] object ArrowUtils {
       largeListType: Boolean = false): Field = {
     dt match {
       case ArrayType(elementType, containsNull) =>
-        val listType = if (largeListType) ArrowType.LargeList.INSTANCE else ArrowType.List.INSTANCE
+        val listType =
+          if (largeListType) ArrowType.LargeList.INSTANCE else ArrowType.List.INSTANCE
         val fieldType = new FieldType(nullable, listType, null)
         new Field(
           name,
           fieldType,
           Seq(
-            toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes,
+            toArrowField(
+              "element",
+              elementType,
+              containsNull,
+              timeZoneId,
+              largeVarTypes,
               largeListType)).asJava)
       case StructType(fields) =>
         val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
@@ -125,7 +131,12 @@ private[sql] object ArrowUtils {
           fieldType,
           fields
             .map { field =>
-              toArrowField(field.name, field.dataType, field.nullable, timeZoneId, largeVarTypes,
+              toArrowField(
+                field.name,
+                field.dataType,
+                field.nullable,
+                timeZoneId,
+                largeVarTypes,
                 largeListType)
             }
             .toImmutableArraySeq
