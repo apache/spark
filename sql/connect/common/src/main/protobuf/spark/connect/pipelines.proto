@@ -40,13 +40,12 @@ message PipelineCommand {
     DefineSqlGraphElements define_sql_graph_elements = 6;
     GetQueryFunctionExecutionSignalStream get_query_function_execution_signal_stream = 7;
     DefineFlowQueryFunctionResult define_flow_query_function_result = 8;
+    // Reserved field for protocol extensions.
+    // Used to support forward-compatibility by carrying additional command types
+    // that are not yet defined in this version of the proto. During planning, the
+    // engine will resolve and dispatch the concrete command contained in this field.
+    google.protobuf.Any extension = 999;
   }
-
-  // Reserved field for protocol extensions.
-  // Used to support forward-compatibility by carrying additional command types
-  // that are not yet defined in this version of the proto. During planning, the
-  // engine will resolve and dispatch the concrete command contained in this field.
-  google.protobuf.Any extension = 999;
 
   // Request to create a new dataflow graph.
   message CreateDataflowGraph {
@@ -101,7 +100,7 @@ message PipelineCommand {
     // Used to support forward-compatibility by carrying additional fields
     // that are not yet defined in this version of the proto. During planning, the
     // engine will resolve and dispatch the concrete command contained in this field.
-    google.protobuf.Any extension = 999;
+    repeated google.protobuf.Any extension = 999;
   }
 
   // Request to define a flow targeting a dataset.
@@ -133,7 +132,7 @@ message PipelineCommand {
     // Used to support forward-compatibility by carrying additional fields
     // that are not yet defined in this version of the proto. During planning, the
     // engine will resolve and dispatch the concrete command contained in this field.
-    google.protobuf.Any extension = 999;
+    repeated google.protobuf.Any extension = 999;
 
     message Response {
       // Fully qualified flow name that uniquely identify a flow in the Dataflow graph.

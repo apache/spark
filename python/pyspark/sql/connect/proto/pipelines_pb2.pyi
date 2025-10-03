@@ -267,7 +267,11 @@ class PipelineCommand(google.protobuf.message.Message):
         def source_code_location(self) -> global___SourceCodeLocation:
             """The location in source code that this dataset was defined."""
         @property
-        def extension(self) -> google.protobuf.any_pb2.Any:
+        def extension(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            google.protobuf.any_pb2.Any
+        ]:
             """Reserved field for protocol extensions.
             Used to support forward-compatibility by carrying additional fields
             that are not yet defined in this version of the proto. During planning, the
@@ -285,7 +289,7 @@ class PipelineCommand(google.protobuf.message.Message):
             schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             format: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
-            extension: google.protobuf.any_pb2.Any | None = ...,
+            extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -312,8 +316,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"dataset_name",
                 "dataset_type",
                 b"dataset_type",
-                "extension",
-                b"extension",
                 "format",
                 b"format",
                 "schema",
@@ -475,7 +477,11 @@ class PipelineCommand(google.protobuf.message.Message):
         def source_code_location(self) -> global___SourceCodeLocation:
             """The location in source code that this flow was defined."""
         @property
-        def extension(self) -> google.protobuf.any_pb2.Any:
+        def extension(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            google.protobuf.any_pb2.Any
+        ]:
             """Reserved field for protocol extensions.
             Used to support forward-compatibility by carrying additional fields
             that are not yet defined in this version of the proto. During planning, the
@@ -491,7 +497,7 @@ class PipelineCommand(google.protobuf.message.Message):
             sql_conf: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             client_id: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
-            extension: google.protobuf.any_pb2.Any | None = ...,
+            extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -512,8 +518,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"client_id",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
-                "extension",
-                b"extension",
                 "flow_name",
                 b"flow_name",
                 "relation",
@@ -987,6 +991,7 @@ class PipelineCommand(google.protobuf.message.Message):
             "define_sql_graph_elements",
             "get_query_function_execution_signal_stream",
             "define_flow_query_function_result",
+            "extension",
         ]
         | None
     ): ...
