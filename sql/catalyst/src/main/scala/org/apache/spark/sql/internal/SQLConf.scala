@@ -2667,7 +2667,8 @@ object SQLConf {
   val MAX_VERSIONS_TO_DELETE = buildConf("spark.sql.streaming.stateStore.maxVersionsToDelete")
     .internal()
     .doc("The maximum number of versions to delete per maintenance operation. By default, " +
-      "this value is set to -1, which means no limit.")
+      "this value is set to -1, which means no limit. Note that, currently this is only " +
+      "supported for the RocksDB state store provider.")
     .version("4.1.0")
     .intConf
     .createWithDefault(-1)
