@@ -188,6 +188,8 @@ public class ArrowColumnVector extends ColumnVector {
       accessor = new MapAccessor(mapVector);
     } else if (vector instanceof ListVector listVector) {
       accessor = new ArrayAccessor(listVector);
+    } else if (vector instanceof LargeListVector largeListVector) {
+      accessor = new LargeArrayAccessor(largeListVector);
     } else if (vector instanceof StructVector structVector) {
       accessor = new StructAccessor(structVector);
 
@@ -555,6 +557,25 @@ public class ArrowColumnVector extends ColumnVector {
       int start = accessor.getElementStartIndex(rowId);
       int end = accessor.getElementEndIndex(rowId);
       return new ColumnarArray(arrayData, start, end - start);
+    }
+  }
+
+  static class LargeArrayAccessor extends ArrowVectorAccessor {
+
+    private final LargeListVector accessor;
+    private final ArrowColumnVector arrayData;
+
+    LargeArrayAccessor(LargeListVector vector) {
+      super(vector);
+      this.accessor = vector;
+      this.arrayData = new ArrowColumnVector(vector.getDataVector());
+    }
+
+    @Override
+    final ColumnarArray getArray(int rowId) {
+      long start = accessor.getElementStartIndex(rowId);
+      long end = accessor.getElementEndIndex(rowId);
+      return new ColumnarArray(arrayData, (int) start, (int) (end - start));
     }
   }
 
