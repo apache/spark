@@ -581,7 +581,10 @@ class RocksDBFileManager(
    * - SST files that were used in a version, but that version got overwritten with a different
    *   set of SST files.
    */
-  def deleteOldVersions(numVersionsToRetain: Int, minVersionsToDelete: Long = 0): Unit = {
+  def deleteOldVersions(
+      numVersionsToRetain: Int,
+      maxVersionsToDelete: Int = -1,
+      minVersionsToDelete: Long = 0): Unit = {
     // Check if enough stale version files present
     if (shouldSkipDeletion(numVersionsToRetain, minVersionsToDelete)) return
 
@@ -603,14 +606,21 @@ class RocksDBFileManager(
 
     // Find the versions to delete
     val maxSnapshotVersionPresent = sortedSnapshotVersionsAndUniqueIds.last._1
+    val minSnapshotVersionPresent = sortedSnapshotVersionsAndUniqueIds.head._1
 
     // In order to reconstruct numVersionsToRetain version, retain the latest snapshot
     // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1).
+    // Also require minVersionToRetain <= minSnapshotVersionPresent + maxVersionsToDelete.
     // If none of the snapshots satisfy the condition, minVersionToRetain will be 0 and
     // no version gets deleted.
     val minVersionToRetain = sortedSnapshotVersionsAndUniqueIds
       .map(_._1)
       .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
+      .filter( v =>
+        if (maxVersionsToDelete != -1) {
+          v <= minSnapshotVersionPresent + maxVersionsToDelete
+        } else true
+      )
       .foldLeft(0L)(math.max)
 
     // When snapshotVersionToDelete is non-empty, there are at least 2 snapshot versions.

@@ -2664,6 +2664,14 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.3)
 
+  val MAX_VERSIONS_TO_DELETE = buildConf("spark.sql.streaming.stateStore.maxVersionsToDelete")
+    .internal()
+    .doc("The maximum number of versions to delete per maintenance operation. By default, " +
+      "this value is set to -1, which means no limit.")
+    .version("4.1.0")
+    .intConf
+    .createWithDefault(-1)
+
   val MAX_BATCHES_TO_RETAIN_IN_MEMORY = buildConf("spark.sql.streaming.maxBatchesToRetainInMemory")
     .internal()
     .doc("The maximum number of batches which will be retained in memory to avoid " +
@@ -6692,6 +6700,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
+
+  def maxVersionsToDelete: Int = getConf(MAX_VERSIONS_TO_DELETE)
 
   def ratioExtraSpaceAllowedInCheckpoint: Double = getConf(RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT)
 

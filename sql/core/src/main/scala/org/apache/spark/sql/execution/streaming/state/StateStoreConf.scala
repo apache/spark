@@ -62,6 +62,9 @@ class StateStoreConf(
   /** Maximum count of versions a State Store implementation should retain in memory */
   val maxVersionsToRetainInMemory: Int = sqlConf.maxBatchesToRetainInMemory
 
+  /** Maximum number of versions to delete per maintenance operation */
+  val maxVersionsToDelete: Int = sqlConf.maxVersionsToDelete
+
   /**
    * Optional fully qualified name of the subclass of [[StateStoreProvider]]
    * managing state data. That is, the implementation of the State Store to use.
