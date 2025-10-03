@@ -136,8 +136,8 @@ class SqlScriptingExecution(
         injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
       }
 
-      // If the last frame is a CONTINUE handler, leave the handler without injecting anyting,
-      // but skip the conditional statement if the exception originated from a conditional
+      // If the last frame is a CONTINUE handler, leave the handler without injecting anything, but
+      // skip the conditional statement if the exception originated from its conditional expression.
       if (lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER
           && context.frames.nonEmpty) {
         // Remove the scope if handler is executed.
