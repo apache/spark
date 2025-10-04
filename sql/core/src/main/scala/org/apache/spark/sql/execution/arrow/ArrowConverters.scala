@@ -53,7 +53,7 @@ private[sql] class ArrowBatchStreamWriter(
     timeZoneId: String,
     errorOnDuplicatedFieldNames: Boolean,
     largeVarTypes: Boolean,
-    largeListType: Boolean = false) {
+    largeListType: Boolean) {
 
   val arrowSchema = ArrowUtils.toArrowSchema(
     schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, largeListType)
@@ -257,7 +257,7 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
-      largeListType: Boolean = false): Array[Byte] = {
+      largeListType: Boolean): Array[Byte] = {
     val batches = new ArrowBatchWithSchemaIterator(
         Iterator.empty, schema, 0L, 0L,
         timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, largeListType,

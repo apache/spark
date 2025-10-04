@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import org.apache.arrow.vector.complex.LargeListVector
 import org.apache.arrow.vector.VectorSchemaRoot
 
 import org.apache.spark.SparkFunSuite
@@ -402,7 +403,6 @@ class ArrowWriterSuite extends SparkFunSuite {
     assert(array4.getInt(2) === 8)
 
     // Verify that the underlying vector is a LargeListVector
-    import org.apache.arrow.vector.complex.LargeListVector
     assert(writer.root.getFieldVectors().get(0).isInstanceOf[LargeListVector])
 
     writer.root.close()
