@@ -81,7 +81,10 @@ message PipelineCommand {
     repeated string partition_cols = 6;
 
     // Schema for the dataset. If unset, this will be inferred from incoming flows.
-    optional spark.connect.DataType schema = 7;
+    oneof schema {
+      spark.connect.DataType data_type = 7;
+      string schema_string = 10;
+    }
 
     // The output table format of the dataset. Only applies to dataset_type == TABLE and
     // dataset_type == MATERIALIZED_VIEW.

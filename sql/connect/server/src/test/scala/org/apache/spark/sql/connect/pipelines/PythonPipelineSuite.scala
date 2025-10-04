@@ -36,6 +36,7 @@ import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
+import org.apache.spark.sql.types.{LongType, StringType}
 
 /**
  * Test suite that starts a Spark Connect server and executes Spark Declarative Pipelines Python
@@ -692,6 +693,86 @@ class PythonPipelineSuite
       },
       condition = "RUN_EMPTY_PIPELINE",
       parameters = Map.empty)
+  }
+
+  test("table with string schema") {
+    val graph = buildGraph("""
+        |from pyspark.sql.functions import lit
+        |
+        |@dp.materialized_view(schema="id LONG, name STRING")
+        |def table_with_string_schema():
+        |    return spark.range(5).withColumn("name", lit("test"))
+        |""".stripMargin)
+      .resolve()
+      .validate()
+
+    assert(graph.flows.size == 1)
+    assert(graph.tables.size == 1)
+
+    val table = graph.table(graphIdentifier("table_with_string_schema"))
+    assert(table.specifiedSchema.isDefined)
+    assert(table.specifiedSchema.get.fieldNames === Array("id", "name"))
+    assert(table.specifiedSchema.get.fields(0).dataType === LongType)
+    assert(table.specifiedSchema.get.fields(1).dataType === StringType)
+  }
+
+  test("table with StructType schema") {
+    val graph = buildGraph("""
+        |from pyspark.sql.types import StructType, StructField, LongType, StringType
+        |from pyspark.sql.functions import lit
+        |
+        |@dp.materialized_view(schema=StructType([
+        |    StructField("id", LongType(), True),
+        |    StructField("name", StringType(), True)
+        |]))
+        |def table_with_struct_schema():
+        |    return spark.range(5).withColumn("name", lit("test"))
+        |""".stripMargin)
+      .resolve()
+      .validate()
+
+    assert(graph.flows.size == 1)
+    assert(graph.tables.size == 1)
+
+    val table = graph.table(graphIdentifier("table_with_struct_schema"))
+    assert(table.specifiedSchema.isDefined)
+    assert(table.specifiedSchema.get.fieldNames === Array("id", "name"))
+    assert(table.specifiedSchema.get.fields(0).dataType === LongType)
+    assert(table.specifiedSchema.get.fields(1).dataType === StringType)
+  }
+
+  test("string schema validation error - schema mismatch") {
+    val graph = buildGraph("""
+        |from pyspark.sql.functions import lit
+        |
+        |@dp.materialized_view(schema="id LONG, name STRING")
+        |def table_with_wrong_schema():
+        |    return spark.range(5).withColumn("wrong_column", lit("test"))
+        |""".stripMargin)
+      .resolve()
+
+    val ex = intercept[AnalysisException] { graph.validate() }
+    assert(ex.getMessage.contains("has a user-specified schema that is incompatible"))
+    assert(ex.getMessage.contains("table_with_wrong_schema"))
+  }
+
+  test("StructType schema validation error - schema mismatch") {
+    val graph = buildGraph("""
+        |from pyspark.sql.types import StructType, StructField, LongType, StringType
+        |from pyspark.sql.functions import lit
+        |
+        |@dp.materialized_view(schema=StructType([
+        |    StructField("id", LongType(), True),
+        |    StructField("name", StringType(), True)
+        |]))
+        |def table_with_wrong_struct_schema():
+        |    return spark.range(5).withColumn("different_column", lit("test"))
+        |""".stripMargin)
+      .resolve()
+
+    val ex = intercept[AnalysisException] { graph.validate() }
+    assert(ex.getMessage.contains("has a user-specified schema that is incompatible"))
+    assert(ex.getMessage.contains("table_with_wrong_struct_schema"))
   }
 
   /**
