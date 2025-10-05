@@ -70,6 +70,7 @@ JVM_ARGS="-XX:+IgnoreUnrecognizedVMOptions \
   --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED \
   -Djdk.reflect.useDirectMethodHandle=false \
   -Dio.netty.tryReflectionSetAccessible=true \
-  --enable-native-access=ALL-UNNAMED"
+  --enable-native-access=ALL-UNNAMED \
+  $JVM_ARGS"
 
 exec java $JVM_ARGS -cp "$SCCLASSPATH" org.apache.spark.sql.application.ConnectRepl "$@"
