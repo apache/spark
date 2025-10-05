@@ -580,6 +580,16 @@ class RocksDBFileManager(
    * - Partially written SST files
    * - SST files that were used in a version, but that version got overwritten with a different
    *   set of SST files.
+   *
+   * @param numVersionsToRetain the number of RocksDB versions to keep in DBFS after the deletion.
+   *                            Must be greater than 0 or -1 to retain all versions.
+   * @param maxVersionsToDelete the max number of RocksDB versions to delete if a deletion occurs.
+   *                            Must be greater than 0 or -1 to delete all non-retained versions.
+   * @param minVersionsToDelete the min number of stale versions required to trigger deletion.
+   *                            If its set to <= 0, then we will always perform list operations
+   *                            to determine deletion candidates. If set to a positive value, then
+   *                            we will skip deletion if the number of stale versions is less than
+   *                            this value.
    */
   def deleteOldVersions(
       numVersionsToRetain: Int,
