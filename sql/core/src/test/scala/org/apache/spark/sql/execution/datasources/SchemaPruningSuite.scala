@@ -1568,7 +1568,8 @@ abstract class SchemaPruningSuite
       // Should keep active, category, price for filter, prune containerType
       checkScan(
         query,
-        "struct<items:array<struct<id:int,name:string,category:string,price:double,active:boolean>>>")
+        "struct<items:array<struct<id:int,name:string,category:string," +
+          "price:double,active:boolean>>>")
       checkAnswer(query, Row(1, "item1") :: Row(3, "item3") :: Nil)
     }
   }
@@ -1619,17 +1620,17 @@ abstract class SchemaPruningSuite
     withDataSourceTable(testData, "documents") {
       // Using SQL lateral view syntax
       val query = sql("""
-        SELECT tag.tagId, tag.tagName, category
-        FROM documents 
+        SELECT tag.tagId, category
+        FROM documents
         LATERAL VIEW explode(tags) t AS tag
         LATERAL VIEW explode(categories) c AS category
         WHERE tag.tagType = 'technology'
       """)
 
-      // Should prune title, tagType is kept for filter
+      // Should prune title and tagName, tagType is kept for filter
       checkScan(
         query,
-        "struct<tags:array<struct<tagId:int,tagName:string,tagType:string>>,categories:array<string>>")
+        "struct<tags:array<struct<tagId:int,tagType:string>>,categories:array<string>>")
       checkAnswer(
         query,
         Row(101, "spark", "tutorial") :: Row(101, "spark", "advanced") ::
@@ -1658,6 +1659,13 @@ abstract class SchemaPruningSuite
             col("left.id") === col("right.id"))
           .select("left.id", "left.leftData", "right.rightCode")
 
+
+        checkScan(
+          query,
+          "struct<leftItems:array<struct<id:int,leftData:string>>>",
+          "struct<rightItems:array<struct<id:int,rightCode:string>>>"
+        )
+
         // Should prune leftValue and rightData
         checkAnswer(query, Row(1, "left1", "code1") :: Row(2, "left2", "code2") :: Nil)
       }
@@ -1678,8 +1686,8 @@ abstract class SchemaPruningSuite
       val query = sql("""
         SELECT item.itemId, item.itemName
         FROM (
-          SELECT explode(items) as item 
-          FROM sub_containers 
+          SELECT explode(items) as item
+          FROM sub_containers
           WHERE containerType = 'standard'
         ) exploded
         WHERE item.itemStatus = 'active'
@@ -1767,7 +1775,8 @@ abstract class SchemaPruningSuite
       // Should prune salary, department, companyName, lastName, age, street, zipCode, country
       checkScan(
         query,
-        "struct<employees:array<struct<empId:int,personalInfo:struct<firstName:string,address:struct<city:string>>>>>")
+        "struct<employees:array<struct<empId:int,personalInfo:struct<" +
+          "firstName:string,address:struct<city:string>>>>>")
       checkAnswer(query, Row(101, "John", "NYC") :: Row(102, "Jane", "SF") :: Nil)
     }
   }
@@ -1820,7 +1829,8 @@ abstract class SchemaPruningSuite
       // Should prune orgType, manager, budget, certified, and other unused fields
       checkScan(
         query,
-        """struct<departments:array<struct<projects:array<struct<skills:array<struct<skillId:int,skillName:string,level:string>>>>>>>""")
+        "struct<departments:array<struct<projects:array<struct<skills:" +
+          "array<struct<skillId:int,skillName:string,level:string>>>>>>>")
       checkAnswer(
         query,
         Row(1, "Scala", "Expert") :: Row(2, "Spark", "Advanced") ::
@@ -1833,13 +1843,17 @@ abstract class SchemaPruningSuite
     // Using raw SQL since case classes don't support maps easily
     val mapData = spark.sql("""
       SELECT map(
-        'user1', named_struct('userId', 1, 'userName', 'John', 'userAge', 25, 'userEmail', 'john@test.com'),
-        'user2', named_struct('userId', 2, 'userName', 'Jane', 'userAge', 30, 'userEmail', 'jane@test.com')
+        'user1', named_struct('userId', 1, 'userName', 'John', 'userAge', 25,
+          'userEmail', 'john@test.com'),
+        'user2', named_struct('userId', 2, 'userName', 'Jane', 'userAge', 30,
+          'userEmail', 'jane@test.com')
       ) as userMap,
       'active' as status,
       array(
-        map('config1', named_struct('configId', 101, 'configValue', 'value1', 'configType', 'string')),
-        map('config2', named_struct('configId', 102, 'configValue', 'value2', 'configType', 'number'))
+        map('config1', named_struct('configId', 101, 'configValue', 'value1',
+          'configType', 'string')),
+        map('config2', named_struct('configId', 102, 'configValue', 'value2',
+          'configType', 'number'))
       ) as configMaps
     """)
 
@@ -1867,11 +1881,14 @@ abstract class SchemaPruningSuite
               'storeName', 'Store A',
               'products', map(
                 'electronics', array(
-                  named_struct('productId', 1001, 'productName', 'Laptop', 'price', 999.99, 'category', 'computers'),
-                  named_struct('productId', 1002, 'productName', 'Mouse', 'price', 19.99, 'category', 'accessories')
+                  named_struct('productId', 1001, 'productName', 'Laptop', 'price', 999.99,
+                    'category', 'computers'),
+                  named_struct('productId', 1002, 'productName', 'Mouse', 'price', 19.99,
+                    'category', 'accessories')
                 ),
                 'books', array(
-                  named_struct('productId', 2001, 'productName', 'Scala Book', 'price', 49.99, 'category', 'programming')
+                  named_struct('productId', 2001, 'productName', 'Scala Book', 'price', 49.99,
+                    'category', 'programming')
                 )
               ),
               'revenue', 50000.0
@@ -1888,7 +1905,7 @@ abstract class SchemaPruningSuite
       SELECT store.storeId, product.productId, product.productName
       FROM complex_data
       LATERAL VIEW explode(regions) r AS region
-      LATERAL VIEW explode(region.stores) s AS store  
+      LATERAL VIEW explode(region.stores) s AS store
       LATERAL VIEW explode(store.products) p AS productType, products
       LATERAL VIEW explode(products) prod AS product
     """)
@@ -1909,8 +1926,10 @@ abstract class SchemaPruningSuite
           'profile', named_struct(
             'profileId', 101,
             'contacts', array(
-              named_struct('phone', '123-456-7890', 'email', 'test1@example.com', 'preferred', 'email'),
-              named_struct('phone', '987-654-3210', 'email', 'test2@example.com', 'preferred', 'phone')
+              named_struct('phone', '123-456-7890', 'email', 'test1@example.com',
+                'preferred', 'email'),
+              named_struct('phone', '987-654-3210', 'email', 'test2@example.com',
+                'preferred', 'phone')
             ),
             'preferences', map('newsletter', 'true', 'sms', 'false')
           ),
@@ -1961,7 +1980,8 @@ abstract class SchemaPruningSuite
       // Should prune rootField, unused1, unused2, unused3, unused4, field3
       checkScan(
         query,
-        """struct<items:array<struct<field1:string,level2:struct<field2:string,level3:struct<level4:struct<field4:string,data4:int>>>>>>""")
+        "struct<items:array<struct<field1:string,level2:struct<field2:string," +
+          "level3:struct<level4:struct<field4:string,data4:int>>>>>>")
       checkAnswer(query, Row("f1", "f2", "f4", 42) :: Row("f1b", "f2b", "f4b", 43) :: Nil)
     }
   }

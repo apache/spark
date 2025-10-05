@@ -148,6 +148,23 @@ object SelectedField {
             val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
             selectField(left, opt)
         }
+      case ArrayTransform(child, lambda @ LambdaFunction(CreateNamedStruct(structExprs), _, _)) =>
+        // ArrayTransform with CreateNamedStruct creates a pruned struct array
+        // Extract the fields being selected in the struct
+        child.dataType match {
+          case ArrayType(st: StructType, containsNull) =>
+            // Get the lambda variable from the lambda function arguments
+            val lambdaVar = lambda.arguments.head
+            val selectedFields = structExprs.grouped(2).collect {
+              case Seq(Literal(_, StringType), GetStructField(v, ordinal, _))
+                  if v == lambdaVar =>
+                st.fields(ordinal)
+            }.toArray
+
+            val prunedStructType = StructType(selectedFields)
+            selectField(child, Option(ArrayType(prunedStructType, containsNull)))
+          case _ => None
+        }
       case _ =>
         None
     }
