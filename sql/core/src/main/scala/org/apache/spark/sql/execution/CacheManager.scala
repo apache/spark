@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -28,11 +29,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPla
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
+  ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -80,6 +83,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   /** Checks if the cache is empty. */
   def isEmpty: Boolean = {
     cachedData.isEmpty
+  }
+
+  private[sql] def numCachedEntries: Int = {
+    cachedData.size
   }
 
   // Test-only
@@ -211,15 +218,29 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       plan: LogicalPlan,
       cascade: Boolean,
       blocking: Boolean): Unit = {
-    uncacheByCondition(spark, _.sameResult(plan), cascade, blocking)
+    EliminateSubqueryAliases(plan) match {
+      case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
+        val nameParts = ident.toQualifiedNameParts(catalog)
+        uncacheTableOrView(spark, nameParts, cascade, blocking)
+      case _ =>
+        uncacheByCondition(spark, _.sameResult(plan), cascade, blocking)
+    }
   }
 
-  def uncacheTableOrView(spark: SparkSession, name: Seq[String], cascade: Boolean): Unit = {
+  def uncacheTableOrView(
+      spark: SparkSession,
+      name: Seq[String],
+      cascade: Boolean,
+      blocking: Boolean = false): Unit = {
     uncacheByCondition(
-      spark, isMatchedTableOrView(_, name, spark.sessionState.conf), cascade, blocking = false)
+      spark, isMatchedTableOrView(_, name, spark.sessionState.conf), cascade, blocking)
   }
 
-  private def isMatchedTableOrView(plan: LogicalPlan, name: Seq[String], conf: SQLConf): Boolean = {
+  private def isMatchedTableOrView(
+      plan: LogicalPlan,
+      name: Seq[String],
+      conf: SQLConf,
+      includeTimeTravel: Boolean = true): Boolean = {
     def isSameName(nameInCache: Seq[String]): Boolean = {
       nameInCache.length == name.length && nameInCache.zip(name).forall(conf.resolver.tupled)
     }
@@ -228,9 +249,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       case LogicalRelationWithTable(_, Some(catalogTable)) =>
         isSameName(catalogTable.identifier.nameParts)
 
-      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _) =>
-        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-        isSameName(v2Ident.toQualifiedNameParts(catalog))
+      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
+        val nameInCache = v2Ident.toQualifiedNameParts(catalog)
+        isSameName(nameInCache) && (includeTimeTravel || timeTravelSpec.isEmpty)
 
       case v: View =>
         isSameName(v.desc.identifier.nameParts)
@@ -299,8 +320,27 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * normalized before being used further.
    */
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
-    val normalized = QueryExecution.normalize(spark, plan)
-    recacheByCondition(spark, _.plan.exists(_.sameResult(normalized)))
+    EliminateSubqueryAliases(plan) match {
+      case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
+        val nameParts = ident.toQualifiedNameParts(catalog)
+        recacheByTableName(spark, nameParts)
+      case _ =>
+        val normalized = QueryExecution.normalize(spark, plan)
+        recacheByCondition(spark, _.plan.exists(_.sameResult(normalized)))
+    }
+  }
+
+  /**
+   * Re-caches all cache entries that reference the given table name.
+   */
+  def recacheByTableName(
+      spark: SparkSession,
+      name: Seq[String],
+      includeTimeTravel: Boolean = true): Unit = {
+    def shouldInvalidate(entry: CachedData): Boolean = {
+      entry.plan.exists(isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel))
+    }
+    recacheByCondition(spark, shouldInvalidate)
   }
 
   /**

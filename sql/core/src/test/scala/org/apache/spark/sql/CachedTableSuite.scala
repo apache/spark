@@ -30,13 +30,20 @@ import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
+import org.apache.spark.sql.connector.catalog.CatalogPlugin
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -58,6 +65,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   import testImplicits._
 
   setupTestData()
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    spark.conf.set(s"spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+  }
 
   override def afterEach(): Unit = {
     try {
@@ -1852,5 +1864,465 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
       assert(!spark.catalog.tableExists("SPARK_52684"))
     }
+  }
+
+  test("cache DSv2 table with time travel") {
+    val t = "testcat.tbl"
+    val version = "v1"
+    withTable(t, "cached_tt") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin current version
+      pinTable("testcat", Identifier.of(Array(), "tbl"), version)
+
+      // cache pinned version
+      sql(s"CACHE TABLE cached_tt AS SELECT * FROM $t VERSION AS OF '$version'")
+      assertCached(sql("SELECT * FROM cached_tt"))
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+      checkAnswer(sql("SELECT * FROM cached_tt"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // verify lookupCachedData finds time travel cache
+      val timeTravelDF = sql(s"SELECT * FROM $t VERSION AS OF '$version'")
+      assert(cacheManager.lookupCachedData(timeTravelDF).isDefined)
+
+      // verify base table is not cached
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assert(!spark.catalog.isCached(t))
+
+      // verify lookupCachedData does NOT match base table with time travel cache
+      val baseDF = sql(s"SELECT * FROM $t")
+      assert(cacheManager.lookupCachedData(baseDF).isEmpty)
+    }
+  }
+
+  test("uncache DSv2 table to invalidate base and time travel plans") {
+    val t = "testcat.tbl"
+    val version = "v1"
+    withTable(t, "cached_tt") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin current version
+      pinTable("testcat", Identifier.of(Array(), "tbl"), version)
+
+      // cache base table
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      assert(spark.catalog.isCached(t))
+
+      // cache pinned version
+      sql(s"CACHE TABLE cached_tt AS SELECT * FROM $t VERSION AS OF '$version'")
+      assertCached(sql("SELECT * FROM cached_tt"))
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+
+      // verify lookupCachedData finds separate entries for base and time travel plans
+      val baseDF = sql(s"SELECT * FROM $t")
+      val timeTravelDF = sql(s"SELECT * FROM $t VERSION AS OF '$version'")
+      assert(cacheManager.lookupCachedData(baseDF).isDefined)
+      assert(cacheManager.lookupCachedData(timeTravelDF).isDefined)
+      assert(cacheManager.lookupCachedData(baseDF) != cacheManager.lookupCachedData(timeTravelDF))
+
+      // uncaching base table should affect ALL time-traveled cache entries
+      uncacheTable(t)
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertNotCached(sql("SELECT * FROM cached_tt"))
+
+      // verify lookupCachedData returns None after uncaching
+      assert(cacheManager.lookupCachedData(baseDF).isEmpty)
+      assert(cacheManager.lookupCachedData(timeTravelDF).isEmpty)
+    }
+  }
+
+  test("uncache DSv2 table with time travel by plan") {
+    val t = "testcat.tbl"
+    val version = "v1"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin current version
+      pinTable("testcat", Identifier.of(Array(), "tbl"), version)
+
+      // cache pinned version
+      val timeTravelDF = sql(s"SELECT * FROM $t VERSION AS OF '$version'")
+      timeTravelDF.cache()
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+
+      // verify base table is not affected
+      assertNotCached(sql(s"SELECT * FROM $t"))
+
+      // verify lookupCachedData finds the cache before uncaching
+      assert(cacheManager.lookupCachedData(timeTravelDF).isDefined)
+
+      // uncache pinned version by plan
+      cacheManager.uncacheQuery(timeTravelDF, cascade = false)
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+
+      // verify lookupCachedData returns None after uncaching
+      assert(cacheManager.lookupCachedData(timeTravelDF).isEmpty)
+    }
+  }
+
+  test("uncache DSv2 table by qualified name with time travel") {
+    val t = "testcat.tbl"
+    val version = "v1"
+    withTable(t, "cached_tt") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin current version
+      pinTable("testcat", Identifier.of(Array(), "tbl"), version)
+
+      // cache base
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+
+      // cache pinned version
+      sql(s"CACHE TABLE cached_tt AS SELECT * FROM $t VERSION AS OF '$version'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+
+      // verify lookupCachedData finds both before uncaching
+      val baseDF = sql(s"SELECT * FROM $t")
+      assert(cacheManager.lookupCachedData(baseDF).isDefined)
+      val timeTravelDF = sql(s"SELECT * FROM $t VERSION AS OF '$version'")
+      assert(cacheManager.lookupCachedData(timeTravelDF).isDefined)
+
+      // uncache by qualified name should uncache both plans
+      spark.catalog.uncacheTable(t)
+
+      // verify queries don't use cache
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+
+      // verify lookupCachedData returns None for both after uncaching
+      assert(cacheManager.lookupCachedData(baseDF).isEmpty)
+      assert(cacheManager.lookupCachedData(timeTravelDF).isEmpty)
+    }
+  }
+
+  test("uncache DSv2 table by relation with multiple time travel versions") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      // cache base
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t"),
+        Seq(Row(1, "a"), Row(2, "b"), Row(3, "c"), Row(4, "d")))
+
+      // cache v1
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t VERSION AS OF '$version1'"),
+        Seq(Row(1, "a"), Row(2, "b")))
+
+      // cache v2
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t VERSION AS OF '$version2'"),
+        Seq(Row(1, "a"), Row(2, "b"), Row(3, "c"), Row(4, "d")))
+
+      // verify lookupCachedData finds distinct entries for each version
+      val baseDF = sql(s"SELECT * FROM $t")
+      assert(cacheManager.lookupCachedData(baseDF).isDefined)
+      val v1DF = sql(s"SELECT * FROM $t VERSION AS OF '$version1'")
+      assert(cacheManager.lookupCachedData(v1DF).isDefined)
+      val v2DF = sql(s"SELECT * FROM $t VERSION AS OF '$version2'")
+      assert(cacheManager.lookupCachedData(v2DF).isDefined)
+
+      // look up cache using DataSourceV2Relation directly
+      val cat = catalog("testcat").asTableCatalog
+      val baseTable = cat.loadTable(ident)
+      val baseRelation = DataSourceV2Relation.create(baseTable, Some(cat), Some(ident))
+      assert(cacheManager.lookupCachedData(spark, baseRelation).isDefined)
+      val v1Table = cat.loadTable(ident, version1)
+      val v1Relation = baseRelation.copy(
+        table = v1Table,
+        timeTravelSpec = Some(AsOfVersion(version1)))
+      assert(cacheManager.lookupCachedData(spark, v1Relation).isDefined)
+      val v2Table = cat.loadTable(ident, version2)
+      val v2Relation = baseRelation.copy(
+        table = v2Table,
+        timeTravelSpec = Some(AsOfVersion(version2)))
+      assert(cacheManager.lookupCachedData(spark, v2Relation).isDefined)
+
+      // uncache using DataSourceV2Relation directly
+      cacheManager.uncacheQuery(spark, baseRelation, cascade = true)
+      assert(cacheManager.lookupCachedData(spark, baseRelation).isEmpty)
+      assert(cacheManager.lookupCachedData(spark, v1Relation).isEmpty)
+      assert(cacheManager.lookupCachedData(spark, v2Relation).isEmpty)
+
+      // verify queries don't use cache
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+    }
+  }
+
+  test("uncache DSv2 table using SQL") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      // cache base and both pinned versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // uncache all plans using SQL
+      sql(s"UNCACHE TABLE $t")
+
+      // verify queries don't use cache
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+    }
+  }
+
+  test("uncache DSv2 table using uncacheTableOrView") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      // cache base and both pinned versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // uncache all plans using uncacheTableOrView
+      cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
+
+      // verify queries don't use cache
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+    }
+  }
+
+  test("REFRESH TABLE refreshes time travel plans correctly") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin versions
+      pinTable("testcat", ident, version1)
+      pinTable("testcat", ident, version2)
+
+      // cache base and both versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // must have 3 cache entries
+      assert(cacheManager.numCachedEntries == 3)
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = true)
+
+      // refresh base table, which should also refresh all time travel plans
+      sql(s"REFRESH TABLE $t")
+
+      // all entries must be refreshed
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = false)
+    }
+  }
+
+  test("recacheByTableName with time travel plans") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin versions
+      pinTable("testcat", ident, version1)
+      pinTable("testcat", ident, version2)
+
+      // cache base and both versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // must have 3 cache entries
+      assert(cacheManager.numCachedEntries == 3)
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = true)
+
+      // refresh base, keep pinned versions cached
+      cacheManager.recacheByTableName(spark, Seq("testcat", "tbl"), includeTimeTravel = false)
+
+      // time travel entries must NOT be refreshed
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = true)
+
+      // refresh all
+      cacheManager.recacheByTableName(spark, Seq("testcat", "tbl"))
+
+      // all plans must be refreshed
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = false)
+    }
+  }
+
+  private def checkCacheLoading(ds: Dataset[_], isLoaded: Boolean): Unit = {
+    cacheManager.lookupCachedData(ds) match {
+      case Some(entry) =>
+        assert(entry.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded == isLoaded)
+      case _ =>
+        fail("dataset is not cached")
+    }
+  }
+
+  test("RENAME TABLE manages cache with time travel plans correctly") {
+    val t = "testcat.tbl"
+    val tRenamed = "testcat.tbl_renamed"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, tRenamed, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin versions
+      pinTable("testcat", ident, version1)
+      pinTable("testcat", ident, version2)
+
+      // cache base and both versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // must have 3 cache entries
+      assert(cacheManager.numCachedEntries == 3)
+
+      // rename base table
+      sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
+
+      // assert cache was cleared and renamed table (current version) was cached again
+      assert(cacheManager.numCachedEntries == 1)
+      assertCached(sql(s"SELECT * FROM $tRenamed"))
+    }
+  }
+
+  test("DROP TABLE invalidates time travel cache entries") {
+    checkTimeTravelPlanInvalidation { t =>
+      sql(s"DROP TABLE $t")
+    }
+  }
+
+  test("REPLACE TABLE invalidates time travel cache entries") {
+    checkTimeTravelPlanInvalidation { t =>
+      sql(s"REPLACE TABLE $t (a INT COMMENT 'test', b STRING NOT NULL)")
+    }
+  }
+
+  private def checkTimeTravelPlanInvalidation(action: String => Unit): Unit = {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      pinTable("testcat", ident, version1)
+      pinTable("testcat", ident, version2)
+
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      assert(cacheManager.numCachedEntries == 3)
+
+      action(t)
+
+      assert(cacheManager.isEmpty)
+    }
+  }
+
+  private def cacheManager = spark.sharedState.cacheManager
+
+  private def pinTable(
+      catalogName: String,
+      ident: Identifier,
+      version: String): Unit = {
+    catalog(catalogName) match {
+      case inMemory: BasicInMemoryTableCatalog => inMemory.pinTable(ident, version)
+      case _ => fail(s"can't pin $ident in $catalogName")
+    }
+  }
+
+  private def catalog(name: String): CatalogPlugin = {
+    spark.sessionState.catalogManager.catalog(name)
   }
 }

@@ -200,6 +200,10 @@ abstract class QueryTest extends PlanTest {
     checkAggregatesWithTol(dataFrame, Seq(expectedAnswer), absTol)
   }
 
+  def assertNotCached(query: Dataset[_]): Unit = {
+    assertCached(query, numCachedTables = 0)
+  }
+
   /**
    * Asserts that a given [[Dataset]] will be executed using the given number of cached results.
    */
