@@ -490,6 +490,10 @@ class TransformWithStateInPySparkStateServer(
             sendResponse(2, s"state $stateName doesn't exist")
           }
         case ListStateCall.MethodCase.LISTSTATEPUT =>
+          // TODO: Check whether we can safely remove fetchWithArrow without breaking backward
+          //  compatibility (Spark Connect)
+          // TODO: Also check whether fetchWithArrow has a clear benefit to be retained (in terms
+          //  of performance)
           val rows = if (message.getListStatePut.getFetchWithArrow) {
             deserializer.readArrowBatches(inputStream)
           } else {
@@ -522,6 +526,10 @@ class TransformWithStateInPySparkStateServer(
           listStateInfo.listState.appendValue(newRow)
           sendResponse(0)
         case ListStateCall.MethodCase.APPENDLIST =>
+          // TODO: Check whether we can safely remove fetchWithArrow without breaking backward
+          //  compatibility (Spark Connect)
+          // TODO: Also check whether fetchWithArrow has a clear benefit to be retained (in terms
+          //  of performance)
           val rows = if (message.getAppendList.getFetchWithArrow) {
             deserializer.readArrowBatches(inputStream)
           } else {

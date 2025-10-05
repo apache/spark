@@ -123,16 +123,11 @@ case class Table(
     normalizedPath: Option[String],
     properties: Map[String, String] = Map.empty,
     comment: Option[String],
-    baseOrigin: QueryOrigin,
+    override val origin: QueryOrigin,
     isStreamingTable: Boolean,
     format: Option[String]
 ) extends TableInput
     with Output {
-
-  override val origin: QueryOrigin = baseOrigin.copy(
-    objectType = Some("table"),
-    objectName = Some(identifier.unquotedString)
-  )
 
   // Load this table's data from underlying storage.
   override def load(readOptions: InputReadOptions): DataFrame = {
