@@ -46,4 +46,28 @@ private[spark] object SparkClosureCleaner {
       }
     }
   }
+
+  /**
+   * Clean the given closure and return a new closure with only accessed fields.
+   * This method is designed for Java 21+ where direct field modification is not allowed.
+   *
+   * @param closure           the closure to clean
+   * @param checkSerializable whether to verify that the closure is serializable after cleaning
+   * @param cleanTransitively whether to clean enclosing closures transitively
+   * @return a new closure with only accessed fields
+   */
+  def cleanAndRet[T <: AnyRef](
+      closure: T,
+      checkSerializable: Boolean = true,
+      cleanTransitively: Boolean = true): T = {
+    val cleanedClosure = ClosureCleaner.cleanAndRet(closure, cleanTransitively, mutable.Map.empty)
+    try {
+      if (checkSerializable && SparkEnv.get != null) {
+        SparkEnv.get.closureSerializer.newInstance().serialize(cleanedClosure)
+      }
+    } catch {
+      case ex: Exception => throw new SparkException("Task not serializable", ex)
+    }
+    cleanedClosure.asInstanceOf[T]
+  }
 }

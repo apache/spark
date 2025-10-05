@@ -138,7 +138,7 @@ private[spark] object ClosureCleaner extends Logging {
       obj: AnyRef,
       outerClass: Class[_],
       accessedFields: Map[Class[_], Set[String]]): AnyRef = {
-    val clone = instantiateClass(outerClass, parent)
+    val clone = instantiateClass(outerClass, parent, "$outer")
 
     var currentClass = outerClass
     assert(currentClass != null, "The outer class can't be null.")
@@ -261,6 +261,73 @@ private[spark] object ClosureCleaner extends Logging {
     }
 
     true
+  }
+
+  /**
+   * Clean the given closure and return a new closure with only accessed fields.
+   * This method is designed for Java 21+ where direct field modification is not allowed.
+   *
+   * @param func              the closure to clean
+   * @param cleanTransitively whether to clean enclosing closures transitively
+   * @param accessedFields    a map from a class to a set of its fields that are accessed by
+   *                          the starting closure
+   * @return a new closure with only accessed fields
+   */
+  private[spark] def cleanAndRet(
+      func: AnyRef,
+      cleanTransitively: Boolean,
+      accessedFields: Map[Class[_], Set[String]]): AnyRef = {
+    // Only handle indylambda closures for Java 21+
+    val maybeIndylambdaProxy = IndylambdaScalaClosures.getSerializationProxy(func)
+
+    if (!isClosure(func.getClass) && maybeIndylambdaProxy.isEmpty) {
+      logDebug(s"Expected a closure; got ${func.getClass.getName}")
+      return func
+    }
+
+    if (func == null) {
+      return func
+    }
+
+    if (maybeIndylambdaProxy.isEmpty) {
+      // For non-indylambda closures, return original func (not supported in Java 21+)
+      logWarning(s"Non-indylambda closure not supported in Java 21+: ${func.getClass.getName}")
+      return func
+    }
+
+    val lambdaProxy = maybeIndylambdaProxy.get
+    val implMethodName = lambdaProxy.getImplMethodName
+
+    logDebug(s"Cloning indylambda closure and returning the new cleaned closure: $implMethodName")
+
+    // capturing class is the class that declared this lambda
+    val capturingClassName = lambdaProxy.getCapturingClass.replace('/', '.')
+    val classLoader = func.getClass.getClassLoader
+    // scalastyle:off classforname
+    val capturingClass = Class.forName(capturingClassName, false, classLoader)
+    // scalastyle:on classforname
+
+    // Fail fast if we detect return statements in closures
+    val capturingClassReader = getClassReader(capturingClass)
+    capturingClassReader.accept(new ReturnStatementFinder(Option(implMethodName)), 0)
+
+    val outerThis = if (lambdaProxy.getCapturedArgCount > 0) {
+      // only need to clean when there is an enclosing non-null "this" captured by the closure
+      Option(lambdaProxy.getCapturedArg(0)).getOrElse(return func)
+    } else {
+      return func
+    }
+
+    val isClosureDeclaredInScalaRepl = capturingClassName.startsWith("$line") &&
+      capturingClassName.endsWith("$iw")
+    if (isClosureDeclaredInScalaRepl && outerThis.getClass.getName == capturingClassName) {
+      assert(accessedFields.isEmpty)
+      cleanupScalaReplClosureAndRet(func, lambdaProxy, outerThis, cleanTransitively)
+    } else {
+      // For other closures, return original func
+      logWarning(s"Unsupported closure type for Java 21+: ${func.getClass.getName}")
+      func
+    }
   }
 
   /**
@@ -390,17 +457,21 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   /**
-   * Null out fields of enclosing class which are not actually accessed by a closure
-   * @param func the starting closure to clean
-   * @param lambdaProxy starting closure proxy
-   * @param outerThis lambda enclosing class
-   * @param cleanTransitively whether to clean enclosing closures transitively
+   * Clone outer this for Scala REPL closure with only accessed fields.
+   * This is the common logic shared between cleanupScalaReplClosure and
+   * cleanupScalaReplClosureAndRet.
+   *
+   * @param func              the closure to clean
+   * @param lambdaProxy       lambda proxy
+   * @param outerThis         outer this object
+   * @param cleanTransitively whether to clean transitively
+   * @return outer this (either original or cloned) with only accessed fields
    */
-  private def cleanupScalaReplClosure(
+  private def cloneOuterThisForScalaReplClosure(
       func: AnyRef,
       lambdaProxy: SerializedLambda,
       outerThis: AnyRef,
-      cleanTransitively: Boolean): Unit = {
+      cleanTransitively: Boolean): AnyRef = {
 
     val capturingClass = outerThis.getClass
     val accessedFields: Map[Class[_], Set[String]] = Map.empty
@@ -418,32 +489,61 @@ private[spark] object ClosureCleaner extends Logging {
     accessedFields.foreach { f => logDebug("     " + f) }
 
     if (accessedFields(capturingClass).size < capturingClass.getDeclaredFields.length) {
-      val outerField = func.getClass.getDeclaredField("arg$1")
-      if (Runtime.version().feature() > 21) {
-        /**
-         * For scala repl closure,
-         * - func: an instance of class $line1.$read$$iw...$$anonfun$1
-         * - outerThis: an instance of class $line1.$read$$iw...
-         * - capturingClass: class $line1.$read$$iw...
-         * - outerField: arg$1 in class $line1.$read$$iw...$$anonfun$1 referring to outerThis
-         * This indicates the capturingClass is generated for the line
-         * having lambda, not the REPL, much more safer.
-         */
-        val cleaner = new Java21ClosureCleaner(
-          func, accessedFields, outerThis, capturingClass, outerField)
-        cleaner.cleanup()
-      } else {
-        // clone and clean the enclosing `this` only when there are fields
-        // to null out
-        logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
-        val clonedOuterThis = cloneAndSetFields(
-          parent = null, outerThis, capturingClass, accessedFields)
-        // SPARK-37072: When Java 17 is used and `outerField` is read-only,
-        // the content of `outerField` cannot be set by reflect api directly.
-        // But we can remove the `final` modifier of `outerField` before set value
-        // and reset the modifier after set value.
-        setFieldAndIgnoreModifiers(func, outerField, clonedOuterThis)
-      }
+      // clone and clean the enclosing `this` only when there are fields to null out
+      logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
+      val clonedOuterThis = cloneAndSetFields(
+        parent = null, outerThis, capturingClass, accessedFields)
+      clonedOuterThis
+    } else {
+      logDebug(s"All fields are accessed, return original outerThis")
+      outerThis
+    }
+  }
+
+  /**
+   * Null out fields of enclosing class which are not actually accessed by a closure
+   * @param func the starting closure to clean
+   * @param lambdaProxy starting closure proxy
+   * @param outerThis lambda enclosing class
+   * @param cleanTransitively whether to clean enclosing closures transitively
+   */
+  private def cleanupScalaReplClosure(
+      func: AnyRef,
+      lambdaProxy: SerializedLambda,
+      outerThis: AnyRef,
+      cleanTransitively: Boolean): Unit = {
+
+    val outerThisToUse = cloneOuterThisForScalaReplClosure(
+      func, lambdaProxy, outerThis, cleanTransitively)
+    val outerField = func.getClass.getDeclaredField("arg$1")
+    // SPARK-37072: When Java 17 is used and `outerField` is read-only,
+    // the content of `outerField` cannot be set by reflect api directly.
+    // But we can remove the `final` modifier of `outerField` before set value
+    // and reset the modifier after set value.
+    setFieldAndIgnoreModifiers(func, outerField, outerThisToUse)
+  }
+
+  /**
+   * Clean Scala REPL closure and return a new closure with only accessed fields.
+   * This is the Java 21+ version that returns a new closure instead of modifying the original.
+   */
+  private def cleanupScalaReplClosureAndRet(
+      func: AnyRef,
+      lambdaProxy: SerializedLambda,
+      outerThis: AnyRef,
+      cleanTransitively: Boolean): AnyRef = {
+
+    val outerThisToUse = cloneOuterThisForScalaReplClosure(
+      func, lambdaProxy, outerThis, cleanTransitively)
+
+    if (outerThisToUse ne outerThis) {
+      // Fields were cleaned, create a new closure instance with the cleaned outer this
+      val newFunc = instantiateClass(func.getClass, outerThisToUse, "arg$1")
+      logDebug(s" +++ Scala REPL closure is now cleaned and returned +++")
+      newFunc
+    } else {
+      logDebug(s"No fields to clean, return original func")
+      func
     }
   }
 
@@ -512,89 +612,64 @@ private[spark] object ClosureCleaner extends Logging {
       s"${accessedAmmCmdFields.size} classes")
     accessedAmmCmdFields.foreach { f => logTrace("     " + f) }
 
-    val outerField = func.getClass.getDeclaredField("arg$1")
-    if (Runtime.version().feature() > 21) {
-      /**
-       * For Ammonite repl closure,
-       * - func: an instance of class cmdX$Helper$$anonfun$1
-       * - outerThis: an instance of cmdX
-       * - capturingClass: class cmdX
-       * - outerField: arg$1 in class cmdX$Helper$$anonfun$1 referring to
-       * outerThis
-       * This indicates the capturingClass is generated for the line
-       * having lambda, not the REPL, much more safer.
-       */
-      for ((cmdClass, cmdInstance) <- ammCmdInstances if !cmdClass.getName.contains("Helper")) {
-        val accessedFields = accessedAmmCmdFields.getOrElse(cmdClass, Set.empty)
-        if (accessedFields.size < cmdClass.getDeclaredFields.length) {
-          val cleaner = new Java21ClosureCleaner(
-            func,
-            Map(cmdClass -> accessedFields),
-            cmdInstance,
-            cmdClass,
-            outerField
-          )
-          cleaner.cleanup()
-        }
-      }
-    } else {
-      val cmdClones = Map[Class[_], AnyRef]()
-      for ((cmdClass, _) <- ammCmdInstances if !cmdClass.getName.contains("Helper")) {
-        logDebug(s" + Cloning instance of Ammonite command class ${cmdClass.getName}")
-        cmdClones(cmdClass) = instantiateClass(cmdClass, enclosingObject = null)
-      }
-      for ((cmdHelperClass, cmdHelperInstance) <- ammCmdInstances
-          if cmdHelperClass.getName.contains("Helper")) {
-        val cmdHelperOuter = cmdHelperClass.getDeclaredFields
-          .find(_.getName == "$outer")
-          .map { field =>
-            field.setAccessible(true)
-            field.get(cmdHelperInstance)
-          }
-        val outerClone = cmdHelperOuter.flatMap(o => cmdClones.get(o.getClass)).orNull
-        logDebug(s" + Cloning instance of Ammonite command helper class ${cmdHelperClass.getName}")
-        cmdClones(cmdHelperClass) =
-          instantiateClass(cmdHelperClass, enclosingObject = outerClone)
-      }
-
-      // set accessed fields
-      for ((_, cmdClone) <- cmdClones) {
-        val cmdClass = cmdClone.getClass
-        val accessedFields = accessedAmmCmdFields(cmdClass)
-        for (field <- cmdClone.getClass.getDeclaredFields
-            // outer fields were initialized during clone construction
-            if accessedFields.contains(field.getName) && field.getName != "$outer") {
-          // get command clone if exists, otherwise use an original field value
-          val value = cmdClones.getOrElse(field.getType, {
-            field.setAccessible(true)
-            field.get(ammCmdInstances(cmdClass))
-          })
-          setFieldAndIgnoreModifiers(cmdClone, field, value)
-        }
-      }
-
-      val outerThisClone = if (!isAmmoniteCommandOrHelper(outerThis.getClass)) {
-        // if outer class is not Ammonite helper / command object then is was not cloned
-        // in the code above. We still need to clone it and update accessed fields
-        logDebug(s" + Cloning instance of lambda capturing class ${outerThis.getClass.getName}")
-        val clone = cloneAndSetFields(parent = null, outerThis, outerThis.getClass, accessedFields)
-        // making sure that the code below will update references to Ammonite objects if they exist
-        for (field <- outerThis.getClass.getDeclaredFields) {
-          field.setAccessible(true)
-          cmdClones.get(field.getType).foreach { value =>
-            setFieldAndIgnoreModifiers(clone, field, value)
-          }
-        }
-        clone
-      } else {
-        cmdClones(outerThis.getClass)
-      }
-      // update lambda capturing class reference
-      setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
+    val cmdClones = Map[Class[_], AnyRef]()
+    for ((cmdClass, _) <- ammCmdInstances if !cmdClass.getName.contains("Helper")) {
+      logDebug(s" + Cloning instance of Ammonite command class ${cmdClass.getName}")
+      cmdClones(cmdClass) = instantiateClass(cmdClass, enclosingObject = null, "$outer")
     }
+    for ((cmdHelperClass, cmdHelperInstance) <- ammCmdInstances
+         if cmdHelperClass.getName.contains("Helper")) {
+      val cmdHelperOuter = cmdHelperClass.getDeclaredFields
+        .find(_.getName == "$outer")
+        .map { field =>
+          field.setAccessible(true)
+          field.get(cmdHelperInstance)
+        }
+      val outerClone = cmdHelperOuter.flatMap(o => cmdClones.get(o.getClass)).orNull
+      logDebug(s" + Cloning instance of Ammonite command helper class ${cmdHelperClass.getName}")
+      cmdClones(cmdHelperClass) =
+        instantiateClass(cmdHelperClass, enclosingObject = outerClone, "$outer")
+    }
+
+    // set accessed fields
+    for ((_, cmdClone) <- cmdClones) {
+      val cmdClass = cmdClone.getClass
+      val accessedFields = accessedAmmCmdFields(cmdClass)
+      for (field <- cmdClone.getClass.getDeclaredFields
+           // outer fields were initialized during clone construction
+           if accessedFields.contains(field.getName) && field.getName != "$outer") {
+        // get command clone if exists, otherwise use an original field value
+        val value = cmdClones.getOrElse(field.getType, {
+          field.setAccessible(true)
+          field.get(ammCmdInstances(cmdClass))
+        })
+        setFieldAndIgnoreModifiers(cmdClone, field, value)
+      }
+    }
+
+    val outerThisClone = if (!isAmmoniteCommandOrHelper(outerThis.getClass)) {
+      // if outer class is not Ammonite helper / command object then is was not cloned
+      // in the code above. We still need to clone it and update accessed fields
+      logDebug(s" + Cloning instance of lambda capturing class ${outerThis.getClass.getName}")
+      val clone = cloneAndSetFields(parent = null, outerThis, outerThis.getClass, accessedFields)
+      // making sure that the code below will update references to Ammonite objects if they exist
+      for (field <- outerThis.getClass.getDeclaredFields) {
+        field.setAccessible(true)
+        cmdClones.get(field.getType).foreach { value =>
+          setFieldAndIgnoreModifiers(clone, field, value)
+        }
+      }
+      clone
+    } else {
+      cmdClones(outerThis.getClass)
+    }
+
+    val outerField = func.getClass.getDeclaredField("arg$1")
+    // update lambda capturing class reference
+    setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
   }
 
-  private[spark] def setFieldAndIgnoreModifiers(obj: AnyRef, field: Field, value: AnyRef): Unit = {
+  private def setFieldAndIgnoreModifiers(obj: AnyRef, field: Field, value: AnyRef): Unit = {
     val modifiersField = getFinalModifiersFieldForJava17(field)
     modifiersField
       .foreach(m => m.setInt(field, field.getModifiers & ~Modifier.FINAL))
@@ -622,18 +697,49 @@ private[spark] object ClosureCleaner extends Logging {
     } else None
   }
 
-  private def instantiateClass(cls: Class[_], enclosingObject: AnyRef): AnyRef = {
-    // Use reflection to instantiate object without calling constructor
-    val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
-    val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
-    val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
-    val obj = newCtor.newInstance().asInstanceOf[AnyRef]
+  private def instantiateClass(
+      cls: Class[_], enclosingObject: AnyRef, fieldName: String): AnyRef = {
     if (enclosingObject != null) {
-      val field = cls.getDeclaredField("$outer")
-      field.setAccessible(true)
-      field.set(obj, enclosingObject)
+      // Log all available constructors for debugging
+      val constructors = cls.getDeclaredConstructors
+      logDebug(s"Available constructors for ${cls.getName}:")
+      constructors.foreach { ctor =>
+        val paramTypes = ctor.getParameterTypes.map(_.getSimpleName).mkString(", ")
+        logDebug(s"  - ${ctor.getName}($paramTypes)")
+      }
+
+      // Try to find a constructor that takes the enclosing object as parameter
+      val field = cls.getDeclaredField(fieldName)
+      val fieldType = field.getType
+      logDebug(s"Looking for constructor with parameter type: ${fieldType.getSimpleName}")
+
+      try {
+        val constructor = cls.getDeclaredConstructor(fieldType)
+        constructor.setAccessible(true)
+        logDebug(s"Found matching constructor: ${constructor.getName}(${fieldType.getSimpleName})")
+        constructor.newInstance(enclosingObject).asInstanceOf[AnyRef]
+      } catch {
+        case _: NoSuchMethodException =>
+          logDebug(s"No constructor found with parameter type ${fieldType.getSimpleName}, " +
+            s"falling back to serialization constructor")
+          // Fallback to serialization constructor if no suitable constructor found
+          val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
+          val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
+          val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
+          val obj = newCtor.newInstance().asInstanceOf[AnyRef]
+          // Try to set field using setFieldAndIgnoreModifiers for Java 17+ compatibility
+          val field = cls.getDeclaredField(fieldName)
+          setFieldAndIgnoreModifiers(obj, field, enclosingObject)
+          obj
+      }
+    } else {
+      logDebug(s"No enclosing object provided for ${cls.getName}, using serialization constructor")
+      // Use serialization constructor when no enclosing object
+      val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
+      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
+      val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
+      newCtor.newInstance().asInstanceOf[AnyRef]
     }
-    obj
   }
 }
 
@@ -1140,87 +1246,4 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
       }
     }
   }
-}
-
-/**
- * Java 21+ specific closure cleaner that temporarily nulls out unused fields.
- * This approach helps because Java 21+ won't support modifying final fields in lambda.
- */
-private[spark] class Java21ClosureCleaner(
-    closure: AnyRef,
-    accessedFields: Map[Class[_], Set[String]],
-    enclosingObject: AnyRef,
-    enclosingClass: Class[_],
-    outerReferenceField: Field) extends Logging {
-
-  // Store original field values for restoration
-  private val originalFieldValues = scala.collection.mutable.Map[Field, AnyRef]()
-  private var isCleaned = false
-
-  /**
-   * Clean the closure by temporarily nulling out unused fields.
-   * This method should be called before serialization.
-   */
-  def cleanup(): Unit = {
-    if (isCleaned) {
-      logWarning("Closure has already been cleaned, skipping cleanup")
-      return
-    }
-
-    logDebug(s"+++ Cleaning closure with Java 21+ approach: ${closure.getClass.getName} +++")
-
-    if (enclosingObject != null) {
-       val fieldsToNull = enclosingClass.getDeclaredFields.filterNot {
-          field =>
-             accessedFields(enclosingClass).contains(field.getName)
-       }
-       for (field <- fieldsToNull) {
-         try {
-           // Save the original value for restoration
-           originalFieldValues(field) = field.get(enclosingObject)
-           // Temporarily set to null
-           ClosureCleaner.setFieldAndIgnoreModifiers(enclosingObject, field, null)
-           logDebug(s" + temporarily nulled field: ${field.getName}")
-         } catch {
-             case e: Exception =>
-               logWarning(s" + failed to null field ${field.getName}: ${e.getMessage}")
-         }
-       }
-    }
-
-    isCleaned = true
-    logDebug(s" +++ Java 21+ closure cleaning completed +++")
-  }
-
-  /**
-   * Restore the closure to its original state by setting fields back to their original values.
-   * This method should be called after deserialization or when cleanup is no longer needed.
-   */
-  def restore(): Unit = {
-    if (!isCleaned) {
-      logWarning("Closure has not been cleaned, nothing to restore")
-      return
-    }
-
-    logDebug(s"+++ Restoring closure: ${closure.getClass.getName} +++")
-
-    // Restore all fields to their original values
-    for ((field, originalValue) <- originalFieldValues) {
-      try {
-        // Restore the original value
-        ClosureCleaner.setFieldAndIgnoreModifiers(enclosingObject, field, originalValue)
-        logDebug(s" + restored field: ${field.getName}")
-      } catch {
-        case e: Exception =>
-          logDebug(s" + failed to restore field ${field.getName}: ${e.getMessage}")
-      }
-    }
-
-    // Clear stored values
-    originalFieldValues.clear()
-    isCleaned = false
-
-    logDebug(s" +++ Java 21+ closure restoration completed +++")
-  }
-
 }
