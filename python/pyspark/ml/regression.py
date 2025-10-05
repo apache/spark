@@ -103,6 +103,8 @@ __all__ = [
     "RandomForestRegressionModel",
     "FMRegressor",
     "FMRegressionModel",
+    "ArimaRegression",
+    "ArimaRegressionModel"
 ]
 
 
@@ -146,6 +148,13 @@ class _JavaRegressionModel(RegressionModel, JavaPredictionModel[T], metaclass=AB
 
     pass
 
+class ArimaRegressionModel(JavaModel):
+    """
+    Model fitted by :py:class:`ArimaRegression`.
+
+    This model supports `.transform()` and optional `.predict()`.
+    """
+    pass
 
 class _LinearRegressionParams(
     _PredictorParams,
@@ -206,6 +215,67 @@ class _LinearRegressionParams(
         Gets the value of epsilon or its default value.
         """
         return self.getOrDefault(self.epsilon)
+
+
+@inherit_doc
+class ArimaRegression(JavaEstimator):
+    """
+    ArimaRegression(p=1, d=0, q=1)
+
+    ARIMA time series regression model.
+
+    Parameters
+    ----------
+    p : int
+        Autoregressive order.
+    d : int
+        Differencing order.
+    q : int
+        Moving average order.
+
+    Notes
+    -----
+    Requires a column named "y" as the input time series column.
+    """
+
+    p = Param(Params._dummy(), "p", "Autoregressive order.")
+    d = Param(Params._dummy(), "d", "Differencing order.")
+    q = Param(Params._dummy(), "q", "Moving average order.")
+
+    def __init__(self, p=1, d=0, q=1):
+        super(ArimaRegression, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.ArimaRegression", self.uid)
+        self._setDefault(p=1, d=0, q=1)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    def setParams(self, p=1, d=0, q=1):
+        """
+        Set parameters for ArimaRegression.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def setP(self, value):
+        return self._set(p=value)
+
+    def getP(self):
+        return self.getOrDefault(self.p)
+
+    def setD(self, value):
+        return self._set(d=value)
+
+    def getD(self):
+        return self.getOrDefault(self.d)
+
+    def setQ(self, value):
+        return self._set(q=value)
+
+    def getQ(self):
+        return self.getOrDefault(self.q)
+
+    def _create_model(self, java_model):
+        return ArimaRegressionModel(java_model)
 
 
 @inherit_doc

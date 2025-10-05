@@ -696,6 +696,56 @@ class RegressionTestsMixin:
             self.assertEqual(model.toDebugString, model2.toDebugString)
 
 
+def test_arima_regression(self):
+    import numpy as np
+    import tempfile
+    from pyspark.ml.linalg import Vectors
+    from pyspark.ml.regression import ArimaRegression, ArimaRegressionModel
+
+    spark = self.spark
+
+    # Time series data in a single column named "y"
+    df = spark.createDataFrame(
+        [(1.2,), (2.3,), (3.1,), (4.0,), (5.5,)],
+        ["y"]
+    )
+
+    arima = ArimaRegression(
+        p=1,
+        d=0,
+        q=1,
+    )
+
+    self.assertEqual(arima.getP(), 1)
+    self.assertEqual(arima.getD(), 0)
+    self.assertEqual(arima.getQ(), 1)
+
+    model = arima.fit(df)
+    self.assertEqual(model.uid, arima.uid)
+
+    output = model.transform(df)
+    expected_cols = ["y", "prediction"]
+    self.assertEqual(output.columns, expected_cols)
+    self.assertEqual(output.count(), 5)
+
+    # Predict a single value if API supports it
+    if hasattr(model, "predict"):
+        pred = model.predict(3.0)
+        self.assertIsInstance(pred, float)
+
+    # Model save/load
+    with tempfile.TemporaryDirectory(prefix="arima_regression") as d:
+        arima_path = d + "/arima"
+        model_path = d + "/arima_model"
+
+        arima.write().overwrite().save(arima_path)
+        loaded_arima = ArimaRegression.load(arima_path)
+        self.assertEqual(str(arima), str(loaded_arima))
+
+        model.write().overwrite().save(model_path)
+        loaded_model = ArimaRegressionModel.load(model_path)
+        self.assertEqual(str(model), str(loaded_model))
+
 class RegressionTests(RegressionTestsMixin, ReusedSQLTestCase):
     pass
 
