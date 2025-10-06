@@ -404,7 +404,7 @@ class BlockInfoManagerSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-53807") {
+  test("SPARK-53807 - concurrent unlock and releaseAllLocksForTask for write should not fail") {
     val blockId = TestBlockId("block")
     assert(blockInfoManager.lockNewBlockForWriting(blockId, newBlockInfo()))
     blockInfoManager.unlock(blockId)
