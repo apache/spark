@@ -42,8 +42,8 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
   override def defaultSize: Int = 2048
 
   /**
-   * The GeometryType is a mixed SRID type iff the SRID is MIXED_SRID. Semantically, this
-   * means that different SRID values per row are allowed.
+   * The GeometryType is a mixed SRID type iff the SRID is MIXED_SRID. Semantically, this means
+   * that different SRID values per row are allowed.
    */
   def isMixedSrid: Boolean = srid == GeometryType.MIXED_SRID
 

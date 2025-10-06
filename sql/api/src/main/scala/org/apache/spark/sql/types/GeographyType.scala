@@ -44,8 +44,8 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
   override def defaultSize: Int = 2048
 
   /**
-   * The GeographyType is a mixed SRID type iff the SRID is MIXED_SRID. Semantically,
-   * this means that different SRID values per row are allowed.
+   * The GeographyType is a mixed SRID type iff the SRID is MIXED_SRID. Semantically, this means
+   * that different SRID values per row are allowed.
    */
   def isMixedSrid: Boolean = srid == GeographyType.MIXED_SRID
 

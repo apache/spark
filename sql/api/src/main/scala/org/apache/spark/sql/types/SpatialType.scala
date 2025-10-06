@@ -20,9 +20,11 @@ package org.apache.spark.sql.types
 import org.apache.spark.sql.types.AbstractDataType
 
 trait SpatialType extends AbstractDataType {
+
   /**
-   * Mixed SRID value and the corresponding CRS value for geospatial types (Geometry and Geography).
-   * These values represent a geospatial type that can hold different SRID/CRS values per row.
+   * Mixed SRID value and the corresponding CRS value for geospatial types (Geometry and
+   * Geography). These values represent a geospatial type that can hold different SRID/CRS values
+   * per row.
    */
   final val MIXED_SRID: Int = -1
   final val MIXED_CRS: String = "SRID:ANY"
