@@ -502,7 +502,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
          |        "0" : 18703750728
          |      }
          |    },
-         |    "numInputRows" : 8000000,
+         |    "numInputRows" : 800000,
          |    "inputRowsPerSecond" : 75291.3,
          |    "processedRowsPerSecond" : 71906.9,
          |    "metrics" : {
@@ -706,7 +706,7 @@ object StreamingQueryStatusAndProgressSuite {
         startOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18424809459\n    }\n}",
         endOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18432809459\n    }\n}",
         latestOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18703750728\n    }\n}",
-        numInputRows = 800000,
+        numInputRows = 800000L,
         inputRowsPerSecond = 75291.2831516931,
         processedRowsPerSecond = 71906.88058963642,
         metrics = new java.util.HashMap(Map(
