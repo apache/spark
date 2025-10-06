@@ -429,13 +429,15 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
     override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
       private var currentIndex = 0
       private val numElements = map.numElements()
-      private val mapIterator = map.iterator()
-      
+      private val keyArray = map.keyArray()
+      private val valueArray = map.valueArray()
+
       override def hasNext: Boolean = currentIndex < numElements
 
       override def next(): InternalRow = {
-        if (!mapIterator.hasNext) throw new NoSuchElementException("No more elements")
-        val (key, value) = mapIterator.next()
+        if (!hasNext) throw new NoSuchElementException("No more elements")
+        val key = keyArray.get(currentIndex, keyType)
+        val value = valueArray.get(currentIndex, valueType)
         val row = if (includePosition) {
           InternalRow(currentIndex, key, value)
         } else {
