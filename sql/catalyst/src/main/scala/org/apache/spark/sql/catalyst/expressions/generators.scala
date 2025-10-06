@@ -420,7 +420,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
   }
 
   private class MapExplodeIterator(
-      map: MapData,
+      mapData: MapData,
       keyType: DataType,
       valueType: DataType,
       includePosition: Boolean)
@@ -428,9 +428,9 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 
     override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
       private var currentIndex = 0
-      private val numElements = map.numElements()
-      private val keyArray = map.keyArray()
-      private val valueArray = map.valueArray()
+      private val numElements = mapData.numElements()
+      private val keyArray = mapData.keyArray()
+      private val valueArray = mapData.valueArray()
 
       override def hasNext: Boolean = currentIndex < numElements
 
