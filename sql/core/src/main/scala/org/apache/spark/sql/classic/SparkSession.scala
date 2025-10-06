@@ -42,7 +42,7 @@ import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext, ThreadLocalParameterContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -560,7 +560,7 @@ class SparkSession private(
           // Convert all arguments to expressions (not evaluated values)
           val paramExpressions = args.map { arg =>
             arg match {
-              case literal: org.apache.spark.sql.catalyst.expressions.Literal =>
+              case literal: Literal =>
                 // Already a Literal expression from ResolveExecuteImmediate - use it directly
                 literal
               case _ =>

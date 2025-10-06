@@ -36,7 +36,8 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, SparkParserUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
@@ -54,13 +55,11 @@ class SparkSqlParser extends AbstractSqlParser {
   private val substitutor = new VariableSubstitution()
   private[execution] val parameterHandler = new ParameterHandler()
 
-
   // Thread-local flag to track whether we're in a top-level parse operation
   // This is used to prevent parameter substitution during identifier/data type parsing
   private val isTopLevelParse = new ThreadLocal[Boolean] {
     override def initialValue(): Boolean = true
   }
-
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     val wasTopLevel = isTopLevelParse.get()
@@ -72,7 +71,7 @@ class SparkSqlParser extends AbstractSqlParser {
         (command, false)
       } else {
         // Modern mode: check if we have a parameterized query context
-        org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
+        ThreadLocalParameterContext.get() match {
           case Some(context) =>
             val substituted = substituteParametersIfNeeded(command, context)
             // Position mapper is stored by the parameter handler for later retrieval
@@ -86,7 +85,7 @@ class SparkSqlParser extends AbstractSqlParser {
     val variableSubstituted = substitutor.substitute(paramSubstituted)
 
     // Step 3: Only set special origin if parameter substitution actually occurred
-    val currentOrigin = org.apache.spark.sql.catalyst.trees.CurrentOrigin.get
+    val currentOrigin = CurrentOrigin.get
     val originToUse = if (substitutionOccurred && wasTopLevel) {
       // Parameter substitution occurred - set original SQL text for position mapping
       currentOrigin.copy(
@@ -99,13 +98,13 @@ class SparkSqlParser extends AbstractSqlParser {
       currentOrigin
     }
 
-    org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(originToUse) {
+    CurrentOrigin.withOrigin(originToUse) {
       try {
         super.parse(variableSubstituted)(toResult)
       } finally {
         // Clear parameter substitution callback after parsing is complete
         if (substitutionOccurred && wasTopLevel) {
-          org.apache.spark.sql.catalyst.util.SparkParserUtils.clearParameterSubstitutionCallback()
+          SparkParserUtils.clearParameterSubstitutionCallback()
         }
       }
     }
@@ -113,7 +112,7 @@ class SparkSqlParser extends AbstractSqlParser {
 
   private def substituteParametersIfNeeded(
       command: String,
-      context: org.apache.spark.sql.catalyst.parser.ParameterContext): String = {
+      context: ParameterContext): String = {
 
     // Check legacy config - if parameter substitution limited to constants only, return original
     if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
@@ -123,8 +122,8 @@ class SparkSqlParser extends AbstractSqlParser {
     }
   }
 
-  // Override parsing methods that should NOT use parameter substitution
-  // These methods parse identifiers and data types where parameters don't make sense
+  // Override parsing methods that should NOT use parameter substitution.
+  // These methods parse identifiers and data types where parameters don't make sense.
   override def parseTableIdentifier(sqlText: String): TableIdentifier = {
     val wasTopLevel = isTopLevelParse.get()
     isTopLevelParse.set(false)  // Disable parameter substitution for identifier parsing

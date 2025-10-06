@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{LiteralToSqlConverter, SparkParserUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Handler for parameter substitution across different Spark SQL contexts.
@@ -158,10 +159,10 @@ class ParameterHandler {
    * @return An Expression representing the value
    */
   private def convertToExpression(value: Any): Expression = value match {
-    case literal: org.apache.spark.sql.catalyst.expressions.Literal =>
+    case literal: Literal =>
       // Already a Literal from ResolveExecuteImmediate - use it directly
       literal
-    case expr: org.apache.spark.sql.catalyst.expressions.Expression =>
+    case expr: Expression =>
       // Expression from Column object - use it directly
       expr
     case null =>
@@ -220,7 +221,7 @@ class ParameterHandler {
 
         // Validate that the query doesn't mix parameter types
         if (hasPositional && hasNamed) {
-          throw org.apache.spark.sql.errors.QueryCompilationErrors
+          throw QueryCompilationErrors
             .invalidQueryMixedQueryParameters()
         }
 
@@ -232,7 +233,7 @@ class ParameterHandler {
             case ("", arg) => convertToExpression(arg) // empty strings are unnamed
           }.toList
           if (unnamedExprs.nonEmpty) {
-            throw org.apache.spark.sql.errors.QueryCompilationErrors
+            throw QueryCompilationErrors
               .invalidQueryAllParametersMustBeNamed(unnamedExprs)
           }
         }
@@ -354,7 +355,7 @@ class ParameterHandler {
 
     val (hasPositional, hasNamed) = detectParameters(sqlText)
     if (hasPositional && hasNamed) {
-      throw org.apache.spark.sql.errors.QueryCompilationErrors.invalidQueryMixedQueryParameters()
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
     }
   }
 }

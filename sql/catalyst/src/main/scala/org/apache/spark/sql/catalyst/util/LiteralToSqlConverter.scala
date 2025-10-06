@@ -17,8 +17,10 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.{InternalRow}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
@@ -135,7 +137,7 @@ object LiteralToSqlConverter {
             case _: StructType =>
               // Struct literals (row values) - convert to ROW constructor
               value match {
-                case row: org.apache.spark.sql.catalyst.InternalRow =>
+                case row: InternalRow =>
                   val structType = dataType.asInstanceOf[StructType]
                   val fieldValues = (0 until row.numFields).map { i =>
                     if (row.isNullAt(i)) {
@@ -163,7 +165,7 @@ object LiteralToSqlConverter {
     else {
       // Handle both Scala collections and Spark's GenericArrayData
       val arraySeq = value match {
-        case gad: org.apache.spark.sql.catalyst.util.GenericArrayData =>
+        case gad: GenericArrayData =>
           gad.array.toSeq
         case seq: scala.collection.Seq[Any] =>
           seq
@@ -185,7 +187,7 @@ object LiteralToSqlConverter {
     else {
       // Handle both Scala collections and Spark's ArrayBasedMapData
       val mapValue = value match {
-        case abmd: org.apache.spark.sql.catalyst.util.ArrayBasedMapData =>
+        case abmd: ArrayBasedMapData =>
           // Convert ArrayBasedMapData to a Map
           val keys = abmd.keyArray.array
           val values = abmd.valueArray.array

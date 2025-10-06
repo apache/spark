@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.test.SharedSparkSession
@@ -375,7 +376,7 @@ class ParameterPositionMappingSuite extends QueryTest with SharedSparkSession {
 
   test("position mapping - nested expression with parameter") {
     // Complex nested expression
-    checkPositionMapping[org.apache.spark.sql.catalyst.ExtendedAnalysisException](
+    checkPositionMapping[ExtendedAnalysisException](
       "SELECT (:param + 10) * *** FROM test",
       expectedStartPos = 32, // Actual position reported by analysis
       expectedStopPos = 35, // "SELECT (:param + 10) * *** FROM test".length - 1

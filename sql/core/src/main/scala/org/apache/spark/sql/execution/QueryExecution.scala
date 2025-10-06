@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
+import org.apache.spark.sql.catalyst.trees.WithOrigin
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
@@ -80,7 +81,7 @@ class QueryExecution(
     try {
       analyzed
     } catch {
-      case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+      case e: Throwable with WithOrigin =>
         // exceptions with origin information
         SQLExecution.withNewExecutionIdOnError(this, Some("analyze"))(e)
     }

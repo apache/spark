@@ -767,9 +767,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     }
 
     checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
-      Array(Row(1), Row(2), Row(3), Row(4), Row(5)))
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
     checkAnswer(spark.sql(query("?"), args = Array("t1")),
-      Array(Row(1), Row(2), Row(3), Row(4), Row(5)))
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
   }
 
   test("SPARK-50892: parameterized identifier inside a recursive CTE") {
@@ -783,9 +783,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     }
 
     checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
-      Array(Row(1), Row(2), Row(3), Row(4), Row(5)))
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
     checkAnswer(spark.sql(query("?"), args = Array("t1")),
-      Array(Row(1), Row(2), Row(3), Row(4), Row(5)))
+      Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
   }
 
 
@@ -874,8 +874,6 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       checkColType(schema("code"), CharType(8))
     }
   }
-
-
 
   test("named parameters in DDL comments and properties") {
     withTable("ddl_comments_named") {

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Command, CompoundBody, Logic
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
+import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StringType
@@ -114,7 +115,7 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
           // For parameterized queries, build parameter arrays
           val (paramValues, paramNames) = buildUnifiedParameters(args)
 
-          sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+          sparkSession.asInstanceOf[ClassicSparkSession]
             .sql(sqlString, paramValues, paramNames)
         }
 
