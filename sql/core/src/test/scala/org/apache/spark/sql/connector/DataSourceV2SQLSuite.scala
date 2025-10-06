@@ -3887,14 +3887,7 @@ class DataSourceV2SQLSuiteV1Filter
       val result = sql(s"SELECT * FROM $t").collect()
       assert(result.length == 1)
       assert(result(0).getString(0) == "a")
-      assert(result(0).get(1) != null)
-      assert(result(0).get(2) != null)
-      assert(result(0).get(3) != null)
-      assert(result(0).get(4) != null)
-      assert(result(0).get(5) != null)
-      assert(result(0).get(6) != null)
-      assert(result(0).get(7) != null)
-      assert(result(0).get(8) != null)
+      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null))
     }
   }
 
