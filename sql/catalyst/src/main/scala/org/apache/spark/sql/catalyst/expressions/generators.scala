@@ -381,25 +381,71 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
         if (inputArray == null) {
           Nil
         } else {
-          val rows = new Array[InternalRow](inputArray.numElements())
-          inputArray.foreach(et, (i, e) => {
-            rows(i) = if (position) InternalRow(i, e) else InternalRow(e)
-          })
-          rows
+          new ArrayExplodeIterator(inputArray, et, position)
         }
       case MapType(kt, vt, _) =>
         val inputMap = child.eval(input).asInstanceOf[MapData]
         if (inputMap == null) {
           Nil
         } else {
-          val rows = new Array[InternalRow](inputMap.numElements())
-          var i = 0
-          inputMap.foreach(kt, vt, (k, v) => {
-            rows(i) = if (position) InternalRow(i, k, v) else InternalRow(k, v)
-            i += 1
-          })
-          rows
+          new MapExplodeIterator(inputMap, kt, vt, position)
         }
+    }
+  }
+
+  private class ArrayExplodeIterator(
+      array: ArrayData,
+      elementType: DataType,
+      includePosition: Boolean)
+      extends IterableOnce[InternalRow] {
+
+    override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
+      private var currentIndex = 0
+      private val numElements = array.numElements()
+
+      override def hasNext: Boolean = currentIndex < numElements
+
+      override def next(): InternalRow = {
+        if (!hasNext) throw new NoSuchElementException("No more elements")
+        val element = array.get(currentIndex, elementType)
+        val row = if (includePosition) {
+          InternalRow(currentIndex, element)
+        } else {
+          InternalRow(element)
+        }
+        currentIndex += 1
+        row
+      }
+    }
+  }
+
+  private class MapExplodeIterator(
+      map: MapData,
+      keyType: DataType,
+      valueType: DataType,
+      includePosition: Boolean)
+      extends IterableOnce[InternalRow] {
+
+    override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
+      private var currentIndex = 0
+      private val numElements = map.numElements()
+      private val keyArray = map.keyArray()
+      private val valueArray = map.valueArray()
+
+      override def hasNext: Boolean = currentIndex < numElements
+
+      override def next(): InternalRow = {
+        if (!hasNext) throw new NoSuchElementException("No more elements")
+        val key = keyArray.get(currentIndex, keyType)
+        val value = valueArray.get(currentIndex, valueType)
+        val row = if (includePosition) {
+          InternalRow(currentIndex, key, value)
+        } else {
+          InternalRow(key, value)
+        }
+        currentIndex += 1
+        row
+      }
     }
   }
 
