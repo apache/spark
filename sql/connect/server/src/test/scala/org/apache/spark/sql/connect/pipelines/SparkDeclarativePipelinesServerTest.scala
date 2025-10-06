@@ -138,8 +138,11 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest with St
 
   def startPipelineAndWaitForCompletion(graphId: String): ArrayBuffer[PipelineEvent] = {
     val defaultStartRunCommand =
-      PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId)
-        .setStorage(storageRoot).build()
+      PipelineCommand.StartRun
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
+        .build()
     startPipelineAndWaitForCompletion(defaultStartRunCommand)
   }
 

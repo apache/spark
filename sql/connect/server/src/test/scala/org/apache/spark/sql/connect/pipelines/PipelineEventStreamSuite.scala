@@ -42,8 +42,11 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
         val startRunRequest = buildStartRunPlan(
-          proto.PipelineCommand.StartRun.newBuilder()
-            .setDataflowGraphId(graphId).setStorage(storageRoot).build())
+          proto.PipelineCommand.StartRun
+            .newBuilder()
+            .setDataflowGraphId(graphId)
+            .setStorage(storageRoot)
+            .build())
         val responseIterator = client.execute(startRunRequest)
         while (responseIterator.hasNext) {
           val response = responseIterator.next()

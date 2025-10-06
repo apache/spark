@@ -566,7 +566,7 @@ class PythonPipelineSuite
   }
 
   test("groupby and rollup works with internal datasets, referencing with (col, str)") {
-      val graph = buildGraph("""
+    val graph = buildGraph("""
       from pyspark.sql.functions import col, sum, count
 
       @dp.materialized_view
@@ -602,33 +602,33 @@ class PythonPipelineSuite
         )
     """)
 
-      val updateContext =
-        new PipelineUpdateContextImpl(graph, _ => (), storageRoot = storageRoot)
-      updateContext.pipelineExecution.runPipeline()
-      updateContext.pipelineExecution.awaitCompletion()
+    val updateContext =
+      new PipelineUpdateContextImpl(graph, _ => (), storageRoot = storageRoot)
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
 
-      val groupbyDfs =
-        Seq(spark.table("groupby_with_col_result"), spark.table("groupby_with_str_result"))
+    val groupbyDfs =
+      Seq(spark.table("groupby_with_col_result"), spark.table("groupby_with_str_result"))
 
-      val rollupDfs =
-        Seq(spark.table("rollup_with_col_result"), spark.table("rollup_with_str_result"))
+    val rollupDfs =
+      Seq(spark.table("rollup_with_col_result"), spark.table("rollup_with_str_result"))
 
-      // groupBy: each variant should have exactly one row per id [0,1,2]
-      groupbyDfs.foreach { df =>
-        assert(df.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
-      }
+    // groupBy: each variant should have exactly one row per id [0,1,2]
+    groupbyDfs.foreach { df =>
+      assert(df.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
+    }
 
-      // rollup: each variant should have groupBy rows + one total row
-      rollupDfs.foreach { df =>
-        assert(df.count() == 3 + 1) // 3 ids + 1 total
-        val totalRow = df.filter("id IS NULL").collect().head
-        assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
-      }
+    // rollup: each variant should have groupBy rows + one total row
+    rollupDfs.foreach { df =>
+      assert(df.count() == 3 + 1) // 3 ids + 1 total
+      val totalRow = df.filter("id IS NULL").collect().head
+      assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
+    }
   }
 
   test("MV/ST with partition columns works") {
-      withTable("mv", "st") {
-        val graph = buildGraph("""
+    withTable("mv", "st") {
+      val graph = buildGraph("""
             |from pyspark.sql.functions import col
             |
             |@dp.materialized_view(partition_cols = ["id_mod"])
@@ -640,26 +640,24 @@ class PythonPipelineSuite
             |  return spark.readStream.table("mv")
             |""".stripMargin)
 
-        val updateContext = new PipelineUpdateContextImpl(
-          graph,
-          eventCallback = _ => (),
-          storageRoot = storageRoot)
-        updateContext.pipelineExecution.runPipeline()
-        updateContext.pipelineExecution.awaitCompletion()
+      val updateContext =
+        new PipelineUpdateContextImpl(graph, eventCallback = _ => (), storageRoot = storageRoot)
+      updateContext.pipelineExecution.runPipeline()
+      updateContext.pipelineExecution.awaitCompletion()
 
-        // check table is created with correct partitioning
-        val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+      // check table is created with correct partitioning
+      val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
 
-        Seq("mv", "st").foreach { tableName =>
-          val table = catalog.loadTable(Identifier.of(Array("default"), tableName))
-          assert(
-            table.partitioning().map(_.references().head.fieldNames().head) === Array("id_mod"))
+      Seq("mv", "st").foreach { tableName =>
+        val table = catalog.loadTable(Identifier.of(Array("default"), tableName))
+        assert(
+          table.partitioning().map(_.references().head.fieldNames().head) === Array("id_mod"))
 
-          val rows = spark.table(tableName).collect().map(r => (r.getLong(0), r.getLong(1))).toSet
-          val expected = (0 until 5).map(id => (id.toLong, (id % 2).toLong)).toSet
-          assert(rows == expected)
-        }
+        val rows = spark.table(tableName).collect().map(r => (r.getLong(0), r.getLong(1))).toSet
+        val expected = (0 until 5).map(id => (id.toLong, (id % 2).toLong)).toSet
+        assert(rows == expected)
       }
+    }
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
