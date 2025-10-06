@@ -23,11 +23,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
-    override def spark: SparkSession = SparkSession.builder()
-      .master("local")
-      .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)
-      .config(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, value = false)
-      .getOrCreate()
+  override def spark: SparkSession = SparkSession.builder()
+    .master("local")
+    .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)
+    .config(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, value = false)
+    .getOrCreate()
 
   override def afterAll(): Unit = {
     // This suite should not interfere with the other test suites.
