@@ -36,8 +36,8 @@ public class SpatialReferenceMapper {
   }
 
   // Hash maps defining the mappings to/from SRID and string ID for a CRS.
-  private static final HashMap<Integer, String> sridToStringId = BuildSridToStringIdMap();
-  private static final HashMap<String, Integer> stringIdToSrid = BuildStringIdToSridMap();
+  private static final HashMap<Integer, String> sridToStringId = buildSridToStringIdMap();
+  private static final HashMap<String, Integer> stringIdToSrid = buildStringIdToSridMap();
 
   // Returns the string ID corresponding to the input SRID. If the input SRID is not supported,
   // `null` is returned.
@@ -56,7 +56,7 @@ public class SpatialReferenceMapper {
   // below will be updated accordingly, in order to populate the mappings with more complete data.
 
   // Helper method for building the SRID-to-string-ID mapping.
-  private static HashMap<Integer, String> BuildSridToStringIdMap() {
+  private static HashMap<Integer, String> buildSridToStringIdMap() {
     HashMap<Integer, String> map = new HashMap<>();
     map.put(0, "SRID:0"); // Unspecified
     map.put(3857, "EPSG:3857"); // Web Mercator
@@ -65,7 +65,7 @@ public class SpatialReferenceMapper {
   }
 
   // Helper method for building the string-ID-to-SRID mapping.
-  private static HashMap<String, Integer> BuildStringIdToSridMap() {
+  private static HashMap<String, Integer> buildStringIdToSridMap() {
     HashMap<String, Integer> map = new HashMap<>();
     map.put("SRID:0", 0); // Unspecified
     map.put("EPSG:3857", 3857); // Web Mercator
