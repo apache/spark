@@ -140,10 +140,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
           matched(ordinal)
 
+          // Try to resolve literal functions first (for DefaultValueExpression)
+        case u @ UnresolvedLiteralFunction(nameParts) => withPosition(u) {
+          LiteralFunctionResolution.resolve(nameParts).getOrElse(u)
+        }
+
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
             resolveColumnByName(nameParts)
-              .orElse(LiteralFunctionResolution.resolve(nameParts))
               .map {
                 // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
                 // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
@@ -175,9 +179,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             u.copy(child = newChild)
           }
 
-        case d @ DefaultValueExpression(c: Expression, _, _) =>
-          d.copy(child = resolveLiteralColumns(c))
-
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
       resolved.copyTagsFrom(e)
@@ -195,13 +196,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
         expr
-    }
-  }
-
-  private def resolveLiteralColumns(e: Expression) = {
-    e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
-      case u @ UnresolvedAttribute(nameParts) =>
-        LiteralFunctionResolution.resolve(nameParts).getOrElse(u)
     }
   }
 

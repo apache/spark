@@ -271,6 +271,30 @@ object UnresolvedTVFAliases {
 }
 
 /**
+ * Holds the name of a literal function that has yet to be resolved.
+ * Similar to UnresolvedAttribute but specifically for literal functions.
+ */
+case class UnresolvedLiteralFunction(nameParts: Seq[String]) extends Expression with Unevaluable {
+
+  def name: String =
+    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved = false
+  override def children: Seq[Expression] = Nil
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_LITERAL_FUNCTION)
+
+  override def toString: String = s"'$name"
+
+  override def sql: String = nameParts.map(quoteIfNeeded).mkString(".")
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = this
+}
+
+/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {

@@ -109,6 +109,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_DF_STAR: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_IDENTIFIER: Value = Value
+  val UNRESOLVED_LITERAL_FUNCTION: Value = Value
   val UNRESOLVED_ORDINAL: Value = Value
   val UNRESOLVED_PLAN_ID: Value = Value
   val UNRESOLVED_WINDOW_EXPRESSION: Value = Value

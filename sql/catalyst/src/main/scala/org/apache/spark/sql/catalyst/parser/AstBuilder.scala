@@ -2932,9 +2932,9 @@ class AstBuilder extends DataTypeAstBuilder
           CurrentUser()
       }
     } else {
-      // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
-      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`
-      UnresolvedAttribute.quoted(ctx.name.getText)
+      // If the parser is not in ansi mode, we should return `UnresolvedLiteralFunction`,
+      // in case there are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`
+      UnresolvedLiteralFunction(Seq(ctx.name.getText))
     }
   }
 
