@@ -82,7 +82,7 @@ message PipelineCommand {
 
     // Schema for the dataset. If unset, this will be inferred from incoming flows.
     oneof schema {
-      spark.connect.DataType data_type = 7;
+      spark.connect.DataType schema_data_type = 7;
       string schema_string = 10;
     }
 

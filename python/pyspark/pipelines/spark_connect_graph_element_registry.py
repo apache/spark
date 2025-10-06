@@ -49,7 +49,17 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         if isinstance(dataset, Table):
             table_properties = dataset.table_properties
             partition_cols = dataset.partition_cols
-            schema = dataset.schema
+
+            if isinstance(dataset.schema, str):
+                schema_string = dataset.schema
+                schema_data_type = None
+            elif isinstance(dataset.schema, StructType):
+                schema_string = None
+                schema_data_type = pyspark_types_to_proto_types(dataset.schema)
+            else:
+                schema_string = None
+                schema_data_type = None
+
             format = dataset.format
 
             if isinstance(dataset, MaterializedView):
@@ -64,7 +74,8 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         elif isinstance(dataset, TemporaryView):
             table_properties = None
             partition_cols = None
-            schema = None
+            schema_string = None
+            schema_data_type = None
             format = None
             dataset_type = pb2.DatasetType.TEMPORARY_VIEW
         else:
@@ -73,27 +84,18 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
                 messageParameters={"dataset_type": type(dataset).__name__},
             )
 
-        define_dataset_kwargs = {
-            "dataflow_graph_id": self._dataflow_graph_id,
-            "dataset_name": dataset.name,
-            "dataset_type": dataset_type,
-            "comment": dataset.comment,
-            "table_properties": table_properties,
-            "partition_cols": partition_cols,
-            "format": format,
-            "source_code_location": source_code_location_to_proto(dataset.source_code_location),
-        }
-
-        if schema is not None:
-            if isinstance(schema, str):
-                define_dataset_kwargs["schema_string"] = schema
-            elif isinstance(schema, StructType):
-                define_dataset_kwargs["data_type"] = pyspark_types_to_proto_types(schema)
-            else:
-                # For other DataType objects
-                define_dataset_kwargs["data_type"] = pyspark_types_to_proto_types(schema)
-
-        inner_command = pb2.PipelineCommand.DefineDataset(**define_dataset_kwargs)
+        inner_command = pb2.PipelineCommand.DefineDataset(
+            dataflow_graph_id=self._dataflow_graph_id,
+            dataset_name=dataset.name,
+            dataset_type=dataset_type,
+            comment=dataset.comment,
+            table_properties=table_properties,
+            partition_cols=partition_cols,
+            format=format,
+            source_code_location=source_code_location_to_proto(dataset.source_code_location),
+            schema_string=schema_string,
+            schema_data_type=schema_data_type,
+        )
         command = pb2.Command()
         command.pipeline_command.define_dataset.CopyFrom(inner_command)
         self._client.execute_command(command)

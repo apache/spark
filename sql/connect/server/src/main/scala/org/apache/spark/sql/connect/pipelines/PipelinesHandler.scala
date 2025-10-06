@@ -189,10 +189,10 @@ private[connect] object PipelinesHandler extends Logging {
             identifier = qualifiedIdentifier,
             comment = Option(dataset.getComment),
             specifiedSchema = dataset.getSchemaCase match {
-              case proto.PipelineCommand.DefineDataset.SchemaCase.DATA_TYPE =>
+              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_DATA_TYPE =>
                 Some(
                   DataTypeProtoConverter
-                    .toCatalystType(dataset.getDataType)
+                    .toCatalystType(dataset.getSchemaDataType)
                     .asInstanceOf[StructType])
               case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_STRING =>
                 Some(StructType.fromDDL(dataset.getSchemaString))
