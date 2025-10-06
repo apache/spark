@@ -565,6 +565,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
         "pyspark.sql.tests.pandas.test_pandas_map",
         "pyspark.sql.tests.pandas.test_pandas_transform_with_state",
+        "pyspark.sql.tests.pandas.test_pandas_transform_with_state_checkpoint_v2",
         "pyspark.sql.tests.pandas.test_pandas_udf",
         "pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg",
         "pyspark.sql.tests.pandas.test_pandas_udf_scalar",
@@ -1147,6 +1148,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state",
+        "pyspark.sql.tests.connect.pandas.test_parity_transform_with_state_pyspark",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
