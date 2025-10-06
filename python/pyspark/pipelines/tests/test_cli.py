@@ -60,7 +60,8 @@ class CLIUtilityTests(unittest.TestCase):
                     },
                     "libraries": [
                         {"glob": {"include": "test_include"}}
-                    ]
+                    ],
+                    "storage": "storage_path",
                 }
                 """
             )
@@ -72,6 +73,7 @@ class CLIUtilityTests(unittest.TestCase):
             assert spec.configuration == {"key1": "value1", "key2": "value2"}
             assert len(spec.libraries) == 1
             assert spec.libraries[0].include == "test_include"
+            assert spec.storage == "storage_path"
 
     def test_load_pipeline_spec_name_is_required(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
@@ -86,7 +88,8 @@ class CLIUtilityTests(unittest.TestCase):
                     },
                     "libraries": [
                         {"glob": {"include": "test_include"}}
-                    ]
+                    ],
+                    "storage": "storage_path",
                 }
                 """
             )
@@ -112,7 +115,8 @@ class CLIUtilityTests(unittest.TestCase):
                     },
                     "libraries": [
                         {"glob": {"include": "test_include"}}
-                    ]
+                    ],
+                    "storage": "storage_path",
                 }
                 """
             )
@@ -150,21 +154,21 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_unpack_empty_pipeline_spec(self):
         empty_spec = PipelineSpec(
-            name="test_pipeline", catalog=None, database=None, configuration={}, libraries=[]
+            name="test_pipeline", storage="storage_path", catalog=None, database=None, configuration={}, libraries=[]
         )
-        self.assertEqual(unpack_pipeline_spec({"name": "test_pipeline"}), empty_spec)
+        self.assertEqual(unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path"}), empty_spec)
 
     def test_unpack_pipeline_spec_bad_configuration(self):
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"name": "test_pipeline", "configuration": "not_a_dict"})
+            unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path", "configuration": "not_a_dict"})
         self.assertIn("should be a dict", str(context.exception))
 
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"name": "test_pipeline", "configuration": {"key": {}}})
+            unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path", "configuration": {"key": {}}})
         self.assertIn("key", str(context.exception))
 
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"name": "test_pipeline", "configuration": {1: "something"}})
+            unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path", "configuration": {1: "something"}})
         self.assertIn("int", str(context.exception))
 
     def test_find_pipeline_spec_in_current_directory(self):
@@ -239,6 +243,7 @@ class CLIUtilityTests(unittest.TestCase):
             name="test_pipeline",
             catalog=None,
             database=None,
+            storage="storage_path",
             configuration={},
             libraries=[LibrariesGlob(include="subdir1/**")],
         )
@@ -280,6 +285,7 @@ class CLIUtilityTests(unittest.TestCase):
         """Errors raised while executing definitions code should make it to the outer context."""
         spec = PipelineSpec(
             name="test_pipeline",
+            storage="storage_path",
             catalog=None,
             database=None,
             configuration={},
@@ -298,6 +304,7 @@ class CLIUtilityTests(unittest.TestCase):
     def test_register_definitions_unsupported_file_extension_matches_glob(self):
         spec = PipelineSpec(
             name="test_pipeline",
+            storage="storage_path",
             catalog=None,
             database=None,
             configuration={},
@@ -352,6 +359,7 @@ class CLIUtilityTests(unittest.TestCase):
                     registry,
                     PipelineSpec(
                         name="test_pipeline",
+                        storage="storage_path",
                         catalog=None,
                         database=None,
                         configuration={},
@@ -500,6 +508,7 @@ class CLIUtilityTests(unittest.TestCase):
                 """
                 {
                     "name": "test_pipeline",
+                    "storage": "storage_path",
                     "libraries": [
                         {"glob": {"include": "transformations/**/*.py"}}
                     ]
