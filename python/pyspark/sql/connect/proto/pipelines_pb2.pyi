@@ -578,6 +578,7 @@ class PipelineCommand(google.protobuf.message.Message):
         FULL_REFRESH_ALL_FIELD_NUMBER: builtins.int
         REFRESH_SELECTION_FIELD_NUMBER: builtins.int
         DRY_FIELD_NUMBER: builtins.int
+        STORAGE_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to start."""
         @property
@@ -596,6 +597,8 @@ class PipelineCommand(google.protobuf.message.Message):
         """If true, the run will not actually execute any flows, but will only validate the graph and
         check for any errors. This is useful for testing and validation purposes.
         """
+        storage: builtins.str
+        """storage location for pipeline checkpoints and metadata."""
         def __init__(
             self,
             *,
@@ -604,6 +607,7 @@ class PipelineCommand(google.protobuf.message.Message):
             full_refresh_all: builtins.bool | None = ...,
             refresh_selection: collections.abc.Iterable[builtins.str] | None = ...,
             dry: builtins.bool | None = ...,
+            storage: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -614,12 +618,16 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dry",
                 "_full_refresh_all",
                 b"_full_refresh_all",
+                "_storage",
+                b"_storage",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
                 "dry",
                 b"dry",
                 "full_refresh_all",
                 b"full_refresh_all",
+                "storage",
+                b"storage",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -631,6 +639,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dry",
                 "_full_refresh_all",
                 b"_full_refresh_all",
+                "_storage",
+                b"_storage",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
                 "dry",
@@ -641,6 +651,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"full_refresh_selection",
                 "refresh_selection",
                 b"refresh_selection",
+                "storage",
+                b"storage",
             ],
         ) -> None: ...
         @typing.overload
@@ -656,6 +668,10 @@ class PipelineCommand(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_full_refresh_all", b"_full_refresh_all"]
         ) -> typing_extensions.Literal["full_refresh_all"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_storage", b"_storage"]
+        ) -> typing_extensions.Literal["storage"] | None: ...
 
     class DefineSqlGraphElements(google.protobuf.message.Message):
         """Parses the SQL file and registers all datasets and flows."""

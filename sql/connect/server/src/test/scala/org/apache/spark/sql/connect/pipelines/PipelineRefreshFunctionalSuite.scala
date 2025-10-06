@@ -128,6 +128,7 @@ class PipelineRefreshFunctionalSuite
           PipelineCommand.StartRun
             .newBuilder()
             .setDataflowGraphId(graphId)
+            .setStorage(storageRoot)
             .addAllFullRefreshSelection(List("a").asJava)
             .build())
       },
@@ -168,6 +169,7 @@ class PipelineRefreshFunctionalSuite
             .setDataflowGraphId(graphId)
             .addAllFullRefreshSelection(Seq("a", "mv").asJava)
             .addRefreshSelection("b")
+            .setStorage(storageRoot)
             .build())
       },
       expectedContentAfterRefresh = Map(
@@ -211,6 +213,7 @@ class PipelineRefreshFunctionalSuite
           PipelineCommand.StartRun
             .newBuilder()
             .setDataflowGraphId(graphId)
+            .setStorage(storageRoot)
             .setFullRefreshAll(true)
             .build())
       },
@@ -231,6 +234,7 @@ class PipelineRefreshFunctionalSuite
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
         .setFullRefreshAll(true)
         .addRefreshSelection("a")
         .build()
@@ -253,6 +257,7 @@ class PipelineRefreshFunctionalSuite
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
         .setFullRefreshAll(true)
         .addFullRefreshSelection("a")
         .build()
@@ -275,6 +280,7 @@ class PipelineRefreshFunctionalSuite
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
         .addRefreshSelection("a")
         .addFullRefreshSelection("a")
         .build()
@@ -298,6 +304,7 @@ class PipelineRefreshFunctionalSuite
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
         .addRefreshSelection("a")
         .addRefreshSelection("b")
         .addFullRefreshSelection("a")
@@ -321,6 +328,7 @@ class PipelineRefreshFunctionalSuite
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
+        .setStorage(storageRoot)
         .setDataflowGraphId(graphId)
         .addRefreshSelection("spark_catalog.default.a")
         .addFullRefreshSelection("a") // This should be treated as the same table

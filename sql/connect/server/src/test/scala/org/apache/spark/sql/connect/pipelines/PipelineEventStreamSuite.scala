@@ -42,7 +42,8 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
         val startRunRequest = buildStartRunPlan(
-          proto.PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build())
+          proto.PipelineCommand.StartRun.newBuilder()
+            .setDataflowGraphId(graphId).setStorage(storageRoot).build())
         val responseIterator = client.execute(startRunRequest)
         while (responseIterator.hasNext) {
           val response = responseIterator.next()
@@ -94,6 +95,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
             proto.PipelineCommand.StartRun
               .newBuilder()
               .setDataflowGraphId(graphId)
+              .setStorage(storageRoot)
               .setDry(dry)
               .build())
           val ex = intercept[AnalysisException] {
@@ -144,6 +146,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           proto.PipelineCommand.StartRun
             .newBuilder()
             .setDataflowGraphId(graphId)
+            .setStorage(storageRoot)
             .setDry(true)
             .build())
         val responseIterator = client.execute(startRunRequest)

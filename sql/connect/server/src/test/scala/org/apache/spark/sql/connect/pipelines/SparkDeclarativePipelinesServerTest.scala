@@ -24,15 +24,9 @@ import org.apache.spark.connect.proto.{PipelineCommand, PipelineEvent}
 import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey, SparkConnectService}
-import org.apache.spark.sql.pipelines.utils.PipelineTest
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.pipelines.utils.{PipelineTest, StorageRootMixin}
 
-class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
-
-  protected override def sparkConf = {
-    super.sparkConf
-      .set("spark.sql.pipelines.storageRoot", Utils.createTempDir().getAbsolutePath)
-  }
+class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest with StorageRootMixin {
 
   override def afterEach(): Unit = {
     SparkConnectService.sessionManager
@@ -43,9 +37,6 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
       })
     PipelineTest.cleanupMetastore(spark)
     super.afterEach()
-    // clear spark.sql.pipelines.storageRoot directory
-    val storageRoot = spark.conf.get("spark.sql.pipelines.storageRoot")
-    Utils.deleteRecursively(new java.io.File(storageRoot))
   }
 
   // Helper method to get the session holder
@@ -147,7 +138,8 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
 
   def startPipelineAndWaitForCompletion(graphId: String): ArrayBuffer[PipelineEvent] = {
     val defaultStartRunCommand =
-      PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()
+      PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId)
+        .setStorage(storageRoot).build()
     startPipelineAndWaitForCompletion(defaultStartRunCommand)
   }
 

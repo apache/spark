@@ -566,7 +566,6 @@ class PythonPipelineSuite
   }
 
   test("groupby and rollup works with internal datasets, referencing with (col, str)") {
-    withTempDir { dir =>
       val graph = buildGraph("""
       from pyspark.sql.functions import col, sum, count
 
@@ -604,7 +603,7 @@ class PythonPipelineSuite
     """)
 
       val updateContext =
-        new PipelineUpdateContextImpl(graph, _ => (), storageRoot = dir.toString)
+        new PipelineUpdateContextImpl(graph, _ => (), storageRoot = storageRoot)
       updateContext.pipelineExecution.runPipeline()
       updateContext.pipelineExecution.awaitCompletion()
 
@@ -625,11 +624,9 @@ class PythonPipelineSuite
         val totalRow = df.filter("id IS NULL").collect().head
         assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
       }
-    }
   }
 
   test("MV/ST with partition columns works") {
-    withTempDir { dir =>
       withTable("mv", "st") {
         val graph = buildGraph("""
             |from pyspark.sql.functions import col
@@ -646,7 +643,7 @@ class PythonPipelineSuite
         val updateContext = new PipelineUpdateContextImpl(
           graph,
           eventCallback = _ => (),
-          storageRoot = dir.toString)
+          storageRoot = storageRoot)
         updateContext.pipelineExecution.runPipeline()
         updateContext.pipelineExecution.awaitCompletion()
 
@@ -663,7 +660,6 @@ class PythonPipelineSuite
           assert(rows == expected)
         }
       }
-    }
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {

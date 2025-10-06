@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.pipelines.utils
 
-import java.io.{BufferedReader, File, FileNotFoundException, InputStreamReader}
-import java.nio.file.Files
+import java.io.{BufferedReader, FileNotFoundException, InputStreamReader}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Try}
@@ -34,23 +33,17 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
-import org.apache.spark.sql.pipelines.utils.PipelineTest.{cleanupMetastore, createTempDir}
+import org.apache.spark.sql.pipelines.utils.PipelineTest.cleanupMetastore
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.util.Utils
 
 abstract class PipelineTest
   extends QueryTest
+  with StorageRootMixin
   with SQLTestUtils
   with SparkErrorTestMixin
   with TargetCatalogAndDatabaseMixin
   with Logging
   with Eventually {
-
-  /**
-   *  A temporary directory created as the pipeline storage root for each test.
-   *  So tests don't need to create their own temp dir.
-   */
-  protected var storageRoot: String = _
 
   protected def startPipelineAndWaitForCompletion(
        unresolvedDataflowGraph: DataflowGraph): Unit = {
@@ -121,7 +114,6 @@ abstract class PipelineTest
 
   protected override def beforeEach(): Unit = {
     super.beforeEach()
-    storageRoot = createTempDir()
     cleanupMetastore(spark)
     (catalogInPipelineSpec, databaseInPipelineSpec) match {
       case (Some(catalog), Some(schema)) =>
@@ -134,7 +126,6 @@ abstract class PipelineTest
   protected override def afterEach(): Unit = {
     cleanupMetastore(spark)
     super.afterEach()
-    Utils.deleteRecursively(new File(storageRoot))
   }
 
   override protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
@@ -307,11 +298,6 @@ object PipelineTest extends Logging {
     "system",
     "main"
   )
-
-  /** Creates a temporary directory. */
-  protected def createTempDir(): String = {
-    Files.createTempDirectory(getClass.getSimpleName).normalize.toString
-  }
 
   /**
    * Try to drop the schema in the catalog and return whether it is successfully dropped.
