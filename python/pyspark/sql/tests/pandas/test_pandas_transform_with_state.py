@@ -36,6 +36,9 @@ from pyspark.sql.types import (
     IntegerType,
     TimestampType,
     DecimalType,
+    ArrayType,
+    MapType,
+    DoubleType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
@@ -70,6 +73,7 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     UpcastProcessorFactory,
     MinEventTimeStatefulProcessorFactory,
     StatefulProcessorCompositeTypeFactory,
+    CompositeOutputProcessorFactory,
 )
 
 
@@ -1593,6 +1597,47 @@ class TransformWithStateTestsMixin:
 
         self._test_transform_with_state_basic(
             StatefulProcessorCompositeTypeFactory(), check_results, output_schema=output_schema
+        )
+
+    # run a test with composite types where the output of TWS (not just the states) are complex.
+    def test_composite_output_schema(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                rows = batch_df.sort("primitiveValue").collect()
+                assert len(rows) == 2
+
+                # Check key_0 with count=2
+                row_0 = [r for r in rows if "key_0" in r.primitiveValue][0]
+                assert row_0.primitiveValue == "key_0_count_2"
+                assert row_0.listOfPrimitive == ["item_0", "item_1"]
+                assert row_0.mapOfPrimitive == {"key0": "value0", "key1": "value1"}
+                assert len(row_0.listOfComposite) == 2
+                assert row_0.listOfComposite[0].intValue == 0
+                assert row_0.listOfComposite[0].doubleValue == 0.0
+                assert row_0.listOfComposite[1].intValue == 1
+                assert row_0.listOfComposite[1].doubleValue == 1.5
+                assert len(row_0.mapOfComposite) == 2
+                assert row_0.mapOfComposite["nested_key0"].intValue == 0
+                assert row_0.mapOfComposite["nested_key0"].doubleValue == 0.0
+                assert row_0.mapOfComposite["nested_key1"].intValue == 10
+                assert row_0.mapOfComposite["nested_key1"].doubleValue == 2.5
+
+        # Define the output schema matching Scala case class
+        inner_nested_class_schema = StructType([
+            StructField("intValue", IntegerType(), True),
+            StructField("doubleValue", DoubleType(), True)
+        ])
+
+        output_schema = StructType([
+            StructField("primitiveValue", StringType(), True),
+            StructField("listOfPrimitive", ArrayType(StringType()), True),
+            StructField("mapOfPrimitive", MapType(StringType(), StringType()), True),
+            StructField("listOfComposite", ArrayType(inner_nested_class_schema), True),
+            StructField("mapOfComposite", MapType(StringType(), inner_nested_class_schema), True),
+        ])
+
+        self._test_transform_with_state_basic(
+            CompositeOutputProcessorFactory(), check_results, True, output_schema=output_schema
         )
 
     # run the same test suites again but with single shuffle partition
