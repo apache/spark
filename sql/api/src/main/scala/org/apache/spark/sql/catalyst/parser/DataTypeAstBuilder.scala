@@ -125,8 +125,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
             // The special parameterized GEOGRAPHY type syntax uses a single "ANY" string value.
             // This implies a mixed GEOGRAPHY type, with potentially different SRIDs across rows.
             GeographyType("ANY")
-          }
-          else {
+          } else {
             // The explicitly parameterzied GEOGRAPHY syntax uses a specified integer SRID value.
             // This implies a fixed GEOGRAPHY type, with a single fixed SRID value across all rows.
             GeographyType(currentCtx.srid.getText.toInt)
@@ -138,8 +137,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
             // The special parameterized GEOMETRY type syntax uses a single "ANY" string value.
             // This implies a mixed GEOMETRY type, with potentially different SRIDs across rows.
             GeometryType("ANY")
-          }
-          else {
+          } else {
             // The explicitly parameterzied GEOMETRY type syntax has a single integer SRID value.
             // This implies a fixed GEOMETRY type, with a single fixed SRID value across all rows.
             GeometryType(currentCtx.srid.getText.toInt)

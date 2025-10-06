@@ -23,13 +23,13 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Experimental
 
 /**
- * The data type representing GEOGRAPHY values which are spatial objects, as defined in the
- * Open Geospatial Consortium (OGC) Simple Feature Access specification
+ * The data type representing GEOGRAPHY values which are spatial objects, as defined in the Open
+ * Geospatial Consortium (OGC) Simple Feature Access specification
  * (https://portal.ogc.org/files/?artifact_id=25355), with a geographic coordinate system.
  */
 @Experimental
 class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAlgorithm)
-  extends AtomicType
+    extends AtomicType
     with Serializable {
 
   /**
@@ -44,8 +44,8 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
   override def defaultSize: Int = 2048
 
   /**
-   * The GeographyType is a mixed SRID type iff the SRID is GEOGRAPHY_MIXED_SRID.
-   * Semantically, this means that different SRID values per row are allowed.
+   * The GeographyType is a mixed SRID type iff the SRID is GEOGRAPHY_MIXED_SRID. Semantically,
+   * this means that different SRID values per row are allowed.
    */
   def isMixedSrid: Boolean = srid == GeographyType.GEOGRAPHY_MIXED_SRID
 
@@ -107,8 +107,8 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
   override def hashCode(): Int = srid.hashCode
 
   /**
-   * The GeographyType can only accept another type if the other type is also a GeographyType,
-   * and the SRID values are compatible (see `acceptsGeographyType` below for more details).
+   * The GeographyType can only accept another type if the other type is also a GeographyType, and
+   * the SRID values are compatible (see `acceptsGeographyType` below for more details).
    */
   override private[sql] def acceptsType(other: DataType): Boolean = {
     other match {
@@ -122,9 +122,10 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
   }
 
   /**
-   * The GeographyType with mixed SRID can accept any other GeographyType, i.e. either a fixed SRID
-   * GeographyType or another mixed SRID GeographyType. Conversely, a GeographyType with fixed SRID
-   * can only accept another GeographyType with the same fixed SRID value, and not a mixed SRID.
+   * The GeographyType with mixed SRID can accept any other GeographyType, i.e. either a fixed
+   * SRID GeographyType or another mixed SRID GeographyType. Conversely, a GeographyType with
+   * fixed SRID can only accept another GeographyType with the same fixed SRID value, and not a
+   * mixed SRID.
    */
   def acceptsGeographyType(gt: GeographyType): Boolean = {
     // If the SRID is mixed, we can accept any other GeographyType.
@@ -142,13 +143,12 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
     }
     // As for other valid CRS values, we currently offer limited support.
     else if (crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_CRS) ||
-        crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_EPSG_CRS)) {
+      crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_EPSG_CRS)) {
       GeographyType.GEOGRAPHY_DEFAULT_SRID
     } else {
       throw new SparkIllegalArgumentException(
         errorClass = "ST_INVALID_CRS_VALUE",
-        messageParameters = Map("crs" -> crs)
-      )
+        messageParameters = Map("crs" -> crs))
     }
   }
 }
@@ -157,16 +157,15 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
 object GeographyType extends AbstractDataType {
 
   /**
-   * Mixed SRID value and the corresponding CRS value for GeographyType.
-   * This value is completely internal, and should not be exposed to users.
-   * It means we can have different SRIDs per row.
+   * Mixed SRID value and the corresponding CRS value for GeographyType. This value is completely
+   * internal, and should not be exposed to users. It means we can have different SRIDs per row.
    */
   final val GEOGRAPHY_MIXED_SRID = -1
   final val GEOGRAPHY_MIXED_CRS = "SRID:ANY"
 
   /**
-   * Default CRS value for GeographyType depends on storage specification.
-   * Parquet and Iceberg use OGC:CRS84, which translates to SRID 4326 here.
+   * Default CRS value for GeographyType depends on storage specification. Parquet and Iceberg use
+   * OGC:CRS84, which translates to SRID 4326 here.
    */
   final val GEOGRAPHY_DEFAULT_SRID = 4326
   final val GEOGRAPHY_DEFAULT_CRS = "OGC:CRS84"
@@ -191,8 +190,7 @@ object GeographyType extends AbstractDataType {
       // Limited geographic SRID values are allowed.
       throw new SparkIllegalArgumentException(
         errorClass = "ST_INVALID_SRID_VALUE",
-        messageParameters = Map("srid" -> srid.toString)
-      )
+        messageParameters = Map("srid" -> srid.toString))
     }
     new GeographyType(GEOGRAPHY_DEFAULT_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
   }
@@ -216,8 +214,7 @@ object GeographyType extends AbstractDataType {
       case None =>
         throw new SparkIllegalArgumentException(
           errorClass = "ST_INVALID_ALGORITHM_VALUE",
-          messageParameters = Map("alg" -> algorithm)
-        )
+          messageParameters = Map("alg" -> algorithm))
     }
   }
 
@@ -226,8 +223,7 @@ object GeographyType extends AbstractDataType {
       // Limited geographic CRS values are allowed.
       throw new SparkIllegalArgumentException(
         errorClass = "ST_INVALID_CRS_VALUE",
-        messageParameters = Map("crs" -> crs)
-      )
+        messageParameters = Map("crs" -> crs))
     }
     new GeographyType(crs, algorithm)
   }
@@ -239,8 +235,8 @@ object GeographyType extends AbstractDataType {
     // Currently, we only support "OGC:CRS84" / "EPSG:4326" / "SRID:ANY".
     // In the future, we may support others.
     crs.equalsIgnoreCase(GEOGRAPHY_DEFAULT_CRS) ||
-      crs.equalsIgnoreCase(GEOGRAPHY_DEFAULT_EPSG_CRS) ||
-      crs.equalsIgnoreCase(GEOGRAPHY_MIXED_CRS)
+    crs.equalsIgnoreCase(GEOGRAPHY_DEFAULT_EPSG_CRS) ||
+    crs.equalsIgnoreCase(GEOGRAPHY_MIXED_CRS)
   }
 
   /**
@@ -261,8 +257,8 @@ object GeographyType extends AbstractDataType {
 }
 
 /**
- * Edge interpolation algorithm for Geography logical type.
- * Currently, Spark only supports spherical algorithm.
+ * Edge interpolation algorithm for Geography logical type. Currently, Spark only supports
+ * spherical algorithm.
  */
 sealed abstract class EdgeInterpolationAlgorithm
 

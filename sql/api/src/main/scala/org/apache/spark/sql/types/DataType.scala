@@ -226,8 +226,10 @@ object DataType {
       case "geometry" => GeometryType(GeometryType.GEOMETRY_DEFAULT_CRS)
       case GEOMETRY_TYPE(crs) => GeometryType(crs)
       case "geography" => GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS)
-      case GEOGRAPHY_TYPE_CRS(crs) => GeographyType(crs, GeographyType.GEOGRAPHY_DEFAULT_ALGORITHM)
-      case GEOGRAPHY_TYPE_ALG(alg) => GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS, alg)
+      case GEOGRAPHY_TYPE_CRS(crs) =>
+        GeographyType(crs, GeographyType.GEOGRAPHY_DEFAULT_ALGORITHM)
+      case GEOGRAPHY_TYPE_ALG(alg) =>
+        GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS, alg)
       case GEOGRAPHY_TYPE_CRS_ALG(crs, alg) => GeographyType(crs, alg)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
