@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils}
@@ -162,6 +163,17 @@ case class DataSourceV2ScanRelation(
       case _ =>
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
+  }
+
+  override def doCanonicalize(): LogicalPlan = {
+    val canonicalized = this.copy(
+      relation = this.relation.copy(
+        output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
+      ),
+      output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
+      scan = this.scan.doCanonicalize()
+    )
+    canonicalized
   }
 }
 

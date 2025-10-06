@@ -157,4 +157,11 @@ public interface Scan {
   default ColumnarSupportMode columnarSupportMode() {
     return ColumnarSupportMode.PARTITION_DEFINED;
   }
+
+  /**
+   * Return the canonicalized scan
+   *
+   * @since 4.1.0
+   */
+  default Scan doCanonicalize() {return this;}
 }
