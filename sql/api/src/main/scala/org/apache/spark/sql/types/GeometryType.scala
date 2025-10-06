@@ -87,6 +87,7 @@ class GeometryType private (val crs: String)
 
   /**
    * Two types are considered equal iff they are both GeometryTypes and have the same SRID value.
+   * For the GEOMETRY type, the SRID value uniquely identifies its type information.
    */
   override def equals(obj: Any): Boolean = {
     obj match {
@@ -167,11 +168,14 @@ object GeometryType extends AbstractDataType {
    * as specified by the Parquet, Delta, and Iceberg specifications.
    * If crs is omitted, it should always default to this.
    */
-  final val DEFAULT_STORAGE_CRS = "OGC:CRS84"
-  final val DEFAULT_STORAGE_CRS_SRID = 4326
+  final val GEOMETRY_DEFAULT_SRID = 4326
+  final val GEOMETRY_DEFAULT_CRS = "OGC:CRS84"
 
-  /** The default GeometryType for storage. */
-  val GEOMETRY_MIXED_TYPE: GeometryType = GeometryType(GEOMETRY_MIXED_CRS)
+  /**
+   * The default concrete GeometryType in SQL.
+   */
+  private final val GEOMETRY_MIXED_TYPE: GeometryType =
+    GeometryType(GEOMETRY_MIXED_CRS)
 
   /**
    * Constructors for GeometryType.

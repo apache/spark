@@ -122,8 +122,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
           // Unparameterized geometry type isn't supported and will be caught by the default branch.
           // Here, we only handle the parameterized GEOGRAPHY type syntax, which comes in two forms:
           if (currentCtx.srid.getText.toLowerCase(Locale.ROOT) == "any") {
-            // The special parameterized GEOGRAPHY type syntax has a single "ANY" string value.
-            // This implies a mixed GEOGRAPHY type, with potentially different SRID values rows.
+            // The special parameterized GEOGRAPHY type syntax uses a single "ANY" string value.
+            // This implies a mixed GEOGRAPHY type, with potentially different SRIDs across rows.
             GeographyType("ANY")
           }
           else {
@@ -135,8 +135,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
           // Unparameterized geometry type isn't supported and will be caught by the default branch.
           // Here, we only handle the parameterized GEOMETRY type syntax, which comes in two forms:
           if (currentCtx.srid.getText.toLowerCase(Locale.ROOT) == "any") {
-            // The special parameterized GEOMETRY type syntax has a single "ANY" string value.
-            // This implies a mixed GEOMETRY type, with potentially different SRID values rows.
+            // The special parameterized GEOMETRY type syntax uses a single "ANY" string value.
+            // This implies a mixed GEOMETRY type, with potentially different SRIDs across rows.
             GeometryType("ANY")
           }
           else {

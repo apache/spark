@@ -28,11 +28,11 @@ public class CrsMappings {
   // We implement this class as a singleton (we disallow construction).
   private CrsMappings() {}
 
-  private static CrsMappings instance = new CrsMappings();
+  private static final CrsMappings Instance = new CrsMappings();
 
   // Returns the unique instance of this class.
   public static CrsMappings get() {
-    return instance;
+    return Instance;
   }
 
   // Hash maps defining the mappings to/from SRID and string ID for a CRS.

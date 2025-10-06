@@ -87,13 +87,14 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
   private[spark] override def asNullable: GeographyType = this
 
   /**
-   * Two types are considered equal iff they are both GeographyTypes and have the same SRID value.
+   * Two types are considered equal iff they are both GeographyTypes and have the same type info.
+   * For the GEOGRAPHY type, the SRID value and algorithm uniquely identify its type information.
    */
   override def equals(obj: Any): Boolean = {
     obj match {
       case g: GeographyType =>
-        // Iff two GeographyTypes have the same SRID, they are considered equal.
-        g.srid == srid
+        // Iff two GeographyTypes have the same SRID and algorithm, they are considered equal.
+        g.srid == srid && g.algorithm == algorithm
       case _ =>
         // In all other cases, the two types are considered not equal.
         false
@@ -167,8 +168,8 @@ object GeographyType extends AbstractDataType {
    * Default CRS value for GeographyType depends on storage specification.
    * Parquet and Iceberg use OGC:CRS84, which translates to SRID 4326 here.
    */
-  final val GEOGRAPHY_DEFAULT_CRS = "OGC:CRS84"
   final val GEOGRAPHY_DEFAULT_SRID = 4326
+  final val GEOGRAPHY_DEFAULT_CRS = "OGC:CRS84"
 
   // The default edge interpolation algorithm value for GeographyType.
   final val GEOGRAPHY_DEFAULT_ALGORITHM = EdgeInterpolationAlgorithm.SPHERICAL
@@ -176,8 +177,10 @@ object GeographyType extends AbstractDataType {
   // Another way to represent the default parquet crs value (OGC:CRS84).
   final val GEOGRAPHY_DEFAULT_EPSG_CRS = s"EPSG:$GEOGRAPHY_DEFAULT_SRID"
 
-  /** The default GeographyType for storage. */
-  val GEOGRAPHY_MIXED_TYPE: GeographyType =
+  /**
+   * The default concrete GeographyType in SQL.
+   */
+  private final val GEOGRAPHY_MIXED_TYPE: GeographyType =
     GeographyType(GEOGRAPHY_MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
 
   /**

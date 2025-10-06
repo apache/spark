@@ -223,7 +223,7 @@ object DataType {
       case STRING_WITH_COLLATION(collation) => StringType(collation)
       // If the coordinate reference system (CRS) value is omitted, Parquet and other storage
       // formats (Delta, Iceberg) consider "OGC:CRS84" to be the default value of the crs.
-      case "geometry" => GeometryType(GeometryType.DEFAULT_STORAGE_CRS)
+      case "geometry" => GeometryType(GeometryType.GEOMETRY_DEFAULT_CRS)
       case GEOMETRY_TYPE(crs) => GeometryType(crs)
       case "geography" => GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS)
       case GEOGRAPHY_TYPE_CRS(crs) => GeographyType(crs, GeographyType.GEOGRAPHY_DEFAULT_ALGORITHM)

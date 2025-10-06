@@ -280,8 +280,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromDDL(VarcharType(11))
 
   // GEOMETRY type with default fixed SRID.
-  checkDataTypeFromJson(GeometryType(GeometryType.DEFAULT_STORAGE_CRS_SRID))
-  checkDataTypeFromDDL(GeometryType(GeometryType.DEFAULT_STORAGE_CRS_SRID))
+  checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+  checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
 
   // GEOMETRY type with non-default fixed SRID.
   checkDataTypeFromJson(GeometryType(3857))
