@@ -21,8 +21,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
-import org.apache.spark.sql.pipelines.graph.DatasetManager.getTableCatalogForTable
 
 object State extends Logging {
 
@@ -66,33 +64,12 @@ object State extends Logging {
     val elementsToReset: Seq[Input] = findElementsToReset(resolvedGraph, env)
 
     elementsToReset.foreach {
-      case t: Table => reset(t, env)
       case f: ResolvedFlow => reset(f, env, resolvedGraph)
+      case _ => // tables is handled in materializeTables since hive metastore does not support
+                // removing all columns from a table.
     }
 
     elementsToReset
-  }
-
-  /**
-   * Resets the table only if it exists by:
-   *  - Clearing out all data
-   *  - Removing all columns
-   */
-  private def reset(table: Table, env: PipelineUpdateContext): Unit = {
-    logInfo(log"Clearing out state for table ${MDC(LogKeys.TABLE_NAME, table.displayName)}}")
-    val catalog = getTableCatalogForTable(env.spark, table.identifier)
-    val identifier =
-      Identifier.of(Array(table.identifier.database.get), table.identifier.identifier)
-
-    if (catalog.tableExists(identifier)) {
-      env.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
-
-      val catalogTable = catalog.loadTable(identifier)
-      val deletions = catalogTable.columns().map { c =>
-        TableChange.deleteColumn(Array(c.name), false)
-      }
-      catalog.alterTable(identifier, deletions: _*)
-    }
   }
 
   /**
