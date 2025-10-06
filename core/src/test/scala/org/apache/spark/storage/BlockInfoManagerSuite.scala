@@ -403,4 +403,24 @@ class BlockInfoManagerSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("SPARK-53807") {
+    val blockId = TestBlockId("block")
+    assert(blockInfoManager.lockNewBlockForWriting(blockId, newBlockInfo()))
+    blockInfoManager.unlock(blockId)
+
+    // Without the fix the block below almost always fails.
+    (0 to 10).foreach { task =>
+      withTaskId(task) {
+        blockInfoManager.registerTask(task)
+
+        assert(blockInfoManager.lockForWriting(blockId).isDefined)
+
+        val future = Future(blockInfoManager.unlock(blockId, Option(task)))
+        blockInfoManager.releaseAllLocksForTask(task)
+
+        ThreadUtils.awaitReady(future, 100.millis)
+      }
+    }
+  }
 }
