@@ -111,9 +111,13 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  */
 trait ConditionalStatementExec extends NonLeafStatementExec {
   /**
-   * Used by CONTINUE HANDLER for all ConditionalStatementExec and by EXIT HANDLER for
-   * ForStatementExec to flag the statement as interrupted and subsequently force the
-   * hasNext method to return false (used for skipping the conditional statement).
+   * Interrupted flag indicates if the statement has been interrupted, and is used
+   * for skipping the execution of the conditional statements, by setting the hasNext
+   * to be false.
+   * Interrupt is issued by the CONTINUE HANDLER when the conditional statement's
+   * conditional expression throws an exception, and is issued by the Leave Statement
+   * when the ForStatementExec executes the Leave Statement injected by the EXIT
+   * HANDLER.
    */
   protected[scripting] var interrupted: Boolean = false
 }
