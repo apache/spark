@@ -582,10 +582,10 @@ class RocksDBFileManager(
    *   set of SST files.
    *
    * @param numVersionsToRetain the number of RocksDB versions to keep in object store after the
-   *                            deletion. Must be greater than 0 or -1 to retain all versions.
+   *                            deletion. Must be greater than 0, or -1 to retain all versions.
    * @param maxVersionsToDeletePerMaintenance the max number of RocksDB versions
    *                            to delete per maintenance operation.
-   *                            Must be greater than 0 or -1 to delete all stale versions.
+   *                            Must be greater than 0, or -1 to delete all stale versions.
    * @param minVersionsToDelete the min number of stale versions required to trigger deletion.
    *                            If its set to <= 0, then we will always perform list operations
    *                            to determine deletion candidates. If set to a positive value, then
