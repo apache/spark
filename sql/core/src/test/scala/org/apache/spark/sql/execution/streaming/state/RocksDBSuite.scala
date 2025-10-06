@@ -784,14 +784,15 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies(
-    "RocksDB: purge version files with minVersionsToDelete > 0 and maxVersionsToDelete > 0",
+    "RocksDB: purge version files with minVersionsToDelete > 0 " +
+    "and maxVersionsToDeletePerMaintenance > 0",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) {
     case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
       val remoteDir = Utils.createTempDir().toString
       new File(remoteDir).delete() // to make sure that the directory gets created
       val conf = dbConf.copy(
         minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 3,
-        maxVersionsToDelete = 1)
+        maxVersionsToDeletePerMaintenance = 1)
       withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled,
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds) { db =>
         // Commit 5 versions
@@ -824,7 +825,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.doMaintenance()
 
         // Checkpoint directory after maintenance
-        // Verify that only one version is deleted because maxVersionsToDelete = 1
+        // Verify that only one version is deleted because maxVersionsToDeletePerMaintenance = 1
         assert(snapshotVersionsPresent(remoteDir) == Seq(2, 3, 4, 5, 6))
         if (isChangelogCheckpointingEnabled) {
           assert(changelogVersionsPresent(remoteDir) == Seq(2, 3, 4, 5, 6))
@@ -834,7 +835,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.load(6)
         db.commit()
         db.doMaintenance()
-        // Verify that only one version is deleted because maxVersionsToDelete = 1
+        // Verify that only one version is deleted because maxVersionsToDeletePerMaintenance = 1
         assert(snapshotVersionsPresent(remoteDir) == Seq(3, 4, 5, 6, 7))
         if (isChangelogCheckpointingEnabled) {
           assert(changelogVersionsPresent(remoteDir) == Seq(3, 4, 5, 6, 7))
@@ -843,14 +844,14 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies(
-    "RocksDB: purge version files with minVersionsToDelete < maxVersionsToDelete",
+    "RocksDB: purge version files with minVersionsToDelete < maxVersionsToDeletePerMaintenance",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) {
     case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
       val remoteDir = Utils.createTempDir().toString
       new File(remoteDir).delete() // to make sure that the directory gets created
       val conf = dbConf.copy(
         minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 1,
-        maxVersionsToDelete = 2)
+        maxVersionsToDeletePerMaintenance = 2)
       withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled,
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds) { db =>
         // Commit 5 versions

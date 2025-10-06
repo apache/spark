@@ -583,8 +583,9 @@ class RocksDBFileManager(
    *
    * @param numVersionsToRetain the number of RocksDB versions to keep in object store after the
    *                            deletion. Must be greater than 0 or -1 to retain all versions.
-   * @param maxVersionsToDelete the max number of RocksDB versions to delete if a deletion occurs.
-   *                            Must be greater than 0 or -1 to delete all non-retained versions.
+   * @param maxVersionsToDeletePerMaintenance the max number of RocksDB versions
+   *                            to delete per maintenance operation.
+   *                            Must be greater than 0 or -1 to delete all stale versions.
    * @param minVersionsToDelete the min number of stale versions required to trigger deletion.
    *                            If its set to <= 0, then we will always perform list operations
    *                            to determine deletion candidates. If set to a positive value, then
@@ -593,7 +594,7 @@ class RocksDBFileManager(
    */
   def deleteOldVersions(
       numVersionsToRetain: Int,
-      maxVersionsToDelete: Int = -1,
+      maxVersionsToDeletePerMaintenance: Int = -1,
       minVersionsToDelete: Long = 0): Unit = {
     // Check if enough stale version files present
     if (shouldSkipDeletion(numVersionsToRetain, minVersionsToDelete)) return
@@ -620,15 +621,16 @@ class RocksDBFileManager(
 
     // In order to reconstruct numVersionsToRetain version, retain the latest snapshot
     // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1).
-    // Also require minVersionToRetain <= minSnapshotVersionPresent + maxVersionsToDelete.
+    // Also require
+    // minVersionToRetain <= minSnapshotVersionPresent + maxVersionsToDeletePerMaintenance.
     // If none of the snapshots satisfy the condition, minVersionToRetain will be 0 and
     // no version gets deleted.
     val minVersionToRetain = sortedSnapshotVersionsAndUniqueIds
       .map(_._1)
       .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
       .filter( v =>
-        if (maxVersionsToDelete != -1) {
-          v <= minSnapshotVersionPresent + maxVersionsToDelete
+        if (maxVersionsToDeletePerMaintenance != -1) {
+          v <= minSnapshotVersionPresent + maxVersionsToDeletePerMaintenance
         } else true
       )
       .foldLeft(0L)(math.max)

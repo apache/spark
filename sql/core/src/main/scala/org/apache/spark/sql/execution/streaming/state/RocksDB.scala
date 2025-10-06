@@ -1396,7 +1396,7 @@ class RocksDB(
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(
         numVersionsToRetain = conf.minVersionsToRetain,
-        maxVersionsToDelete = conf.maxVersionsToDelete,
+        maxVersionsToDeletePerMaintenance = conf.maxVersionsToDeletePerMaintenance,
         minVersionsToDelete = conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
@@ -1955,7 +1955,7 @@ case class RocksDBConf(
     allowFAllocate: Boolean,
     compression: String,
     reportSnapshotUploadLag: Boolean,
-    maxVersionsToDelete: Int)
+    maxVersionsToDeletePerMaintenance: Int)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -2147,7 +2147,7 @@ object RocksDBConf {
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
       storeConf.reportSnapshotUploadLag,
-      storeConf.maxVersionsToDelete)
+      storeConf.maxVersionsToDeletePerMaintenance)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

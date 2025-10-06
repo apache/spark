@@ -63,7 +63,7 @@ class StateStoreConf(
   val maxVersionsToRetainInMemory: Int = sqlConf.maxBatchesToRetainInMemory
 
   /** Maximum number of versions to delete per maintenance operation */
-  val maxVersionsToDelete: Int = sqlConf.maxVersionsToDelete
+  val maxVersionsToDeletePerMaintenance: Int = sqlConf.maxVersionsToDeletePerMaintenance
 
   /**
    * Optional fully qualified name of the subclass of [[StateStoreProvider]]
