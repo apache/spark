@@ -23,15 +23,15 @@ import java.util.HashMap;
  * Class for maintaining mappings between supported SRID values and the string ID of the
  * corresponding CRS.
  */
-public class CrsMappings {
+public class SpatialReferenceMapper {
 
   // We implement this class as a singleton (we disallow construction).
-  private CrsMappings() {}
+  private SpatialReferenceMapper() {}
 
-  private static final CrsMappings Instance = new CrsMappings();
+  private static final SpatialReferenceMapper Instance = new SpatialReferenceMapper();
 
   // Returns the unique instance of this class.
-  public static CrsMappings get() {
+  public static SpatialReferenceMapper get() {
     return Instance;
   }
 

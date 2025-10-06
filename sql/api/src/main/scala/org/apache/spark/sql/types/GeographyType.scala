@@ -44,10 +44,10 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
   override def defaultSize: Int = 2048
 
   /**
-   * The GeographyType is a mixed SRID type iff the SRID is GEOGRAPHY_MIXED_SRID. Semantically,
+   * The GeographyType is a mixed SRID type iff the SRID is MIXED_SRID. Semantically,
    * this means that different SRID values per row are allowed.
    */
-  def isMixedSrid: Boolean = srid == GeographyType.GEOGRAPHY_MIXED_SRID
+  def isMixedSrid: Boolean = srid == GeographyType.MIXED_SRID
 
   /**
    * Type name that is displayed to users.
@@ -138,8 +138,8 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
    */
   private[types] def toSrid(crs: String): Int = {
     // The special value "SRID:ANY" is used to represent mixed SRID values.
-    if (crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_MIXED_CRS)) {
-      GeographyType.GEOGRAPHY_MIXED_SRID
+    if (crs.equalsIgnoreCase(GeographyType.MIXED_CRS)) {
+      GeographyType.MIXED_SRID
     }
     // As for other valid CRS values, we currently offer limited support.
     else if (crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_CRS) ||
@@ -154,14 +154,7 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
 }
 
 @Experimental
-object GeographyType extends AbstractDataType {
-
-  /**
-   * Mixed SRID value and the corresponding CRS value for GeographyType. This value is completely
-   * internal, and should not be exposed to users. It means we can have different SRIDs per row.
-   */
-  final val GEOGRAPHY_MIXED_SRID = -1
-  final val GEOGRAPHY_MIXED_CRS = "SRID:ANY"
+object GeographyType extends SpatialType {
 
   /**
    * Default CRS value for GeographyType depends on storage specification. Parquet and Iceberg use
@@ -180,7 +173,7 @@ object GeographyType extends AbstractDataType {
    * The default concrete GeographyType in SQL.
    */
   private final val GEOGRAPHY_MIXED_TYPE: GeographyType =
-    GeographyType(GEOGRAPHY_MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
+    GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
 
   /**
    * Constructors for GeographyType.
@@ -200,7 +193,7 @@ object GeographyType extends AbstractDataType {
       case "ANY" =>
         // Special value "ANY" is used for mixed SRID values.
         // This should be available to users in the Scala API.
-        new GeographyType(GEOGRAPHY_MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
+        new GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
       case _ =>
         // Otherwise, we need to further check the CRS value.
         // This shouldn't be available to users in the Scala API.
@@ -236,7 +229,7 @@ object GeographyType extends AbstractDataType {
     // In the future, we may support others.
     crs.equalsIgnoreCase(GEOGRAPHY_DEFAULT_CRS) ||
     crs.equalsIgnoreCase(GEOGRAPHY_DEFAULT_EPSG_CRS) ||
-    crs.equalsIgnoreCase(GEOGRAPHY_MIXED_CRS)
+    crs.equalsIgnoreCase(MIXED_CRS)
   }
 
   /**

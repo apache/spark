@@ -23,7 +23,6 @@ import org.json4s.JsonAST.JString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.sql.types.{DataType, GeographyType}
 
 class GeographyTypeSuite extends SparkFunSuite {
 
@@ -88,9 +87,9 @@ class GeographyTypeSuite extends SparkFunSuite {
 
   test("GEOGRAPHY type with the special ANY specifier for mixed SRID") {
     val g = GeographyType("ANY")
-    assert(g.srid == GeographyType.GEOGRAPHY_MIXED_SRID)
+    assert(g.srid == GeographyType.MIXED_SRID)
     assert(g == GeographyType("ANY"))
-    assert(g.hashCode() == GeographyType.GEOGRAPHY_MIXED_SRID.hashCode())
+    assert(g.hashCode() == GeographyType.MIXED_SRID.hashCode())
     // This GEOGRAPHY type has a fixed SRID.
     assert(g.isMixedSrid)
     // The type name for concrete geography type does display the SRID.

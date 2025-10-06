@@ -20,35 +20,35 @@ package org.apache.spark.sql.types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class CrsMappingsSuite {
+public class SpatialReferenceMapperSuite {
 
   @Test
   public void getStringIdReturnsCorrectStringIdForValidSrid() {
-    CrsMappings crsMappings = CrsMappings.get();
-    Assertions.assertEquals("SRID:0", crsMappings.getStringId(0));
-    Assertions.assertEquals("EPSG:3857", crsMappings.getStringId(3857));
-    Assertions.assertEquals("OGC:CRS84", crsMappings.getStringId(4326));
+    SpatialReferenceMapper srMapper = SpatialReferenceMapper.get();
+    Assertions.assertEquals("SRID:0", srMapper.getStringId(0));
+    Assertions.assertEquals("EPSG:3857", srMapper.getStringId(3857));
+    Assertions.assertEquals("OGC:CRS84", srMapper.getStringId(4326));
   }
 
   @Test
   public void getStringIdReturnsNullForInvalidSrid() {
-    CrsMappings crsMappings = CrsMappings.get();
-    Assertions.assertNull(crsMappings.getStringId(-1));
-    Assertions.assertNull(crsMappings.getStringId(9999));
+    SpatialReferenceMapper srMapper = SpatialReferenceMapper.get();
+    Assertions.assertNull(srMapper.getStringId(-1));
+    Assertions.assertNull(srMapper.getStringId(9999));
   }
 
   @Test
   public void getSridReturnsCorrectSridForValidStringId() {
-    CrsMappings crsMappings = CrsMappings.get();
-    Assertions.assertEquals(0, crsMappings.getSrid("SRID:0"));
-    Assertions.assertEquals(3857, crsMappings.getSrid("EPSG:3857"));
-    Assertions.assertEquals(4326, crsMappings.getSrid("OGC:CRS84"));
+    SpatialReferenceMapper srMapper = SpatialReferenceMapper.get();
+    Assertions.assertEquals(0, srMapper.getSrid("SRID:0"));
+    Assertions.assertEquals(3857, srMapper.getSrid("EPSG:3857"));
+    Assertions.assertEquals(4326, srMapper.getSrid("OGC:CRS84"));
   }
 
   @Test
   public void getSridReturnsNullForInvalidStringId() {
-    CrsMappings crsMappings = CrsMappings.get();
-    Assertions.assertNull(crsMappings.getSrid("INVALID:ID"));
-    Assertions.assertNull(crsMappings.getSrid("EPSG:9999"));
+    SpatialReferenceMapper srMapper = SpatialReferenceMapper.get();
+    Assertions.assertNull(srMapper.getSrid("INVALID:ID"));
+    Assertions.assertNull(srMapper.getSrid("EPSG:9999"));
   }
 }

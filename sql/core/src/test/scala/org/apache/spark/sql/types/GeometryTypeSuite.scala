@@ -23,7 +23,6 @@ import org.json4s.JsonAST.JString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.sql.types.{DataType, GeometryType}
 
 class GeometryTypeSuite extends SparkFunSuite {
 
@@ -64,9 +63,9 @@ class GeometryTypeSuite extends SparkFunSuite {
 
   test("GEOMETRY type with the special ANY specifier for mixed SRID") {
     val g = GeometryType("ANY")
-    assert(g.srid == GeometryType.GEOMETRY_MIXED_SRID)
+    assert(g.srid == GeometryType.MIXED_SRID)
     assert(g == GeometryType("ANY"))
-    assert(g.hashCode() == GeometryType.GEOMETRY_MIXED_SRID.hashCode())
+    assert(g.hashCode() == GeometryType.MIXED_SRID.hashCode())
     // This GEOMETRY type has a fixed SRID.
     assert(g.isMixedSrid)
     // The type name for concrete geometry type does display the SRID.

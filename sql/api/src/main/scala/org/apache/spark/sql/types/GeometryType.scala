@@ -42,10 +42,10 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
   override def defaultSize: Int = 2048
 
   /**
-   * The GeometryType is a mixed SRID type iff the SRID is GEOMETRY_MIXED_SRID. Semantically, this
+   * The GeometryType is a mixed SRID type iff the SRID is MIXED_SRID. Semantically, this
    * means that different SRID values per row are allowed.
    */
-  def isMixedSrid: Boolean = srid == GeometryType.GEOMETRY_MIXED_SRID
+  def isMixedSrid: Boolean = srid == GeometryType.MIXED_SRID
 
   /**
    * Type name that is displayed to users.
@@ -135,11 +135,11 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
    */
   private[types] def toSrid(crs: String): Int = {
     // The special value "SRID:ANY" is used to represent mixed SRID values.
-    if (crs.equalsIgnoreCase(GeometryType.GEOMETRY_MIXED_CRS)) {
-      return GeometryType.GEOMETRY_MIXED_SRID
+    if (crs.equalsIgnoreCase(GeometryType.MIXED_CRS)) {
+      return GeometryType.MIXED_SRID
     }
     // For all other CRS values, we need to look up the corresponding SRID.
-    val srid = CrsMappings.get().getSrid(crs)
+    val srid = SpatialReferenceMapper.get().getSrid(crs)
     if (srid == null) {
       // If the CRS value is not recognized, we throw an exception.
       throw new SparkIllegalArgumentException(
@@ -151,14 +151,7 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
 }
 
 @Experimental
-object GeometryType extends AbstractDataType {
-
-  /**
-   * Mixed SRID value and the corresponding CRS value for GeometryType. This value is completely
-   * internal, and should not be exposed to users. It means we can have different SRIDs per row.
-   */
-  final val GEOMETRY_MIXED_SRID = -1
-  final val GEOMETRY_MIXED_CRS = "SRID:ANY"
+object GeometryType extends SpatialType {
 
   /**
    * The default coordinate reference system (CRS) value used for geometries, as specified by the
@@ -172,13 +165,13 @@ object GeometryType extends AbstractDataType {
    * The default concrete GeometryType in SQL.
    */
   private final val GEOMETRY_MIXED_TYPE: GeometryType =
-    GeometryType(GEOMETRY_MIXED_CRS)
+    GeometryType(MIXED_CRS)
 
   /**
    * Constructors for GeometryType.
    */
   def apply(srid: Int): GeometryType = {
-    val crs = CrsMappings.get().getStringId(srid)
+    val crs = SpatialReferenceMapper.get().getStringId(srid)
     if (crs == null) {
       throw new SparkIllegalArgumentException(
         errorClass = "ST_INVALID_SRID_VALUE",
@@ -192,7 +185,7 @@ object GeometryType extends AbstractDataType {
       case "ANY" =>
         // Special value "ANY" is used for mixed SRID values.
         // This should be available to users in the Scala API.
-        new GeometryType(GEOMETRY_MIXED_CRS)
+        new GeometryType(MIXED_CRS)
       case _ =>
         // Otherwise, we need to further check the CRS value.
         // This shouldn't be available to users in the Scala API.
