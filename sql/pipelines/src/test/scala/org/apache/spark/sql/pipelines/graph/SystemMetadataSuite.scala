@@ -177,7 +177,7 @@ trait SystemMetadataTestHelpers {
   ): Path = {
     val expectedRawCheckPointDir = tableOrSinkElement match {
       case t: Table => new Path(updateContext.storageRoot)
-        .suffix(s"/${t.identifier.table}/${flowElement.identifier.table}")
+        .suffix(s"/_checkpoints/${t.identifier.table}/${flowElement.identifier.table}")
         .toString
       case _ =>
         fail(
