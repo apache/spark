@@ -512,7 +512,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
          |    }
          |  } ],
          |  "sink" : {
-         |    "description" : "DeltaSink[s3://<masked-storage/__unitystorage/schemas/75bc9f38-9af3-4af9-852b-7077489f93d3/tables/c963dc05-f685-4fe8-a744-500cb40ce28a]",
+         |    "description" : "DeltaSink[s3://<masked-storage>/delta-source]",
          |    "numOutputRows" : -1
          |  }
          |}
@@ -714,8 +714,7 @@ object StreamingQueryStatusAndProgressSuite {
           "minOffsetsBehindLatest" -> "270941269",
           "maxOffsetsBehindLatest" -> "270941269").asJava))),
     sink = SinkProgress(
-      "DeltaSink[s3://<masked-storage/__unitystorage/schemas/" +
-        "75bc9f38-9af3-4af9-852b-7077489f93d3/tables/c963dc05-f685-4fe8-a744-500cb40ce28a]"
+      "DeltaSink[s3://<masked-storage>/delta-source]"
       , None
     ),
     observedMetrics = new java.util.HashMap())
