@@ -21,6 +21,7 @@ import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.classic.SparkSession
 
 sealed trait SystemMetadata {}
@@ -32,10 +33,11 @@ case class FlowSystemMetadata(
     context: PipelineUpdateContext,
     flow: Flow,
     graph: DataflowGraph
-) extends SystemMetadata {
+) extends SystemMetadata with Logging {
 
   /**
-   * Returns the checkpoint root directory for a given flow.
+   * Returns the checkpoint root directory for a given flow
+   * which is storage/_checkpoints/flow_destination_table/flow_name.
    * @return the checkpoint root directory for `flow`
    */
   private def flowCheckpointsDirOpt(): Option[Path] = {
@@ -43,10 +45,15 @@ case class FlowSystemMetadata(
       val checkpointRoot = new Path(context.storageRoot, "_checkpoints")
       val flowTableName = flow.destinationIdentifier.table
       val flowName = flow.identifier.table
-      new Path(
+      val checkpointDir = new Path(
         new Path(checkpointRoot, flowTableName),
         flowName
       )
+      logInfo(
+        log"Flow ${MDC(LogKeys.FLOW_NAME, flowName)} using checkpoint " +
+          log"directory: ${MDC(LogKeys.CHECKPOINT_PATH, checkpointDir)}",
+      )
+      checkpointDir
     } else {
       throw new IllegalArgumentException(
         s"Flow ${flow.identifier} does not have a valid destination for checkpoints."
