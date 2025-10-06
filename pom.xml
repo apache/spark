@@ -141,7 +141,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.16.0</parquet.version>
-    <orc.version>2.2.0</orc.version>
+    <orc.version>2.2.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.26</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
