@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -279,6 +280,8 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       relation @ LogicalRelationWithTable(
       hadoopFsRelation@HadoopFsRelation(_, _, _, _, _: ParquetFileFormat, _), _)) =>
         rewritePlan(p, projectList, filters, relation, hadoopFsRelation)
+      case p@PhysicalOperation(projectList, filters, relation: DataSourceV2Relation) =>
+        rewriteV2RelationPlan(p, projectList, filters, relation.output, relation)
     }
   }
 
@@ -341,6 +344,104 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
         case _ => Alias(rewritten, e.name)(e.exprId, e.qualifier)
       }
     }
+    Project(newProjectList, withFilter)
+  }
+
+  private def rewriteV2RelationPlan(
+      originalPlan: LogicalPlan,
+      projectList: Seq[NamedExpression],
+      filters: Seq[Expression],
+      relationOutput: Seq[AttributeReference],
+      relation: LogicalPlan): LogicalPlan = {
+
+    // Collect variant fields from the relation output
+    val (variants, attributeMap) = collectAndRewriteVariants(relationOutput)
+    if (attributeMap.isEmpty) return originalPlan
+
+    // Collect requested fields from projections and filters
+    projectList.foreach(variants.collectRequestedFields)
+    filters.foreach(variants.collectRequestedFields)
+    if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
+
+    // Build attribute map with rewritten types
+    val finalAttributeMap = buildAttributeMap(relationOutput, variants)
+
+    // Rewrite the relation with new output
+    val newRelation = relation match {
+      case r: DataSourceV2Relation =>
+        val newOutput = r.output.map(a => finalAttributeMap.getOrElse(a.exprId, a))
+        r.copy(output = newOutput.toIndexedSeq)
+      case _ => return originalPlan
+    }
+
+    // Build filter and project with rewritten expressions
+    buildFilterAndProject(newRelation, projectList, filters, variants, finalAttributeMap)
+  }
+
+  /**
+   * Collect variant fields and return initialized VariantInRelation.
+   */
+  private def collectAndRewriteVariants(
+      schemaAttributes: Seq[AttributeReference]): (VariantInRelation, Map[ExprId, Attribute]) = {
+    val variants = new VariantInRelation
+    val defaultValues = ResolveDefaultColumns.existenceDefaultValues(StructType(
+      schemaAttributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
+
+    for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {
+      variants.addVariantFields(a.exprId, a.dataType, defaultValue, Nil)
+    }
+
+    val attributeMap = if (variants.mapping.isEmpty) {
+      Map.empty[ExprId, Attribute]
+    } else {
+      schemaAttributes.map(a => (a.exprId, a)).toMap
+    }
+
+    (variants, attributeMap)
+  }
+
+  /**
+   * Build attribute map with rewritten variant types.
+   */
+  private def buildAttributeMap(
+      schemaAttributes: Seq[AttributeReference],
+      variants: VariantInRelation): Map[ExprId, AttributeReference] = {
+    schemaAttributes.map { a =>
+      if (variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
+        val newType = variants.rewriteType(a.exprId, a.dataType, Nil)
+        val newAttr = AttributeReference(a.name, newType, a.nullable, a.metadata)(
+          qualifier = a.qualifier)
+        (a.exprId, newAttr)
+      } else {
+        (a.exprId, a)
+      }
+    }.toMap
+  }
+
+  /**
+   * Build the final Project(Filter(relation)) plan with rewritten expressions.
+   */
+  private def buildFilterAndProject(
+      relation: LogicalPlan,
+      projectList: Seq[NamedExpression],
+      filters: Seq[Expression],
+      variants: VariantInRelation,
+      attributeMap: Map[ExprId, AttributeReference]): LogicalPlan = {
+
+    val withFilter = if (filters.nonEmpty) {
+      Filter(filters.map(variants.rewriteExpr(_, attributeMap)).reduce(And), relation)
+    } else {
+      relation
+    }
+
+    val newProjectList = projectList.map { e =>
+      val rewritten = variants.rewriteExpr(e, attributeMap)
+      rewritten match {
+        case n: NamedExpression => n
+        case _ => Alias(rewritten, e.name)(e.exprId, e.qualifier)
+      }
+    }
+
     Project(newProjectList, withFilter)
   }
 }
