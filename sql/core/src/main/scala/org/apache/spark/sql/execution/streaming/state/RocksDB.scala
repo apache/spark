@@ -1496,10 +1496,9 @@ class RocksDB(
     // Use RocksDBMemoryManager to calculate the memory usage accounting
     val memoryUsage = RocksDBMemoryManager.getInstanceMemoryUsage(instanceUniqueId, getMemoryUsage)
 
-    val requestedPinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
-    val globalPinnedBlocksMemUsage = lruCache.getPinnedUsage()
+    val totalPinnedBlocksMemUsage = lruCache.getPinnedUsage()
     val pinnedBlocksMemUsage = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
-      instanceUniqueId, globalPinnedBlocksMemUsage, requestedPinnedBlocksMemUsage)
+      instanceUniqueId, totalPinnedBlocksMemUsage)
 
     RocksDBMetrics(
       numKeysOnLoadedVersion,

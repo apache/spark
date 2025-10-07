@@ -2788,6 +2788,52 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  test("SPARK-53792: RocksDBMemoryManager getInstancePinnedBlocksMemUsage") {
+    try {
+      // Clear any existing providers from previous tests
+      RocksDBMemoryManager.resetWriteBufferManagerAndCache
+
+      val boundedMemoryId1 = "test-instance-1"
+      val boundedMemoryId2 = "test-instance-2"
+      val unboundedMemoryId = "test-instance"
+      val cacheUsage = 1000L
+      val cacheUsage1 = 300L  // This should be ignored for bounded memory
+
+      // Register two bounded memory instances
+      RocksDBMemoryManager.updateMemoryUsage(boundedMemoryId1, 0L, isBoundedMemory = true)
+      RocksDBMemoryManager.updateMemoryUsage(boundedMemoryId2, 0L, isBoundedMemory = true)
+      RocksDBMemoryManager.updateMemoryUsage(unboundedMemoryId, 0L, isBoundedMemory = false)
+
+      // Test that both instances get the same divided value from globalPinnedUsage
+      val result1 = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+        boundedMemoryId1,
+        cacheUsage)
+      val result2 = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+        boundedMemoryId2,
+        cacheUsage)
+      val result3 = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+        unboundedMemoryId,
+        cacheUsage1)
+
+      // With 2 bounded instances, each should get half of globalPinnedUsage
+      assert(result1 === 500L, s"Expected 500L for bounded instance 1, got $result1")
+      assert(result2 === 500L, s"Expected 500L for bounded instance 2, got $result2")
+      assert(result3 === 300L, s"Expected 300L for unbounded instance, got $result3")
+
+      // Test with zero instances (unregistered instance)
+      RocksDBMemoryManager.resetWriteBufferManagerAndCache
+      val nonexistInstanceRes = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+        boundedMemoryId1,
+        cacheUsage)
+      assert(
+        nonexistInstanceRes === cacheUsage,
+        s"Expected $cacheUsage when no instances, got $nonexistInstanceRes"
+      )
+    } finally {
+      RocksDBMemoryManager.resetWriteBufferManagerAndCache
+    }
+  }
+
   testWithColumnFamilies("SPARK-37224: flipping option 'trackTotalNumberOfRows' during restart",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
@@ -3791,53 +3837,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   }
 
   def listFiles(file: String): Seq[File] = listFiles(new File(file))
-
-  test("SPARK-53792: RocksDBMemoryManager getInstancePinnedBlocksMemUsage") {
-    try {
-      // Clear any existing providers from previous tests
-      RocksDBMemoryManager.resetWriteBufferManagerAndCache
-
-      val boundedMemoryId1 = "test-instance-1"
-      val boundedMemoryId2 = "test-instance-2"
-      val unboundedMemoryId = "test-instance"
-      val sharedCachePinnedUsage = 1000L
-      val requestedPinnedUsage = 300L  // This should be ignored for bounded memory
-
-      // Register two bounded memory instances
-      RocksDBMemoryManager.updateMemoryUsage(boundedMemoryId1, 0L, isBoundedMemory = true)
-      RocksDBMemoryManager.updateMemoryUsage(boundedMemoryId2, 0L, isBoundedMemory = true)
-      RocksDBMemoryManager.updateMemoryUsage(unboundedMemoryId, 0L, isBoundedMemory = false)
-
-      // Test that both instances get the same divided value from globalPinnedUsage
-      val result1 = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
-        boundedMemoryId1,
-        sharedCachePinnedUsage,
-        requestedPinnedUsage)
-      val result2 = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
-        boundedMemoryId2,
-        sharedCachePinnedUsage,
-        requestedPinnedUsage)
-      val result3 = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
-        unboundedMemoryId,
-        sharedCachePinnedUsage,
-        requestedPinnedUsage)
-
-      // With 2 bounded instances, each should get half of globalPinnedUsage
-      assert(result1 === 500L, s"Expected 500L for bounded instance 1, got $result1")
-      assert(result2 === 500L, s"Expected 500L for bounded instance 2, got $result2")
-      assert(result3 === 300L, s"Expected 300L for unbounded instance, got $result3")
-
-      // Test with zero instances (unregistered instance)
-      RocksDBMemoryManager.resetWriteBufferManagerAndCache
-      val resultZero = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
-        boundedMemoryId1,
-        sharedCachePinnedUsage,
-        requestedPinnedUsage)
-      assert(resultZero === 0L, s"Expected 0L when no instances, got $resultZero")
-    } finally {
-      RocksDBMemoryManager.resetWriteBufferManagerAndCache
-    }
-  }
 }
 
 object RocksDBSuite {
