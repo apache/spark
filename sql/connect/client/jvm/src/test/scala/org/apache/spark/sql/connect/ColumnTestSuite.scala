@@ -209,4 +209,30 @@ class ColumnTestSuite extends ConnectFunSuite {
   testColName(structType1, _.struct(structType1))
   import org.apache.spark.util.ArrayImplicits._
   testColName(structType2, _.struct(structType2.fields.toImmutableArraySeq: _*))
+
+  test("transform with named function") {
+    val a = fn.col("a")
+    def addOne(c: Column): Column = c + 1
+    val transformed = a.transform(addOne)
+    assert(transformed == (a + 1))
+  }
+
+  test("transform with lambda") {
+    val a = fn.col("a")
+    val transformed = a.transform(c => c * 2)
+    assert(transformed == (a * 2))
+  }
+
+  test("transform chaining") {
+    val a = fn.col("a")
+    val transformed = a.transform(c => c + 1).transform(c => c * 2)
+    assert(transformed == ((a + 1) * 2))
+  }
+
+  test("transform with complex lambda") {
+    val a = fn.col("a")
+    val transformed = a.transform(c => fn.when(c > 10, c * 2).otherwise(c))
+    val expected = fn.when(a > 10, a * 2).otherwise(a)
+    assert(transformed == expected)
+  }
 }
