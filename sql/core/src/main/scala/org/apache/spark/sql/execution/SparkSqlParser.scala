@@ -102,12 +102,12 @@ class SparkSqlParser extends AbstractSqlParser {
     val originToUse = if ((substitutionOccurred || hasParameters) && wasTopLevel) {
       // Parameter substitution occurred or we have parameters in legacy mode
       // Set original SQL text for position mapping
-      // IMPORTANT: Do NOT preserve old parameterSubstitutionCallback to avoid contamination
+      // IMPORTANT: Preserve any callback set by parameter substitution
       val baseOrigin = currentOrigin.copy(
         sqlText = Some(command), // Use original SQL text, not substituted
         startIndex = Some(0),
-        stopIndex = Some(command.length - 1),
-        parameterSubstitutionCallback = None // Clear any old callback to prevent contamination
+        stopIndex = Some(command.length - 1)
+        // parameterSubstitutionCallback is preserved by copy()
       )
 
       // If we have parameters in legacy mode, ensure callback is set
