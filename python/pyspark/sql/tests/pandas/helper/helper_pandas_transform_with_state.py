@@ -1840,7 +1840,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
         pass
 
 
-# A Pandas stateful processor with composite output schema:
+# A Pandas stateful processor with a simple ValueState computation and composite output schema:
 #
 # primitiveValue: StringType
 # listOfPrimitive: ArrayType(StringType)
@@ -1904,7 +1904,7 @@ class PandasCompositeOutputProcessor(StatefulProcessor):
     def close(self) -> None:
         pass
 
-# A Row stateful processor with composite output schema:
+# A Row stateful processor with a simple ValueState computation and composite output schema:
 #
 # primitiveValue: StringType
 # listOfPrimitive: ArrayType(StringType)
