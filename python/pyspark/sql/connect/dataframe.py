@@ -1830,7 +1830,7 @@ class DataFrame(ParentDataFrame):
     def _get_binary_as_bytes(self) -> bool:
         """Get the binary_as_bytes configuration value from Spark session."""
         conf_value = self._session.conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true")
-        return (conf_value or "true").lower() == "true"
+        return conf_value is not None and conf_value.lower() == "true"
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
