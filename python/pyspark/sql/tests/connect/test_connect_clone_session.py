@@ -17,9 +17,7 @@
 import uuid
 import unittest
 
-from pyspark.sql import SparkSession
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.sql.utils import AnalysisException
 
 
 class SparkConnectCloneSessionTest(SparkConnectSQLTestCase):
@@ -35,9 +33,11 @@ class SparkConnectCloneSessionTest(SparkConnectSQLTestCase):
         # Clone the session
         cloned_session = self.connect.cloneSession()
 
-        # Verify the configuration was copied (if cloning doesn't preserve dynamic configs, use a different approach)
+        # Verify the configuration was copied
+        # (if cloning doesn't preserve dynamic configs, use a different approach)
         cloned_value = cloned_session.sql("SET spark.test.original").collect()[0][1]
-        # For now, just verify that sessions are independent by setting different values
+        self.assertEqual(cloned_value, "'value1'")
+        # Verify that sessions are independent by setting different values
         cloned_session.sql("SET spark.test.original = 'modified_clone'")
         self.connect.sql("SET spark.test.original = 'modified_original'")
 
