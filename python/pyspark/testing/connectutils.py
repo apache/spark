@@ -23,27 +23,28 @@ import unittest
 import uuid
 import contextlib
 
-from pyspark.testing import (
+from pyspark import Row, SparkConf
+from pyspark.util import is_remote_only
+from pyspark.testing.utils import PySparkErrorTestUtils
+from pyspark import Row, SparkConf
+from pyspark.util import is_remote_only
+from pyspark.testing.utils import (
+    have_pandas,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+    have_graphviz,
+    graphviz_requirement_message,
     grpc_requirement_message,
     have_grpc,
     grpc_status_requirement_message,
     have_grpc_status,
     googleapis_common_protos_requirement_message,
     have_googleapis_common_protos,
-    graphviz_requirement_message,
-    have_graphviz,
     connect_requirement_message,
     should_test_connect,
+    PySparkErrorTestUtils,
 )
-from pyspark import Row, SparkConf
-from pyspark.util import is_remote_only
-from pyspark.testing.utils import PySparkErrorTestUtils
-from pyspark.testing.sqlutils import (
-    have_pandas,
-    pandas_requirement_message,
-    pyarrow_requirement_message,
-    SQLTestUtils,
-)
+from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql.session import SparkSession as PySparkSession
 
 

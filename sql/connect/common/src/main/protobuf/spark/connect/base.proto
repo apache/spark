@@ -333,6 +333,7 @@ message ExecutePlanRequest {
   message RequestOption {
     oneof request_option {
       ReattachOptions reattach_options = 1;
+      ResultChunkingOptions result_chunking_options = 2;
       // Extension type for request options
       google.protobuf.Any extension = 999;
     }
@@ -406,6 +407,10 @@ message ExecutePlanResponse {
     // Pipeline command response
     PipelineCommandResult pipeline_command_result = 22;
 
+    // A signal from the server to the client to execute the query function for a flow, and to
+    // register its result with the server.
+    PipelineQueryFunctionExecutionSignal pipeline_query_function_execution_signal = 23;
+
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
   }
@@ -435,6 +440,14 @@ message ExecutePlanResponse {
 
     // If set, row offset of the start of this ArrowBatch in execution results.
     optional int64 start_offset = 3;
+
+    // Index of this chunk in the batch if chunking is enabled. The index starts from 0.
+    optional int64 chunk_index = 4;
+
+    // Total number of chunks in this batch if chunking is enabled.
+    // It is missing when chunking is disabled - the batch is returned whole
+    // and client will treat this response as the batch.
+    optional int64 num_chunks_in_batch = 5;
   }
 
   message Metrics {
@@ -819,6 +832,24 @@ message ReattachOptions {
   bool reattachable = 1;
 }
 
+message ResultChunkingOptions {
+  // Although Arrow results are split into batches with a size limit according to estimation, the
+  // size of the batches is not guaranteed to be less than the limit, especially when a single row
+  // is larger than the limit, in which case the server will fail to split it further into smaller
+  // batches. As a result, the client may encounter a gRPC error stating “Received message larger
+  // than max” when a batch is too large.
+  // If allow_arrow_batch_chunking=true, the server will split large Arrow batches into smaller chunks,
+  // and the client is expected to handle the chunked Arrow batches.
+  //
+  // If false, the server will not chunk large Arrow batches.
+  bool allow_arrow_batch_chunking = 1;
+
+  // Optional preferred Arrow batch size in bytes for the server to use when sending Arrow results.
+  // The server will attempt to use this size if it is set and within the valid range
+  // ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
+  optional int64 preferred_arrow_chunk_size = 2;
+}
+
 message ReattachExecuteRequest {
   // (Required)
   //
@@ -1068,6 +1099,32 @@ message FetchErrorDetailsResponse {
     // Portable error identifier across SQL engines
     // If null, error class or SQLSTATE is not set.
     optional string sql_state = 4;
+
+    // Additional information if the error was caused by a breaking change.
+    optional BreakingChangeInfo breaking_change_info = 5;
+  }
+
+  // BreakingChangeInfo defines the schema for breaking change information.
+  message BreakingChangeInfo {
+    // A message explaining how the user can migrate their job to work
+    // with the breaking change.
+    repeated string migration_message = 1;
+
+    // A spark config flag that can be used to mitigate the breaking change.
+    optional MitigationConfig mitigation_config = 2;
+
+    // If true, the breaking change should be inspected manually.
+    // If false, the spark job should be retried by setting the mitigationConfig.
+    optional bool needs_audit = 3;
+  }
+
+  // MitigationConfig defines a spark config flag that can be used to mitigate a breaking change.
+  message MitigationConfig {
+    // The spark config key.
+    string key = 1;
+
+    // The spark config value that mitigates the breaking change.
+    string value = 2;
   }
 
   // Error defines the schema for the representing exception.

@@ -23,7 +23,7 @@ import re
 import inspect
 import warnings
 from collections.abc import Mapping
-from functools import partial, reduce
+from functools import partial, reduce, wraps
 from typing import (
     Any,
     Callable,
@@ -36,6 +36,7 @@ from typing import (
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -103,7 +104,9 @@ from pyspark.pandas.internal import (
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 from pyspark.pandas.utils import (
+    ansi_mode_context,
     combine_frames,
+    is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
     name_like_string,
@@ -141,6 +144,18 @@ if TYPE_CHECKING:
 # pattern every time it is used in _repr_ in Series.
 # This pattern basically seeks the footer string from pandas'
 REPR_PATTERN = re.compile(r"Length: (?P<length>[0-9]+)")
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def with_ansi_mode_context(f: FuncT) -> FuncT:
+    @wraps(f)
+    def _with_ansi_mode_context(self: "Series", *args: Any, **kwargs: Any) -> Any:
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return f(self, *args, **kwargs)
+
+    return cast(FuncT, _with_ansi_mode_context)
+
 
 _flex_doc_SERIES = """
 Return {desc} of series and other, element-wise (binary operator `{op_name}`).
@@ -369,6 +384,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     pandas-on-Spark Series that corresponds to pandas Series logically. This holds Spark Column
     internally.
 
+    .. versionchanged:: 4.1.0
+        Support construction from a pandas-on-Spark Series input, which can be used with
+        additional parameters index, dtype, and name for overriding the original value.
+
     :ivar _internal: an internal immutable Frame to manage metadata.
     :type _internal: InternalFrame
     :ivar _psdf: Parent's pandas-on-Spark DataFrame
@@ -376,9 +395,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     Parameters
     ----------
-    data : array-like, dict, or scalar value, pandas Series
+    data : array-like, dict, or scalar value, pandas Series, pandas-on-Spark Series
         Contains data stored in Series
-        Note that if `data` is a pandas Series, other arguments should not be used.
+        Note that if `data` is a Series, index, dtype, or name can also be
+        specified to override the original value.
     index : array-like or Index (1d)
         Values must be hashable and have the same length as `data`.
         Non-unique index values are allowed. Will default to
@@ -387,6 +407,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dict.
     dtype : numpy.dtype or None
         If None, dtype will be inferred
+    name : str, default None
+        The name to give to the Series.
     copy : boolean, default False
         Copy input data
     """
@@ -406,6 +428,24 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             self._anchor = data
             self._col_label = index
+
+        elif isinstance(data, Series):
+            assert not copy
+            assert not fastpath
+
+            if name:
+                data = data.rename(name)
+
+            if index:
+                data = data.reindex(index)
+
+            if dtype:
+                data = data.astype(dtype)
+
+            anchor = DataFrame(data)
+            self._anchor = anchor
+            self._col_label = anchor._internal.column_labels[0]
+            object.__setattr__(anchor, "_psseries", {self._column_label: self})
         else:
             if isinstance(data, pd.Series):
                 assert index is None
@@ -3370,13 +3410,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             lag_scol = F.lag(scol, lag).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
             lag_col_name = verify_temp_column_name(sdf, "__autocorr_lag_tmp_col__")
-            corr = (
-                sdf.withColumn(lag_col_name, lag_scol)
-                .select(F.corr(scol, F.col(lag_col_name)))
-                .head()[0]
-            )
+
+            sdf_lag = sdf.withColumn(lag_col_name, lag_scol)
+            if is_ansi_mode_enabled(sdf.sparkSession):
+                # Compute covariance between the original and lagged columns.
+                # If the covariance is None or zero (indicating no linear relationship),
+                # return NaN, otherwise, proceeding to compute correlation may raise
+                # DIVIDE_BY_ZERO under ANSI mode.
+                cov_value = sdf_lag.select(F.covar_samp(scol, F.col(lag_col_name))).head()[0]
+                if cov_value is None or cov_value == 0.0:
+                    return np.nan
+            corr = sdf_lag.select(F.corr(scol, F.col(lag_col_name))).head()[0]
+
         return np.nan if corr is None else corr
 
+    @with_ansi_mode_context
     def corr(
         self, other: "Series", method: str = "pearson", min_periods: Optional[int] = None
     ) -> float:
@@ -4856,6 +4904,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return self.index
 
     # TODO: introduce 'in_place'; fully support 'regex'
+    @with_ansi_mode_context
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
@@ -5081,33 +5130,68 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     )
                 )
             to_replace = {k: v for k, v in zip(to_replace, value)}
+
+        spark_session = self._internal.spark_frame.sparkSession
+        ansi_mode = is_ansi_mode_enabled(spark_session)
+        col_type = self.spark.data_type
+
         if isinstance(to_replace, dict):
             is_start = True
             if len(to_replace) == 0:
                 current = self.spark.column
             else:
                 for to_replace_, value in to_replace.items():
-                    cond = (
-                        (F.isnan(self.spark.column) | self.spark.column.isNull())
-                        if pd.isna(to_replace_)
-                        else (self.spark.column == F.lit(to_replace_))
-                    )
+                    if pd.isna(to_replace_):
+                        if ansi_mode and isinstance(col_type, NumericType):
+                            cond = F.isnan(self.spark.column) | self.spark.column.isNull()
+                        else:
+                            cond = self.spark.column.isNull()
+                    else:
+                        to_replace_lit = (
+                            F.lit(to_replace_).try_cast(col_type)
+                            if ansi_mode
+                            else F.lit(to_replace_)
+                        )
+                        cond = self.spark.column == to_replace_lit
+                    value_expr = F.lit(value).try_cast(col_type) if ansi_mode else F.lit(value)
                     if is_start:
-                        current = F.when(cond, value)
+                        current = F.when(cond, value_expr)
                         is_start = False
                     else:
-                        current = current.when(cond, value)
+                        current = current.when(cond, value_expr)
                 current = current.otherwise(self.spark.column)
         else:
             if regex:
                 # to_replace must be a string
                 cond = self.spark.column.rlike(cast(str, to_replace))
             else:
-                cond = self.spark.column.isin(to_replace)
+                if ansi_mode:
+                    to_replace_values = (
+                        [to_replace]
+                        if not is_list_like(to_replace) or isinstance(to_replace, str)
+                        else to_replace
+                    )
+                    to_replace_values = cast(List[Any], to_replace_values)
+                    literals = [F.lit(v).try_cast(col_type) for v in to_replace_values]
+                    cond = self.spark.column.isin(literals)
+                else:
+                    cond = self.spark.column.isin(to_replace)
                 # to_replace may be a scalar
                 if np.array(pd.isna(to_replace)).any():
-                    cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
-            current = F.when(cond, value).otherwise(self.spark.column)
+                    if ansi_mode:
+                        if isinstance(col_type, NumericType):
+                            cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
+                        else:
+                            cond = cond | self.spark.column.isNull()
+                    else:
+                        cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
+
+            if ansi_mode:
+                value_expr = F.lit(value).try_cast(col_type)
+                current = F.when(cond, value_expr).otherwise(self.spark.column.try_cast(col_type))
+
+            else:
+                current = F.when(cond, value).otherwise(self.spark.column)
 
         return self._with_new_scol(current)  # TODO: dtype?
 
@@ -7336,15 +7420,11 @@ def _test() -> None:
     import sys
     from pyspark.sql import SparkSession
     import pyspark.pandas.series
-    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.series.__dict__.copy()
     globs["ps"] = pyspark.pandas
-
-    if is_ansi_mode_test:
-        del pyspark.pandas.series.Series.autocorr.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.series tests").getOrCreate()

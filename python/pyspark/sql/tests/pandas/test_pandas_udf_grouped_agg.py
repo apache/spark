@@ -19,7 +19,7 @@ import unittest
 from typing import cast
 
 from pyspark.util import PythonEvalType
-from pyspark.sql import Row
+from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import (
     array,
     explode,
@@ -717,6 +717,82 @@ class GroupedAggPandasUDFTestsMixin:
                     assertDataFrameEqual(
                         aggregated, df.groupby("id").agg((sum(df.v) + sum(df.w)).alias("s"))
                     )
+
+    def test_arrow_cast_enabled_numeric_to_decimal(self):
+        import numpy as np
+        from decimal import Decimal
+
+        columns = [
+            "int8",
+            "int16",
+            "int32",
+            "uint8",
+            "uint16",
+            "uint32",
+            "float64",
+        ]
+
+        pdf = pd.DataFrame({key: np.arange(1, 2).astype(key) for key in columns})
+        df = self.spark.range(2).repartition(1)
+
+        for column in columns:
+            with self.subTest(column=column):
+
+                @pandas_udf("decimal(10,0)", PandasUDFType.GROUPED_AGG)
+                def test(series):
+                    return pdf[column].iloc[0]
+
+                row = df.groupby("id").agg(test(df.id)).first()
+                res = row[1]
+                self.assertEqual(res, Decimal("1"))
+
+    def test_arrow_cast_enabled_str_to_numeric(self):
+        df = self.spark.range(2).repartition(1)
+
+        types = ["int", "long", "float", "double"]
+
+        for type_str in types:
+            with self.subTest(type=type_str):
+
+                @pandas_udf(type_str, PandasUDFType.GROUPED_AGG)
+                def test(series):
+                    return 123
+
+                row = df.groupby("id").agg(test(df.id)).first()
+                self.assertEqual(row[1], 123)
+
+    def test_0_args(self):
+        df = self.spark.range(10).withColumn("k", sf.col("id") % 3)
+
+        @pandas_udf("long", PandasUDFType.GROUPED_AGG)
+        def pandas_max(v) -> int:
+            return v.max()
+
+        @pandas_udf("long", PandasUDFType.GROUPED_AGG)
+        def pandas_lit_1() -> int:
+            return 1
+
+        expected1 = df.select(sf.max("id").alias("res1"), sf.lit(1).alias("res1"))
+        result1 = df.select(pandas_max("id").alias("res1"), pandas_lit_1().alias("res1"))
+        self.assertEqual(expected1.collect(), result1.collect())
+
+        expected2 = (
+            df.groupby("k")
+            .agg(
+                sf.max("id").alias("res1"),
+                sf.lit(1).alias("res1"),
+            )
+            .sort("k")
+        )
+        result2 = (
+            df.groupby("k")
+            .agg(
+                pandas_max("id").alias("res1"),
+                pandas_lit_1().alias("res1"),
+            )
+            .sort("k")
+        )
+        self.assertEqual(expected2.collect(), result2.collect())
 
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):

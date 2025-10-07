@@ -279,11 +279,11 @@ public class TaskMemoryManager {
     } catch (ClosedByInterruptException | InterruptedIOException e) {
       // This called by user to kill a task (e.g: speculative task).
       logger.error("Error while calling spill() on {}", e,
-        MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
+        MDC.of(LogKeys.MEMORY_CONSUMER, consumerToSpill));
       throw new RuntimeException(e.getMessage());
     } catch (IOException e) {
       logger.error("Error while calling spill() on {}", e,
-        MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
+        MDC.of(LogKeys.MEMORY_CONSUMER, consumerToSpill));
       // checkstyle.off: RegexpSinglelineJava
       throw new SparkOutOfMemoryError(
         "SPILL_OUT_OF_MEMORY",
@@ -320,7 +320,7 @@ public class TaskMemoryManager {
    */
   public void showMemoryUsage() {
     logger.info("Memory used in task {}",
-      MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
+      MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
     synchronized (this) {
       long memoryAccountedForByConsumers = 0;
       for (MemoryConsumer c: consumers) {
@@ -328,20 +328,20 @@ public class TaskMemoryManager {
         memoryAccountedForByConsumers += totalMemUsage;
         if (totalMemUsage > 0) {
           logger.info("Acquired by {}: {}",
-            MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, c),
-            MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(totalMemUsage)));
+            MDC.of(LogKeys.MEMORY_CONSUMER, c),
+            MDC.of(LogKeys.MEMORY_SIZE, Utils.bytesToString(totalMemUsage)));
         }
       }
       long memoryNotAccountedFor =
         memoryManager.getExecutionMemoryUsageForTask(taskAttemptId) - memoryAccountedForByConsumers;
       logger.info(
         "{} bytes of memory were used by task {} but are not associated with specific consumers",
-        MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, memoryNotAccountedFor),
-        MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
+        MDC.of(LogKeys.MEMORY_SIZE, memoryNotAccountedFor),
+        MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
       logger.info(
         "{} bytes of memory are used for execution and {} bytes of memory are used for storage",
-        MDC.of(LogKeys.EXECUTION_MEMORY_SIZE$.MODULE$, memoryManager.executionMemoryUsed()),
-        MDC.of(LogKeys.STORAGE_MEMORY_SIZE$.MODULE$,  memoryManager.storageMemoryUsed()));
+        MDC.of(LogKeys.EXECUTION_MEMORY_SIZE, memoryManager.executionMemoryUsed()),
+        MDC.of(LogKeys.STORAGE_MEMORY_SIZE,  memoryManager.storageMemoryUsed()));
     }
   }
 
@@ -388,7 +388,7 @@ public class TaskMemoryManager {
       page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     } catch (OutOfMemoryError e) {
       logger.warn("Failed to allocate a page ({} bytes), try again.",
-        MDC.of(LogKeys.PAGE_SIZE$.MODULE$, acquired));
+        MDC.of(LogKeys.PAGE_SIZE, acquired));
       // there is no enough memory actually, it means the actual free memory is smaller than
       // MemoryManager thought, we should keep the acquired memory.
       synchronized (this) {

@@ -30,7 +30,11 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.pipelines.graph.DataflowGraph
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.pipelines.Language.Python
+import org.apache.spark.sql.pipelines.common.FlowStatus
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
+import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 
 /**
@@ -49,7 +53,7 @@ class PythonPipelineSuite
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
-         |from pyspark import pipelines as sdp
+         |from pyspark import pipelines as dp
          |from pyspark.pipelines.spark_connect_graph_element_registry import (
          |    SparkConnectGraphElementRegistry,
          |)
@@ -105,7 +109,7 @@ class PythonPipelineSuite
 
   test("basic") {
     val graph = buildGraph("""
-        |@sdp.table
+        |@dp.table
         |def table1():
         |    return spark.readStream.format("rate").load()
         |""".stripMargin)
@@ -115,22 +119,148 @@ class PythonPipelineSuite
     assert(graph.tables.size == 1)
   }
 
+  test("failed flow progress event has correct python source code location") {
+    // Note that pythonText will be inserted into line 26 of the python script that is run.
+    val unresolvedGraph = buildGraph(pythonText = """
+        |@dp.table()
+        |def table1():
+        |    df = spark.createDataFrame([(25,), (30,), (45,)], ["age"])
+        |    return df.select("name")
+        |""".stripMargin)
+
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    updateContext.pipelineExecution.runPipeline()
+
+    assertFlowProgressEvent(
+      updateContext.eventBuffer,
+      identifier = graphIdentifier("table1"),
+      expectedFlowStatus = FlowStatus.FAILED,
+      cond = flowProgressEvent =>
+        flowProgressEvent.origin.sourceCodeLocation == Option(
+          QueryOrigin(
+            language = Option(Python()),
+            filePath = Option("<string>"),
+            line = Option(28),
+            objectName = Option("spark_catalog.default.table1"),
+            objectType = Option(QueryOriginType.Flow.toString))),
+      errorChecker = ex =>
+        ex.getMessage.contains(
+          "A column, variable, or function parameter with name `name` cannot be resolved."),
+      expectedEventLevel = EventLevel.WARN)
+  }
+
+  test("flow progress events have correct python source code location") {
+    val unresolvedGraph = buildGraph(pythonText = """
+        |@dp.table(
+        | comment = 'my table'
+        |)
+        |def table1():
+        |    return spark.readStream.table('mv')
+        |
+        |@dp.materialized_view
+        |def mv2():
+        |   return spark.range(26, 29)
+        |
+        |@dp.materialized_view
+        |def mv():
+        |   df = spark.createDataFrame([(25,), (30,), (45,)], ["age"])
+        |   return df.select("age")
+        |
+        |@dp.append_flow(
+        | target = 'table1'
+        |)
+        |def standalone_flow1():
+        |   return spark.readStream.table('mv2')
+        |""".stripMargin)
+
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+
+    Seq(
+      FlowStatus.QUEUED,
+      FlowStatus.STARTING,
+      FlowStatus.PLANNING,
+      FlowStatus.RUNNING,
+      FlowStatus.COMPLETED).foreach { flowStatus =>
+      assertFlowProgressEvent(
+        updateContext.eventBuffer,
+        identifier = graphIdentifier("mv2"),
+        expectedFlowStatus = flowStatus,
+        cond = flowProgressEvent =>
+          flowProgressEvent.origin.sourceCodeLocation == Option(
+            QueryOrigin(
+              language = Option(Python()),
+              filePath = Option("<string>"),
+              line = Option(34),
+              objectName = Option("spark_catalog.default.mv2"),
+              objectType = Option(QueryOriginType.Flow.toString))),
+        expectedEventLevel = EventLevel.INFO)
+
+      assertFlowProgressEvent(
+        updateContext.eventBuffer,
+        identifier = graphIdentifier("mv"),
+        expectedFlowStatus = flowStatus,
+        cond = flowProgressEvent =>
+          flowProgressEvent.origin.sourceCodeLocation == Option(
+            QueryOrigin(
+              language = Option(Python()),
+              filePath = Option("<string>"),
+              line = Option(38),
+              objectName = Option("spark_catalog.default.mv"),
+              objectType = Option(QueryOriginType.Flow.toString))),
+        expectedEventLevel = EventLevel.INFO)
+    }
+
+    // Note that streaming flows do not have a PLANNING phase.
+    Seq(FlowStatus.QUEUED, FlowStatus.STARTING, FlowStatus.RUNNING, FlowStatus.COMPLETED)
+      .foreach { flowStatus =>
+        assertFlowProgressEvent(
+          updateContext.eventBuffer,
+          identifier = graphIdentifier("table1"),
+          expectedFlowStatus = flowStatus,
+          cond = flowProgressEvent =>
+            flowProgressEvent.origin.sourceCodeLocation == Option(
+              QueryOrigin(
+                language = Option(Python()),
+                filePath = Option("<string>"),
+                line = Option(28),
+                objectName = Option("spark_catalog.default.table1"),
+                objectType = Option(QueryOriginType.Flow.toString))),
+          expectedEventLevel = EventLevel.INFO)
+
+        assertFlowProgressEvent(
+          updateContext.eventBuffer,
+          identifier = graphIdentifier("standalone_flow1"),
+          expectedFlowStatus = flowStatus,
+          cond = flowProgressEvent =>
+            flowProgressEvent.origin.sourceCodeLocation == Option(
+              QueryOrigin(
+                language = Option(Python()),
+                filePath = Option("<string>"),
+                line = Option(43),
+                objectName = Option("spark_catalog.default.standalone_flow1"),
+                objectType = Option(QueryOriginType.Flow.toString))),
+          expectedEventLevel = EventLevel.INFO)
+      }
+  }
+
   test("basic with inverted topological order") {
     // This graph is purposefully in the wrong topological order to test the topological sort
     val graph = buildGraph("""
-        |@sdp.table()
+        |@dp.table()
         |def b():
         |  return spark.readStream.table("a")
         |
-        |@sdp.table()
+        |@dp.table()
         |def c():
         |  return spark.readStream.table("a")
         |
-        |@sdp.materialized_view()
+        |@dp.materialized_view()
         |def d():
         |  return spark.read.table("a")
         |
-        |@sdp.materialized_view()
+        |@dp.materialized_view()
         |def a():
         |  return spark.range(5)
         |""".stripMargin)
@@ -141,11 +271,11 @@ class PythonPipelineSuite
 
   test("flows") {
     val graph = buildGraph("""
-      |@sdp.table()
+      |@dp.table()
       |def a():
       |  return spark.readStream.format("rate").load()
       |
-      |@sdp.append_flow(target = "a")
+      |@dp.append_flow(target = "a")
       |def supplement():
       |  return spark.readStream.format("rate").load()
       |""".stripMargin).resolve().validate()
@@ -160,15 +290,15 @@ class PythonPipelineSuite
 
   test("referencing internal datasets") {
     val graph = buildGraph("""
-      |@sdp.materialized_view
+      |@dp.materialized_view
       |def src():
       |  return spark.range(5)
       |
-      |@sdp.materialized_view
+      |@dp.materialized_view
       |def a():
       |  return spark.read.table("src")
       |
-      |@sdp.table
+      |@dp.table
       |def b():
       |  return spark.readStream.table("src")
       |""".stripMargin).resolve().validate()
@@ -191,15 +321,15 @@ class PythonPipelineSuite
   test("referencing external datasets") {
     sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
     val graph = buildGraph("""
-        |@sdp.materialized_view
+        |@dp.materialized_view
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
         |
-        |@sdp.materialized_view
+        |@dp.materialized_view
         |def b():
         |  return spark.table("spark_catalog.default.src")
         |
-        |@sdp.table
+        |@dp.table
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
         |""".stripMargin).resolve().validate()
@@ -218,15 +348,15 @@ class PythonPipelineSuite
 
   test("referencing internal datasets failed") {
     val graph = buildGraph("""
-        |@sdp.table
+        |@dp.table
         |def a():
         |  return spark.read.table("src")
         |
-        |@sdp.table
+        |@dp.table
         |def b():
         |  return spark.table("src")
         |
-        |@sdp.table
+        |@dp.table
         |def c():
         |  return spark.readStream.table("src")
         |""".stripMargin).resolve()
@@ -240,15 +370,15 @@ class PythonPipelineSuite
 
   test("referencing external datasets failed") {
     val graph = buildGraph("""
-        |@sdp.table
+        |@dp.table
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
         |
-        |@sdp.materialized_view
+        |@dp.materialized_view
         |def b():
         |  return spark.table("spark_catalog.default.src")
         |
-        |@sdp.materialized_view
+        |@dp.materialized_view
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
         |""".stripMargin).resolve()
@@ -260,11 +390,11 @@ class PythonPipelineSuite
   test("create dataset with the same name will fail") {
     val ex = intercept[AnalysisException] {
       buildGraph(s"""
-           |@sdp.materialized_view
+           |@dp.materialized_view
            |def a():
            |  return spark.range(1)
            |
-           |@sdp.materialized_view(name = "a")
+           |@dp.materialized_view(name = "a")
            |def b():
            |  return spark.range(1)
            |""".stripMargin)
@@ -274,19 +404,19 @@ class PythonPipelineSuite
 
   test("create datasets with fully/partially qualified names") {
     val graph = buildGraph(s"""
-         |@sdp.table
+         |@dp.table
          |def mv_1():
          |  return spark.range(5)
          |
-         |@sdp.table(name = "schema_a.mv_2")
+         |@dp.table(name = "schema_a.mv_2")
          |def irrelevant_1():
          |  return spark.range(5)
          |
-         |@sdp.table(name = "st_1")
+         |@dp.table(name = "st_1")
          |def irrelevant_2():
          |  return spark.readStream.format("rate").load()
          |
-         |@sdp.table(name = "schema_b.st_2")
+         |@dp.table(name = "schema_b.st_2")
          |def irrelevant_3():
          |  return spark.readStream.format("rate").load()
          |""".stripMargin).resolve()
@@ -333,11 +463,11 @@ class PythonPipelineSuite
   test("create datasets with three part names") {
     val graphTry = Try {
       buildGraph(s"""
-           |@sdp.table(name = "some_catalog.some_schema.mv")
+           |@dp.table(name = "some_catalog.some_schema.mv")
            |def irrelevant_1():
            |  return spark.range(5)
            |
-           |@sdp.table(name = "some_catalog.some_schema.st")
+           |@dp.table(name = "some_catalog.some_schema.st")
            |def irrelevant_2():
            |  return spark.readStream.format("rate").load()
            |""".stripMargin).resolve()
@@ -356,18 +486,18 @@ class PythonPipelineSuite
   test("temporary views works") {
     // A table is defined since pipeline with only temporary views is invalid.
     val graph = buildGraph(s"""
-         |@sdp.table
+         |@dp.table
          |def mv_1():
          |  return spark.range(5)
-         |@sdp.temporary_view
+         |@dp.temporary_view
          |def view_1():
          |  return spark.range(5)
          |
-         |@sdp.temporary_view(name= "view_2")
+         |@dp.temporary_view(name= "view_2")
          |def irrelevant_1():
          |  return spark.read.table("view_1")
          |
-         |@sdp.temporary_view(name= "view_3")
+         |@dp.temporary_view(name= "view_3")
          |def irrelevant_2():
          |  return spark.read.table("view_1")
          |""".stripMargin).resolve()
@@ -385,11 +515,11 @@ class PythonPipelineSuite
   test("create named flow with multipart name will fail") {
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
-           |@sdp.table
+           |@dp.table
            |def src():
            |  return spark.readStream.table("src0")
            |
-           |@sdp.append_flow(name ="some_schema.some_flow", target = "src")
+           |@dp.append_flow(name ="some_schema.some_flow", target = "src")
            |def some_flow():
            |  return spark.readStream.format("rate").load()
            |""".stripMargin)
@@ -399,11 +529,11 @@ class PythonPipelineSuite
 
   test("create flow with multipart target and no explicit name succeeds") {
     val graph = buildGraph("""
-           |@sdp.table()
+           |@dp.table()
            |def a():
            |  return spark.readStream.format("rate").load()
            |
-           |@sdp.append_flow(target = "default.a")
+           |@dp.append_flow(target = "default.a")
            |def supplement():
            |  return spark.readStream.format("rate").load()
            |""".stripMargin).resolve().validate()
@@ -418,11 +548,11 @@ class PythonPipelineSuite
 
   test("create named flow with multipart target succeeds") {
     val graph = buildGraph("""
-           |@sdp.table()
+           |@dp.table()
            |def a():
            |  return spark.readStream.format("rate").load()
            |
-           |@sdp.append_flow(target = "default.a", name = "something")
+           |@dp.append_flow(target = "default.a", name = "something")
            |def supplement():
            |  return spark.readStream.format("rate").load()
            |""".stripMargin)
@@ -432,6 +562,99 @@ class PythonPipelineSuite
       graph
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+  }
+
+  test("groupby and rollup works with internal datasets, referencing with (col, str)") {
+    val graph = buildGraph("""
+      from pyspark.sql.functions import col, sum, count
+
+      @dp.materialized_view
+      def src():
+        return spark.range(3)
+
+      @dp.materialized_view
+      def groupby_with_col_result():
+        return spark.read.table("src").groupBy(col("id")).agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+
+      @dp.materialized_view
+      def groupby_with_str_result():
+        return spark.read.table("src").groupBy("id").agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+
+      @dp.materialized_view
+      def rollup_with_col_result():
+        return spark.read.table("src").rollup(col("id")).agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+
+      @dp.materialized_view
+      def rollup_with_str_result():
+        return spark.read.table("src").rollup("id").agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+    """)
+
+    val updateContext = new PipelineUpdateContextImpl(graph, _ => ())
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+
+    val groupbyDfs =
+      Seq(spark.table("groupby_with_col_result"), spark.table("groupby_with_str_result"))
+
+    val rollupDfs =
+      Seq(spark.table("rollup_with_col_result"), spark.table("rollup_with_str_result"))
+
+    // groupBy: each variant should have exactly one row per id [0,1,2]
+    groupbyDfs.foreach { df =>
+      assert(df.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
+    }
+
+    // rollup: each variant should have groupBy rows + one total row
+    rollupDfs.foreach { df =>
+      assert(df.count() == 3 + 1) // 3 ids + 1 total
+      val totalRow = df.filter("id IS NULL").collect().head
+      assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
+    }
+  }
+
+  test("MV/ST with partition columns works") {
+    withTable("mv", "st") {
+      val graph = buildGraph("""
+             |from pyspark.sql.functions import col
+             |
+             |@dp.materialized_view(partition_cols = ["id_mod"])
+             |def mv():
+             |  return spark.range(5).withColumn("id_mod", col("id") % 2)
+             |
+             |@dp.table(partition_cols = ["id_mod"])
+             |def st():
+             |  return spark.readStream.table("mv")
+             |""".stripMargin)
+
+      val updateContext = new PipelineUpdateContextImpl(graph, eventCallback = _ => ())
+      updateContext.pipelineExecution.runPipeline()
+      updateContext.pipelineExecution.awaitCompletion()
+
+      // check table is created with correct partitioning
+      val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+
+      Seq("mv", "st").foreach { tableName =>
+        val table = catalog.loadTable(Identifier.of(Array("default"), tableName))
+        assert(
+          table.partitioning().map(_.references().head.fieldNames().head) === Array("id_mod"))
+
+        val rows = spark.table(tableName).collect().map(r => (r.getLong(0), r.getLong(1))).toSet
+        val expected = (0 until 5).map(id => (id.toLong, (id % 2).toLong)).toSet
+        assert(rows == expected)
+      }
+    }
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
@@ -449,7 +672,7 @@ class PythonPipelineSuite
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
-            |@sdp.temporary_view
+            |@dp.temporary_view
             |def view_1():
             |  return spark.range(5)
             |""".stripMargin)
@@ -462,7 +685,7 @@ class PythonPipelineSuite
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
-            |@sdp.append_flow(target = "a")
+            |@dp.append_flow(target = "a")
             |def flow():
             |  return spark.range(5)
             |""".stripMargin)

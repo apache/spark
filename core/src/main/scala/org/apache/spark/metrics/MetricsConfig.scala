@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.internal.config.METRICS_CONF
 import org.apache.spark.util.Utils

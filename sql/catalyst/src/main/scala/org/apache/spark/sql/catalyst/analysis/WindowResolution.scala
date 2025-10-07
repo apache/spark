@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{
   AggregateWindowFunction,
   CurrentRow,
-  Expression,
   FrameLessOffsetWindowFunction,
   RangeFrame,
   RankLike,
@@ -59,7 +58,7 @@ object WindowResolution {
    * in [[WindowExpression.windowSpec]], alterantively it provides a default frame when it
    * is unspecified.
    */
-  def resolveFrame(expression: Expression): Expression = expression match {
+  def resolveFrame(windowExpression: WindowExpression): WindowExpression = windowExpression match {
     case WindowExpression(
         wf: FrameLessOffsetWindowFunction,
         WindowSpecDefinition(_, _, f: SpecifiedWindowFrame)
@@ -91,7 +90,7 @@ object WindowResolution {
    * In case of [[RankLike]] window functions, it attaches the resolved order to the
    * function to finalize it.
    */
-  def resolveOrder(expression: Expression): Expression = expression match {
+  def resolveOrder(windowExpression: WindowExpression): WindowExpression = windowExpression match {
     case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
       throw QueryCompilationErrors.windowFunctionWithWindowFrameNotOrderedError(wf)
 

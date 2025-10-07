@@ -30,19 +30,18 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
-import org.apache.commons.io.{FilenameUtils, IOUtils}
+import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{DFS_FILE, VERSION_NUM}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -299,22 +298,31 @@ class RocksDBFileManager(
     logDebug(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
       log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
 
-    if (version <= 1 && numKeys <= 0) {
-      // If we're writing the initial version and there's no data, we have to explicitly initialize
-      // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but
-      // when there's no data that method won't write any files, and zipToDfsFile uses the
-      // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
-      // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
-      // still need to create the initial dfs root directory anyway.
-      if (!rootDirChecked) {
-        val path = new Path(dfsRootDir)
-        if (!fm.exists(path)) fm.mkdirs(path)
-        rootDirChecked = true
+    val (_, zipFilesTimeMs) = Utils.timeTakenMs {
+      if (version <= 1 && numKeys <= 0) {
+        // If we're writing the initial version and there's no data, we have to initialize
+        // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but
+        // when there's no data that method won't write any files, and zipToDfsFile uses the
+        // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
+        // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
+        // still need to create the initial dfs root directory anyway.
+        if (!rootDirChecked) {
+          val path = new Path(dfsRootDir)
+          if (!fm.exists(path)) fm.mkdirs(path)
+          rootDirChecked = true
+        }
       }
+      zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version, checkpointUniqueId))
+      logInfo(log"Saved checkpoint file for version ${MDC(LogKeys.VERSION_NUM, version)} " +
+        log"checkpointUniqueId: ${MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
     }
-    zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version, checkpointUniqueId))
-    logInfo(log"Saved checkpoint file for version ${MDC(LogKeys.VERSION_NUM, version)} " +
-      log"checkpointUniqueId: ${MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
+
+    // populate the SaveCheckpointMetrics
+    saveCheckpointMetrics =
+      saveCheckpointMetrics.copy(
+        // Round up to 1ms to reassure that we've logged successfully and avoid flaky tests
+        saveZipFilesTimeMs = Some(Math.max(zipFilesTimeMs, 1L))
+      )
   }
 
   /**
@@ -572,8 +580,22 @@ class RocksDBFileManager(
    * - Partially written SST files
    * - SST files that were used in a version, but that version got overwritten with a different
    *   set of SST files.
+   *
+   * @param numVersionsToRetain the number of RocksDB versions to keep in object store after the
+   *                            deletion. Must be greater than 0, or -1 to retain all versions.
+   * @param maxVersionsToDeletePerMaintenance the max number of RocksDB versions
+   *                            to delete per maintenance operation.
+   *                            Must be greater than 0, or -1 to delete all stale versions.
+   * @param minVersionsToDelete the min number of stale versions required to trigger deletion.
+   *                            If its set to <= 0, then we will always perform list operations
+   *                            to determine deletion candidates. If set to a positive value, then
+   *                            we will skip deletion if the number of stale versions is less than
+   *                            this value.
    */
-  def deleteOldVersions(numVersionsToRetain: Int, minVersionsToDelete: Long = 0): Unit = {
+  def deleteOldVersions(
+      numVersionsToRetain: Int,
+      maxVersionsToDeletePerMaintenance: Int = -1,
+      minVersionsToDelete: Long = 0): Unit = {
     // Check if enough stale version files present
     if (shouldSkipDeletion(numVersionsToRetain, minVersionsToDelete)) return
 
@@ -595,14 +617,22 @@ class RocksDBFileManager(
 
     // Find the versions to delete
     val maxSnapshotVersionPresent = sortedSnapshotVersionsAndUniqueIds.last._1
+    val minSnapshotVersionPresent = sortedSnapshotVersionsAndUniqueIds.head._1
 
     // In order to reconstruct numVersionsToRetain version, retain the latest snapshot
     // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1).
+    // Also require
+    // minVersionToRetain <= minSnapshotVersionPresent + maxVersionsToDeletePerMaintenance.
     // If none of the snapshots satisfy the condition, minVersionToRetain will be 0 and
     // no version gets deleted.
     val minVersionToRetain = sortedSnapshotVersionsAndUniqueIds
       .map(_._1)
       .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
+      .filter( v =>
+        if (maxVersionsToDeletePerMaintenance != -1) {
+          v <= minSnapshotVersionPresent + maxVersionsToDeletePerMaintenance
+        } else true
+      )
       .foldLeft(0L)(math.max)
 
     // When snapshotVersionToDelete is non-empty, there are at least 2 snapshot versions.
@@ -861,7 +891,7 @@ class RocksDBFileManager(
       files.foreach { file =>
         zout.putNextEntry(new ZipEntry(file.getName))
         in = new FileInputStream(file)
-        val bytes = IOUtils.copy(in, zout)
+        val bytes = in.transferTo(zout)
         in.close()
         zout.closeEntry()
         totalBytes += bytes
@@ -880,8 +910,8 @@ class RocksDBFileManager(
         throw e
     } finally {
       // Close everything no matter what happened
-      IOUtils.closeQuietly(in)
-      IOUtils.closeQuietly(zout)
+      Utils.closeQuietly(in)
+      Utils.closeQuietly(zout)
     }
   }
 
@@ -962,7 +992,9 @@ case class RocksDBFileManagerMetrics(
     bytesCopied: Long,
     filesReused: Long,
     @JsonDeserialize(contentAs = classOf[java.lang.Long])
-    zipFileBytesUncompressed: Option[Long] = None)
+    zipFileBytesUncompressed: Option[Long] = None,
+    @JsonDeserialize(contentAs = classOf[java.lang.Long])
+    saveZipFilesTimeMs: Option[Long] = None)
 
 /**
  * Metrics to return when requested but no operation has been performed.
@@ -1021,7 +1053,7 @@ case class RocksDBCheckpointMetadata(
 
 /** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
-  val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
+  val VERSION = 1
 
   implicit val format: Formats = Serialization.formats(NoTypeHints)
 

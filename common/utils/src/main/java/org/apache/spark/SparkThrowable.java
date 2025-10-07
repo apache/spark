@@ -60,6 +60,12 @@ public interface SparkThrowable {
     return SparkThrowableHelper.isInternalError(this.getCondition());
   }
 
+  // If null, the error message is not for a breaking change
+  default BreakingChangeInfo getBreakingChangeInfo() {
+    return SparkThrowableHelper.getBreakingChangeInfo(
+        this.getCondition()).getOrElse(() -> null);
+  }
+
   default Map<String, String> getMessageParameters() {
     return new HashMap<>();
   }

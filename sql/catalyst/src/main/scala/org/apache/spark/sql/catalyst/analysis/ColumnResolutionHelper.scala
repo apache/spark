@@ -23,14 +23,12 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
-import org.apache.spark.sql.catalyst.parser.SqlScriptingLabelContext.isForbiddenLabelName
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -169,12 +167,17 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
         }
 
-        case u @ UnresolvedExtractValue(child, fieldName) =>
+        case u @ UnresolvedExtractValue(child, field) =>
           val newChild = innerResolve(child, isTopLevel = false)
-          if (newChild.resolved) {
-            ExtractValue(newChild, fieldName, resolver)
+          val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
+            innerResolve(field, isTopLevel = false)
           } else {
-            u.copy(child = newChild)
+            field
+          }
+          if (newChild.resolved) {
+            ExtractValue(child = newChild, extraction = resolvedField, resolver = resolver)
+          } else {
+            u.copy(child = newChild, extraction = resolvedField)
           }
 
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
@@ -235,102 +238,16 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
-  /**
-   * Look up variable by nameParts.
-   * If in SQL Script, first check local variables, unless in EXECUTE IMMEDIATE
-   * (EXECUTE IMMEDIATE generated query cannot access local variables).
-   * if not found fall back to session variables.
-   * @param nameParts NameParts of the variable.
-   * @return Reference to the variable.
-   */
-  def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
-    // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
-    def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
-      nameParts.length == 1 || {
-        if (nameParts.length == 2) {
-          nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-        } else if (nameParts.length == 3) {
-          nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-            nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-        } else {
-          false
-        }
-      }
-    }
-
-    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
-      nameParts
-    } else {
-      nameParts.map(_.toLowerCase(Locale.ROOT))
-    }
-
-    SqlScriptingContextManager.get().map(_.getVariableManager)
-      // If we are in EXECUTE IMMEDIATE lookup only session variables.
-      .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
-      // If variable name is qualified with session.<varName> treat it as a session variable.
-      .filterNot(_ =>
-        nameParts.length > 2 || (nameParts.length == 2 && isForbiddenLabelName(nameParts.head)))
-      .flatMap(_.get(namePartsCaseAdjusted))
-      .map { varDef =>
-        VariableReference(
-          nameParts,
-          FakeLocalCatalog,
-          Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
-          varDef)
-      }
-      .orElse(
-        if (maybeTempVariableName(nameParts)) {
-          catalogManager.tempVariableManager
-            .get(namePartsCaseAdjusted)
-            .map { varDef =>
-              VariableReference(
-                nameParts,
-                FakeSystemCatalog,
-                Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
-                varDef
-              )}
-        } else {
-          None
-        }
-      )
-  }
-
   // Resolves `UnresolvedAttribute` to its value.
   protected def resolveVariables(e: Expression): Expression = {
-    def resolveVariable(nameParts: Seq[String]): Option[Expression] = {
-      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-      if (isResolvingView) {
-        if (AnalysisContext.get.referredTempVariableNames.contains(nameParts)) {
-          lookupVariable(nameParts)
-        } else {
-          None
-        }
-      } else {
-        lookupVariable(nameParts)
-      }
-    }
+    val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
 
     def resolve(nameParts: Seq[String]): Option[Expression] = {
-      var resolvedVariable: Option[Expression] = None
-      // We only support temp variables for now, so the variable name can at most have 3 parts.
-      var numInnerFields: Int = math.max(0, nameParts.length - 3)
-      // Follow the column resolution and prefer the longest match. This makes sure that users
-      // can always use fully qualified variable name to avoid name conflicts.
-      while (resolvedVariable.isEmpty && numInnerFields < nameParts.length) {
-        resolvedVariable = resolveVariable(nameParts.dropRight(numInnerFields))
-        if (resolvedVariable.isEmpty) numInnerFields += 1
-      }
-
-      resolvedVariable.map { variable =>
-        if (numInnerFields != 0) {
-          val nestedFields = nameParts.takeRight(numInnerFields)
-          nestedFields.foldLeft(variable: Expression) { (e, name) =>
-            ExtractValue(e, Literal(name), conf.resolver)
-          }
-        } else {
-          variable
-        }
-      }.map(e => Alias(e, nameParts.last)())
+      variableResolution.resolveMultipartName(
+        nameParts = nameParts,
+        resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty,
+        referredTempVariableNames = AnalysisContext.get.referredTempVariableNames
+      ).map(e => Alias(e, nameParts.last)())
     }
 
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {

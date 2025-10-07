@@ -35,6 +35,17 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  * For full functionality tests, see SqlScriptingParserSuite and SqlScriptingInterpreterSuite.
  */
 class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key)
+    super.afterAll()
+  }
+
   // Helpers
   private def verifySqlScriptResult(
       sqlText: String,
@@ -58,7 +69,6 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.ANSI_ENABLED.key, "true")
-      .set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   // Tests
@@ -78,7 +88,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Scripting with exception handlers") {
+  test("Scripting with exit exception handlers") {
     val sqlScript =
       """
         |BEGIN
@@ -103,6 +113,36 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     verifySqlScriptResult(sqlScript, Seq(Row(2)))
+  }
+
+  test("Scripting with continue exception handlers") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE flag1 INT = -1;
+        |  DECLARE flag2 INT = -1;
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SELECT flag1;
+        |    SET flag1 = 1;
+        |  END;
+        |  BEGIN
+        |    DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag1;
+        |      SET flag1 = 2;
+        |    END;
+        |    SELECT 5;
+        |    SET flag2 = 1;
+        |    SELECT 1/0;
+        |    SELECT 6;
+        |    SET flag2 = 2;
+        |  END;
+        |  SELECT 7;
+        |  SELECT flag1, flag2;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(2, 2)))
   }
 
   test("single select") {

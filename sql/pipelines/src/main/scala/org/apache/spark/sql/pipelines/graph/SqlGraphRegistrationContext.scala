@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
-import org.apache.spark.sql.pipelines.{Language, QueryOriginType}
+import org.apache.spark.sql.pipelines.Language
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -193,7 +193,7 @@ class SqlGraphRegistrationContext(
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
           partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
           properties = cst.tableSpec.properties,
-          baseOrigin = queryOrigin.copy(
+          origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
             objectType = Option(QueryOriginType.Table.toString)
           ),
@@ -224,7 +224,7 @@ class SqlGraphRegistrationContext(
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
           partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
           properties = cst.tableSpec.properties,
-          baseOrigin = queryOrigin.copy(
+          origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
             objectType = Option(QueryOriginType.Table.toString)
           ),
@@ -274,7 +274,7 @@ class SqlGraphRegistrationContext(
             Option.when(cmv.columns.nonEmpty)(StructType(cmv.columns.map(_.toV1Column))),
           partitionCols = Option(PartitionHelper.applyPartitioning(cmv.partitioning, queryOrigin)),
           properties = cmv.tableSpec.properties,
-          baseOrigin = queryOrigin.copy(
+          origin = queryOrigin.copy(
             objectName = Option(mvIdentifier.unquotedString),
             objectType = Option(QueryOriginType.Table.toString)
           ),
@@ -322,7 +322,8 @@ class SqlGraphRegistrationContext(
             objectName = Option(viewIdentifier.unquotedString),
             objectType = Option(QueryOriginType.View.toString)
           ),
-          properties = cv.properties
+          properties = cv.properties,
+          sqlText = cv.originalText
         )
       )
 
@@ -365,7 +366,8 @@ class SqlGraphRegistrationContext(
             objectName = Option(viewIdentifier.unquotedString),
             objectType = Option(QueryOriginType.View.toString)
           ),
-          properties = Map.empty
+          properties = Map.empty,
+          sqlText = cvc.originalText
         )
       )
 

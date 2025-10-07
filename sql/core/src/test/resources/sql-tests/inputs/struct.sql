@@ -28,5 +28,7 @@ SELECT ID, STRUCT(ST.C as STC, ST.D as STD).STD FROM tbl_x;
 
 -- LCAs with struct columns
 SELECT STRUCT(1 AS a) AS b, b AS c;
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1);
 SELECT STRUCT(1 AS a) AS b, b AS c GROUP BY b;
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1) GROUP BY b;
 SELECT MAX(STRUCT(1 AS a)), 2 AS b, b AS c GROUP BY b;

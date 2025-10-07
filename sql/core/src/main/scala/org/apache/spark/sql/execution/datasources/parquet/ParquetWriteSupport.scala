@@ -308,9 +308,9 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
             writeFields(row.getStruct(ordinal, t.length), t, fieldWriters)
           }
 
-      case t: ArrayType => makeArrayWriter(t)
+      case t: ArrayType => makeArrayWriter(t, inShredded)
 
-      case t: MapType => makeMapWriter(t)
+      case t: MapType => makeMapWriter(t, inShredded)
 
       case t: UserDefinedType[_] => makeWriter(t.sqlType, inShredded)
 
@@ -391,9 +391,9 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     }
   }
 
-  def makeArrayWriter(arrayType: ArrayType): ValueWriter = {
+  def makeArrayWriter(arrayType: ArrayType, inShredded: Boolean): ValueWriter = {
     // The shredded schema should not have an array inside
-    val elementWriter = makeWriter(arrayType.elementType, inShredded = false)
+    val elementWriter = makeWriter(arrayType.elementType, inShredded)
 
     def threeLevelArrayWriter(repeatedGroupName: String, elementFieldName: String): ValueWriter =
       (row: SpecializedGetters, ordinal: Int) => {
@@ -472,9 +472,12 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     }
   }
 
-  private def makeMapWriter(mapType: MapType): ValueWriter = {
-    val keyWriter = makeWriter(mapType.keyType, inShredded = false)
-    val valueWriter = makeWriter(mapType.valueType, inShredded = false)
+  private def makeMapWriter(mapType: MapType, inShredded: Boolean): ValueWriter = {
+    // TODO: If maps are ever supported in the shredded schema, we should add a test in
+    //  `ParquetVariantShreddingSuite` to make sure that timestamps within maps are shredded
+    //  correctly as INT64.
+    val keyWriter = makeWriter(mapType.keyType, inShredded)
+    val valueWriter = makeWriter(mapType.valueType, inShredded)
     val repeatedGroupName = if (writeLegacyParquetFormat) {
       // Legacy mode:
       //

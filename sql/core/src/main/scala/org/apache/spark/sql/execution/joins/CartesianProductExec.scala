@@ -37,12 +37,17 @@ class UnsafeCartesianRDD(
     right : RDD[UnsafeRow],
     inMemoryBufferThreshold: Int,
     spillThreshold: Int,
-    spillSizeThreshold: Long)
+    sizeInBytesSpillThreshold: Long)
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
-    val rowArray = new ExternalAppendOnlyUnsafeRowArray(inMemoryBufferThreshold, spillThreshold,
-      spillSizeThreshold)
+    val rowArray = new ExternalAppendOnlyUnsafeRowArray(
+      inMemoryBufferThreshold,
+      // TODO: shall we have a new config to specify the max in-memory buffer size
+      //       of ExternalAppendOnlyUnsafeRowArray?
+      sizeInBytesSpillThreshold,
+      spillThreshold,
+      sizeInBytesSpillThreshold)
 
     val partition = split.asInstanceOf[CartesianPartition]
     rdd2.iterator(partition.s2, context).foreach(rowArray.add)

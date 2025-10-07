@@ -34,6 +34,30 @@ private[spark] trait SparkStringUtils {
     s"[${SPACE_DELIMITED_UPPERCASE_HEX.formatHex(bytes)}]"
   }
 
+  def fromHexString(hex: String): Array[Byte] = {
+    SPACE_DELIMITED_UPPERCASE_HEX.parseHex(hex.stripPrefix("[").stripSuffix("]"))
+  }
+
+  def isEmpty(str: String): Boolean = str == null || str.length() == 0
+
+  def isNotEmpty(str: String): Boolean = !isEmpty(str)
+
+  def isBlank(str: String): Boolean = str == null || str.isBlank
+
+  def isNotBlank(str: String): Boolean = !isBlank(str)
+
+  def abbreviate(str: String, abbrevMarker: String, len: Int): String = {
+    if (str == null || abbrevMarker == null) {
+      null
+    } else if (str.length() <= len || str.length() <= abbrevMarker.length()) {
+      str
+    } else {
+      str.substring(0, len - abbrevMarker.length()) + abbrevMarker
+    }
+  }
+
+  def abbreviate(str: String, len: Int): String = abbreviate(str, "...", len)
+
   def sideBySide(left: String, right: String): Seq[String] = {
     sideBySide(left.split("\n").toImmutableArraySeq, right.split("\n").toImmutableArraySeq)
   }
@@ -44,7 +68,7 @@ private[spark] trait SparkStringUtils {
     val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
 
     leftPadded.zip(rightPadded).map { case (l, r) =>
-      (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
+      (if (l == r) " " else "!") + l + " ".repeat((maxLeftSize - l.length) + 3) + r
     }
   }
 
@@ -52,6 +76,24 @@ private[spark] trait SparkStringUtils {
     import org.apache.spark.util.ArrayImplicits._
     str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
   }
+
+  /** Try to strip prefix and suffix with the given string 's' */
+  def strip(str: String, s: String): String =
+    if (str == null || s == null) str else str.stripPrefix(s).stripSuffix(s)
+
+  def leftPad(str: String, width: Int): String =
+    if (str == null || str.length >= width) str else String.format(s"%${width}s", str)
+
+  def rightPad(str: String, width: Int): String =
+    if (str == null || str.length >= width) str else String.format(s"%-${width}s", str)
+
+  def rightPad(str: String, width: Int, s: String): String =
+    if (str == null || str.length >= width) {
+      str
+    } else {
+      val tmp = str + s.repeat((width - str.length)/s.length)
+      tmp + s.substring(0, width - tmp.length)
+    }
 }
 
 private[spark] object SparkStringUtils extends SparkStringUtils with Logging {
@@ -101,12 +143,4 @@ private[spark] object SparkStringUtils extends SparkStringUtils with Logging {
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     truncatedString(seq, "", sep, "", maxFields)
   }
-
-  def isEmpty(str: String): Boolean = str == null || str.length() == 0
-
-  def isNotEmpty(str: String): Boolean = !isEmpty(str)
-
-  def isBlank(str: String): Boolean = str == null || str.isBlank
-
-  def isNotBlank(str: String): Boolean = !isBlank(str)
 }

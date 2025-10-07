@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedSubqueryColumnAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -128,8 +128,44 @@ case class CTERelationDef(
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
 
   lazy val hasSelfReferenceAsCTERef: Boolean = child.collectFirstWithSubqueries {
-    case CTERelationRef(this.id, _, _, _, _, true, _) => true
+    case CTERelationRef(this.id, _, _, _, _, true, _, _) => true
   }.getOrElse(false)
+  lazy val hasSelfReferenceInAnchor: Boolean = {
+    val unionNode: Option[Union] = child match {
+      case SubqueryAlias(_, union: Union) =>
+        Some(union)
+      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, union: Union)) =>
+        Some(union)
+      case SubqueryAlias(_, WithCTE(union: Union, _)) =>
+        Some(union)
+      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, WithCTE(union: Union, _))) =>
+        Some(union)
+      case _ => None
+    }
+    if (unionNode.isDefined) {
+      unionNode.get.children.head.collectFirstWithSubqueries {
+        case CTERelationRef(this.id, _, _, _, _, true, _, _) => true
+      }.getOrElse(false)
+    } else {
+      false
+    }
+  }
+  lazy val hasSelfReferenceInSubCTE: Boolean = {
+    val withCTENode: Option[WithCTE] = child match {
+      case SubqueryAlias(_, withCTE @ WithCTE(_, _)) =>
+        Some(withCTE)
+      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, withCTE @ WithCTE(_, _))) =>
+        Some(withCTE)
+      case _ => None
+    }
+    if (withCTENode.isDefined) {
+      withCTENode.exists(_.cteDefs.exists(_.collectFirstWithSubqueries {
+        case CTERelationRef(this.id, _, _, _, _, true, _, _) => true
+      }.isDefined))
+    } else {
+      false
+    }
+  }
   lazy val hasSelfReferenceAsUnionLoopRef: Boolean = child.collectFirstWithSubqueries {
     case UnionLoopRef(this.id, _, _) => true
   }.getOrElse(false)
@@ -150,6 +186,8 @@ object CTERelationDef {
  * @param statsOpt             The optional statistics inferred from the corresponding CTE
  *                             definition.
  * @param recursive            If this is a recursive reference.
+ * @param isUnlimitedRecursion If the node is a (non-recursive) reference to a recursive CTE that
+ *                             should be executed without a limit to the number of rows it returns.
  */
 case class CTERelationRef(
     cteId: Long,
@@ -158,11 +196,17 @@ case class CTERelationRef(
     override val isStreaming: Boolean,
     statsOpt: Option[Statistics] = None,
     recursive: Boolean = false,
-    override val maxRows: Option[Long] = None) extends LeafNode with MultiInstanceRelation {
+    override val maxRows: Option[Long] = None,
+    isUnlimitedRecursion: Boolean = false) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
   override lazy val resolved: Boolean = _resolved
+
+  override def stringArgs: Iterator[Any] = {
+    // We omit the false value of isUnlimitedRecursion in golden files.
+    if (isUnlimitedRecursion) super.stringArgs else super.stringArgs.toArray.init.iterator
+  }
 
   override def newInstance(): LogicalPlan = {
     // CTERelationRef inherits the output attributes from a query, which may contain duplicated

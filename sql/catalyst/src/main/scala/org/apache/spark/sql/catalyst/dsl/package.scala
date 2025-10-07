@@ -405,6 +405,8 @@ package object dsl extends SQLConfHelper {
 
       def globalLimit(limitExpr: Expression): LogicalPlan = GlobalLimit(limitExpr, logicalPlan)
 
+      def limitAll(): LogicalPlan = LimitAll(logicalPlan)
+
       def offset(offsetExpr: Expression): LogicalPlan = Offset(offsetExpr, logicalPlan)
 
       def join(

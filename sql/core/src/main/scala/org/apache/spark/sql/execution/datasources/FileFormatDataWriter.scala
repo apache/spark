@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.TaskOutputFileAlreadyExistException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, NUM_CONCURRENT_WRITER}
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
@@ -172,7 +172,7 @@ class SingleDirectoryDataWriter(
     val currentPath = committer.newTaskTempFile(
       taskAttemptContext,
       None,
-      f"-c$fileCounter%03d" + ext)
+      FileNameSpec("", f"-c$fileCounter%03d" + ext))
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,

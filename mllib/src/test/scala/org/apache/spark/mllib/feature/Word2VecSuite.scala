@@ -29,7 +29,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
   // TODO: add more tests
 
   test("Word2Vec") {
-    val sentence = "a b " * 100 + "a c " * 10
+    val sentence = "a b ".repeat(100) + "a c ".repeat(10)
     val localDoc = Seq(sentence, sentence)
     val doc = sc.parallelize(localDoc)
       .map(line => line.split(" ").toSeq)

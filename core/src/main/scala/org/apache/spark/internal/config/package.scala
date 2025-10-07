@@ -291,14 +291,6 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val EVENT_LOG_READER_MAX_STRING_LENGTH =
-    ConfigBuilder("spark.eventLog.readerMaxStringLength")
-      .doc("Limit the maximum string size an eventlog item can have when deserializing it.")
-      .version("4.1.0")
-      .intConf
-      .checkValue(_ > 0, "Maximum string size of an eventLog item should be positive.")
-      .createWithDefault(Int.MaxValue)
-
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
@@ -499,6 +491,16 @@ package object config {
     .version("1.6.0")
     .doubleConf
     .createWithDefault(0.6)
+
+  private[spark] val UNMANAGED_MEMORY_POLLING_INTERVAL =
+    ConfigBuilder("spark.memory.unmanagedMemoryPollingInterval")
+      .doc("Interval for polling unmanaged memory users to track their memory usage. " +
+        "Unmanaged memory users are components that manage their own memory outside of " +
+        "Spark's core memory management, such as RocksDB for Streaming State Store. " +
+        "Setting this to 0 disables unmanaged memory polling.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("0s")
 
   private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
     ConfigBuilder("spark.storage.unrollMemoryThreshold")
@@ -1199,6 +1201,14 @@ package object config {
     .checkValue(v => v >= 0, "The value should be a non-negative time value.")
     .createWithDefaultString("0min")
 
+  private[spark] val DRIVER_METRICS_POLLING_INTERVAL =
+    ConfigBuilder("spark.driver.metrics.pollingInterval")
+      .doc("How often to collect driver metrics (in milliseconds). " +
+        "If unset, the polling is done at the executor heartbeat interval. " +
+        "If set, the polling is done at this interval.")
+      .version("4.1.0")
+      .fallbackConf(EXECUTOR_HEARTBEAT_INTERVAL)
+
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
     .version("2.1.0")
@@ -1597,9 +1607,9 @@ package object config {
       .createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD =
-    ConfigBuilder("spark.shuffle.spill.maxRecordsSizeForSpillThreshold")
+    ConfigBuilder("spark.shuffle.spill.maxSizeInBytesForSpillThreshold")
       .internal()
-      .doc("The maximum size in memory before forcing the shuffle sorter to spill. " +
+      .doc("The maximum in memory size in bytes before forcing the shuffle sorter to spill. " +
         "By default it is Long.MAX_VALUE, which means we never force the sorter to spill, " +
         "until we reach some limitations, like the max page size limitation for the pointer " +
         "array in the sorter.")
@@ -2125,6 +2135,15 @@ package object config {
       .intConf
       .createWithDefault(1)
 
+  private[spark] val IO_COMPRESSION_ZSTD_STRATEGY =
+    ConfigBuilder("spark.io.compression.zstd.strategy")
+      .doc("Compression strategy for Zstd compression codec. The higher the value is, the more " +
+        "complex it becomes, usually resulting stronger but slower compression or higher CPU " +
+        "cost.")
+      .version("4.1.0")
+      .intConf
+      .createOptional
+
   private[spark] val IO_COMPRESSION_LZF_PARALLEL =
     ConfigBuilder("spark.io.compression.lzf.parallel.enabled")
       .doc("When true, LZF compression will use multiple threads to compress data in parallel.")
@@ -2299,6 +2318,15 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT =
+    ConfigBuilder("spark.submit.callSystemExitOnMainExit")
+      .doc("If true, SparkSubmit will call System.exit() to initiate JVM shutdown once the " +
+        "user's main method has exited. This can be useful in cases where non-daemon JVM " +
+        "threads might otherwise prevent the JVM from shutting down on its own.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val SCHEDULER_ALLOCATION_FILE =
     ConfigBuilder("spark.scheduler.allocation.file")

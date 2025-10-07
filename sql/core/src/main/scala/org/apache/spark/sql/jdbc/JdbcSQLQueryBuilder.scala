@@ -200,7 +200,7 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
        |$joinType
        |(${right.build()}) $rightSideQualifier
        |ON $joinCondition
-       |)""".stripMargin
+       |) ${JoinPushdownAliasGenerator.getSubqueryQualifier}""".stripMargin
     )
 
     this
@@ -222,5 +222,13 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     options.prepareQuery +
       s"SELECT $hintClause$columnList FROM $tableOrQuery $tableSampleClause" +
       s" $whereClause $groupByClause $orderByClause $limitClause $offsetClause"
+  }
+}
+
+object JoinPushdownAliasGenerator {
+  private val subQueryId = new java.util.concurrent.atomic.AtomicLong()
+
+  def getSubqueryQualifier: String = {
+    "join_subquery_" + subQueryId.getAndIncrement()
   }
 }

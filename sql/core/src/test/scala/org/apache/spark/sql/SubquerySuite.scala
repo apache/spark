@@ -2562,9 +2562,9 @@ class SubquerySuite extends QueryTest
             "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
           parameters = Map("expr" -> "v1.x", "dataType" -> "map"),
           context = ExpectedContext(
-            fragment = "select upper(x['a'] + rand()) as a",
-            start = 39,
-            stop = 72)
+            fragment = "(\n  select concat(a, a) from\n  (select upper(x['a'] + rand()) as a)\n)",
+            start = 7,
+            stop = 75)
         )
       }
     }

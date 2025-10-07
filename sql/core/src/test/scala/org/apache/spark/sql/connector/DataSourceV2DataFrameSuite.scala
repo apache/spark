@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, Cast => V2Cast, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
@@ -371,21 +372,15 @@ class DataSourceV2DataFrameSuite
           null,
           new ColumnDefaultValue(
             "(100 + 23)",
-            new GeneralScalarExpression(
-              "+",
-              Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+            LiteralValue(123, IntegerType),
             LiteralValue(123, IntegerType)),
           new ColumnDefaultValue(
             "('h' || 'r')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("h"), StringType),
-                LiteralValue(UTF8String.fromString("r"), StringType))),
+            LiteralValue(UTF8String.fromString("hr"), StringType),
             LiteralValue(UTF8String.fromString("hr"), StringType)),
           new ColumnDefaultValue(
             "CAST(1 AS BOOLEAN)",
-            new V2Cast(LiteralValue(1, IntegerType), IntegerType, BooleanType),
+            new AlwaysTrue,
             LiteralValue(true, BooleanType))))
 
       val df1 = Seq(1).toDF("id")
@@ -420,21 +415,15 @@ class DataSourceV2DataFrameSuite
           null,
           new ColumnDefaultValue(
             "(50 * 2)",
-            new GeneralScalarExpression(
-              "*",
-              Array(LiteralValue(50, IntegerType), LiteralValue(2, IntegerType))),
+            LiteralValue(100, IntegerType),
             LiteralValue(100, IntegerType)),
           new ColumnDefaultValue(
             "('un' || 'known')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("un"), StringType),
-                LiteralValue(UTF8String.fromString("known"), StringType))),
+            LiteralValue(UTF8String.fromString("unknown"), StringType),
             LiteralValue(UTF8String.fromString("unknown"), StringType)),
           new ColumnDefaultValue(
             "CAST(0 AS BOOLEAN)",
-            new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType),
+            new AlwaysFalse,
             LiteralValue(false, BooleanType))))
 
       val df3 = Seq(1).toDF("id")
@@ -469,21 +458,15 @@ class DataSourceV2DataFrameSuite
         Array(
           new ColumnDefaultValue(
             "(100 + 23)",
-            new GeneralScalarExpression(
-              "+",
-              Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+            LiteralValue(123, IntegerType),
             LiteralValue(123, IntegerType)),
           new ColumnDefaultValue(
             "('h' || 'r')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("h"), StringType),
-                LiteralValue(UTF8String.fromString("r"), StringType))),
+            LiteralValue(UTF8String.fromString("hr"), StringType),
             LiteralValue(UTF8String.fromString("hr"), StringType)),
           new ColumnDefaultValue(
             "CAST(1 AS BOOLEAN)",
-            new V2Cast(LiteralValue(1, IntegerType), IntegerType, BooleanType),
+            new AlwaysTrue,
             LiteralValue(true, BooleanType))))
     }
   }
@@ -514,19 +497,13 @@ class DataSourceV2DataFrameSuite
         Array(
           new DefaultValue(
             "(123 + 56)",
-            new GeneralScalarExpression(
-              "+",
-              Array(LiteralValue(123, IntegerType), LiteralValue(56, IntegerType)))),
+            LiteralValue(179, IntegerType)),
           new DefaultValue(
             "('r' || 'l')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("r"), StringType),
-                LiteralValue(UTF8String.fromString("l"), StringType)))),
+            LiteralValue(UTF8String.fromString("rl"), StringType)),
           new DefaultValue(
             "CAST(0 AS BOOLEAN)",
-            new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType))))
+            new AlwaysFalse)))
     }
   }
 
@@ -692,7 +669,7 @@ class DataSourceV2DataFrameSuite
             LiteralValue(1542490413000000L, TimestampType)),
           new ColumnDefaultValue(
             "1",
-            new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
+            LiteralValue(1.0, DoubleType),
             LiteralValue(1.0, DoubleType))))
 
       val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
@@ -714,11 +691,7 @@ class DataSourceV2DataFrameSuite
             LiteralValue(1645624555000000L, TimestampType)),
           new ColumnDefaultValue(
             "(1 + 1)",
-            new V2Cast(
-              new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
-                LiteralValue(1, IntegerType))),
-              IntegerType,
-              DoubleType),
+            LiteralValue(2.0, DoubleType),
             LiteralValue(2.0, DoubleType))))
     }
   }
@@ -746,7 +719,7 @@ class DataSourceV2DataFrameSuite
               LiteralValue(1542490413000000L, TimestampType)),
             new ColumnDefaultValue(
               "1",
-              new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
+              LiteralValue(1.0, DoubleType),
               LiteralValue(1.0, DoubleType))))
 
         val alterCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
@@ -764,11 +737,7 @@ class DataSourceV2DataFrameSuite
               LiteralValue(1645624555000000L, TimestampType)),
             new DefaultValue(
               "(1 + 1)",
-              new V2Cast(
-                new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
-                  LiteralValue(1, IntegerType))),
-                IntegerType,
-                DoubleType))))
+              LiteralValue(2.0, DoubleType))))
       }
   }
 

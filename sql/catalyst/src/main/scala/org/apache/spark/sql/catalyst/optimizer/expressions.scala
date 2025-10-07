@@ -59,7 +59,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def constantFolding(
+  private def tryFold(expr: Expression, isConditionalBranch: Boolean): Expression = {
+    try {
+      Literal.create(expr.freshCopyIfContainsStatefulExpression().eval(EmptyRow), expr.dataType)
+    } catch {
+      case NonFatal(_) if isConditionalBranch =>
+        // When doing constant folding inside conditional expressions, we should not fail
+        // during expression evaluation, as the branch we are evaluating may not be reached at
+        // runtime, and we shouldn't fail the query, to match the original behavior.
+        expr.setTagValue(FAILED_TO_EVALUATE, ())
+        expr
+    }
+  }
+
+  private[sql] def constantFolding(
       e: Expression,
       isConditionalBranch: Boolean = false): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>
@@ -78,17 +91,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case e if e.getTagValue(FAILED_TO_EVALUATE).isDefined => e
 
     // Fold expressions that are foldable.
-    case e if e.foldable =>
-      try {
-        Literal.create(e.freshCopyIfContainsStatefulExpression().eval(EmptyRow), e.dataType)
-      } catch {
-        case NonFatal(_) if isConditionalBranch =>
-          // When doing constant folding inside conditional expressions, we should not fail
-          // during expression evaluation, as the branch we are evaluating may not be reached at
-          // runtime, and we shouldn't fail the query, to match the original behavior.
-          e.setTagValue(FAILED_TO_EVALUATE, ())
-          e
-      }
+    case e if e.foldable => tryFold(e, isConditionalBranch)
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
     case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
@@ -100,7 +103,13 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
       Literal(null, s.dataType)
 
-    case other => other.mapChildren(constantFolding(_, isConditionalBranch))
+    case other =>
+      val newOther = other.mapChildren(constantFolding(_, isConditionalBranch))
+      if (newOther.foldable) {
+        tryFold(newOther, isConditionalBranch)
+      } else {
+        newOther
+      }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(AlwaysProcess.fn, ruleId) {

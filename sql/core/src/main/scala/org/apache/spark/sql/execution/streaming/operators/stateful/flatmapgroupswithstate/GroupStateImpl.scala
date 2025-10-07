@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate
 
 import java.sql.Date
 import java.util.concurrent.TimeUnit
@@ -28,7 +28,7 @@ import org.apache.spark.api.java.Optional
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.GroupStateImpl._
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, TestGroupState}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils

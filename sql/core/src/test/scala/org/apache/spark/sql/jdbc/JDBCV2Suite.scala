@@ -18,11 +18,10 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.util.Properties
+import java.util.{HexFormat, Properties}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.codec.binary.Hex
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
@@ -157,102 +156,93 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     super.beforeAll()
     Utils.classForName("org.h2.Driver")
     withConnection { conn =>
-      conn.prepareStatement("CREATE SCHEMA \"test\"").executeUpdate()
-      conn.prepareStatement(
+
+      val batchStmt = conn.createStatement()
+      batchStmt.addBatch("CREATE SCHEMA \"test\"")
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"empty_table\" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)")
-        .executeUpdate()
-      conn.prepareStatement(
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"people\" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)")
-        .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)").executeUpdate()
-      conn.prepareStatement(
+      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)")
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"employee\" (dept INTEGER, name TEXT(32), salary NUMERIC(20, 2)," +
-          " bonus DOUBLE, is_manager BOOLEAN)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000, true)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200, false)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (1, 'cathy', 9000, 1200, false)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300, true)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200, true)").executeUpdate()
-      conn.prepareStatement(
+          " bonus DOUBLE, is_manager BOOLEAN)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000, true)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200, false)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'cathy', 9000, 1200, false)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300, true)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200, true)")
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"dept\" (\"dept id\" INTEGER NOT NULL, \"dept.id\" INTEGER)")
-        .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (1, 1)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (2, 1)").executeUpdate()
+      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (1, 1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (2, 1)")
 
       // scalastyle:off
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)").executeUpdate()
+      batchStmt.addBatch("CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)")
       // scalastyle:on
-      conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (1)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (2)").executeUpdate()
-      conn.prepareStatement(
-        """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""").executeUpdate()
-      conn.prepareStatement(
-        """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""").executeUpdate()
+      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (2)")
 
-      conn.prepareStatement(
+      batchStmt.addBatch(
+        """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""")
+      batchStmt.addBatch(
+        """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""")
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"item\" (id INTEGER, name TEXT(32), price NUMERIC(23, 3))")
-        .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
-        "(1, 'bottle', 11111111111111111111.123)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
-        "(1, 'bottle', 99999999999999999999.123)").executeUpdate()
+      batchStmt.addBatch("INSERT INTO \"test\".\"item\"" +
+        "VALUES (1, 'bottle', 11111111111111111111.123)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"item\"" +
+        "VALUES (1, 'bottle', 99999999999999999999.123)")
 
-      conn.prepareStatement(
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"datetime\" (name TEXT(32), date1 DATE, time1 TIMESTAMP)")
-        .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
-        "('amy', '2022-05-19', '2022-05-19 00:00:00')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
-        "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
+      batchStmt.addBatch("INSERT INTO \"test\".\"datetime\"" +
+        "VALUES ('amy', '2022-05-19', '2022-05-19 00:00:00')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"datetime\"" +
+        "VALUES ('alex', '2022-05-18', '2022-05-18 00:00:00')")
 
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc_def@gmail.com')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc%def@gmail.com')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc%_def@gmail.com')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc_%def@gmail.com')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc_''%def@gmail.com')").executeUpdate()
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%_def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_%def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_''%def@gmail.com')")
 
-      conn.prepareStatement("CREATE TABLE \"test\".\"binary_tab\" (name TEXT(32),b BINARY(20))")
+      batchStmt.addBatch("CREATE TABLE \"test\".\"employee_bonus\" " +
+        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('amy', 10000, 1000, 0.1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('alex', 12000, 1200, 0.1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('cathy', 8000, 1200, 0.15)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('david', 10000, 1300, 0.13)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('jen', 12000, 2400, 0.2)")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))")
+      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('abc')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('a a a')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES (null)")
+
+      batchStmt.executeBatch()
+
+      conn
+        .prepareStatement("CREATE TABLE \"test\".\"binary_tab\" (name TEXT(32),b BINARY(20))")
         .executeUpdate()
       val stmt = conn.prepareStatement("INSERT INTO \"test\".\"binary_tab\" VALUES (?, ?)")
       stmt.setString(1, "jen")
       stmt.setBytes(2, testBytes)
       stmt.executeUpdate()
-
-      conn.prepareStatement("CREATE TABLE \"test\".\"employee_bonus\" " +
-        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
-        "VALUES ('amy', 10000, 1000, 0.1)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
-        "VALUES ('alex', 12000, 1200, 0.1)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
-        "VALUES ('cathy', 8000, 1200, 0.15)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
-        "VALUES ('david', 10000, 1300, 0.13)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
-        "VALUES ('jen', 12000, 2400, 0.2)").executeUpdate()
-
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
-        "('abc')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
-        "('a a a')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
-        "(null)").executeUpdate()
     }
     h2Dialect.registerFunction("my_avg", IntegralAverage)
     h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
@@ -3112,7 +3102,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
-    val hexBinary = Hex.encodeHexString(testBytes, false)
+    val hexBinary = HexFormat.of().withUpperCase().formatHex(testBytes)
     val binary = "X'" + hexBinary + "'"
     val df = sql(s"SELECT * FROM h2.test.binary_tab WHERE b = $binary")
     checkFiltersRemoved(df)

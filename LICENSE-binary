@@ -386,7 +386,6 @@ org.glassfish.jersey.core:jersey-common
 org.glassfish.jersey.core:jersey-server
 org.glassfish.jersey.inject:jersey-hk2
 org.javassist:javassist
-org.jetbrains:annotations
 org.json4s:json4s-ast_2.13
 org.json4s:json4s-core_2.13
 org.json4s:json4s-jackson-core_2.13
@@ -399,7 +398,6 @@ org.rocksdb:rocksdbjni
 org.scala-lang:scala-compiler
 org.scala-lang:scala-library
 org.scala-lang:scala-reflect
-org.scala-lang.modules:scala-collection-compat_2.13
 org.scala-lang.modules:scala-parallel-collections_2.13
 org.scala-lang.modules:scala-parser-combinators_2.13
 org.scala-lang.modules:scala-xml_2.13
@@ -462,6 +460,7 @@ org.codehaus.janino:janino
 org.fusesource.leveldbjni:leveldbjni-all
 org.jline:jline
 org.jpmml:pmml-model
+org.locationtech.jts:jts-core
 org.threeten:threeten-extra
 
 python/lib/py4j-*-src.zip
@@ -480,7 +479,6 @@ dev.ludovic.netlib:blas
 dev.ludovic.netlib:arpack
 dev.ludovic.netlib:lapack
 net.razorvine:pickle
-org.bouncycastle:bcprov-jdk18on
 org.checkerframework:checker-qual
 org.typelevel:algebra_2.13:jar
 org.typelevel:cats-kernel_2.13
