@@ -36,7 +36,8 @@ case class Origin(
     objectType: Option[String] = None,
     objectName: Option[String] = None,
     stackTrace: Option[Array[StackTraceElement]] = None,
-    pysparkErrorContext: Option[(String, String)] = None) {
+    pysparkErrorContext: Option[(String, String)] = None,
+    parameterSubstitutionCallback: Option[Any] = None) { // Store callback to avoid dependencies
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
     DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)

@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundPlanStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.util.SparkParserUtils
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -106,9 +105,7 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
         }
       }
     } finally {
-      // Clear any parameter substitution callback that might have been set
-      // This prevents thread-local contamination between tests
-      SparkParserUtils.clearParameterSubstitutionCallback()
+      // Note: No callback cleanup needed since we're not using thread-local callbacks
     }
   }
 

@@ -195,6 +195,7 @@ trait SparkParserUtils {
   def withOrigin[T](ctx: ParserRuleContext, sqlText: Option[String] = None)(f: => T): T = {
     val current = CurrentOrigin.get
     val text = sqlText.orElse(current.sqlText)
+
     if (text.isEmpty) {
       CurrentOrigin.set(position(ctx.getStart))
     } else {
@@ -205,12 +206,34 @@ trait SparkParserUtils {
         text.get,
         current.objectType,
         current.objectName)
-      CurrentOrigin.set(adjustedOrigin)
+
+      // IMPORTANT: Preserve any existing callback when setting the new origin
+      val finalOrigin = if (current.parameterSubstitutionCallback.isDefined) {
+        adjustedOrigin.copy(parameterSubstitutionCallback = current.parameterSubstitutionCallback)
+      } else {
+        adjustedOrigin
+      }
+
+      CurrentOrigin.set(finalOrigin)
     }
     try {
       f
     } finally {
-      CurrentOrigin.set(current)
+      // IMPORTANT: When restoring origin, preserve any callback that was added during parsing
+      val currentAfterParsing = CurrentOrigin.get
+      val originToRestore =
+        if (currentAfterParsing.parameterSubstitutionCallback.isDefined ||
+          current.parameterSubstitutionCallback.isDefined) {
+          // Either the current or the original has a callback - preserve it
+          val callbackToPreserve = currentAfterParsing.parameterSubstitutionCallback
+            .orElse(current.parameterSubstitutionCallback)
+          current.copy(parameterSubstitutionCallback = callbackToPreserve)
+        } else {
+          // Neither has a callback - restore as normal
+          current
+        }
+
+      CurrentOrigin.set(originToRestore)
     }
   }
 
@@ -240,13 +263,16 @@ trait SparkParserUtils {
       objectType: Option[String],
       objectName: Option[String]): Origin = {
 
-    // Try to get parameter substitution information via callback
-    SparkParserUtils.parameterSubstitutionCallback match {
+    // Try to get parameter substitution callback from CurrentOrigin
+    CurrentOrigin.get.parameterSubstitutionCallback match {
       case Some(callback) =>
-        callback(startToken, stopToken, substitutedSql, objectType, objectName)
+        // Cast the callback from Any to the proper type
+        val typedCallback = callback.asInstanceOf[SparkParserUtils.ParameterSubstitutionCallback]
+        typedCallback(startToken, stopToken, substitutedSql, objectType, objectName)
           .getOrElse(
             positionAndText(startToken, stopToken, substitutedSql, objectType, objectName))
       case None =>
+        // No parameter substitution callback - use default behavior
         positionAndText(startToken, stopToken, substitutedSql, objectType, objectName)
     }
   }
@@ -279,68 +305,12 @@ trait SparkParserUtils {
 object SparkParserUtils extends SparkParserUtils {
 
   /**
-   * Callback type for parameter substitution integration.
-   *
-   * This callback allows the parameter substitution system to provide origin adjustment without
-   * creating circular dependencies between modules.
-   *
-   * @param startToken
-   *   The start token from substituted SQL
-   * @param stopToken
-   *   The stop token from substituted SQL
-   * @param substitutedSql
-   *   The substituted SQL text
-   * @param objectType
-   *   The object type
-   * @param objectName
-   *   The object name
-   * @return
-   *   Some(origin) if parameter substitution should be applied, None otherwise
+   * Type alias for parameter substitution callback function. Takes (startToken, stopToken,
+   * substitutedSql, objectType, objectName) and returns an optional Origin.
    */
   type ParameterSubstitutionCallback =
     (Token, Token, String, Option[String], Option[String]) => Option[Origin]
 
-  /**
-   * Thread-local callback for parameter substitution integration. This is set by the parameter
-   * handler when parameter substitution occurs.
-   */
-  private val parameterSubstitutionCallbackStorage =
-    new ThreadLocal[Option[ParameterSubstitutionCallback]]() {
-      override def initialValue(): Option[ParameterSubstitutionCallback] = None
-    }
-
-  /**
-   * Get the current parameter substitution callback.
-   */
-  def parameterSubstitutionCallback: Option[ParameterSubstitutionCallback] = {
-    parameterSubstitutionCallbackStorage.get()
-  }
-
-  /**
-   * Set the parameter substitution callback for the current thread. This should be called by
-   * parameter handlers before parsing.
-   */
-  def setParameterSubstitutionCallback(callback: ParameterSubstitutionCallback): Unit = {
-    parameterSubstitutionCallbackStorage.set(Some(callback))
-  }
-
-  /**
-   * Clear the parameter substitution callback for the current thread.
-   */
-  def clearParameterSubstitutionCallback(): Unit = {
-    parameterSubstitutionCallbackStorage.remove()
-  }
-
-  /**
-   * Execute a block with a parameter substitution callback set.
-   */
-  def withParameterSubstitutionCallback[T](
-      callback: ParameterSubstitutionCallback)(f: => T): T = {
-    setParameterSubstitutionCallback(callback)
-    try {
-      f
-    } finally {
-      clearParameterSubstitutionCallback()
-    }
-  }
+  // Note: Thread-local callback mechanism removed - parameter substitution info
+  // is now passed through CurrentOrigin.parameterSubstitutionCallback instead
 }

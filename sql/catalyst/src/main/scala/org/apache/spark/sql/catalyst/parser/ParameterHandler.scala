@@ -18,12 +18,9 @@ package org.apache.spark.sql.catalyst.parser
 
 import scala.util.{Failure, Success, Try}
 
-import org.antlr.v4.runtime.Token
-
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.util.{LiteralToSqlConverter, SparkParserUtils}
+import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -69,6 +66,7 @@ class ParameterHandler {
   // Memoization cache for LiteralToSqlConverter to avoid repeated conversions
   private val conversionCache = scala.collection.mutable.Map[Expression, String]()
 
+
   /**
    * Helper method to perform parameter substitution and store position mapper.
    *
@@ -98,30 +96,31 @@ class ParameterHandler {
   }
 
   /**
-   * Set up substitution context and parser callback for error position mapping.
+   * Set up substitution context for error position mapping.
+   * Creates a callback function and stores it in the current Origin for later retrieval.
    *
    * @param originalSql The original SQL text
    * @param substitutedSql The substituted SQL text
    * @param positionMapper The position mapper for error translation
    * @param isIdentity Whether this is an identity mapping (no substitution occurred)
    */
-  private def setupSubstitutionContext(
+  private[sql] def setupSubstitutionContext(
       originalSql: String,
       substitutedSql: String,
       positionMapper: PositionMapper,
       isIdentity: Boolean): Unit = {
 
-    // Note: substitution info is passed through callback closure variables
-
-    // Set parser callback for origin adjustment
-    val callback: SparkParserUtils.ParameterSubstitutionCallback =
+    // Create callback function for position mapping
+    // The positionMapper is captured in the closure, eliminating the need for caching
+    val callback: (org.antlr.v4.runtime.Token, org.antlr.v4.runtime.Token, String,
+        Option[String], Option[String]) => Option[org.apache.spark.sql.catalyst.trees.Origin] =
       if (isIdentity) {
         // Identity mapping - return None to use default logic
         (_, _, _, _, _) => None
       } else {
         // Actual substitution - map positions back to original SQL
-        (startToken: Token, stopToken: Token, _, objectType: Option[String],
-         objectName: Option[String]) => {
+        // The positionMapper is captured from the method parameter
+        (startToken, stopToken, _, objectType, objectName) => {
           val startOpt = Option(startToken)
           val stopOpt = Option(stopToken)
 
@@ -132,7 +131,7 @@ class ParameterHandler {
             Option(positionMapper.mapToOriginal(token.getStopIndex)))
 
           // Create origin with original SQL and mapped positions
-          Some(Origin(
+          Some(org.apache.spark.sql.catalyst.trees.Origin(
             line = startOpt.map(_.getLine),
             startPosition = startOpt.map(_.getCharPositionInLine),
             startIndex = originalStartIndex,
@@ -143,7 +142,10 @@ class ParameterHandler {
         }
       }
 
-    SparkParserUtils.setParameterSubstitutionCallback(callback)
+    // Update CurrentOrigin to include the callback
+    val currentOrigin = org.apache.spark.sql.catalyst.trees.CurrentOrigin.get
+    val updatedOrigin = currentOrigin.copy(parameterSubstitutionCallback = Some(callback))
+    org.apache.spark.sql.catalyst.trees.CurrentOrigin.set(updatedOrigin)
   }
 
   /**
