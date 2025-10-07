@@ -244,7 +244,7 @@ trait SparkParserUtils {
    * to the original SQL and uses the original SQL text in the origin.
    *
    * @param startToken The start token from the substituted SQL
-   * @param stopToken The stop token from the substituted SQL  
+   * @param stopToken The stop token from the substituted SQL
    * @param substitutedSql The SQL text after substitution
    * @param objectType The object type for the origin
    * @param objectName The object name for the origin

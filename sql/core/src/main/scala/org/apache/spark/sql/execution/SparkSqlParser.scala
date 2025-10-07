@@ -85,7 +85,7 @@ class SparkSqlParser extends AbstractSqlParser {
         // Modern mode: perform parameter substitution if parameters are present.
         ThreadLocalParameterContext.get() match {
           case Some(context) =>
-            val substituted = substituteParametersIfNeeded(command, context)
+            val substituted = substituteParametersOrSetupCallback(command, context)
             (substituted, substituted != command, true) // Track if substitution occurred.
           case None =>
             (command, false, false)  // No parameters to substitute.
@@ -127,7 +127,7 @@ class SparkSqlParser extends AbstractSqlParser {
     }
   }
 
-  private def substituteParametersIfNeeded(
+  private def substituteParametersOrSetupCallback(
       command: String,
       context: ParameterContext): String = {
 

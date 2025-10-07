@@ -63,9 +63,6 @@ class ParameterHandler {
   // Compiled regex pattern for efficient parameter marker detection.
   private val parameterMarkerPattern = java.util.regex.Pattern.compile("[?:]")
 
-  // Memoization cache for LiteralToSqlConverter to avoid repeated conversions.
-  private val conversionCache = scala.collection.mutable.Map[Expression, String]()
-
 
   /**
    * Helper method to perform parameter substitution and store position mapper.
@@ -178,14 +175,13 @@ class ParameterHandler {
   }
 
   /**
-   * Convert an Expression to SQL string with memoization for performance.
-   * Caches results to avoid repeated expensive conversions.
+   * Convert an Expression to SQL string representation.
    *
    * @param expr The expression to convert
    * @return SQL string representation
    */
-  private def convertToSqlWithMemoization(expr: Expression): String = {
-    conversionCache.getOrElseUpdate(expr, LiteralToSqlConverter.convert(expr))
+  private def convertToSql(expr: Expression): String = {
+    LiteralToSqlConverter.convert(expr)
   }
 
   /**
@@ -204,80 +200,86 @@ class ParameterHandler {
     context match {
       case NamedParameterContext(params) =>
         performSubstitution(sqlText, namedParams = params.map { case (name, expr) =>
-          (name, convertToSqlWithMemoization(expr))
+          (name, convertToSql(expr))
         })
 
       case PositionalParameterContext(params) =>
         performSubstitution(sqlText,
           positionalParams = params.map(expr =>
-            convertToSqlWithMemoization(expr)).toList)
+            convertToSql(expr)).toList)
 
       case HybridParameterContext(args, paramNames) =>
-        // Detect which parameter types are actually used in the query (single call).
-        val (hasPositional, hasNamed) = detectParameters(sqlText)
-
-        // Validate that the query doesn't mix parameter types.
-        if (hasPositional && hasNamed) {
-          throw QueryCompilationErrors
-            .invalidQueryMixedQueryParameters()
-        }
-
-        // Validate ALL_PARAMETERS_MUST_BE_NAMED: if query uses named parameters,
-        // all USING expressions must have names.
-        if (hasNamed && !hasPositional) {
-          // Single-pass collection operation to find unnamed expressions.
-          val unnamedExprs = paramNames.zip(args).collect {
-            case ("", arg) => convertToExpression(arg) // Empty strings are unnamed.
-          }.toList
-          if (unnamedExprs.nonEmpty) {
-            throw QueryCompilationErrors
-              .invalidQueryAllParametersMustBeNamed(unnamedExprs)
-          }
-        }
-
-        if (hasPositional && !hasNamed) {
-          // Query uses only positional parameters.
-          val positionalParams = args.map(convertToExpression).toSeq
-          performSubstitution(sqlText,
-            positionalParams = positionalParams.map(expr =>
-              convertToSqlWithMemoization(expr)).toList)
-        } else if (hasNamed && !hasPositional) {
-          // Query uses only named parameters - single-pass collection with view for efficiency.
-          val namedParams = paramNames.view.zip(args).collect {
-            case (name, value) if name.nonEmpty =>
-              name -> convertToExpression(value)
-          }.toMap
-          performSubstitution(sqlText,
-            namedParams = namedParams.map { case (name, expr) =>
-              (name, convertToSqlWithMemoization(expr))
-            })
-        } else {
-          // No parameters in query - return as-is.
-          performSubstitution(sqlText)
-        }
+        handleHybridParameters(sqlText, args.toSeq, paramNames.toSeq)
     }
   }
 
   /**
-   * Substitute parameters in SQL text with optional context.
-   * If no context is provided, returns the original SQL text.
+   * Handle hybrid parameter context which can contain both named and positional parameters.
+   * Validates parameter consistency and routes to appropriate substitution method.
    *
    * @param sqlText The SQL text containing parameter markers
-   * @param parameterContextOpt Optional parameter context
+   * @param args The parameter values
+   * @param paramNames The parameter names (empty string for positional parameters)
    * @return The SQL text with parameters substituted
    */
-  def substituteParametersIfNeeded(
+  private def handleHybridParameters(
       sqlText: String,
-      parameterContextOpt: Option[ParameterContext]): String = {
+      args: Seq[Any],
+      paramNames: Seq[String]): String = {
+    // Detect which parameter types are actually used in the query.
+    val (hasPositional, hasNamed) = detectParameters(sqlText)
 
-    parameterContextOpt match {
-      case Some(context) => substituteParameters(sqlText, context)
-      case None => sqlText
+    // Validate that the query doesn't mix parameter types.
+    if (hasPositional && hasNamed) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+
+    // Validate ALL_PARAMETERS_MUST_BE_NAMED: if query uses named parameters,
+    // all USING expressions must have names.
+    if (hasNamed && !hasPositional) {
+      validateAllParametersNamed(args, paramNames)
+    }
+
+    if (hasPositional && !hasNamed) {
+      // Query uses only positional parameters.
+      val positionalParams = args.map(convertToExpression)
+      performSubstitution(sqlText,
+        positionalParams = positionalParams.map(convertToSql).toList)
+    } else if (hasNamed && !hasPositional) {
+      // Query uses only named parameters.
+      val namedParams = paramNames.zip(args).collect {
+        case (name, value) if name.nonEmpty =>
+          name -> convertToExpression(value)
+      }.toMap
+      performSubstitution(sqlText,
+        namedParams = namedParams.map { case (name, expr) =>
+          (name, convertToSql(expr))
+        })
+    } else {
+      // No parameters in query - return as-is.
+      performSubstitution(sqlText)
+    }
+  }
+
+  /**
+   * Validate that all parameters have names when named parameters are used.
+   *
+   * @param args The parameter values
+   * @param paramNames The parameter names
+   * @throws QueryCompilationErrors.invalidQueryAllParametersMustBeNamed if unnamed parameters found
+   */
+  private def validateAllParametersNamed(args: Seq[Any], paramNames: Seq[String]): Unit = {
+    val unnamedExprs = paramNames.zip(args).collect {
+      case ("", arg) => convertToExpression(arg) // Empty strings are unnamed.
+    }.toList
+    if (unnamedExprs.nonEmpty) {
+      throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
     }
   }
 
   /**
    * Substitute parameters using named parameter map.
+   * This is a convenience method that wraps the main substituteParameters method.
    *
    * @param sqlText The SQL text containing parameter markers
    * @param paramMap Map of parameter names to expressions
@@ -286,17 +288,13 @@ class ParameterHandler {
   def substituteNamedParameters(
       sqlText: String,
       paramMap: Map[String, Expression]): String = {
-
     if (paramMap.isEmpty) return sqlText
-
-    val paramValues = paramMap.map { case (name, expr) =>
-      (name, convertToSqlWithMemoization(expr))
-    }
-    performSubstitution(sqlText, namedParams = paramValues)
+    substituteParameters(sqlText, NamedParameterContext(paramMap))
   }
 
   /**
    * Substitute parameters using positional parameter list.
+   * This is a convenience method that wraps the main substituteParameters method.
    *
    * @param sqlText The SQL text containing parameter markers
    * @param paramList Sequence of parameter expressions
@@ -305,12 +303,8 @@ class ParameterHandler {
   def substitutePositionalParameters(
       sqlText: String,
       paramList: Seq[Expression]): String = {
-
     if (paramList.isEmpty) return sqlText
-
-    val paramValues = paramList.map(expr =>
-      convertToSqlWithMemoization(expr)).toList
-    performSubstitution(sqlText, positionalParams = paramValues)
+    substituteParameters(sqlText, PositionalParameterContext(paramList))
   }
 
 
