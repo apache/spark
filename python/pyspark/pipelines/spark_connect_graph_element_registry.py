@@ -93,7 +93,9 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             partition_cols=partition_cols,
             format=format,
             source_code_location=source_code_location_to_proto(dataset.source_code_location),
-            schema_string=schema_string,
+            # Even though schema_string is not required, the generated Python code seems to
+            # erroneously think it is required.
+            schema_string=schema_string, # type: ignore[arg-type]
             schema_data_type=schema_data_type,
         )
         command = pb2.Command()

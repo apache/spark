@@ -83,15 +83,15 @@ message PipelineCommand {
     // Schema for the dataset. If unset, this will be inferred from incoming flows.
     oneof schema {
       spark.connect.DataType schema_data_type = 7;
-      string schema_string = 10;
+      string schema_string = 8;
     }
 
     // The output table format of the dataset. Only applies to dataset_type == TABLE and
     // dataset_type == MATERIALIZED_VIEW.
-    optional string format = 8;
+    optional string format = 9;
 
     // The location in source code that this dataset was defined.
-    optional SourceCodeLocation source_code_location = 9;
+    optional SourceCodeLocation source_code_location = 10;
   }
 
   // Request to define a flow targeting a dataset.

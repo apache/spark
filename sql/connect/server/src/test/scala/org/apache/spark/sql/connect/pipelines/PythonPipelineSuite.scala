@@ -36,7 +36,7 @@ import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
-import org.apache.spark.sql.types.{LongType, StringType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Test suite that starts a Spark Connect server and executes Spark Declarative Pipelines Python
@@ -711,9 +711,7 @@ class PythonPipelineSuite
 
     val table = graph.table(graphIdentifier("table_with_string_schema"))
     assert(table.specifiedSchema.isDefined)
-    assert(table.specifiedSchema.get.fieldNames === Array("id", "name"))
-    assert(table.specifiedSchema.get.fields(0).dataType === LongType)
-    assert(table.specifiedSchema.get.fields(1).dataType === StringType)
+    assert(table.specifiedSchema.get == StructType.fromDDL("id LONG, name STRING"))
   }
 
   test("table with StructType schema") {
@@ -736,9 +734,7 @@ class PythonPipelineSuite
 
     val table = graph.table(graphIdentifier("table_with_struct_schema"))
     assert(table.specifiedSchema.isDefined)
-    assert(table.specifiedSchema.get.fieldNames === Array("id", "name"))
-    assert(table.specifiedSchema.get.fields(0).dataType === LongType)
-    assert(table.specifiedSchema.get.fields(1).dataType === StringType)
+    assert(table.specifiedSchema.get == StructType.fromDDL("id LONG, name STRING"))
   }
 
   test("string schema validation error - schema mismatch") {
