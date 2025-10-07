@@ -281,7 +281,7 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       hadoopFsRelation@HadoopFsRelation(_, _, _, _, _: ParquetFileFormat, _), _)) =>
         rewritePlan(p, projectList, filters, relation, hadoopFsRelation)
       case p@PhysicalOperation(projectList, filters, relation: DataSourceV2Relation) =>
-        rewriteV2RelationPlan(p, projectList, filters, relation.output, relation)
+        rewriteV2RelationPlan(p, projectList, filters, relation)
     }
   }
 
@@ -351,11 +351,10 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       originalPlan: LogicalPlan,
       projectList: Seq[NamedExpression],
       filters: Seq[Expression],
-      relationOutput: Seq[AttributeReference],
-      relation: LogicalPlan): LogicalPlan = {
+      relation: DataSourceV2Relation): LogicalPlan = {
 
     // Collect variant fields from the relation output
-    val (variants, attributeMap) = collectAndRewriteVariants(relationOutput)
+    val (variants, attributeMap) = collectAndRewriteVariants(relation.output)
     if (attributeMap.isEmpty) return originalPlan
 
     // Collect requested fields from projections and filters
@@ -364,15 +363,11 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
 
     // Build attribute map with rewritten types
-    val finalAttributeMap = buildAttributeMap(relationOutput, variants)
+    val finalAttributeMap = buildAttributeMap(relation.output, variants)
 
     // Rewrite the relation with new output
-    val newRelation = relation match {
-      case r: DataSourceV2Relation =>
-        val newOutput = r.output.map(a => finalAttributeMap.getOrElse(a.exprId, a))
-        r.copy(output = newOutput.toIndexedSeq)
-      case _ => return originalPlan
-    }
+    val newOutput = relation.output.map(a => finalAttributeMap.getOrElse(a.exprId, a))
+    val newRelation = relation.copy(output = newOutput.toIndexedSeq)
 
     // Build filter and project with rewritten expressions
     buildFilterAndProject(newRelation, projectList, filters, variants, finalAttributeMap)
