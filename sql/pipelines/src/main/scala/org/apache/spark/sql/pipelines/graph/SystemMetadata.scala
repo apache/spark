@@ -51,7 +51,7 @@ case class FlowSystemMetadata(
       )
       logInfo(
         log"Flow ${MDC(LogKeys.FLOW_NAME, flowName)} using checkpoint " +
-          log"directory: ${MDC(LogKeys.CHECKPOINT_PATH, checkpointDir)}",
+          log"directory: ${MDC(LogKeys.CHECKPOINT_PATH, checkpointDir)}"
       )
       checkpointDir
     } else {
@@ -68,7 +68,7 @@ case class FlowSystemMetadata(
   }
 
   /**
-   * Same as [[latestCheckpointLocation()]] but returns [[None]] if the flow checkpoints directory
+   * Same as [[latestCheckpointLocation]] but returns None if the flow checkpoints directory
    * does not exist.
    */
   def latestCheckpointLocationOpt(): Option[String] = {

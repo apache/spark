@@ -154,21 +154,38 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_unpack_empty_pipeline_spec(self):
         empty_spec = PipelineSpec(
-            name="test_pipeline", storage="storage_path", catalog=None, database=None, configuration={}, libraries=[]
+            name="test_pipeline",
+            storage="storage_path",
+            catalog=None,
+            database=None,
+            configuration={},
+            libraries=[],
         )
-        self.assertEqual(unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path"}), empty_spec)
+        self.assertEqual(
+            unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path"}), empty_spec
+        )
 
     def test_unpack_pipeline_spec_bad_configuration(self):
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path", "configuration": "not_a_dict"})
+            unpack_pipeline_spec(
+                {"name": "test_pipeline", "storage": "storage_path", "configuration": "not_a_dict"}
+            )
         self.assertIn("should be a dict", str(context.exception))
 
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path", "configuration": {"key": {}}})
+            unpack_pipeline_spec(
+                {"name": "test_pipeline", "storage": "storage_path", "configuration": {"key": {}}}
+            )
         self.assertIn("key", str(context.exception))
 
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path", "configuration": {1: "something"}})
+            unpack_pipeline_spec(
+                {
+                    "name": "test_pipeline",
+                    "storage": "storage_path",
+                    "configuration": {1: "something"},
+                }
+            )
         self.assertIn("int", str(context.exception))
 
     def test_find_pipeline_spec_in_current_directory(self):

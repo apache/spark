@@ -152,7 +152,15 @@ def load_pipeline_spec(spec_path: Path) -> PipelineSpec:
 
 
 def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
-    ALLOWED_FIELDS = {"name", "storage", "catalog", "database", "schema", "configuration", "libraries"}
+    ALLOWED_FIELDS = {
+        "name",
+        "storage",
+        "catalog",
+        "database",
+        "schema",
+        "configuration",
+        "libraries",
+    }
     REQUIRED_FIELDS = ["name", "storage"]
     for key in spec_data.keys():
         if key not in ALLOWED_FIELDS:

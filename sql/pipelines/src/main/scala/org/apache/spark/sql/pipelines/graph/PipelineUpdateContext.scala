@@ -34,7 +34,7 @@ trait PipelineUpdateContext {
   def resetCheckpointFlows: FlowFilter
 
   /**
-   * The root storage location for pipeline metadata, including checkpoints for some kinds of flows.
+   * The root storage location for pipeline metadata, including checkpoints for streaming flows.
    */
   def storageRoot: String
 

@@ -72,7 +72,7 @@ def start_run(
     full_refresh_all: bool,
     refresh: Optional[Sequence[str]],
     dry: bool,
-    storage: str
+    storage: str,
 ) -> Iterator[Dict[str, Any]]:
     """Start a run of the dataflow graph in the Spark Connect server.
 
@@ -80,7 +80,7 @@ def start_run(
     :param full_refresh: List of datasets to reset and recompute.
     :param full_refresh_all: Perform a full graph reset and recompute.
     :param refresh: List of datasets to update.
-    :param dry: If true, the run will not actually execute any flows, but will only validate the graph.
+    :param dry: If true, the run will not actually execute any flows, but only validate the graph.
     :param storage: The storage location to store metadata such as streaming checkpoints.
     """
     inner_command = pb2.PipelineCommand.StartRun(

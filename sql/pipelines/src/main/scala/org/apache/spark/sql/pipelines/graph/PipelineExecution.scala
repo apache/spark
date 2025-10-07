@@ -18,7 +18,13 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.pipelines.common.RunState
-import org.apache.spark.sql.pipelines.logging.{ConstructPipelineEvent, EventLevel, PipelineEvent, PipelineEventOrigin, RunProgress}
+import org.apache.spark.sql.pipelines.logging.{
+  ConstructPipelineEvent,
+  EventLevel,
+  PipelineEvent,
+  PipelineEventOrigin,
+  RunProgress
+}
 
 /**
  * Executes a [[DataflowGraph]] by resolving the graph, materializing datasets, and running the
@@ -163,5 +169,4 @@ class PipelineExecution(context: PipelineUpdateContext) {
       )
       .stop()
   }
-
 }

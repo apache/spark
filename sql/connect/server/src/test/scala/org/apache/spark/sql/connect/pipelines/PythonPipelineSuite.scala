@@ -129,7 +129,7 @@ class PythonPipelineSuite
         |    return df.select("name")
         |""".stripMargin)
 
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
 
     assertFlowProgressEvent(
@@ -174,7 +174,7 @@ class PythonPipelineSuite
         |   return spark.readStream.table('mv2')
         |""".stripMargin)
 
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 

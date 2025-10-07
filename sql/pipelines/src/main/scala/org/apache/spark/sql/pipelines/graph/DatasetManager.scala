@@ -34,12 +34,11 @@ import org.apache.spark.sql.connector.catalog.{
   TableInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
-import org.apache.spark.sql.connector.expressions.{Expressions, Transform}
+import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
 import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
-import org.apache.spark.sql.types.StructType
 
 /**
  * `DatasetManager` is responsible for materializing tables in the catalog based on the given
@@ -262,10 +261,11 @@ object DatasetManager extends Logging {
 
     val identifier =
       Identifier.of(Array(table.identifier.database.get), table.identifier.identifier)
-    val outputSchema = tableOutputSchema(table, resolvedDataflowGraph)
-
+    val outputSchema = table.specifiedSchema.getOrElse(
+      resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
+    )
     val mergedProperties = resolveTableProperties(table, identifier)
-    val partitioning = tablePartitioning(table)
+    val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
 
     val existingTableOpt = if (catalog.tableExists(identifier)) {
       Some(catalog.loadTable(identifier))
@@ -287,7 +287,7 @@ object DatasetManager extends Logging {
       }
     }
 
-    // Wipe the data if full refresh or if it is a materialized view
+    // Wipe the data if we need to
     if ((isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined) {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
@@ -401,25 +401,4 @@ object DatasetManager extends Logging {
     val fullRefreshTableIdentsSet = fullRefreshTablesSet.map(_.identifier)
     (allRefreshTables, refreshTableIdentsSet, fullRefreshTableIdentsSet)
   }
-
-  def getTableCatalogForTable(
-      spark: SparkSession,
-      tableIdentifier: TableIdentifier): TableCatalog = {
-    val catalogManager = spark.sessionState.catalogManager
-    (tableIdentifier.catalog match {
-      case Some(catalogName) =>
-        catalogManager.catalog(catalogName)
-      case None =>
-        catalogManager.currentCatalog
-    }).asInstanceOf[TableCatalog]
-  }
-
-  private def tablePartitioning(table: Table): Seq[Transform] = {
-    table.partitionCols.toSeq.flatten.map(Expressions.identity)
-  }
-
-  private def tableOutputSchema(table: Table, resolvedDataflowGraph: DataflowGraph): StructType =
-    table.specifiedSchema.getOrElse(
-      resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
-    )
 }
