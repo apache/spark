@@ -3910,10 +3910,10 @@ class DataSourceV2SQLSuiteV1Filter
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"""CREATE table $t (
-           c1 STRING,
+           c1 timestamp,
            current_timestamp TIMESTAMP DEFAULT c1)""")
         },
-        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`current_timestamp`",
