@@ -37,10 +37,10 @@ case class Origin(
     objectName: Option[String] = None,
     stackTrace: Option[Array[StackTraceElement]] = None,
     pysparkErrorContext: Option[(String, String)] = None,
-    parameterSubstitutionCallback: Option[Any] = None) { // Store callback to avoid dependencies
+    parameterSubstitutionCallback: Option[Any] = None) { // Store callback to avoid dependencies.
 
-  // Override equals to exclude parameterSubstitutionCallback from comparison
-  // The callback is an implementation detail and shouldn't affect origin equality
+  // Override equals to exclude parameterSubstitutionCallback from comparison.
+  // The callback is an implementation detail and shouldn't affect origin equality.
   override def equals(obj: Any): Boolean = obj match {
     case other: Origin =>
       line == other.line &&
@@ -52,11 +52,11 @@ case class Origin(
       objectName == other.objectName &&
       stackTraceEquals(stackTrace, other.stackTrace) &&
       pysparkErrorContext == other.pysparkErrorContext
-      // Note: parameterSubstitutionCallback is intentionally excluded
+      // Note: parameterSubstitutionCallback is intentionally excluded.
     case _ => false
   }
 
-  // Helper method to compare stack traces
+  // Helper method to compare stack traces.
   private def stackTraceEquals(st1: Option[Array[StackTraceElement]],
                               st2: Option[Array[StackTraceElement]]): Boolean = {
     (st1, st2) match {
@@ -66,7 +66,7 @@ case class Origin(
     }
   }
 
-  // Override hashCode to be consistent with equals
+  // Override hashCode to be consistent with equals.
   override def hashCode(): Int = {
     val state = Seq(line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName,
       stackTrace.map(_.toSeq), pysparkErrorContext)

@@ -35,10 +35,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * - Uses CompoundOrSingleStatement parsing for all SQL constructs
  * - Consistent error handling and validation
  * - Support for complex data types (arrays, maps, nested structures)
- * - Thread-safe operations with parser-aware error context
+ * - Thread-safe operations with position-aware error context
  *
- * The handler integrates with the parser through callback mechanisms to ensure
- * error positions are correctly mapped back to the original SQL text.
+ * The handler integrates with the parser through callback mechanisms stored in
+ * CurrentOrigin to ensure error positions are correctly mapped back to the original SQL text.
  *
  * @example Basic usage:
  * {{{
@@ -60,10 +60,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  */
 class ParameterHandler {
 
-  // Compiled regex for efficient parameter marker detection
+  // Compiled regex pattern for efficient parameter marker detection.
   private val parameterMarkerPattern = java.util.regex.Pattern.compile("[?:]")
 
-  // Memoization cache for LiteralToSqlConverter to avoid repeated conversions
+  // Memoization cache for LiteralToSqlConverter to avoid repeated conversions.
   private val conversionCache = scala.collection.mutable.Map[Expression, String]()
 
 
@@ -80,7 +80,7 @@ class ParameterHandler {
       namedParams: Map[String, String] = Map.empty,
       positionalParams: List[String] = List.empty): String = {
 
-    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
+    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely.
     if (!parameterMarkerPattern.matcher(sqlText).find()) {
       val identityMapper = PositionMapper.identity(sqlText)
       setupSubstitutionContext(sqlText, sqlText, identityMapper, isIdentity = true)
@@ -96,12 +96,13 @@ class ParameterHandler {
   }
 
   /**
-   * Set up substitution context for error position mapping.
-   * Creates a callback function and stores it in the current Origin for later retrieval.
+   * Set up position mapping context for error reporting.
+   * Creates a callback function and stores it in CurrentOrigin for position translation
+   * between original and substituted SQL text.
    *
-   * @param originalSql The original SQL text
-   * @param substitutedSql The substituted SQL text
-   * @param positionMapper The position mapper for error translation
+   * @param originalSql The original SQL text before parameter substitution
+   * @param substitutedSql The SQL text after parameter substitution
+   * @param positionMapper The position mapper for translating error positions
    * @param isIdentity Whether this is an identity mapping (no substitution occurred)
    */
   private[sql] def setupSubstitutionContext(
@@ -110,39 +111,38 @@ class ParameterHandler {
       positionMapper: PositionMapper,
       isIdentity: Boolean): Unit = {
 
-    // Create callback function for position mapping
-    // The positionMapper is captured in the closure, eliminating the need for caching
+    // Create callback function for position mapping.
+    // The positionMapper is captured in the closure for efficient position translation.
     val callback: (org.antlr.v4.runtime.Token, org.antlr.v4.runtime.Token, String,
         Option[String], Option[String]) => Option[org.apache.spark.sql.catalyst.trees.Origin] =
       if (isIdentity) {
-        // Identity mapping - return None to use default logic
+        // Identity mapping - return None to use default position logic.
         (_, _, _, _, _) => None
       } else {
-        // Actual substitution - map positions back to original SQL
-        // The positionMapper is captured from the method parameter
+        // Parameter substitution occurred - map positions back to original SQL.
         (startToken, stopToken, _, objectType, objectName) => {
           val startOpt = Option(startToken)
           val stopOpt = Option(stopToken)
 
-          // Map positions from substituted SQL back to original SQL
+          // Map positions from substituted SQL back to original SQL.
           val originalStartIndex = startOpt.flatMap(token =>
             Option(positionMapper.mapToOriginal(token.getStartIndex)))
           val originalStopIndex = stopOpt.flatMap(token =>
             Option(positionMapper.mapToOriginal(token.getStopIndex)))
 
-          // Create origin with original SQL and mapped positions
+          // Create origin with original SQL text and mapped positions.
           Some(org.apache.spark.sql.catalyst.trees.Origin(
             line = startOpt.map(_.getLine),
             startPosition = startOpt.map(_.getCharPositionInLine),
             startIndex = originalStartIndex,
             stopIndex = originalStopIndex,
-            sqlText = Some(originalSql), // Use original SQL
+            sqlText = Some(originalSql), // Use original SQL text for error reporting
             objectType = objectType,
             objectName = objectName))
         }
       }
 
-    // Update CurrentOrigin to include the callback
+    // Store the callback in CurrentOrigin for position mapping during error reporting.
     val currentOrigin = org.apache.spark.sql.catalyst.trees.CurrentOrigin.get
     val updatedOrigin = currentOrigin.copy(parameterSubstitutionCallback = Some(callback))
     org.apache.spark.sql.catalyst.trees.CurrentOrigin.set(updatedOrigin)
@@ -157,21 +157,21 @@ class ParameterHandler {
    */
   private def convertToExpression(value: Any): Expression = value match {
     case literal: Literal =>
-      // Already a Literal from ResolveExecuteImmediate - use it directly
+      // Already a Literal from ResolveExecuteImmediate - use it directly.
       literal
     case expr: Expression =>
-      // Expression from Column object - use it directly
+      // Expression from Column object - use it directly.
       expr
     case null =>
-      // Handle null values explicitly
+      // Handle null values explicitly.
       Literal(null)
     case other =>
-      // Raw value - create new Literal with proper error handling
+      // Raw value - create new Literal with proper error handling.
       try {
         Literal(other)
       } catch {
         case _: RuntimeException =>
-          // Fallback for unsupported types
+          // Fallback for unsupported types.
           throw new IllegalArgumentException(
             s"Cannot convert value of type ${other.getClass.getSimpleName} to Expression: $other")
       }
@@ -213,21 +213,21 @@ class ParameterHandler {
             convertToSqlWithMemoization(expr)).toList)
 
       case HybridParameterContext(args, paramNames) =>
-        // Detect which parameter types are actually used in the query (single call)
+        // Detect which parameter types are actually used in the query (single call).
         val (hasPositional, hasNamed) = detectParameters(sqlText)
 
-        // Validate that the query doesn't mix parameter types
+        // Validate that the query doesn't mix parameter types.
         if (hasPositional && hasNamed) {
           throw QueryCompilationErrors
             .invalidQueryMixedQueryParameters()
         }
 
         // Validate ALL_PARAMETERS_MUST_BE_NAMED: if query uses named parameters,
-        // all USING expressions must have names
+        // all USING expressions must have names.
         if (hasNamed && !hasPositional) {
-          // Single-pass collection operation to find unnamed expressions
+          // Single-pass collection operation to find unnamed expressions.
           val unnamedExprs = paramNames.zip(args).collect {
-            case ("", arg) => convertToExpression(arg) // empty strings are unnamed
+            case ("", arg) => convertToExpression(arg) // Empty strings are unnamed.
           }.toList
           if (unnamedExprs.nonEmpty) {
             throw QueryCompilationErrors
@@ -236,13 +236,13 @@ class ParameterHandler {
         }
 
         if (hasPositional && !hasNamed) {
-          // Query uses only positional parameters
+          // Query uses only positional parameters.
           val positionalParams = args.map(convertToExpression).toSeq
           performSubstitution(sqlText,
             positionalParams = positionalParams.map(expr =>
               convertToSqlWithMemoization(expr)).toList)
         } else if (hasNamed && !hasPositional) {
-          // Query uses only named parameters - single-pass collection with view for efficiency
+          // Query uses only named parameters - single-pass collection with view for efficiency.
           val namedParams = paramNames.view.zip(args).collect {
             case (name, value) if name.nonEmpty =>
               name -> convertToExpression(value)
@@ -252,7 +252,7 @@ class ParameterHandler {
               (name, convertToSqlWithMemoization(expr))
             })
         } else {
-          // No parameters in query - return as-is
+          // No parameters in query - return as-is.
           performSubstitution(sqlText)
         }
     }
@@ -325,7 +325,7 @@ class ParameterHandler {
   def detectParameters(
       sqlText: String): (Boolean, Boolean) = {
 
-    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
+    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely.
     if (!parameterMarkerPattern.matcher(sqlText).find()) {
       return (false, false)
     }
@@ -335,7 +335,7 @@ class ParameterHandler {
       case Success(result) => result
       case Failure(_: ParseException) => (false, false)
       case Failure(ex) =>
-        // Re-throw unexpected exceptions for better debugging
+        // Re-throw unexpected exceptions for better debugging.
         throw new RuntimeException(
           s"Unexpected error during parameter detection: ${ex.getMessage}", ex)
     }

@@ -64,63 +64,61 @@ class SparkSqlParser extends AbstractSqlParser {
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     val wasTopLevel = isTopLevelParse.get()
 
-    // IMPORTANT: Always clear any existing callback at the start of parsing to prevent
-    // contamination
+    // Clear any stale callback from previous parsing operations to prevent contamination.
     if (wasTopLevel) {
       CurrentOrigin.set(CurrentOrigin.get.copy(parameterSubstitutionCallback = None))
     }
 
-    // Step 1: Check if parameter substitution should occur
+    // Step 1: Check if parameter substitution should occur.
     val (paramSubstituted, substitutionOccurred, hasParameters) =
       if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-        // Legacy mode: skip parameter substitution but still detect parameters for context mapping
+        // Legacy mode: skip parameter substitution but still detect parameters for context mapping.
         ThreadLocalParameterContext.get() match {
           case Some(context) =>
-            // We have parameters but skip substitution in legacy mode
-            // Callback will be set up in the origin handling below
+            // Parameters detected but substitution skipped in legacy mode.
+            // Position mapping callback will be set up below.
             (command, false, true)
           case None =>
-            (command, false, false) // No parameters
+            (command, false, false) // No parameters detected.
         }
       } else {
-        // Modern mode: check if we have a parameterized query context
+        // Modern mode: perform parameter substitution if parameters are present.
         ThreadLocalParameterContext.get() match {
           case Some(context) =>
             val substituted = substituteParametersIfNeeded(command, context)
-            (substituted, substituted != command, true) // Track if substitution actually occurred
+            (substituted, substituted != command, true) // Track if substitution occurred.
           case None =>
-            (command, false, false)  // No parameters to substitute
+            (command, false, false)  // No parameters to substitute.
         }
       }
 
-    // Step 2: Apply existing variable substitution
+    // Step 2: Apply existing variable substitution.
     val variableSubstituted = substitutor.substitute(paramSubstituted)
 
-    // Step 3: Set special origin if parameter substitution occurred OR if we have parameters
-    // in legacy mode
+    // Step 3: Set up origin with original SQL text for parameter-aware error reporting.
     val currentOrigin = CurrentOrigin.get
     val originToUse = if ((substitutionOccurred || hasParameters) && wasTopLevel) {
-      // Parameter substitution occurred or we have parameters in legacy mode
-      // Set original SQL text for position mapping
-      // IMPORTANT: Preserve any callback set by parameter substitution
+      // Parameter substitution occurred or parameters detected in legacy mode.
+      // Set original SQL text for accurate error position mapping.
+      // IMPORTANT: Preserve any callback set by parameter substitution.
       val baseOrigin = currentOrigin.copy(
-        sqlText = Some(command), // Use original SQL text, not substituted
+        sqlText = Some(command), // Use original SQL text, not substituted.
         startIndex = Some(0),
         stopIndex = Some(command.length - 1)
-        // parameterSubstitutionCallback is preserved by copy()
+        // parameterSubstitutionCallback is preserved by copy().
       )
 
-      // If we have parameters in legacy mode, ensure callback is set
+      // Set up identity callback for legacy mode parameter error reporting.
       if (hasParameters && !substitutionOccurred) {
-        // Legacy mode - set up identity callback for proper error context
+        // Legacy mode - set up identity callback for proper error context.
         val callback: (Token, Token, String, Option[String], Option[String]) => Option[Origin] =
-          (_, _, _, _, _) => None // Identity mapping - use default logic
+          (_, _, _, _, _) => None // Identity mapping - use default position logic.
         baseOrigin.copy(parameterSubstitutionCallback = Some(callback))
       } else {
         baseOrigin
       }
     } else {
-      // No substitution or nested call - use existing origin unchanged
+      // No substitution or nested call - use existing origin unchanged.
       currentOrigin
     }
 
@@ -133,15 +131,14 @@ class SparkSqlParser extends AbstractSqlParser {
       command: String,
       context: ParameterContext): String = {
 
-    // Check legacy config - if parameter substitution limited to constants only, return original
+    // Check legacy configuration - if true, skip parameter substitution during parsing.
     if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-      // In legacy mode, we don't substitute but we still need to set up clean callback context
-      // to prevent contamination from previous tests
+      // In legacy mode, set up identity callback to ensure clean error context.
       parameterHandler.setupSubstitutionContext(
         command,
-        command, // original = substituted in legacy mode
-        PositionMapper.identity(command), // identity mapper since no substitution
-        true // isIdentity = true
+        command, // Original = substituted in legacy mode.
+        PositionMapper.identity(command), // Identity mapper since no substitution.
+        true // isIdentity = true.
       )
       command
     } else {
