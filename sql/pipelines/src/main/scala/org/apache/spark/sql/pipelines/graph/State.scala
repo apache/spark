@@ -73,8 +73,7 @@ object State extends Logging {
   }
 
   /**
-   * Resets the checkpoint for the given flow by creating the next consecutive directory. Also
-   * clears out batch append state if it exists.
+   * Resets the checkpoint for the given flow by creating the next consecutive directory.
    */
   private def reset(flow: ResolvedFlow, env: PipelineUpdateContext, graph: DataflowGraph): Unit = {
     logInfo(log"Clearing out state for flow ${MDC(LogKeys.FLOW_NAME, flow.displayName)}")
