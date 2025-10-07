@@ -54,7 +54,7 @@ class TransformWithStateInPySparkParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.pandas.test_parity_transform_with_state_pyspark import *  # noqa: F401,E501
+    from pyspark.sql.tests.connect.streaming.test_parity_transform_with_state_pyspark import *  # noqa: F401,E501
 
     try:
         import xmlrunner

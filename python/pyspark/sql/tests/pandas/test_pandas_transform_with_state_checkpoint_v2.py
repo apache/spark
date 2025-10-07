@@ -20,7 +20,7 @@ import unittest
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
     TransformWithStateInPandasTestsMixin,
-    TransformWithStateInPySparkTestsMixin
+    TransformWithStateInPySparkTestsMixin,
 )
 from pyspark import SparkConf
 
@@ -39,6 +39,7 @@ class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateIn
         cfg = super().conf()
         cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
         return cfg
+
 
 class TransformWithStateInPandasWithCheckpointV2Tests(
     TransformWithStateInPandasWithCheckpointV2TestsMixin, ReusedSQLTestCase
