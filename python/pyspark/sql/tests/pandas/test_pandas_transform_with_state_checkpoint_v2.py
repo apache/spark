@@ -22,7 +22,6 @@ from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
     TransformWithStateInPandasTestsMixin,
     TransformWithStateInPySparkTestsMixin,
 )
-from pyspark import SparkConf
 
 
 class TransformWithStateInPandasWithCheckpointV2TestsMixin(TransformWithStateInPandasTestsMixin):
@@ -54,7 +53,7 @@ class TransformWithStateInPySparkWithCheckpointV2Tests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_transform_with_state_checkpoint_v2 import *  # noqa: F401
+    from pyspark.sql.tests.pandas.test_pandas_transform_with_state_checkpoint_v2 import *  # noqa: F401,E501
 
     try:
         import xmlrunner
