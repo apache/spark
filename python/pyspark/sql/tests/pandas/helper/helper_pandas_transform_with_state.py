@@ -1851,6 +1851,8 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
 # where InnerNestedClass is a StructType with:
 # intValue: IntegerType
 # doubleValue: DoubleType
+# arrayValue: ArrayType(StringType)
+# mapValue: MapType(StringType, StringType)
 class PandasCompositeOutputProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         # Simple value state to track counts
@@ -1881,15 +1883,15 @@ class PandasCompositeOutputProcessor(StatefulProcessor):
         map_of_primitive = {f"key{i}": f"value{i}" for i in range(count)}
 
         # listOfComposite: ArrayType(StructType)
-        # Each dict has intValue (IntegerType) and doubleValue (DoubleType)
+        # Each dict has intValue (IntegerType), doubleValue (DoubleType), arrayValue (ArrayType), and mapValue (MapType)
         list_of_composite = [
-            {"intValue": i, "doubleValue": float(i * 1.5)}
+            {"intValue": i, "doubleValue": float(i * 1.5), "arrayValue": [f"elem_{i}_{j}" for j in range(i+1)], "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i+1)}}
             for i in range(count)
         ]
 
         # mapOfComposite: MapType(StringType, StructType)
         map_of_composite = {
-            f"nested_key{i}": {"intValue": i * 10, "doubleValue": float(i * 2.5)}
+            f"nested_key{i}": {"intValue": i * 10, "doubleValue": float(i * 2.5), "arrayValue": [f"elem_{i}_{j}" for j in range(i+1)], "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i+1)}}
             for i in range(count)
         }
 
@@ -1915,6 +1917,8 @@ class PandasCompositeOutputProcessor(StatefulProcessor):
 # where InnerNestedClass is a StructType with:
 # intValue: IntegerType
 # doubleValue: DoubleType
+# arrayValue: ArrayType(StringType)
+# mapValue: MapType(StringType, StringType)
 class RowCompositeOutputProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         # Simple value state to track counts
@@ -1945,15 +1949,15 @@ class RowCompositeOutputProcessor(StatefulProcessor):
         map_of_primitive = {f"key{i}": f"value{i}" for i in range(count)}
 
         # listOfComposite: ArrayType(StructType)
-        # Each Row has intValue (IntegerType) and doubleValue (DoubleType)
+        # Each Row has intValue (IntegerType), doubleValue (DoubleType), arrayValue (ArrayType), and mapValue (MapType)
         list_of_composite = [
-            Row(intValue=i, doubleValue=float(i * 1.5))
+            Row(intValue=i, doubleValue=float(i * 1.5), arrayValue=[f"elem_{i}_{j}" for j in range(i+1)], mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i+1)})
             for i in range(count)
         ]
 
         # mapOfComposite: MapType(StringType, StructType)
         map_of_composite = {
-            f"nested_key{i}": Row(intValue=i * 10, doubleValue=float(i * 2.5))
+            f"nested_key{i}": Row(intValue=i * 10, doubleValue=float(i * 2.5), arrayValue=[f"elem_{i}_{j}" for j in range(i+1)], mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i+1)})
             for i in range(count)
         }
 
