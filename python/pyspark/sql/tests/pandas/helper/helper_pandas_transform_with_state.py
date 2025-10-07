@@ -1885,26 +1885,39 @@ class PandasCompositeOutputProcessor(StatefulProcessor):
         # listOfComposite: ArrayType(StructType)
         # Each dict has intValue (IntegerType), doubleValue (DoubleType), arrayValue (ArrayType), and mapValue (MapType)
         list_of_composite = [
-            {"intValue": i, "doubleValue": float(i * 1.5), "arrayValue": [f"elem_{i}_{j}" for j in range(i+1)], "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i+1)}}
+            {
+                "intValue": i,
+                "doubleValue": float(i * 1.5),
+                "arrayValue": [f"elem_{i}_{j}" for j in range(i + 1)],
+                "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            }
             for i in range(count)
         ]
 
         # mapOfComposite: MapType(StringType, StructType)
         map_of_composite = {
-            f"nested_key{i}": {"intValue": i * 10, "doubleValue": float(i * 2.5), "arrayValue": [f"elem_{i}_{j}" for j in range(i+1)], "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i+1)}}
+            f"nested_key{i}": {
+                "intValue": i * 10,
+                "doubleValue": float(i * 2.5),
+                "arrayValue": [f"elem_{i}_{j}" for j in range(i + 1)],
+                "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            }
             for i in range(count)
         }
 
-        yield pd.DataFrame({
-            "primitiveValue": [primitive_value],
-            "listOfPrimitive": [list_of_primitive],
-            "mapOfPrimitive": [map_of_primitive],
-            "listOfComposite": [list_of_composite],
-            "mapOfComposite": [map_of_composite]
-        })
+        yield pd.DataFrame(
+            {
+                "primitiveValue": [primitive_value],
+                "listOfPrimitive": [list_of_primitive],
+                "mapOfPrimitive": [map_of_primitive],
+                "listOfComposite": [list_of_composite],
+                "mapOfComposite": [map_of_composite],
+            }
+        )
 
     def close(self) -> None:
         pass
+
 
 # A Row stateful processor with a simple ValueState computation and composite output schema:
 #
@@ -1951,13 +1964,23 @@ class RowCompositeOutputProcessor(StatefulProcessor):
         # listOfComposite: ArrayType(StructType)
         # Each Row has intValue (IntegerType), doubleValue (DoubleType), arrayValue (ArrayType), and mapValue (MapType)
         list_of_composite = [
-            Row(intValue=i, doubleValue=float(i * 1.5), arrayValue=[f"elem_{i}_{j}" for j in range(i+1)], mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i+1)})
+            Row(
+                intValue=i,
+                doubleValue=float(i * 1.5),
+                arrayValue=[f"elem_{i}_{j}" for j in range(i + 1)],
+                mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            )
             for i in range(count)
         ]
 
         # mapOfComposite: MapType(StringType, StructType)
         map_of_composite = {
-            f"nested_key{i}": Row(intValue=i * 10, doubleValue=float(i * 2.5), arrayValue=[f"elem_{i}_{j}" for j in range(i+1)], mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i+1)})
+            f"nested_key{i}": Row(
+                intValue=i * 10,
+                doubleValue=float(i * 2.5),
+                arrayValue=[f"elem_{i}_{j}" for j in range(i + 1)],
+                mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            )
             for i in range(count)
         }
 
@@ -1966,7 +1989,7 @@ class RowCompositeOutputProcessor(StatefulProcessor):
             listOfPrimitive=list_of_primitive,
             mapOfPrimitive=map_of_primitive,
             listOfComposite=list_of_composite,
-            mapOfComposite=map_of_composite
+            mapOfComposite=map_of_composite,
         )
 
     def close(self) -> None:
