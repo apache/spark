@@ -181,7 +181,8 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
           spark.sql("CREATE TABLE test (col VARCHAR(:len))", Map("len" -> "50"))
         },
         condition = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "':'", "hint" -> "")
+        parameters = Map("error" -> "':'", "hint" -> ""),
+        queryContext = Array(ExpectedContext("CREATE TABLE test (col VARCHAR(:len))", 0, 36))
       )
 
       // Test that parameter markers in CHAR type specifications cause parse errors

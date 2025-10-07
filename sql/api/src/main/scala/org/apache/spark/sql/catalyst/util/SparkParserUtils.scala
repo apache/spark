@@ -243,12 +243,18 @@ trait SparkParserUtils {
    * If parameter substitution occurred, this method maps positions from the substituted SQL back
    * to the original SQL and uses the original SQL text in the origin.
    *
-   * @param startToken The start token from the substituted SQL
-   * @param stopToken The stop token from the substituted SQL
-   * @param substitutedSql The SQL text after substitution
-   * @param objectType The object type for the origin
-   * @param objectName The object name for the origin
-   * @return Origin with positions and text adjusted for parameter substitution
+   * @param startToken
+   *   The start token from the substituted SQL
+   * @param stopToken
+   *   The stop token from the substituted SQL
+   * @param substitutedSql
+   *   The SQL text after substitution
+   * @param objectType
+   *   The object type for the origin
+   * @param objectName
+   *   The object name for the origin
+   * @return
+   *   Origin with positions and text adjusted for parameter substitution
    */
   private def adjustOriginForParameterSubstitution(
       startToken: Token,
