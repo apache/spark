@@ -111,12 +111,7 @@ class ParameterHandler {
       positionMapper: PositionMapper,
       isIdentity: Boolean): Unit = {
 
-    // Set substitution context for parser awareness
-    val substitutionInfo = ParameterSubstitutionContext.SubstitutionInfo(
-      originalSql = originalSql,
-      substitutedSql = substitutedSql,
-      positionMapper = positionMapper)
-    ParameterSubstitutionContext.setSubstitutionInfo(substitutionInfo)
+    // Note: substitution info is passed through callback closure variables
 
     // Set parser callback for origin adjustment
     val callback: SparkParserUtils.ParameterSubstitutionCallback =
