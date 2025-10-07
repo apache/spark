@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.util
+import java.util.{Arrays => JArrays, List => JList}
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
@@ -46,7 +46,8 @@ object SparkPipelines extends Logging {
       pipelinesCliFile: String,
       args: Array[String]): Seq[String] = {
     val (sparkSubmitArgs, pipelinesArgs) = splitArgs(args)
-    (sparkSubmitArgs ++ Seq(pipelinesCliFile) ++ pipelinesArgs)
+    logInfo(s"Running $pipelinesCliFile with arguments: ${pipelinesArgs.mkString(" ")}")
+    sparkSubmitArgs ++ Seq(pipelinesCliFile) ++ pipelinesArgs
   }
 
   /**
@@ -59,7 +60,7 @@ object SparkPipelines extends Logging {
     var remote = "local"
 
     new SparkSubmitArgumentsParser() {
-      parse(util.Arrays.asList(args: _*))
+      parse(JArrays.asList(args: _*))
 
       override protected def handle(opt: String, value: String): Boolean = {
         if (opt == "--remote") {
@@ -91,7 +92,7 @@ object SparkPipelines extends Logging {
         true
       }
 
-      override protected def handleExtraArgs(extra: util.List[String]): Unit = {
+      override protected def handleExtraArgs(extra: JList[String]): Unit = {
         pipelinesArgs.appendAll(extra.asScala)
       }
 

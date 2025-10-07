@@ -205,7 +205,9 @@ def validate_str_dict(d: Mapping[str, str], field_name: str) -> Mapping[str, str
 
 
 def register_definitions(
-    spec_path: Path, registry: GraphElementRegistry, spec: PipelineSpec
+    spec_path: Path,
+    registry: GraphElementRegistry,
+    spec: PipelineSpec,
 ) -> None:
     """Register the graph element definitions in the pipeline spec with the given registry.
     - Looks for Python files matching the glob patterns in the spec and imports them.
@@ -310,12 +312,13 @@ def run(
         default_database=spec.database,
         sql_conf=spec.configuration,
     )
+    log_with_curr_timestamp(f"Dataflow graph created (ID: {dataflow_graph_id}).")
 
     log_with_curr_timestamp("Registering graph elements...")
     registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
     register_definitions(spec_path, registry, spec)
 
-    log_with_curr_timestamp("Starting run...")
+    log_with_curr_timestamp(f"Starting run (dry={dry}, full_refresh={full_refresh}, full_refresh_all={full_refresh_all}, refresh={refresh})...")
     result_iter = start_run(
         spark,
         dataflow_graph_id,
@@ -335,8 +338,9 @@ def parse_table_list(value: str) -> List[str]:
     return [table.strip() for table in value.split(",") if table.strip()]
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Pipeline CLI")
+def main() -> None:
+    """The entry point of spark-pipelines CLI."""
+    parser = argparse.ArgumentParser(description="Pipelines CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # "run" subcommand
@@ -354,7 +358,9 @@ if __name__ == "__main__":
         default=[],
     )
     run_parser.add_argument(
-        "--full-refresh-all", action="store_true", help="Perform a full graph reset and recompute."
+        "--full-refresh-all",
+        action="store_true",
+        help="Perform a full graph reset and recompute.",
     )
     run_parser.add_argument(
         "--refresh",
@@ -374,7 +380,7 @@ if __name__ == "__main__":
     # "init" subcommand
     init_parser = subparsers.add_parser(
         "init",
-        help="Generates a simple pipeline project, including a spec file and example definitions.",
+        help="Generate a sample pipeline project, including a spec file and example definitions.",
     )
     init_parser.add_argument(
         "--name",
@@ -416,3 +422,7 @@ if __name__ == "__main__":
             )
     elif args.command == "init":
         init(args.name)
+
+
+if __name__ == "__main__":
+    main()
