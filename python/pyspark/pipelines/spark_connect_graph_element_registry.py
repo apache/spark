@@ -30,6 +30,8 @@ from pyspark.pipelines.dataset import (
 from pyspark.pipelines.flow import Flow
 from pyspark.pipelines.graph_element_registry import GraphElementRegistry
 from pyspark.pipelines.source_code_location import SourceCodeLocation
+from pyspark.sql.connect.types import pyspark_types_to_proto_types
+from pyspark.sql.types import StructType
 from typing import Any, cast
 import pyspark.sql.connect.proto as pb2
 
@@ -47,7 +49,17 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         if isinstance(dataset, Table):
             table_properties = dataset.table_properties
             partition_cols = dataset.partition_cols
-            schema = None  # TODO
+
+            if isinstance(dataset.schema, str):
+                schema_string = dataset.schema
+                schema_data_type = None
+            elif isinstance(dataset.schema, StructType):
+                schema_string = None
+                schema_data_type = pyspark_types_to_proto_types(dataset.schema)
+            else:
+                schema_string = None
+                schema_data_type = None
+
             format = dataset.format
 
             if isinstance(dataset, MaterializedView):
@@ -62,7 +74,8 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         elif isinstance(dataset, TemporaryView):
             table_properties = None
             partition_cols = None
-            schema = None
+            schema_string = None
+            schema_data_type = None
             format = None
             dataset_type = pb2.DatasetType.TEMPORARY_VIEW
         else:
@@ -78,9 +91,12 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             comment=dataset.comment,
             table_properties=table_properties,
             partition_cols=partition_cols,
-            schema=schema,
             format=format,
             source_code_location=source_code_location_to_proto(dataset.source_code_location),
+            # Even though schema_string is not required, the generated Python code seems to
+            # erroneously think it is required.
+            schema_string=schema_string,  # type: ignore[arg-type]
+            schema_data_type=schema_data_type,
         )
         command = pb2.Command()
         command.pipeline_command.define_dataset.CopyFrom(inner_command)
