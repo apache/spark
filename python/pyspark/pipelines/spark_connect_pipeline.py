@@ -29,7 +29,7 @@ def create_dataflow_graph(
     default_database: Optional[str],
     sql_conf: Optional[Mapping[str, str]],
 ) -> str:
-    """Create a dataflow graph in in the Spark Connect server.
+    """Create a dataflow graph in the Spark Connect server.
 
     :returns: The ID of the created dataflow graph.
     """
@@ -75,10 +75,12 @@ def start_run(
 ) -> Iterator[Dict[str, Any]]:
     """Start a run of the dataflow graph in the Spark Connect server.
 
+    :param spark: SparkSession.
     :param dataflow_graph_id: The ID of the dataflow graph to start.
     :param full_refresh: List of datasets to reset and recompute.
     :param full_refresh_all: Perform a full graph reset and recompute.
     :param refresh: List of datasets to update.
+    :param dry: Whether to perform a dry run or not.
     """
     inner_command = pb2.PipelineCommand.StartRun(
         dataflow_graph_id=dataflow_graph_id,

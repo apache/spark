@@ -47,8 +47,6 @@ private[connect] object PipelinesHandler extends Logging {
    *   Command to be handled
    * @param responseObserver
    *   The response observer where the response will be sent
-   * @param sparkSession
-   *   The spark session
    * @param transformRelationFunc
    *   Function used to convert a relation to a LogicalPlan. This is used when determining the
    *   LogicalPlan that a flow returns.
@@ -255,7 +253,7 @@ private[connect] object PipelinesHandler extends Logging {
 
     val rawDestinationIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session)
-    val flowWritesToView =
+    val isFlowWriteToView =
       graphElementRegistry
         .getViews()
         .filter(_.isInstanceOf[TemporaryView])
@@ -264,7 +262,7 @@ private[connect] object PipelinesHandler extends Logging {
     // If the flow is created implicitly as part of defining a view, then we do not
     // qualify the flow identifier and the flow destination. This is because views are
     // not permitted to have multipart
-    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
+    val isImplicitFlowForTempView = isImplicitFlow && isFlowWriteToView
     val Seq(flowIdentifier, destinationIdentifier) =
       Seq(rawFlowIdentifier, rawDestinationIdentifier).map { rawIdentifier =>
         if (isImplicitFlowForTempView) {
@@ -280,7 +278,7 @@ private[connect] object PipelinesHandler extends Logging {
       }
 
     graphElementRegistry.registerFlow(
-      new UnresolvedFlow(
+      UnresolvedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = destinationIdentifier,
         func =
@@ -295,7 +293,7 @@ private[connect] object PipelinesHandler extends Logging {
             flow.getSourceCodeLocation.getLineNumber),
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
-          language = Option(Python()))))
+          language = Some(Python()))))
     flowIdentifier
   }
 

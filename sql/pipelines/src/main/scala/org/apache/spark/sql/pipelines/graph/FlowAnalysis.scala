@@ -41,36 +41,32 @@ object FlowAnalysis {
      * @return A FlowFunction that attempts to analyze the provided LogicalPlan.
      */
   def createFlowFunctionFromLogicalPlan(plan: LogicalPlan): FlowFunction = {
-    new FlowFunction {
-      override def call(
-          allInputs: Set[TableIdentifier],
-          availableInputs: Seq[Input],
-          confs: Map[String, String],
-          queryContext: QueryContext,
-          queryOrigin: QueryOrigin
-      ): FlowFunctionResult = {
-        val ctx = FlowAnalysisContext(
-          allInputs = allInputs,
-          availableInputs = availableInputs,
-          queryContext = queryContext,
-          spark = SparkSession.active
-        )
-        val df = try {
-          confs.foreach { case (k, v) => ctx.setConf(k, v) }
-          Try(FlowAnalysis.analyze(ctx, plan))
-        } finally {
-          ctx.restoreOriginalConf()
-        }
-        FlowFunctionResult(
-          requestedInputs = ctx.requestedInputs.toSet,
-          batchInputs = ctx.batchInputs.toSet,
-          streamingInputs = ctx.streamingInputs.toSet,
-          usedExternalInputs = ctx.externalInputs.toSet,
-          dataFrame = df,
-          sqlConf = confs,
-          analysisWarnings = ctx.analysisWarnings.toList
-        )
+    (allInputs: Set[TableIdentifier],
+      availableInputs: Seq[Input],
+      confs: Map[String, String],
+      queryContext: QueryContext,
+      queryOrigin: QueryOrigin) => {
+      val ctx = FlowAnalysisContext(
+        allInputs = allInputs,
+        availableInputs = availableInputs,
+        queryContext = queryContext,
+        spark = SparkSession.active
+      )
+      val df = try {
+        confs.foreach { case (k, v) => ctx.setConf(k, v) }
+        Try(FlowAnalysis.analyze(ctx, plan))
+      } finally {
+        ctx.restoreOriginalConf()
       }
+      FlowFunctionResult(
+        requestedInputs = ctx.requestedInputs.toSet,
+        batchInputs = ctx.batchInputs.toSet,
+        streamingInputs = ctx.streamingInputs.toSet,
+        usedExternalInputs = ctx.externalInputs.toSet,
+        dataFrame = df,
+        sqlConf = confs,
+        analysisWarnings = ctx.analysisWarnings.toList
+      )
     }
   }
 

@@ -21,7 +21,6 @@ import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -53,7 +52,7 @@ trait FlowExecution {
   def identifier: TableIdentifier
 
   /**
-   * Returns a user-visible name for the flow.
+   * Returns a user-visible name of this flow.
    */
   final def displayName: String = identifier.unquotedString
 
@@ -139,10 +138,6 @@ trait FlowExecution {
     _future = try {
       Option(
         executeInternal()
-          .transform {
-            case Success(_) => Success(ExecutionResult.FINISHED)
-            case Failure(e) => Failure(e)
-          }
           .map(_ => ExecutionResult.FINISHED)
           .recover {
             case _: Throwable if stopped.get() =>
@@ -221,14 +216,13 @@ class StreamingTableWrite(
 
   def startStream(): StreamingQuery = {
     val data = graph.reanalyzeFlow(flow).df
-    val dataStreamWriter = data.writeStream
+    val dataStreamWriter = data
+      .writeStream
       .queryName(displayName)
       .option("checkpointLocation", checkpointPath)
       .trigger(trigger)
       .outputMode(OutputMode.Append())
-    if (destination.format.isDefined) {
-      dataStreamWriter.format(destination.format.get)
-    }
+    destination.format.foreach(dataStreamWriter.format)
     dataStreamWriter.toTable(destination.identifier.unquotedString)
   }
 }
@@ -243,18 +237,16 @@ class BatchTableWrite(
     val sqlConf: Map[String, String]
 ) extends FlowExecution {
 
-  override def isStreaming: Boolean = false
+  override final def isStreaming: Boolean = false
   override def getOrigin: QueryOrigin = flow.origin
 
-  def executeInternal(): scala.concurrent.Future[Unit] =
+  def executeInternal(): Future[Unit] =
     SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*) {
       updateContext.flowProgressEventLogger.recordRunning(flow = flow)
       val data = graph.reanalyzeFlow(flow).df
       Future {
         val dataFrameWriter = data.write
-        if (destination.format.isDefined) {
-          dataFrameWriter.format(destination.format.get)
-        }
+        destination.format.foreach(dataFrameWriter.format)
         dataFrameWriter
           .mode("append")
           // In "append" mode with saveAsTable, partition columns must be specified in query

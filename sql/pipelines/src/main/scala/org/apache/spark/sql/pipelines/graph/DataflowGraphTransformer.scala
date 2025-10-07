@@ -157,8 +157,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
           None
         }
       }
-      if (flowOpt.isDefined) {
-        val flow = flowOpt.get
+      flowOpt.foreach { flow =>
         futures.append(
           executor.submit(
             () =>

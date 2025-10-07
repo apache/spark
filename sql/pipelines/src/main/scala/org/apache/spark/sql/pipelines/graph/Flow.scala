@@ -149,8 +149,10 @@ trait ResolutionCompletedFlow extends Flow {
 }
 
 /** A [[Flow]] whose flow function has failed to resolve. */
-class ResolutionFailedFlow(val flow: UnresolvedFlow, val funcResult: FlowFunctionResult)
-    extends ResolutionCompletedFlow {
+class ResolutionFailedFlow(
+    val flow: UnresolvedFlow,
+    val funcResult: FlowFunctionResult)
+  extends ResolutionCompletedFlow {
   assert(!funcResult.resolved)
 
   def failure: Seq[Throwable] = funcResult.failure
@@ -174,14 +176,14 @@ class StreamingFlow(
     val flow: UnresolvedFlow,
     val funcResult: FlowFunctionResult,
     val mustBeAppend: Boolean = false
-) extends ResolvedFlow {}
+) extends ResolvedFlow
 
 /** A [[Flow]] that declares exactly what data should be in the target table. */
 class CompleteFlow(
     val flow: UnresolvedFlow,
     val funcResult: FlowFunctionResult,
     val mustBeAppend: Boolean = false
-) extends ResolvedFlow {}
+) extends ResolvedFlow
 
 /** A [[Flow]] that reads source[s] completely and appends data to the target, just once.
  */
