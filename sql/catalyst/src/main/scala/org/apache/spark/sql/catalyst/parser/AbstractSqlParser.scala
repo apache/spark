@@ -91,21 +91,17 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
 
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = {
-    try {
-      parse(sqlText) { parser =>
-        val ctx = parser.compoundOrSingleStatement()
-        withErrorHandling(ctx, Some(sqlText)) {
-          astBuilder.visitCompoundOrSingleStatement(ctx) match {
-            case compoundBody: CompoundPlanStatement => compoundBody
-            case plan: LogicalPlan => plan
-            case _ =>
-              val position = Origin(None, None)
-              throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
-          }
+    parse(sqlText) { parser =>
+      val ctx = parser.compoundOrSingleStatement()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitCompoundOrSingleStatement(ctx) match {
+          case compoundBody: CompoundPlanStatement => compoundBody
+          case plan: LogicalPlan => plan
+          case _ =>
+            val position = Origin(None, None)
+            throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
         }
       }
-    } finally {
-      // Note: No callback cleanup needed since we're not using thread-local callbacks
     }
   }
 
