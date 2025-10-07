@@ -2217,6 +2217,707 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-52407: theta_sketch_agg + theta_union_agg + theta_sketch_estimate positive tests") {
+    val df1 = Seq((1, "a"), (1, "a"), (1, "a"), (1, "b"), (1, "c"), (1, "c"), (1, "d"))
+      .toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    val df2 = Seq((1, "a"), (1, "c"), (1, "d"), (1, "d"), (1, "d"), (1, "e"), (1, "e"), (1, "f"))
+      .toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
+
+    // First test theta_sketch_agg, theta_sketch_estimate via dataframe + sql,
+    // with and without configs, via both DF and SQL implementations.
+    val res1 = df1
+      .groupBy("id")
+      .agg(
+        count("value").as("count"),
+        theta_sketch_agg("value").as("sketch_1"),
+        theta_sketch_agg("value", 20).as("sketch_2"))
+      .withColumn("distinct_count_1", theta_sketch_estimate("sketch_1"))
+      .withColumn("distinct_count_2", theta_sketch_estimate("sketch_2"))
+      .drop("sketch_1", "sketch_2")
+    checkAnswer(res1, Row(1, 7, 4, 4))
+
+    val res2 = sql("""with sketches as (
+        |select
+        | id,
+        | count(value) as count,
+        | theta_sketch_agg(value) as sketch_1,
+        | theta_sketch_agg(value, 20) as sketch_2
+        |from df1
+        |group by 1
+        |)
+        |
+        |select
+        | id,
+        | count,
+        | theta_sketch_estimate(sketch_1) as distinct_count_1,
+        | theta_sketch_estimate(sketch_2) as distinct_count_2
+        |from
+        | sketches
+        |""".stripMargin)
+    checkAnswer(res2, Row(1, 7, 4, 4))
+
+    // Now test theta_union_agg via dataframe + sql, with and without configs,
+    // unioning together sketches with default, non-default and different configurations
+    val df3 = df1
+      .groupBy("id")
+      .agg(
+        count("value").as("count"),
+        theta_sketch_agg("value").as("thetasketch_1"),
+        theta_sketch_agg("value", 20).as("thetasketch_2"),
+        theta_sketch_agg("value").as("thetasketch_3"))
+    df3.createOrReplaceTempView("df3")
+
+    val df4 = sql("""select
+        | id,
+        | count(value) as count,
+        | theta_sketch_agg(value) as thetasketch_1,
+        | theta_sketch_agg(value, 20) as thetasketch_2,
+        | theta_sketch_agg(value, 20) as thetasketch_3
+        |from df2
+        |group by 1
+        |""".stripMargin)
+    df4.createOrReplaceTempView("df4")
+
+    val res3 = df3
+      .union(df4)
+      .groupBy("id")
+      .agg(
+        sum("count").as("count"),
+        theta_sketch_estimate(theta_union_agg("thetasketch_1")).as("distinct_count_1"),
+        theta_sketch_estimate(theta_union_agg("thetasketch_2")).as("distinct_count_2"),
+        theta_sketch_estimate(theta_union_agg("thetasketch_3", 15)).as("distinct_count_3"))
+    checkAnswer(res3, Row(1, 15, 6, 6, 6))
+
+    val res4 = sql("""select
+        | id,
+        | sum(count) as count,
+        | theta_sketch_estimate(theta_union_agg(thetasketch_1)) as distinct_count_1,
+        | theta_sketch_estimate(theta_union_agg(thetasketch_2)) as distinct_count_2,
+        | theta_sketch_estimate(theta_union_agg(thetasketch_3, 15)) as distinct_count_3
+        |from (select * from df3 union all select * from df4)
+        |group by 1
+        |""".stripMargin)
+    checkAnswer(res4, Row(1, 15, 6, 6, 6))
+
+    // add tests to ensure theta_union works via both DF and SQL too
+    val df5 = df3.drop("count")
+    df5.createOrReplaceTempView("df5")
+
+    val df6 = df4
+      .drop("count")
+      .withColumnRenamed("thetasketch_1", "thetasketch_4")
+      .withColumnRenamed("thetasketch_2", "thetasketch_5")
+      .withColumnRenamed("thetasketch_3", "thetasketch_6")
+    df6.createOrReplaceTempView("df6")
+
+    val res5 = df5
+      .join(df6, "id")
+      .withColumn(
+        "distinct_count_1",
+        theta_sketch_estimate(theta_union("thetasketch_1", "thetasketch_4")))
+      .withColumn(
+        "distinct_count_2",
+        theta_sketch_estimate(theta_union("thetasketch_2", "thetasketch_5")))
+      .withColumn(
+        "distinct_count_3",
+        theta_sketch_estimate(theta_union("thetasketch_3", "thetasketch_6", 15)))
+      .drop(
+        "thetasketch_1",
+        "thetasketch_2",
+        "thetasketch_3",
+        "thetasketch_4",
+        "thetasketch_5",
+        "thetasketch_6")
+    checkAnswer(res5, Row(1, 6, 6, 6))
+
+    val res6 = sql("""with joined as (
+        |  select
+        |    l.id,
+        |    l.thetasketch_1,
+        |    l.thetasketch_2,
+        |    l.thetasketch_3,
+        |    r.thetasketch_4,
+        |    r.thetasketch_5,
+        |    r.thetasketch_6
+        |  from
+        |    df5 l
+        |    join
+        |    df6 r
+        |     on l.id = r.id
+        | )
+        |
+        |select
+        |  id,
+        |  theta_sketch_estimate(theta_union(thetasketch_1, thetasketch_4)) as distinct_count_1,
+        |  theta_sketch_estimate(theta_union(thetasketch_2, thetasketch_5)) as distinct_count_2,
+        |  theta_sketch_estimate(theta_union(thetasketch_3, thetasketch_6, 20))
+        |  as distinct_count_3
+        |from
+        | joined
+        |""".stripMargin)
+    checkAnswer(res6, Row(1, 6, 6, 6))
+
+    val df7 =
+      Seq((1, "a"), (1, "a"), (1, "a"), (1, "b"), (1, null), (2, null), (2, null), (2, null))
+        .toDF("id", "value")
+
+    // empty column test
+    val res7 = df7
+      .where(expr("id = 2"))
+      .groupBy("id")
+      .agg(theta_sketch_estimate(theta_sketch_agg("value")).as("distinct_count"))
+    checkAnswer(res7, Row(2, 0))
+
+    // partial empty column test
+    val res8 = df7
+      .groupBy("id")
+      .agg(theta_sketch_estimate(theta_sketch_agg("value")).as("distinct_count"))
+    checkAnswer(res8, Seq(Row(1, 2), Row(2, 0)))
+  }
+
+  test("SPARK-52407: theta_sketch_agg + theta_union_agg + theta_union negative tests") {
+    val df1 = Seq((1, "a"), (1, "a"), (1, "a"), (1, "b"), (1, "c"), (1, "c"), (1, "d"))
+      .toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    val df2 = Seq((1, "a"), (1, "c"), (1, "d"), (1, "d"), (1, "d"), (1, "e"), (1, "e"), (1, "f"))
+      .toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
+
+    // Validate that the functions error out when lgNomEntries < 4 or > 26.
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df1
+          .groupBy("id")
+          .agg(theta_sketch_agg("value", 1).as("thetasketch"))
+          .collect()
+      },
+      condition = "THETA_INVALID_LG_NOM_ENTRIES",
+      parameters = Map(
+        "function" -> "`theta_sketch_agg`",
+        "min" -> "4",
+        "max" -> "26",
+        "value" -> "1"
+      )
+    )
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df1
+          .groupBy("id")
+          .agg(theta_sketch_agg("value", 28).as("thetasketch"))
+          .collect()
+      },
+      condition = "THETA_INVALID_LG_NOM_ENTRIES",
+      parameters = Map(
+        "function" -> "`theta_sketch_agg`",
+        "min" -> "4",
+        "max" -> "26",
+        "value" -> "28"
+      )
+    )
+
+    // Validate that the functions error out when provided unexpected types.
+    checkError(
+      exception = intercept[AnalysisException] {
+        val res = sql("""
+            |select
+            | id,
+            | theta_sketch_agg(value, 'text')
+            |from
+            | df1
+            |group by 1
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_sketch_agg(value, text)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"text\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INT\""),
+      context =
+        ExpectedContext(fragment = "theta_sketch_agg(value, 'text')", start = 14, stop = 44))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        val res = sql("""with sketch_cte as (
+            |select
+            | id,
+            | theta_sketch_agg(value) as sketch
+            |from
+            | df1
+            |group by 1
+            |)
+            |
+            |select theta_union_agg(sketch, 'Theta_4') from sketch_cte
+            |""".stripMargin)
+        checkAnswer(res, Nil)
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_union_agg(sketch, Theta_4)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"Theta_4\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"INT\""),
+      context =
+        ExpectedContext(fragment = "theta_union_agg(sketch, 'Theta_4')", start = 99, stop = 132))
+
+    // Test invalid parameter types for theta_union
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("""with sketches as (
+          |select id, theta_sketch_agg(value) as sketch from df1 group by 1
+          |)
+          |select theta_union(sketch, 'invalid') from sketches
+          |""".stripMargin).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_union(sketch, invalid, 12)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"invalid\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BINARY\""),
+      context =
+        ExpectedContext(fragment = "theta_union(sketch, 'invalid')", start = 93, stop = 122))
+
+    // Test theta_union with non-sketch input.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select theta_union('not_a_sketch', 'also_not_a_sketch')").collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_union(not_a_sketch, also_not_a_sketch, 12)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"not_a_sketch\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BINARY\""),
+      context = ExpectedContext(
+        fragment = "theta_union('not_a_sketch', 'also_not_a_sketch')",
+        start = 7,
+        stop = 54))
+
+  }
+  test(
+    "SPARK-52407: theta_difference + theta_intersection + theta_intersection_agg positive tests") {
+    val df1 = Seq((1, "a"), (1, "a"), (1, "a"), (1, "b"), (1, "c"), (1, "c"), (1, "d"))
+      .toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    val df2 = Seq((1, "a"), (1, "c"), (1, "d"), (1, "d"), (1, "d"), (1, "e"), (1, "e"), (1, "f"))
+      .toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
+
+    val df3 = Seq((1, "c"), (1, "d"), (1, "g"), (1, "g"), (1, "h")).toDF("id", "value")
+    df3.createOrReplaceTempView("df3")
+
+    // Test theta_difference via DataFrame API.
+    val sketches1 = df1
+      .groupBy("id")
+      .agg(
+        theta_sketch_agg("value").as("sketch1"),
+        theta_sketch_agg("value", 20).as("sketch1_20"))
+
+    val sketches2 = df2
+      .groupBy("id")
+      .agg(
+        theta_sketch_agg("value").as("sketch2"),
+        theta_sketch_agg("value", 20).as("sketch2_20"))
+
+    val res1 = sketches1
+      .join(sketches2, "id")
+      .withColumn(
+        "difference_count_1",
+        theta_sketch_estimate(theta_difference("sketch1", "sketch2")))
+      .withColumn(
+        "difference_count_2",
+        theta_sketch_estimate(theta_difference("sketch1_20", "sketch2_20")))
+      .select("id", "difference_count_1", "difference_count_2")
+
+    // df1 has {a,b,c,d}, df2 has {a,c,d,e,f}, so df1 - df2 should be approximately {b}.
+    checkAnswer(res1, Row(1, 1, 1))
+
+    // Test theta_difference via SQL.
+    val res2 = sql("""with sketches1 as (
+      |select
+      | id,
+      | theta_sketch_agg(value) as sketch1,
+      | theta_sketch_agg(value, 20) as sketch1_20
+      |from df1
+      |group by 1
+      |),
+      |sketches2 as (
+      |select
+      | id,
+      | theta_sketch_agg(value) as sketch2,
+      | theta_sketch_agg(value, 20) as sketch2_20
+      |from df2
+      |group by 1
+      |)
+      |
+      |select
+      | s1.id,
+      | theta_sketch_estimate(theta_difference(s1.sketch1, s2.sketch2)) as difference_count_1,
+      | theta_sketch_estimate(theta_difference(s1.sketch1_20, s2.sketch2_20)) as difference_count_2
+      |from sketches1 s1
+      |join sketches2 s2 on s1.id = s2.id
+      |""".stripMargin)
+    checkAnswer(res2, Row(1, 1, 1))
+
+    // Test theta_intersection via DataFrame API.
+    val res3 = sketches1
+      .join(sketches2, "id")
+      .withColumn(
+        "intersection_count_1",
+        theta_sketch_estimate(theta_intersection("sketch1", "sketch2")))
+      .withColumn(
+        "intersection_count_2",
+        theta_sketch_estimate(theta_intersection("sketch1_20", "sketch2_20")))
+      .select("id", "intersection_count_1", "intersection_count_2")
+
+    // df1 has {a,b,c,d}, df2 has {a,c,d,e,f}, so intersection should be approximately {a,c,d} = 3.
+    checkAnswer(res3, Row(1, 3, 3))
+
+    // Test theta_intersection via SQL.
+    val res4 = sql("""with sketches1 as (
+      |select
+      | id,
+      | theta_sketch_agg(value) as sketch1,
+      | theta_sketch_agg(value, 20) as sketch1_20
+      |from df1
+      |group by 1
+      |),
+      |sketches2 as (
+      |select
+      | id,
+      | theta_sketch_agg(value) as sketch2,
+      | theta_sketch_agg(value, 20) as sketch2_20
+      |from df2
+      |group by 1
+      |)
+      |
+      |select
+      | s1.id,
+      | theta_sketch_estimate(theta_intersection(s1.sketch1, s2.sketch2)) as intersection_count_1,
+      | theta_sketch_estimate(theta_intersection(s1.sketch1_20, s2.sketch2_20))
+      | as intersection_count_2
+      |from sketches1 s1
+      |join sketches2 s2 on s1.id = s2.id
+      |""".stripMargin)
+    checkAnswer(res4, Row(1, 3, 3))
+
+    // Test theta_intersection_agg via DataFrame API.
+    val all_sketches = df1
+      .groupBy("id")
+      .agg(theta_sketch_agg("value").as("sketch"))
+      .withColumn("source", lit("df1"))
+      .union(
+        df2
+          .groupBy("id")
+          .agg(theta_sketch_agg("value").as("sketch"))
+          .withColumn("source", lit("df2")))
+      .union(
+        df3
+          .groupBy("id")
+          .agg(theta_sketch_agg("value").as("sketch"))
+          .withColumn("source", lit("df3")))
+
+    val res5 = all_sketches
+      .groupBy("id")
+      .agg(
+        theta_sketch_estimate(theta_intersection_agg("sketch")).as("intersection_count_1")
+      )
+
+    // df1={a,b,c,d}, df2={a,c,d,e,f}, df3={c,d,g,h}, so intersection should be {c,d} = 2.
+    checkAnswer(res5, Row(1, 2))
+
+    // Test theta_intersection_agg via SQL.
+    val res6 = sql("""with all_sketches as (
+      |select id, theta_sketch_agg(value) as sketch, 'df1' as source from df1 group by 1
+      |union all
+      |select id, theta_sketch_agg(value) as sketch, 'df2' as source from df2 group by 1
+      |union all
+      |select id, theta_sketch_agg(value) as sketch, 'df3' as source from df3 group by 1
+      |)
+      |
+      |select
+      | id,
+      | theta_sketch_estimate(theta_intersection_agg(sketch)) as intersection_count_1
+      |from all_sketches
+      |group by 1
+      |""".stripMargin)
+    checkAnswer(res6, Row(1, 2))
+
+    // Test with different lgNomEntries parameters.
+    val res7 = sql("""with sketches1 as (
+      |select id, theta_sketch_agg(value, 12) as sketch1 from df1 group by 1
+      |),
+      |sketches2 as (
+      |select id, theta_sketch_agg(value, 18) as sketch2 from df2 group by 1
+      |)
+      |
+      |select
+      | s1.id,
+      | theta_sketch_estimate(theta_difference(s1.sketch1, s2.sketch2)) as difference_count,
+      | theta_sketch_estimate(theta_intersection(s1.sketch1, s2.sketch2)) as intersection_count
+      |from sketches1 s1
+      |join sketches2 s2 on s1.id = s2.id
+      |""".stripMargin)
+    checkAnswer(res7, Row(1, 1, 3))
+
+    // Test with null values.
+    val df_with_nulls =
+      Seq((1, "a"), (1, "b"), (1, null), (2, null), (2, null)).toDF("id", "value")
+    df_with_nulls.createOrReplaceTempView("df_with_nulls")
+
+    val res8 = sql("""with sketch1 as (
+      |select id, theta_sketch_agg(value) as sketch from df_with_nulls where id = 1 group by 1
+      |),
+      |sketch2 as (
+      |select id, theta_sketch_agg(value) as sketch from df_with_nulls where id = 2 group by 1
+      |)
+      |
+      |select
+      | s1.id,
+      | theta_sketch_estimate(theta_difference(s1.sketch, s2.sketch)) as difference_count,
+      | theta_sketch_estimate(theta_intersection(s1.sketch, s2.sketch)) as intersection_count
+      |from sketch1 s1
+      |cross join sketch2 s2
+      |""".stripMargin)
+    // sketch1 has {a,b}, sketch2 is empty, so difference = 2 and intersection = 0.
+    checkAnswer(res8, Row(1, 2, 0))
+
+    // Test empty intersection.
+    val df_disjoint1 = Seq((1, "a"), (1, "b")).toDF("id", "value")
+    val df_disjoint2 = Seq((1, "c"), (1, "d")).toDF("id", "value")
+    df_disjoint1.createOrReplaceTempView("df_disjoint1")
+    df_disjoint2.createOrReplaceTempView("df_disjoint2")
+
+    val res9 = sql("""with sketch1 as (
+      |select id, theta_sketch_agg(value) as sketch from df_disjoint1 group by 1
+      |),
+      |sketch2 as (
+      |select id, theta_sketch_agg(value) as sketch from df_disjoint2 group by 1
+      |)
+      |
+      |select
+      | s1.id,
+      | theta_sketch_estimate(theta_intersection(s1.sketch, s2.sketch)) as intersection_count
+      |from sketch1 s1
+      |join sketch2 s2 on s1.id = s2.id
+      |""".stripMargin)
+    checkAnswer(res9, Row(1, 0))
+  }
+
+  test(
+    "SPARK-52407: theta_difference + theta_intersection + theta_intersection_agg negative tests") {
+    val df1 = Seq((1, "a"), (1, "b"), (1, "c"), (1, "d")).toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    // Test invalid parameter types for theta_difference.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("""with sketches as (
+          |select id, theta_sketch_agg(value) as sketch from df1 group by 1
+          |)
+          |select theta_difference(sketch, 'invalid') from sketches
+          |""".stripMargin).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_difference(sketch, invalid)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"invalid\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BINARY\""),
+      context =
+        ExpectedContext(fragment = "theta_difference(sketch, 'invalid')", start = 93, stop = 127))
+
+    // Test invalid parameter types for theta_intersection.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("""with sketches as (
+          |select id, theta_sketch_agg(value) as sketch from df1 group by 1
+          |)
+          |select theta_intersection(sketch, 123) from sketches
+          |""".stripMargin).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_intersection(sketch, 123)\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"123\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"BINARY\""),
+      context =
+        ExpectedContext(fragment = "theta_intersection(sketch, 123)", start = 93, stop = 123))
+
+    // Test invalid parameter types for theta_intersection_agg.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("""with sketches as (
+          |select id, theta_sketch_agg(value) as sketch from df1 group by 1
+          |)
+          |select theta_intersection_agg('invalid') from sketches
+          |""".stripMargin).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_intersection_agg(invalid)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"invalid\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BINARY\""),
+      context = ExpectedContext(
+        fragment = "theta_intersection_agg('invalid')",
+        start = 93,
+        stop = 125))
+
+    // Test theta_difference with non-sketch input.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select theta_difference('not_a_sketch', 'also_not_a_sketch')").collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_difference(not_a_sketch, also_not_a_sketch)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"not_a_sketch\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BINARY\""),
+      context = ExpectedContext(
+        fragment = "theta_difference('not_a_sketch', 'also_not_a_sketch')",
+        start = 7,
+        stop = 59))
+
+    // Test theta_intersection with non-sketch input.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select theta_intersection('not_a_sketch', 'also_not_a_sketch')").collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_intersection(not_a_sketch, also_not_a_sketch)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"not_a_sketch\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"BINARY\""),
+      context = ExpectedContext(
+        fragment = "theta_intersection('not_a_sketch', 'also_not_a_sketch')",
+        start = 7,
+        stop = 61))
+  }
+
+  test("SPARK-52407: theta_union") {
+    val df1 = Seq(1, 1, 2, 3).toDF("col")
+    val df2 = Seq(1, 3, 4, 5).toDF("col")
+
+    val sketch1 = df1.selectExpr("theta_sketch_agg(col, 12) as sketch1")
+    val sketch2 = df2.selectExpr("theta_sketch_agg(col, 12) as sketch2")
+
+    checkAnswer(
+      sketch1
+        .crossJoin(sketch2)
+        .selectExpr("theta_sketch_estimate(theta_union(sketch1, sketch2))"),
+      Seq(Row(5)) // {1,2,3} ∪ {1,3,4,5} = {1,2,3,4,5}
+    )
+    checkAnswer(
+      sketch1
+        .crossJoin(sketch2)
+        .select(theta_sketch_estimate(
+          theta_union(col("sketch1"), col("sketch2")))),
+      Seq(Row(5)))
+  }
+
+  test("SPARK-52407: theta_difference") {
+    val df1 = Seq(1, 1, 2, 3).toDF("col")
+    val df2 = Seq(1, 4, 5).toDF("col")
+
+    val sketch1 = df1.selectExpr("theta_sketch_agg(col, 12) as sketch1")
+    val sketch2 = df2.selectExpr("theta_sketch_agg(col, 12) as sketch2")
+
+    checkAnswer(
+      sketch1
+        .crossJoin(sketch2)
+        .selectExpr("theta_sketch_estimate(theta_difference(sketch1, sketch2))"),
+      Seq(Row(2)) // {1,2,3} - {1,4,5} = {2,3}
+    )
+    checkAnswer(
+      sketch1
+        .crossJoin(sketch2)
+        .select(
+          theta_sketch_estimate(theta_difference(col("sketch1"), col("sketch2")))),
+      Seq(Row(2)))
+  }
+
+  test("SPARK-52407: theta_intersection") {
+    val df1 = Seq(1, 1, 2, 3).toDF("col")
+    val df2 = Seq(1, 3, 4, 5).toDF("col")
+
+    val sketch1 = df1.selectExpr("theta_sketch_agg(col, 12) as sketch1")
+    val sketch2 = df2.selectExpr("theta_sketch_agg(col, 12) as sketch2")
+
+    checkAnswer(
+      sketch1
+        .crossJoin(sketch2)
+        .selectExpr("theta_sketch_estimate(theta_intersection(sketch1, sketch2))"),
+      Seq(Row(2)) // {1,2,3} ∩ {1,3,4,5} = {1,3}
+    )
+    checkAnswer(
+      sketch1
+        .crossJoin(sketch2)
+        .select(theta_sketch_estimate(
+          theta_intersection(col("sketch1"), col("sketch2")))),
+      Seq(Row(2)))
+  }
+
+  test("SPARK-52407: theta_intersection_agg") {
+    val df = Seq(1, 2).toDF("col")
+
+    checkAnswer(
+      df.selectExpr("theta_sketch_agg(col) as sketch")
+        .unionAll(df.selectExpr("theta_sketch_agg(col, 20) as sketch"))
+        .unionAll(df.filter(col("col") === 1).selectExpr("theta_sketch_agg(col) as sketch"))
+        .selectExpr("theta_sketch_estimate(theta_intersection_agg(sketch))"),
+      Seq(Row(1)) // The intersection of {1,2}, {1,2}, {1} = {1}.
+    )
+    checkAnswer(
+      df.select(theta_sketch_agg(col("col")).as("sketch"))
+        .unionAll(df.select(theta_sketch_agg(col("col"), lit(20)).as("sketch")))
+        .unionAll(df.filter(col("col") === 1).select(theta_sketch_agg(col("col")).as("sketch")))
+        .select(theta_sketch_estimate(theta_intersection_agg(col("sketch")))),
+      Seq(Row(1)))
+  }
+
+  test("SPARK-52407: theta_sketch_agg") {
+    val df = Seq(1, 1, 2, 2, 3).toDF("col")
+    checkAnswer(df.selectExpr("theta_sketch_estimate(theta_sketch_agg(col, 12))"), Seq(Row(3)))
+    checkAnswer(
+      df.select(theta_sketch_estimate(theta_sketch_agg(col("col"), lit(12)))),
+      Seq(Row(3)))
+  }
+
+  test("SPARK-52407: theta_union_agg") {
+    val df = Seq(1).toDF("col")
+    checkAnswer(
+      df.selectExpr("theta_sketch_agg(col) as sketch")
+        .unionAll(df.selectExpr("theta_sketch_agg(col, 20) as sketch"))
+        .selectExpr("theta_sketch_estimate(theta_union_agg(sketch, 15))"),
+      Seq(Row(1)))
+    checkAnswer(
+      df.select(theta_sketch_agg(col("col")).as("sketch"))
+        .unionAll(df.select(theta_sketch_agg(col("col"), lit(20)).as("sketch")))
+        .select(theta_sketch_estimate(theta_union_agg(col("sketch"), lit(15)))),
+      Seq(Row(1)))
+  }
+
   private def assertAggregateOnDataframe(
       df: => DataFrame,
       expected: Int): Unit = {

@@ -126,9 +126,8 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Examples
         --------
-        >>> import pandas as pd  # doctest: +SKIP
+        >>> import pandas as pd
         >>> from pyspark.sql import functions as sf
-        >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (3, "Alice"), (5, "Bob"), (10, "Bob")], ["age", "name"])
         >>> df.show()
@@ -166,11 +165,12 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Same as above but uses pandas UDF.
 
-        >>> @pandas_udf('int')  # doctest: +SKIP
+        >>> from pyspark.sql.functions import pandas_udf
+        >>> @pandas_udf('int')
         ... def min_udf(v: pd.Series) -> int:
         ...     return v.min()
         ...
-        >>> df.groupBy(df.name).agg(min_udf(df.age)).sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy(df.name).agg(min_udf(df.age)).sort("name").show()
         +-----+------------+
         | name|min_udf(age)|
         +-----+------------+
@@ -533,8 +533,13 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.group
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.group.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.group.GroupedData.agg.__doc__
+
     spark = SparkSession.builder.master("local[4]").appName("sql.group tests").getOrCreate()
     globs["spark"] = spark
 

@@ -16,6 +16,7 @@
 #
 
 import os
+import platform
 import unittest
 import pandas as pd
 
@@ -39,10 +40,33 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
+from pyspark.loose_version import LooseVersion
+from pyspark.testing.utils import (
+    have_pyarrow,
+    have_pandas,
+    have_numpy,
+    pyarrow_requirement_message,
+    pandas_requirement_message,
+    numpy_requirement_message,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from .type_table_utils import generate_table_diff, format_type_table
 
+if have_numpy:
+    import numpy as np
 
+
+@unittest.skipIf(
+    not have_pandas
+    or not have_pyarrow
+    or not have_numpy
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0")
+    or platform.system() == "Darwin",
+    pandas_requirement_message
+    or pyarrow_requirement_message
+    or numpy_requirement_message
+    or "float128 not supported on macos",
+)
 class UDFInputTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
@@ -115,38 +139,7 @@ class UDFInputTypeTests(ReusedSQLTestCase):
                     return x
 
                 def value_str(x):
-                    class NpPrintable:
-                        def __init__(self, x):
-                            self.x = x
-
-                        def __repr__(self):
-                            return f"np.{self.x.dtype}({self.x.item()})"
-
-                    # Numpy 1.x __repr__ returns a different format, see
-                    # https://numpy.org/doc/stable/release/2.0.0-notes.html#representation-of-numpy-scalars-changed # noqa: E501
-                    # We only care about types and values of the elements,
-                    # so we accept this difference and implement our own repr to make
-                    # tests with numpy 1 return the same format as numpy 2.
-                    def convert_to_numpy_printable(x):
-                        import numpy as np
-
-                        if isinstance(x, Row):
-                            converted_values = tuple(convert_to_numpy_printable(v) for v in x)
-                            new_row = Row(*converted_values)
-                            new_row.__fields__ = x.__fields__
-                            return new_row
-                        elif isinstance(x, (list)):
-                            return [convert_to_numpy_printable(elem) for elem in x]
-                        elif isinstance(x, tuple):
-                            return tuple(convert_to_numpy_printable(elem) for elem in x)
-                        elif isinstance(x, dict):
-                            return {k: convert_to_numpy_printable(v) for k, v in x.items()}
-                        elif isinstance(x, np.generic):
-                            return NpPrintable(x)
-                        else:
-                            return x
-
-                    return str(convert_to_numpy_printable(x))
+                    return str(x)
 
                 type_test_udf = udf(type_udf, returnType=StringType(), useArrow=use_arrow)
                 value_test_udf = udf(value_udf, returnType=spark_type, useArrow=use_arrow)

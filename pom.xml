@@ -124,13 +124,13 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.8</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
-    <log4j.version>2.25.1</log4j.version>
+    <log4j.version>2.24.3</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.2</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>4.29.3</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
-    <zookeeper.version>3.9.3</zookeeper.version>
+    <zookeeper.version>3.9.4</zookeeper.version>
     <curator.version>5.9.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
@@ -141,7 +141,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.16.0</parquet.version>
-    <orc.version>2.2.0</orc.version>
+    <orc.version>2.2.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.26</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -214,19 +214,19 @@
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.10.0</commons-cli.version>
-    <bouncycastle.version>1.81</bouncycastle.version>
+    <bouncycastle.version>1.82</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.1.127.Final</netty.version>
     <netty-tcnative.version>2.0.73.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
-    <junit-jupiter.version>5.13.1</junit-jupiter.version>
-    <junit-platform.version>1.13.1</junit-platform.version>
+    <junit-jupiter.version>5.13.4</junit-jupiter.version>
+    <junit-platform.version>1.13.4</junit-platform.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
       also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
     -->
-    <sbt-jupiter-interface.version>0.15.0</sbt-jupiter-interface.version>
+    <sbt-jupiter-interface.version>0.15.1</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
@@ -346,7 +346,7 @@
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
-    <snowflake.jdbc.version>3.23.2</snowflake.jdbc.version>
+    <snowflake.jdbc.version>3.26.1</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>

@@ -362,7 +362,7 @@ jobs:
     - name: Install Python packages (Python 3.11)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect') || contains(matrix.modules, 'yarn')
       run: |
-        python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
+        python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.5'
         python3.11 -m pip list
     # Run the tests.
     - name: Run tests
@@ -522,9 +522,9 @@ jobs:
           - >-
             pyspark-pandas-slow
           - >-
-            pyspark-pandas-connect-part0, pyspark-pandas-connect-part3
+            pyspark-pandas-connect
           - >-
-            pyspark-pandas-connect-part1, pyspark-pandas-connect-part2
+            pyspark-pandas-slow-connect
         exclude:
           # Always run if pyspark == 'true', even infra-image is skip (such as non-master job)
           # In practice, the build will run in individual PR, but not against the individual commit
@@ -538,10 +538,8 @@ jobs:
           # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part0' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part1' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part2' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part3' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow-connect' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -766,7 +764,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.11 -m pip install 'black==23.12.1' 'protobuf==5.29.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.11 -m pip install 'black==23.12.1' 'protobuf==5.29.5' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.11 -m pip list
     - name: Python CodeGen check for branch-3.5
       if: inputs.branch == 'branch-3.5'

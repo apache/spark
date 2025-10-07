@@ -1637,6 +1637,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ML_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     PIPELINE_EVENT_RESULT_FIELD_NUMBER: builtins.int
     PIPELINE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    PIPELINE_QUERY_FUNCTION_EXECUTION_SIGNAL_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1712,6 +1713,13 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult:
         """Pipeline command response"""
     @property
+    def pipeline_query_function_execution_signal(
+        self,
+    ) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal:
+        """A signal from the server to the client to execute the query function for a flow, and to
+        register its result with the server.
+        """
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1758,6 +1766,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         | None = ...,
         pipeline_command_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult
         | None = ...,
+        pipeline_query_function_execution_signal: pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1787,6 +1797,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"pipeline_command_result",
             "pipeline_event_result",
             b"pipeline_event_result",
+            "pipeline_query_function_execution_signal",
+            b"pipeline_query_function_execution_signal",
             "response_type",
             b"response_type",
             "result_complete",
@@ -1832,6 +1844,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"pipeline_command_result",
             "pipeline_event_result",
             b"pipeline_event_result",
+            "pipeline_query_function_execution_signal",
+            b"pipeline_query_function_execution_signal",
             "response_id",
             b"response_id",
             "response_type",
@@ -1874,6 +1888,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "ml_command_result",
             "pipeline_event_result",
             "pipeline_command_result",
+            "pipeline_query_function_execution_signal",
             "extension",
         ]
         | None

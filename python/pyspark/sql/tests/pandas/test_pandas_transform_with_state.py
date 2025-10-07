@@ -312,11 +312,11 @@ class TransformWithStateTestsMixin:
             batch_df.collect()
             if batch_id == 0:
                 expected_prev_elements = ""
-                expected_updated_elements = ",".join(map(lambda x: str(x), range(90)))
+                expected_updated_elements = ",".join(map(lambda x: str(x), range(100)))
             else:
                 # batch_id == 1:
-                expected_prev_elements = ",".join(map(lambda x: str(x), range(90)))
-                expected_updated_elements = ",".join(map(lambda x: str(x), range(180)))
+                expected_prev_elements = ",".join(map(lambda x: str(x), range(100)))
+                expected_updated_elements = ",".join(map(lambda x: str(x), range(190)))
 
             assert set(batch_df.sort("id").collect()) == {
                 Row(

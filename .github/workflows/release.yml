@@ -114,6 +114,11 @@ jobs:
         with:
           repository: apache/spark
           ref: "${{ inputs.branch }}"
+      - name: Free up disk space
+        run: |
+          if [ -f ./dev/free_disk_space ]; then
+            ./dev/free_disk_space
+          fi
       - name: Release Apache Spark
         env:
           GIT_BRANCH: "${{ inputs.branch }}"

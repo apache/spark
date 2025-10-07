@@ -29,6 +29,7 @@ from pyspark.pipelines.dataset import (
 )
 from pyspark.pipelines.flow import Flow
 from pyspark.pipelines.graph_element_registry import GraphElementRegistry
+from pyspark.pipelines.source_code_location import SourceCodeLocation
 from typing import Any, cast
 import pyspark.sql.connect.proto as pb2
 
@@ -79,6 +80,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             partition_cols=partition_cols,
             schema=schema,
             format=format,
+            source_code_location=source_code_location_to_proto(dataset.source_code_location),
         )
         command = pb2.Command()
         command.pipeline_command.define_dataset.CopyFrom(inner_command)
@@ -95,6 +97,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             target_dataset_name=flow.target,
             relation=relation,
             sql_conf=flow.spark_conf,
+            source_code_location=source_code_location_to_proto(flow.source_code_location),
         )
         command = pb2.Command()
         command.pipeline_command.define_flow.CopyFrom(inner_command)
@@ -109,3 +112,11 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         command = pb2.Command()
         command.pipeline_command.define_sql_graph_elements.CopyFrom(inner_command)
         self._client.execute_command(command)
+
+
+def source_code_location_to_proto(
+    source_code_location: SourceCodeLocation,
+) -> pb2.SourceCodeLocation:
+    return pb2.SourceCodeLocation(
+        file_name=source_code_location.filename, line_number=source_code_location.line_number
+    )

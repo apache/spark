@@ -614,6 +614,23 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     assert(ex.errorClass.contains("TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS"))
   }
 
+  test("create view syntax for persisted views") {
+    val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+      sqlText = s"CREATE VIEW b COMMENT 'my persisted comment' AS SELECT * FROM range(1, 4);"
+    )
+    val graph = unresolvedDataflowGraph.resolve().validate()
+
+    val view = graph.views.last
+
+    // view identifier should be multipart for persisted views
+    assert(view.identifier == fullyQualifiedIdentifier("b"))
+    assert(view.isInstanceOf[PersistedView])
+    assert(
+      view.sqlText.isDefined && view.sqlText.get == "SELECT * FROM range(1, 4)"
+    )
+    assert(view.comment.get == "my persisted comment")
+  }
+
   test("Use database and set catalog works") {
     val pipelineCatalog = TestGraphRegistrationContext.DEFAULT_CATALOG
     val pipelineDatabase = TestGraphRegistrationContext.DEFAULT_DATABASE
