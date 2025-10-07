@@ -1874,7 +1874,7 @@ class TransformWithStateTestsMixin:
                     ),
                 ]
 
-        # Define the output schema matching Scala case class
+        # Define the output schema with inner nested class schema
         inner_nested_class_schema = StructType(
             [
                 StructField("intValue", IntegerType(), True),

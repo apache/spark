@@ -1883,7 +1883,7 @@ class PandasCompositeOutputProcessor(StatefulProcessor):
         map_of_primitive = {f"key{i}": f"value{i}" for i in range(count)}
 
         # listOfComposite: ArrayType(StructType)
-        # Each dict has intValue (IntegerType), doubleValue (DoubleType), arrayValue (ArrayType), and mapValue (MapType)
+        # Each Row schema matches the InnerNestedClass mentioned above.
         list_of_composite = [
             {
                 "intValue": i,
@@ -1895,6 +1895,7 @@ class PandasCompositeOutputProcessor(StatefulProcessor):
         ]
 
         # mapOfComposite: MapType(StringType, StructType)
+        # Each (value) Row schema matches the InnerNestedClass mentioned above.
         map_of_composite = {
             f"nested_key{i}": {
                 "intValue": i * 10,
@@ -1962,7 +1963,7 @@ class RowCompositeOutputProcessor(StatefulProcessor):
         map_of_primitive = {f"key{i}": f"value{i}" for i in range(count)}
 
         # listOfComposite: ArrayType(StructType)
-        # Each Row has intValue (IntegerType), doubleValue (DoubleType), arrayValue (ArrayType), and mapValue (MapType)
+        # Each Row schema matches the InnerNestedClass mentioned above.
         list_of_composite = [
             Row(
                 intValue=i,
@@ -1974,6 +1975,7 @@ class RowCompositeOutputProcessor(StatefulProcessor):
         ]
 
         # mapOfComposite: MapType(StringType, StructType)
+        # Each (value) Row schema matches the InnerNestedClass mentioned above.
         map_of_composite = {
             f"nested_key{i}": Row(
                 intValue=i * 10,
