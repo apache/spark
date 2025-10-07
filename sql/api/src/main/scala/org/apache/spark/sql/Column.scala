@@ -1424,6 +1424,23 @@ class Column(val node: ColumnNode) extends Logging with TableValuedFunctionArgum
    */
   def outer(): Column = Column(internal.LazyExpression(node))
 
+  /**
+   * Concise syntax for chaining custom transformations.
+   * {{{
+   *   def addPrefix(c: Column): Column = concat(lit("prefix_"), c)
+   *
+   *   df.select($"name".transform(addPrefix))
+   *
+   *   // Chaining multiple transformations
+   *   def uppercase(c: Column): Column = upper(c)
+   *   df.select($"name".transform(addPrefix).transform(uppercase))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.1.0
+   */
+  def transform(t: Column => Column): Column = t(this)
+
 }
 
 /**

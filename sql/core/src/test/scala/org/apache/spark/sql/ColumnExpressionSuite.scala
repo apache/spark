@@ -3144,4 +3144,62 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select($"dd" / ($"num" + 3)),
       Seq((Duration.ofDays(2))).toDF())
   }
+
+  test("Column.transform: basic transformation") {
+    val df = Seq(1, 2, 3).toDF("value")
+    def addOne(c: Column): Column = c + 1
+    checkAnswer(
+      df.select($"value".transform(addOne)),
+      Seq(2, 3, 4).toDF()
+    )
+  }
+
+  test("Column.transform: chaining transformations") {
+    val df = Seq("apple", "banana", "cherry").toDF("fruit")
+    def addPrefix(c: Column): Column = concat(lit("fruit_"), c)
+    def uppercase(c: Column): Column = upper(c)
+
+    checkAnswer(
+      df.select($"fruit".transform(addPrefix).transform(uppercase)),
+      Seq("FRUIT_APPLE", "FRUIT_BANANA", "FRUIT_CHERRY").toDF()
+    )
+  }
+
+  test("Column.transform: with complex function") {
+    val df = Seq(1, 2, 3, 4, 5).toDF("num")
+    def conditionalDouble(c: Column): Column = when(c > 3, c * 2).otherwise(c)
+
+    checkAnswer(
+      df.select($"num".transform(conditionalDouble)),
+      Seq(1, 2, 3, 8, 10).toDF()
+    )
+  }
+
+  test("Column.transform: with null values") {
+    val df = Seq(Some(1), None, Some(3)).toDF("value")
+    def addTen(c: Column): Column = c + 10
+
+    checkAnswer(
+      df.select($"value".transform(addTen)),
+      Seq(Some(11), None, Some(13)).toDF()
+    )
+  }
+
+  test("Column.transform: preserves column type") {
+    val df = Seq(1.5, 2.5, 3.5).toDF("num")
+    def doubleIt(c: Column): Column = c * 2
+
+    val result = df.select($"num".transform(doubleIt))
+    checkAnswer(result, Seq(3.0, 5.0, 7.0).toDF())
+  }
+
+  test("Column.transform: with functions from functions object") {
+    val df = Seq("  hello  ", "  world  ").toDF("text")
+    def trimAndUpper(c: Column): Column = upper(trim(c))
+
+    checkAnswer(
+      df.select($"text".transform(trimAndUpper)),
+      Seq("HELLO", "WORLD").toDF()
+    )
+  }
 }
