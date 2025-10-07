@@ -51,7 +51,7 @@ class SqlScriptingExecution(
     val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
     // Add frame which represents SQL Script to the context.
     ctx.frames.append(
-      new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRIPT))
+      new SqlScriptingSqlScriptExecutionFrame(executionPlan))
     // Enter the scope of the top level compound.
     // We exit this scope explicitly in the getNextStatement method when there are no more
     // statements to execute.
@@ -71,42 +71,6 @@ class SqlScriptingExecution(
     contextManagerHandle.runWith(f)
   }
 
-  /**
-   * Helper method to inject leave statement into the execution plan.
-   * @param executionPlan Execution plan to inject leave statement into.
-   * @param label Label of the leave statement.
-   */
-  private def injectLeaveStatement(executionPlan: NonLeafStatementExec, label: String): Unit = {
-    // Go as deep as possible, to find a leaf node. Instead of a statement that
-    // should be executed next, inject LEAVE statement in its place.
-    var currExecPlan = executionPlan
-    while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
-      currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
-    }
-    currExecPlan.curr = Some(new LeaveStatementExec(label))
-  }
-
-  /**
-   * Helper method to execute interrupts to ConditionalStatements.
-   * This method should only interrupt when the statement that throws is a conditional statement.
-   * @param executionPlan Execution plan.
-   */
-  private def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {
-    // Go as deep as possible into the execution plan children nodes, to find a leaf node.
-    // That leaf node is the next statement that is to be executed. If the parent node of that
-    // leaf node is a conditional statement, skip the conditional statement entirely.
-    var currExecPlan = executionPlan
-    while (currExecPlan.curr.exists(_.isInstanceOf[NonLeafStatementExec])) {
-      currExecPlan = currExecPlan.curr.get.asInstanceOf[NonLeafStatementExec]
-    }
-
-    currExecPlan match {
-      case exec: ConditionalStatementExec =>
-        exec.interrupted = true
-      case _ =>
-    }
-  }
-
   /** Helper method to iterate get next statements from the first available frame. */
   private def getNextStatement: Option[CompoundStatementExec] = {
     // Remove frames that are already executed.
@@ -122,30 +86,8 @@ class SqlScriptingExecution(
 
       context.frames.remove(context.frames.size - 1)
 
-      // If the last frame is a handler, set leave statement to be the next one in the
-      // innermost scope that should be exited.
-      if (lastFrame.frameType == SqlScriptingFrameType.EXIT_HANDLER
-          && context.frames.nonEmpty) {
-        // Remove the scope if handler is executed.
-        if (context.firstHandlerScopeLabel.isDefined
-          && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
-          context.firstHandlerScopeLabel = None
-        }
-
-        // Inject leave statement into the execution plan of the last frame.
-        injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
-      }
-
-      if (lastFrame.frameType == SqlScriptingFrameType.CONTINUE_HANDLER
-          && context.frames.nonEmpty) {
-        // Remove the scope if handler is executed.
-        if (context.firstHandlerScopeLabel.isDefined
-          && lastFrame.scopeLabel.get == context.firstHandlerScopeLabel.get) {
-          context.firstHandlerScopeLabel = None
-        }
-
-        // Interrupt conditional statements
-        interruptConditionalStatements(context.frames.last.executionPlan)
+      if (context.frames.nonEmpty) {
+        lastFrame.exitExecutionFrame(context)
       }
     }
     // If there are still frames available, get the next statement.
@@ -202,15 +144,17 @@ class SqlScriptingExecution(
   private def handleException(e: SparkThrowable): Unit = {
     context.findHandler(e.getCondition, e.getSqlState) match {
       case Some(handler) =>
-        val handlerFrame = new SqlScriptingExecutionFrame(
-          handler.body,
-          if (handler.handlerType == ExceptionHandlerType.CONTINUE) {
-            SqlScriptingFrameType.CONTINUE_HANDLER
-          } else {
-            SqlScriptingFrameType.EXIT_HANDLER
-          },
-          handler.scopeLabel
-        )
+        val handlerFrame = handler.handlerType match {
+          case ExceptionHandlerType.EXIT => new SqlScriptingExitHandlerExecutionFrame(
+            handler.body,
+            handler.scopeLabel
+          )
+          case ExceptionHandlerType.CONTINUE => new SqlScriptingContinueHandlerExecutionFrame(
+            handler.body,
+            handler.scopeLabel
+          )
+        }
+
         context.frames.append(
           handlerFrame
         )

@@ -1225,7 +1225,7 @@ class ForStatementExec(
 class ExceptionHandlerExec(
     val body: CompoundBodyExec,
     val handlerType: ExceptionHandlerType,
-    val scopeLabel: Option[String]) extends NonLeafStatementExec {
+    val scopeLabel: String) extends NonLeafStatementExec {
 
   protected[scripting] var curr: Option[CompoundStatementExec] = body.curr
 

@@ -87,7 +87,10 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
     // including the scope where the previously checked exception handler frame is defined.
     // Exception handler frames should not have access to variables from scopes
     // which are nested below the scope where the handler is defined.
-    var previousFrameDefinitionLabel = context.currentFrame.scopeLabel
+    var previousFrameDefinitionLabel = context.currentFrame match {
+      case frame: SqlScriptingHandlerExecutionFrame => Some(frame.scopeLabel)
+      case _ => None
+    }
 
     // dropRight(1) removes the current frame, which we already checked above.
     context.frames.dropRight(1).reverseIterator.foreach(frame => {
@@ -105,7 +108,10 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
       // in this frame. If we still have not found the variable, we now have to find the definition
       // of this new frame, so we reassign the frame definition label to search for.
       if (candidateScopes.nonEmpty) {
-        previousFrameDefinitionLabel = frame.scopeLabel
+        previousFrameDefinitionLabel = frame match {
+          case frame: SqlScriptingHandlerExecutionFrame => Some(frame.scopeLabel)
+          case _ => None
+        }
       }
     })
     None
