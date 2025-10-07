@@ -81,13 +81,10 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
 }
 
 /**
- * SQL scripting executor - executes script and returns result statements.
+ * SQL scripting executor - base class for executing a CompoundBody returning result statements.
  * This supports returning multiple result statements from a single script.
  *
  * @param executionPlan CompoundBody which need to be executed.
- * @param frameType Type of the frame.
- * @param scopeLabel Label of the scope where handler is defined.
- *                   Available only for frameType = HANDLER.
  */
 abstract class SqlScriptingExecutionFrame(
     val executionPlan: CompoundBodyExec) extends Iterator[CompoundStatementExec] {
@@ -156,12 +153,17 @@ abstract class SqlScriptingExecutionFrame(
     None
   }
 
+  def exitExecutionFrame(context: SqlScriptingExecutionContext): Unit
+}
+
+object SqlScriptingExecutionFrame {
   /**
    * Helper method to inject leave statement into the execution plan.
    * @param executionPlan Execution plan to inject leave statement into.
    * @param label Label of the leave statement.
    */
-  protected def injectLeaveStatement(executionPlan: NonLeafStatementExec, label: String): Unit = {
+  private[sql] def injectLeaveStatement(
+      executionPlan: NonLeafStatementExec, label: String): Unit = {
     // Go as deep as possible, to find a leaf node. Instead of a statement that
     // should be executed next, inject LEAVE statement in its place.
     var currExecPlan = executionPlan
@@ -176,7 +178,7 @@ abstract class SqlScriptingExecutionFrame(
    * This method should only interrupt when the statement that throws is a conditional statement.
    * @param executionPlan Execution plan.
    */
-  protected def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {
+  private[sql] def interruptConditionalStatements(executionPlan: NonLeafStatementExec): Unit = {
     // Go as deep as possible into the execution plan children nodes, to find a leaf node.
     // That leaf node is the next statement that is to be executed. If the parent node of that
     // leaf node is a conditional statement, skip the conditional statement entirely.
@@ -191,52 +193,82 @@ abstract class SqlScriptingExecutionFrame(
       case _ =>
     }
   }
-
-  def exitExecutionFrame(context: SqlScriptingExecutionContext): Unit
 }
 
+/**
+ * SQL scripting script frame executor - executes script and returns result statements.
+ * This supports returning multiple result statements from a single script.
+ * @param executionPlan CompoundBody which need to be executed.
+ */
 class SqlScriptingSqlScriptExecutionFrame(
     override val executionPlan: CompoundBodyExec)
     extends SqlScriptingExecutionFrame(executionPlan) {
   override def exitExecutionFrame(context: SqlScriptingExecutionContext): Unit = {}
 }
 
+/**
+ * SQL scripting executor - base class for executing handlers.
+ * @param executionPlan CompoundBody which need to be executed.
+ * @param scopeLabel Label of the scope where handler is defined.
+ */
 abstract class SqlScriptingHandlerExecutionFrame(
     override val executionPlan: CompoundBodyExec,
     val scopeLabel: String) extends SqlScriptingExecutionFrame(executionPlan)
 
+/**
+ * SQL scripting executor - executes an exit handler and returns result statements.
+ * This supports returning multiple result statements from a single script.
+ * @param executionPlan CompoundBody which need to be executed.
+ * @param scopeLabel Label of the scope where handler is defined.
+ */
 class SqlScriptingExitHandlerExecutionFrame(
     override val executionPlan: CompoundBodyExec,
     override val scopeLabel: String)
     extends SqlScriptingHandlerExecutionFrame(executionPlan, scopeLabel) {
-  // Set leave statement to be the next one in the innermost scope that should be exited.
+
+  /**
+   * Set leave statement to be the next one in the innermost scope that should be exited.
+   * @param context Execution context after the current frame was removed from the
+   *                frame stack.
+   */
   override def exitExecutionFrame(context: SqlScriptingExecutionContext): Unit = {
     // Remove the scope if handler is executed.
     if (context.firstHandlerScopeLabel.isDefined
-      && this.scopeLabel == context.firstHandlerScopeLabel.get) {
+      && scopeLabel == context.firstHandlerScopeLabel.get) {
       context.firstHandlerScopeLabel = None
     }
 
     // Inject leave statement into the execution plan of the last frame.
-    injectLeaveStatement(context.frames.last.executionPlan, this.scopeLabel)
+    SqlScriptingExecutionFrame.injectLeaveStatement(context.frames.last.executionPlan, scopeLabel)
   }
 }
 
+/**
+ * SQL scripting executor - executes a continue handler and returns result statements.
+ * This supports returning multiple result statements from a single script.
+ * @param executionPlan CompoundBody which need to be executed.
+ * @param scopeLabel Label of the scope where handler is defined.
+ */
 class SqlScriptingContinueHandlerExecutionFrame(
     override val executionPlan: CompoundBodyExec,
     override val scopeLabel: String)
     extends SqlScriptingHandlerExecutionFrame(executionPlan, scopeLabel) {
-  // If the last frame is a handler, set leave statement to be the next one in the
-  // innermost scope that should be exited.
+
+  /**
+   * If the last frame is a handler, set leave statement to be the next one in the
+   * innermost scope that should be exited.
+   * @param context Execution context after the current frame was removed from the
+   *                frame stack.
+   */
   override def exitExecutionFrame(context: SqlScriptingExecutionContext): Unit = {
     // Remove the scope if handler is executed.
     if (context.firstHandlerScopeLabel.isDefined
-      && this.scopeLabel == context.firstHandlerScopeLabel.get) {
+      && scopeLabel == context.firstHandlerScopeLabel.get) {
       context.firstHandlerScopeLabel = None
     }
 
-    // Interrupt conditional statements
-    interruptConditionalStatements(context.frames.last.executionPlan)
+    // Interrupt conditional statements.
+    SqlScriptingExecutionFrame.interruptConditionalStatements(context.frames.last.executionPlan)
   }
 }
 
