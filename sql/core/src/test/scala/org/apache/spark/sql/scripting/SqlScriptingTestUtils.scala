@@ -53,7 +53,7 @@ trait SqlScriptingTestUtils {
     val context = new SqlScriptingExecutionContext()
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
     context.frames.append(
-      new SqlScriptingExecutionFrame(executionPlan, SqlScriptingFrameType.SQL_SCRIPT)
+      new SqlScriptingSqlScriptExecutionFrame(executionPlan)
     )
     executionPlan.enterScope()
 
