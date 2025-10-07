@@ -20,14 +20,18 @@ package org.apache.spark.sql.execution.streaming
 import java.io.File
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.io.IOUtils.NullOutputStream
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should._
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest, Trigger}
@@ -257,6 +261,43 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       ProcessAllAvailable(),      // let no-data-batch be executed
       CheckAnswer(0, 5, 10, 15, 20, 25)
     )
+  }
+
+  test("DSv2 and Delta sink should not have duplicate SparkListenerEvent") {
+    val input = MemoryStream[Int]
+
+    val planCount = scala.collection.mutable.Map[LogicalPlan, Int]().withDefaultValue(0)
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+        case e: SparkListenerSQLExecutionStart =>
+          if (e.qe.logical.isInstanceOf[WriteToMicroBatchDataSource] ||
+            e.qe.logical.isInstanceOf[WriteToMicroBatchDataSourceV1]) {
+            planCount(e.qe.logical) += 1
+          }
+        case _ =>
+      }
+    })
+
+    Console.withOut(new NullOutputStream) {
+      val query = input.toDF().writeStream.format("console").start()
+      input.addData(1, 2, 3)
+      query.processAllAvailable()
+      query.stop()
+    }
+
+    withTempDir { ckpt =>
+      val query = input.toDF().writeStream
+        .format("delta").option("checkpointLocation", ckpt.getCanonicalPath)
+        .toTable("test_table")
+      input.addData(1, 2, 3)
+      query.processAllAvailable()
+      query.stop()
+    }
+
+    planCount.values.foreach { count =>
+      // There is no duplicate SparkListenerEvent for each spark plan
+      assert(count == 1)
+    }
   }
 
   case class ReExecutedBatchTestSource(spark: SparkSession) extends Source {

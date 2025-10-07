@@ -874,7 +874,15 @@ class MicroBatchExecution(
 
     val batchSinkProgress: Option[StreamWriterCommitProgress] =
       execCtx.reportTimeTaken("addBatch") {
-      SQLExecution.withNewExecutionId(execCtx.executionPlan) {
+      def withSQLExecutionContext[T](body: => T): T = {
+        sink match {
+          case _: DeltaSink | _: SupportsWrite =>
+            SQLExecution.withRootExecution(execCtx.executionPlan.sparkSession)(body)
+          case _ => SQLExecution.withNewExecutionId(execCtx.executionPlan, None)(body)
+        }
+      }
+
+      withSQLExecutionContext {
         sink match {
           case s: Sink =>
             s.addBatch(execCtx.batchId, nextBatch)
