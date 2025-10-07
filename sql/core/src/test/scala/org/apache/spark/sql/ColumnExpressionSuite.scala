@@ -3243,7 +3243,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(
         $"fruit".transform(c =>
-          when(length(c) > 5, concat(lit("long: "), upper(c)))
+          when(functions.length(c) > 5, concat(lit("long: "), upper(c)))
             .otherwise(concat(lit("short: "), c))
         )
       ),
