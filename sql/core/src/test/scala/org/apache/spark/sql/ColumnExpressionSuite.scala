@@ -3147,7 +3147,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("Column.transform: basic transformation") {
     val df = Seq(1, 2, 3).toDF("value")
+
     def addOne(c: Column): Column = c + 1
+
     checkAnswer(
       df.select($"value".transform(addOne)),
       Seq(2, 3, 4).toDF()
@@ -3156,7 +3158,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("Column.transform: chaining transformations") {
     val df = Seq("apple", "banana", "cherry").toDF("fruit")
+
     def addPrefix(c: Column): Column = concat(lit("fruit_"), c)
+
     def uppercase(c: Column): Column = upper(c)
 
     checkAnswer(
@@ -3167,6 +3171,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("Column.transform: with complex function") {
     val df = Seq(1, 2, 3, 4, 5).toDF("num")
+
     def conditionalDouble(c: Column): Column = when(c > 3, c * 2).otherwise(c)
 
     checkAnswer(
@@ -3177,6 +3182,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("Column.transform: with null values") {
     val df = Seq(Some(1), None, Some(3)).toDF("value")
+
     def addTen(c: Column): Column = c + 10
 
     checkAnswer(
@@ -3187,6 +3193,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("Column.transform: preserves column type") {
     val df = Seq(1.5, 2.5, 3.5).toDF("num")
+
     def doubleIt(c: Column): Column = c * 2
 
     val result = df.select($"num".transform(doubleIt))
@@ -3195,6 +3202,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("Column.transform: with functions from functions object") {
     val df = Seq("  hello  ", "  world  ").toDF("text")
+
     def trimAndUpper(c: Column): Column = upper(trim(c))
 
     checkAnswer(
@@ -3234,7 +3242,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     // Lambda with conditional and string operations
     checkAnswer(
       df.select(
-        $"fruit".transform(c => 
+        $"fruit".transform(c =>
           when(length(c) > 5, concat(lit("long: "), upper(c)))
             .otherwise(concat(lit("short: "), c))
         )
@@ -3245,6 +3253,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("Column.transform: mixing lambdas and named functions") {
     val df = Seq(1, 2, 3).toDF("num")
+
     def triple(c: Column): Column = c * 3
 
     // Mix named function and lambda
