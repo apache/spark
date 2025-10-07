@@ -16,7 +16,6 @@
 #
 
 import unittest
-from contextlib import contextmanager, ExitStack
 from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
@@ -26,38 +25,6 @@ if should_test_connect:
 
 
 class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
-    def connect_conf(self, conf_dict):
-        """Context manager to set configuration on Spark Connect session"""
-
-        @contextmanager
-        def _connect_conf():
-            old_values = {}
-            for key, value in conf_dict.items():
-                old_values[key] = self.connect.conf.get(key, None)
-                self.connect.conf.set(key, value)
-            try:
-                yield
-            finally:
-                for key, old_value in old_values.items():
-                    if old_value is None:
-                        self.connect.conf.unset(key)
-                    else:
-                        self.connect.conf.set(key, old_value)
-
-        return _connect_conf()
-
-    def both_conf(self, conf_dict):
-        """Context manager to set configuration on both classic and Connect sessions"""
-
-        @contextmanager
-        def _both_conf():
-            with ExitStack() as stack:
-                stack.enter_context(self.sql_conf(conf_dict))
-                stack.enter_context(self.connect_conf(conf_dict))
-                yield
-
-        return _both_conf()
-
     def test_collect(self):
         query = "SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)"
         cdf = self.connect.sql(query)
