@@ -1602,25 +1602,76 @@ class TransformWithStateTestsMixin:
     # run a test with composite types where the output of TWS (not just the states) are complex.
     def test_composite_output_schema(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
+            # Cannot use set() wrapper because Row objects contain unhashable types (lists)
             if batch_id == 0:
-                rows = batch_df.sort("primitiveValue").collect()
-                assert len(rows) == 2
-
-                # Check key_0 with count=2
-                row_0 = [r for r in rows if "key_0" in r.primitiveValue][0]
-                assert row_0.primitiveValue == "key_0_count_2"
-                assert row_0.listOfPrimitive == ["item_0", "item_1"]
-                assert row_0.mapOfPrimitive == {"key0": "value0", "key1": "value1"}
-                assert len(row_0.listOfComposite) == 2
-                assert row_0.listOfComposite[0].intValue == 0
-                assert row_0.listOfComposite[0].doubleValue == 0.0
-                assert row_0.listOfComposite[1].intValue == 1
-                assert row_0.listOfComposite[1].doubleValue == 1.5
-                assert len(row_0.mapOfComposite) == 2
-                assert row_0.mapOfComposite["nested_key0"].intValue == 0
-                assert row_0.mapOfComposite["nested_key0"].doubleValue == 0.0
-                assert row_0.mapOfComposite["nested_key1"].intValue == 10
-                assert row_0.mapOfComposite["nested_key1"].doubleValue == 2.5
+                assert batch_df.sort("primitiveValue").collect() == [
+                    Row(
+                        primitiveValue="key_0_count_2",
+                        listOfPrimitive=["item_0", "item_1"],
+                        mapOfPrimitive={"key0": "value0", "key1": "value1"},
+                        listOfComposite=[
+                            Row(intValue=0, doubleValue=0.0),
+                            Row(intValue=1, doubleValue=1.5)
+                        ],
+                        mapOfComposite={
+                            "nested_key0": Row(intValue=0, doubleValue=0.0),
+                            "nested_key1": Row(intValue=10, doubleValue=2.5)
+                        }
+                    ),
+                    Row(
+                        primitiveValue="key_1_count_2",
+                        listOfPrimitive=["item_0", "item_1"],
+                        mapOfPrimitive={"key0": "value0", "key1": "value1"},
+                        listOfComposite=[
+                            Row(intValue=0, doubleValue=0.0),
+                            Row(intValue=1, doubleValue=1.5)
+                        ],
+                        mapOfComposite={
+                            "nested_key0": Row(intValue=0, doubleValue=0.0),
+                            "nested_key1": Row(intValue=10, doubleValue=2.5)
+                        }
+                    )
+                ]
+            else:
+                assert batch_df.sort("primitiveValue").collect() == [
+                    Row(
+                        primitiveValue="key_0_count_5",
+                        listOfPrimitive=["item_0", "item_1", "item_2", "item_3", "item_4"],
+                        mapOfPrimitive={"key0": "value0", "key1": "value1", "key2": "value2", "key3": "value3", "key4": "value4"},
+                        listOfComposite=[
+                            Row(intValue=0, doubleValue=0.0),
+                            Row(intValue=1, doubleValue=1.5),
+                            Row(intValue=2, doubleValue=3.0),
+                            Row(intValue=3, doubleValue=4.5),
+                            Row(intValue=4, doubleValue=6.0)
+                        ],
+                        mapOfComposite={
+                            "nested_key0": Row(intValue=0, doubleValue=0.0),
+                            "nested_key1": Row(intValue=10, doubleValue=2.5),
+                            "nested_key2": Row(intValue=20, doubleValue=5.0),
+                            "nested_key3": Row(intValue=30, doubleValue=7.5),
+                            "nested_key4": Row(intValue=40, doubleValue=10.0)
+                        }
+                    ),
+                    Row(
+                        primitiveValue="key_1_count_4",
+                        listOfPrimitive=["item_0", "item_1", "item_2", "item_3"],
+                        mapOfPrimitive={"key0": "value0", "key1": "value1", "key2": "value2", "key3": "value3"},
+                        listOfComposite=[
+                            Row(intValue=0, doubleValue=0.0),
+                            Row(intValue=1, doubleValue=1.5),
+                            Row(intValue=2, doubleValue=3.0),
+                            Row(intValue=3, doubleValue=4.5)
+                        ],
+                        mapOfComposite={
+                            "nested_key0": Row(intValue=0, doubleValue=0.0),
+                            "nested_key1": Row(intValue=10, doubleValue=2.5),
+                            "nested_key2": Row(intValue=20, doubleValue=5.0),
+                            "nested_key3": Row(intValue=30, doubleValue=7.5)
+                        }
+                    )
+                ]
 
         # Define the output schema matching Scala case class
         inner_nested_class_schema = StructType([
@@ -1637,7 +1688,7 @@ class TransformWithStateTestsMixin:
         ])
 
         self._test_transform_with_state_basic(
-            CompositeOutputProcessorFactory(), check_results, True, output_schema=output_schema
+            CompositeOutputProcessorFactory(), check_results, output_schema=output_schema
         )
 
     # run the same test suites again but with single shuffle partition
