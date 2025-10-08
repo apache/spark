@@ -37,6 +37,4 @@ rm -rf /__t/Python
 rm -rf /__t/Ruby
 du -sh /__t/*
 
-du -sh /*
-
 df -h
