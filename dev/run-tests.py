@@ -29,7 +29,6 @@ from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd,
 from sparktestsupport.utils import (
     determine_modules_for_files,
     determine_modules_to_test,
-    determine_tags_to_exclude,
     identify_changed_files_from_git_commits,
 )
 import sparktestsupport.modules as modules
