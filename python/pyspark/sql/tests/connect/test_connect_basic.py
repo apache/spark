@@ -1459,6 +1459,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         finally:
             self.connect._client._plan_compression_threshold = default_plan_compression_threshold
 
+
 class SparkConnectGCTests(SparkConnectSQLTestCase):
     @classmethod
     def setUpClass(cls):

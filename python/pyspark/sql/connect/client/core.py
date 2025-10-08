@@ -121,6 +121,7 @@ def _import_zstandard_if_available():
     """
     try:
         import zstandard
+
         return zstandard
     except ImportError:
         return None
@@ -1982,8 +1983,13 @@ class SparkConnectClient(object):
 
                     if info.metadata.get("errorClass") == "CONNECT_INVALID_PLAN.CANNOT_PARSE":
                         # Disable plan compression if the server fails to interpret the plan.
-                        logger.info(f"Disabling plan compression for the session due to {info.metadata["errorClass"]} error.")
-                        self._plan_compression_threshold, self._plan_compression_algorithm = -1, "NONE"
+                        logger.info(
+                            "Disabling plan compression for the session due to CONNECT_INVALID_PLAN.CANNOT_PARSE error."
+                        )
+                        self._plan_compression_threshold, self._plan_compression_algorithm = (
+                            -1,
+                            "NONE",
+                        )
 
                     raise convert_exception(
                         info,
@@ -2145,27 +2151,34 @@ class SparkConnectClient(object):
         )
 
     def _try_compress_and_set_plan(
-            self,
-            plan: pb2.Plan,
-            message: google.protobuf.message.Message,
-            op_type: pb2.Plan.CompressedOperation.OpType,
+        self,
+        plan: pb2.Plan,
+        message: google.protobuf.message.Message,
+        op_type: pb2.Plan.CompressedOperation.OpType,
     ) -> None:
         """
         Tries to compress a protobuf message and sets it on the plan.
         If compression is not enabled, not effective, or not available,
         it falls back to the original message.
         """
-        plan_compression_threshold, plan_compression_algorithm = self._get_plan_compression_threshold_and_algorithm()
+        (
+            plan_compression_threshold,
+            plan_compression_algorithm,
+        ) = self._get_plan_compression_threshold_and_algorithm()
         plan_compression_enabled = (
-                plan_compression_threshold is not None and
-                plan_compression_threshold >= 0 and
-                plan_compression_algorithm is not None and
-                plan_compression_algorithm != "NONE"
+            plan_compression_threshold is not None
+            and plan_compression_threshold >= 0
+            and plan_compression_algorithm is not None
+            and plan_compression_algorithm != "NONE"
         )
         if plan_compression_enabled:
             serialized_msg = message.SerializeToString()
             original_size = len(serialized_msg)
-            if original_size > plan_compression_threshold and plan_compression_algorithm == "ZSTD" and self._zstd_module:
+            if (
+                original_size > plan_compression_threshold
+                and plan_compression_algorithm == "ZSTD"
+                and self._zstd_module
+            ):
                 start_time = time.time()
                 compressed_operation = pb2.Plan.CompressedOperation(
                     data=self._zstd_module.compress(serialized_msg),
@@ -2174,8 +2187,10 @@ class SparkConnectClient(object):
                 )
                 duration = time.time() - start_time
                 compressed_size = len(compressed_operation.data)
-                logger.debug(f"Plan compression: original_size={original_size}, compressed_size={compressed_size}, "
-                      f"saving_ratio={1 - compressed_size / original_size:.2f}, duration_s={duration:.1f}")
+                logger.debug(
+                    f"Plan compression: original_size={original_size}, compressed_size={compressed_size}, "
+                    f"saving_ratio={1 - compressed_size / original_size:.2f}, duration_s={duration:.1f}"
+                )
                 if compressed_size < original_size:
                     plan.compressed_operation.CopyFrom(compressed_operation)
                     return
@@ -2190,15 +2205,22 @@ class SparkConnectClient(object):
     def _get_plan_compression_threshold_and_algorithm(self) -> Tuple[int, str]:
         if self._plan_compression_threshold is None or self._plan_compression_algorithm is None:
             try:
-                self._plan_compression_threshold, self._plan_compression_algorithm = self.get_configs(
+                (
+                    self._plan_compression_threshold,
+                    self._plan_compression_algorithm,
+                ) = self.get_configs(
                     "spark.connect.session.planCompression.threshold",
                     "spark.connect.session.planCompression.defaultAlgorithm",
                 )
                 self._plan_compression_threshold = int(self._plan_compression_threshold)
-                logger.debug(f"Plan compression threshold: {self._plan_compression_threshold}, "
-                             f"algorithm: {self._plan_compression_algorithm}")
+                logger.debug(
+                    f"Plan compression threshold: {self._plan_compression_threshold}, "
+                    f"algorithm: {self._plan_compression_algorithm}"
+                )
             except Exception as e:
                 self._plan_compression_threshold = -1
                 self._plan_compression_algorithm = "NONE"
-                logger.debug("Plan compression is disabled because the server does not support it.", e)
+                logger.debug(
+                    "Plan compression is disabled because the server does not support it.", e
+                )
         return self._plan_compression_threshold, self._plan_compression_algorithm
