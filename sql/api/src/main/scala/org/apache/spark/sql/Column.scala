@@ -1439,7 +1439,7 @@ class Column(val node: ColumnNode) extends Logging with TableValuedFunctionArgum
    * @group expr_ops
    * @since 4.1.0
    */
-  def transform(t: Column => Column): Column = t(this)
+  def transform(f: Column => Column): Column = f(this)
 
 }
 
