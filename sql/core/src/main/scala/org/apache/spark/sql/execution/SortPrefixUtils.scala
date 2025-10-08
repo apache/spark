@@ -63,6 +63,8 @@ object SortPrefixUtils {
         PrefixComparators.STRING_DESC_NULLS_FIRST
       case Descending =>
         PrefixComparators.STRING_DESC
+      case Constant =>
+        NoOpPrefixComparator
     }
   }
 
@@ -76,6 +78,8 @@ object SortPrefixUtils {
         PrefixComparators.BINARY_DESC_NULLS_FIRST
       case Descending =>
         PrefixComparators.BINARY_DESC
+      case Constant =>
+        NoOpPrefixComparator
     }
   }
 
@@ -89,6 +93,8 @@ object SortPrefixUtils {
         PrefixComparators.LONG_DESC_NULLS_FIRST
       case Descending =>
         PrefixComparators.LONG_DESC
+      case Constant =>
+        NoOpPrefixComparator
     }
   }
 
@@ -102,6 +108,8 @@ object SortPrefixUtils {
         PrefixComparators.DOUBLE_DESC_NULLS_FIRST
       case Descending =>
         PrefixComparators.DOUBLE_DESC
+      case Constant =>
+        NoOpPrefixComparator
     }
   }
 
