@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.submit
 
 import java.io.{File, StringWriter}
 import java.nio.charset.MalformedInputException
+import java.util.{List => JList, Map => JMap}
 import java.util.Properties
 
 import scala.collection.mutable
@@ -72,6 +73,18 @@ object KubernetesClientUtils extends Logging {
 
   /**
    * Build, file -> 'file's content' map of all the selected files in SPARK_CONF_DIR.
+   * (Java-friendly)
+   */
+  @Since("4.1.0")
+  def buildSparkConfDirFilesMapJava(
+      configMapName: String,
+      sparkConf: SparkConf,
+      resolvedPropertiesMap: JMap[String, String]): JMap[String, String] = synchronized {
+    buildSparkConfDirFilesMap(configMapName, sparkConf, resolvedPropertiesMap.asScala.toMap).asJava
+  }
+
+  /**
+   * Build, file -> 'file's content' map of all the selected files in SPARK_CONF_DIR.
    */
   @Since("3.1.1")
   def buildSparkConfDirFilesMap(
@@ -89,6 +102,11 @@ object KubernetesClientUtils extends Logging {
     }
   }
 
+  @Since("4.1.0")
+  def buildKeyToPathObjectsJava(confFilesMap: JMap[String, String]): JList[KeyToPath] = {
+    buildKeyToPathObjects(confFilesMap.asScala.toMap).asJava
+  }
+
   @Since("3.1.0")
   def buildKeyToPathObjects(confFilesMap: Map[String, String]): Seq[KeyToPath] = {
     confFilesMap.map {
@@ -96,6 +114,16 @@ object KubernetesClientUtils extends Logging {
         val filePermissionMode = 420  // 420 is decimal for octal literal 0644.
         new KeyToPath(fileName, filePermissionMode, fileName)
     }.toList.sortBy(x => x.getKey) // List is sorted to make mocking based tests work
+  }
+
+  /**
+   * Build a ConfigMap that will hold the content for environment variable SPARK_CONF_DIR
+   * on remote pods. (Java-friendly)
+   */
+  @Since("4.1.0")
+  def buildConfigMapJava(configMapName: String, confFileMap: JMap[String, String],
+      withLabels: JMap[String, String]): ConfigMap = {
+    buildConfigMap(configMapName, confFileMap.asScala.toMap, withLabels.asScala.toMap)
   }
 
   /**
