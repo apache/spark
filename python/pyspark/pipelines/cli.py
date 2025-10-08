@@ -318,7 +318,9 @@ def run(
     registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
     register_definitions(spec_path, registry, spec)
 
-    log_with_curr_timestamp(f"Starting run (dry={dry}, full_refresh={full_refresh}, full_refresh_all={full_refresh_all}, refresh={refresh})...")
+    log_with_curr_timestamp(
+        f"Starting run (dry={dry}, full_refresh={full_refresh}, full_refresh_all={full_refresh_all}, refresh={refresh})..."
+    )
     result_iter = start_run(
         spark,
         dataflow_graph_id,
