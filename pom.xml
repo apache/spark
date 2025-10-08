@@ -217,7 +217,7 @@
     <bouncycastle.version>1.82</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.1.127.Final</netty.version>
+    <netty.version>4.2.6.Final</netty.version>
     <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.13.4</junit-jupiter.version>
@@ -337,6 +337,8 @@
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
       -Djdk.reflect.useDirectMethodHandle=false
       -Dio.netty.tryReflectionSetAccessible=true
+      -Dio.netty.allocator.type=pooled
+      -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
       --enable-native-access=ALL-UNNAMED
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
