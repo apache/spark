@@ -856,6 +856,139 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("test default value special column name conflicting with real column name: CREATE") {
+    val t = "testcat.ns.t"
+    withTable("t") {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(s"""CREATE table $t (
+           c1 STRING,
+           current_date DATE DEFAULT CURRENT_DATE,
+           current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+           current_time time DEFAULT CURRENT_TIME,
+           current_user STRING DEFAULT CURRENT_USER,
+           session_user STRING DEFAULT SESSION_USER,
+           user STRING DEFAULT USER,
+           current_database STRING DEFAULT CURRENT_DATABASE(),
+           current_catalog STRING DEFAULT CURRENT_CATALOG())""")
+      }
+
+      val columns = createExec.columns
+      checkDefaultValues(
+        columns,
+        Array(
+          null, // c1 has no default value
+          new ColumnDefaultValue("CURRENT_DATE", null),
+          new ColumnDefaultValue("CURRENT_TIMESTAMP", null),
+          new ColumnDefaultValue("CURRENT_TIME", null),
+          new ColumnDefaultValue("CURRENT_USER", null),
+          new ColumnDefaultValue("SESSION_USER", null),
+          new ColumnDefaultValue("USER", null),
+          new ColumnDefaultValue("CURRENT_DATABASE()", null),
+          new ColumnDefaultValue("CURRENT_CATALOG()", null)),
+        compareValue = false)
+
+      sql(s"INSERT INTO $t (c1) VALUES ('a')")
+      val result = sql(s"SELECT * FROM $t").collect()
+      assert(result.length == 1)
+      assert(result(0).getString(0) == "a")
+      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null))
+    }
+  }
+
+  test("test default value special column name conflicting with real column name: REPLACE") {
+    val t = "testcat.ns.t"
+    withTable("t") {
+      sql(s"""CREATE table $t (
+         c1 STRING)""")
+      val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
+        sql(
+          s"""REPLACE table $t (
+           c1 STRING,
+           current_date DATE DEFAULT CURRENT_DATE,
+           current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+           current_time time DEFAULT CURRENT_TIME,
+           current_user STRING DEFAULT CURRENT_USER,
+           session_user STRING DEFAULT SESSION_USER,
+           user STRING DEFAULT USER,
+           current_database STRING DEFAULT CURRENT_DATABASE(),
+           current_catalog STRING DEFAULT CURRENT_CATALOG())""")
+      }
+
+      val columns = replaceExec.columns
+      checkDefaultValues(
+        columns,
+        Array(
+          null, // c1 has no default value
+          new ColumnDefaultValue("CURRENT_DATE", null),
+          new ColumnDefaultValue("CURRENT_TIMESTAMP", null),
+          new ColumnDefaultValue("CURRENT_TIME", null),
+          new ColumnDefaultValue("CURRENT_USER", null),
+          new ColumnDefaultValue("SESSION_USER", null),
+          new ColumnDefaultValue("USER", null),
+          new ColumnDefaultValue("CURRENT_DATABASE()", null),
+          new ColumnDefaultValue("CURRENT_CATALOG()", null)),
+        compareValue = false)
+
+      sql(s"INSERT INTO $t (c1) VALUES ('a')")
+      val result = sql(s"SELECT * FROM $t").collect()
+      assert(result.length == 1)
+      assert(result(0).getString(0) == "a")
+      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null))
+    }
+  }
+
+  test("create table with conflicting literal function value in nested default value") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  c1 STRING,
+             |  current_date DATE DEFAULT DATE_ADD(current_date, 7)
+             |) USING foo
+             |""".stripMargin)
+      }
+
+      // Check that the table was created with the expected default value
+      val columns = createExec.columns
+      checkDefaultValues(
+        columns,
+        Array(
+          null, // c1 has no default value
+          new ColumnDefaultValue("DATE_ADD(current_date, 7)", null)),
+        compareValue = false)
+
+      val df1 = Seq("test1", "test2").toDF("c1")
+      df1.writeTo(tableName).append()
+
+      val result = sql(s"SELECT * FROM $tableName")
+      assert(result.count() == 2)
+      assert(result.collect().map(_.getString(0)).toSet == Set("test1", "test2"))
+      assert(result.collect().forall(_.get(1) != null))
+    }
+  }
+
+  test("test default value should not refer to real column") {
+    val t = "testcat.ns.t"
+    withTable("t") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"""CREATE table $t (
+           c1 timestamp,
+           current_timestamp TIMESTAMP DEFAULT c1)""")
+        },
+        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        parameters = Map(
+          "statement" -> "CREATE TABLE",
+          "colName" -> "`current_timestamp`",
+          "defaultValue" -> "c1"
+        ),
+        sqlState = Some("42623")
+      )
+    }
+  }
+
   private def executeAndKeepPhysicalPlan[T <: SparkPlan](func: => Unit): T = {
     val qe = withQueryExecutionsCaptured(spark) {
       func
@@ -865,15 +998,15 @@ class DataSourceV2DataFrameSuite
 
   private def checkDefaultValues(
       columns: Array[Column],
-      expectedDefaultValues: Array[ColumnDefaultValue]): Unit = {
+      expectedDefaultValues: Array[ColumnDefaultValue],
+      compareValue: Boolean = true): Unit = {
     assert(columns.length == expectedDefaultValues.length)
 
     columns.zip(expectedDefaultValues).foreach {
       case (column, expectedDefault) =>
-        assert(
-          column.defaultValue == expectedDefault,
-          s"Default value mismatch for column '${column.name}': " +
-          s"expected $expectedDefault but found ${column.defaultValue}")
+        assert(compareColumnDefaultValue(column.defaultValue(), expectedDefault, compareValue),
+          s"Default value mismatch for column '${column.toString}': " +
+            s"expected $expectedDefault but found ${column.defaultValue}")
     }
   }
 
@@ -911,5 +1044,18 @@ class DataSourceV2DataFrameSuite
       column.newCurrentDefault() == null,
       s"Default value mismatch for column '${column.toString}': " +
         s"expected empty but found ${column.newCurrentDefault()}")
+  }
+
+  private def compareColumnDefaultValue(
+      left: ColumnDefaultValue,
+      right: ColumnDefaultValue,
+      compareValue: Boolean) = {
+    (left, right) match {
+      case (null, null) => true
+      case (null, _) | (_, null) => false
+      case _ => left.getSql == right.getSql &&
+        left.getExpression == right.getExpression &&
+        (!compareValue || left.getValue == right.getValue)
+    }
   }
 }

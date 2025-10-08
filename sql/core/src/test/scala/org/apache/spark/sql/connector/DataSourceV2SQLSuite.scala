@@ -3870,60 +3870,6 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("test default value special column name conflicting with real column name") {
-    val t = "testcat.ns.t"
-    withTable("t") {
-      sql(s"""CREATE table $t (
-         c1 STRING,
-         current_date DATE DEFAULT CURRENT_DATE,
-         current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-         current_time time DEFAULT CURRENT_TIME,
-         current_user STRING DEFAULT CURRENT_USER,
-         session_user STRING DEFAULT SESSION_USER,
-         user STRING DEFAULT USER,
-         current_database STRING DEFAULT CURRENT_DATABASE(),
-         current_catalog STRING DEFAULT CURRENT_CATALOG())""")
-      sql(s"INSERT INTO $t (c1) VALUES ('a')")
-      val result = sql(s"SELECT * FROM $t").collect()
-      assert(result.length == 1)
-      assert(result(0).getString(0) == "a")
-      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null))
-    }
-  }
-
-  test("test default value special column name nested in function") {
-    val t = "testcat.ns.t"
-    withTable("t") {
-      sql(s"""CREATE table $t (
-         c1 STRING,
-         current_date DATE DEFAULT DATE_ADD(current_date, 7))""")
-      sql(s"INSERT INTO $t (c1) VALUES ('a')")
-      val result = sql(s"SELECT * FROM $t").collect()
-      assert(result.length == 1)
-      assert(result(0).getString(0) == "a")
-    }
-  }
-
-  test("test default value should not refer to real column") {
-    val t = "testcat.ns.t"
-    withTable("t") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"""CREATE table $t (
-           c1 timestamp,
-           current_timestamp TIMESTAMP DEFAULT c1)""")
-        },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
-        parameters = Map(
-          "statement" -> "CREATE TABLE",
-          "colName" -> "`current_timestamp`",
-          "defaultValue" -> "c1"
-        ),
-        sqlState = Some("42623")
-      )
-    }
-  }
-
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
