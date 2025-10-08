@@ -114,7 +114,7 @@ message PipelineCommand {
 
   // Request to define a sink
   message DefineSink {
-    // The graph to attach this dataset to.
+    // The graph to attach this sink to.
     optional string dataflow_graph_id = 1;
 
     // Name of the sink
@@ -125,6 +125,9 @@ message PipelineCommand {
 
     // Streaming write format
     optional string format = 4;
+
+    // The location in source code that this sink was defined.
+    optional SourceCodeLocation source_code_location = 5;
   }
 
   // Request to define a flow targeting a dataset.
@@ -231,6 +234,7 @@ message PipelineCommandResult {
     CreateDataflowGraphResult create_dataflow_graph_result = 1;
     DefineOutputResult define_output_result = 2;
     DefineFlowResult define_flow_result = 3;
+    DefineSinkResult define_sink_result = 4;
   }
   message CreateDataflowGraphResult {
     // The ID of the created graph.
@@ -242,6 +246,10 @@ message PipelineCommandResult {
   }
   message DefineFlowResult {
     // Resolved identifier of the flow
+    optional ResolvedIdentifier resolved_identifier = 1;
+  }
+  message DefineSinkResult {
+    // Resolved identifier of the sink
     optional ResolvedIdentifier resolved_identifier = 1;
   }
 }

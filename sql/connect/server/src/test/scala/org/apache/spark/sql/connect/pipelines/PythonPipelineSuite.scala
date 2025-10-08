@@ -306,6 +306,15 @@ class PythonPipelineSuite
         |""".stripMargin)
 
     assert(graph.sinks.map(_.identifier) == Seq(TableIdentifier("myKafkaSink")))
+
+    // ensure format and options are properly set
+    graph.sinks.filter (_.identifier == TableIdentifier("myKafkaSink")).foreach { sink =>
+      assert(sink.format == "kafka")
+      assert(
+        sink.options.get("kafka.bootstrap.servers").contains("host1:port1,host2:port2"))
+    }
+
+    // ensure the flow is properly linked to the sink
     assert(
       graph
         .flowsTo(TableIdentifier("myKafkaSink"))

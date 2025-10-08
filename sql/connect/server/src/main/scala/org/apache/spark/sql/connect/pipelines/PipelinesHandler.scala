@@ -32,7 +32,7 @@ import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, Sink, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -115,6 +115,21 @@ private[connect] object PipelinesHandler extends Logging {
             PipelineCommandResult.DefineFlowResult
               .newBuilder()
               .setResolvedIdentifier(identifierBuilder)
+              .build())
+          .build()
+      case proto.PipelineCommand.CommandTypeCase.DEFINE_SINK =>
+        logInfo(s"Define pipelines sink cmd received: $cmd")
+        val resolvedSink =
+          defineSink(cmd.getDefineSink, sessionHolder)
+        val identifier = ResolvedIdentifier.newBuilder()
+          .setTableName(resolvedSink.identifier)
+          .build()
+        PipelineCommandResult
+          .newBuilder()
+          .setDefineSinkResult(
+            PipelineCommandResult.DefineSinkResult
+              .newBuilder()
+              .setResolvedIdentifier(identifier)
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
@@ -238,6 +253,35 @@ private[connect] object PipelinesHandler extends Logging {
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
     }
+  }
+
+  private def defineSink(
+    sink: proto.PipelineCommand.DefineSink,
+    sessionHolder: SessionHolder
+  ): TableIdentifier = {
+    val dataflowGraphId = sink.getDataflowGraphId
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    val identifier = GraphIdentifierManager
+      .parseTableIdentifier(name = sink.getSinkName, spark = sessionHolder.session)
+    graphElementRegistry.registerSink(
+      SinkImpl(
+        identifier = identifier,
+        format = sink.getFormat,
+        options = sink.getOptionsMap.asScala.toMap,
+        origin = QueryOrigin(
+          filePath = Option.when(sink.getSourceCodeLocation.hasFileName)(
+            sink.getSourceCodeLocation.getFileName),
+          line = Option.when(sink.getSourceCodeLocation.hasLineNumber)(
+            sink.getSourceCodeLocation.getLineNumber),
+          objectType = Option(QueryOriginType.Sink.toString),
+          objectName = Option(identifier.unquotedString),
+          language = Option(Python())
+        ),
+        normalizedPath = None
+      )
+    )
+    identifier
   }
 
   private def defineFlow(

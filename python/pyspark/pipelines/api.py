@@ -475,5 +475,6 @@ def create_sink(
         name=name,
         format=format,
         options=options or {},
+        source_code_location=get_caller_source_code_location(stacklevel=1),
     )
     get_active_graph_element_registry().register_output(sink)

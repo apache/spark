@@ -84,3 +84,4 @@ class Sink:
     name: str
     format: str
     options: Mapping[str, str]
+    source_code_location: SourceCodeLocation

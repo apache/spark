@@ -105,6 +105,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             sink_name=sink.name,
             options=sink.options,
             format=sink.format,
+            source_code_location=source_code_location_to_proto(sink.source_code_location),
         )
         command = pb2.Command()
         command.pipeline_command.define_sink.CopyFrom(inner_command)
