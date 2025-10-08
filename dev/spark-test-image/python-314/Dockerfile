@@ -73,7 +73,8 @@ ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.29.5 goog
 
 # Install Python 3.14 packages
 # TODO: install torch, torchvision and torcheval
+# TODO: install CONNECT_PIP_PKGS
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.14
 RUN python3.14 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
-RUN python3.14 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
+RUN python3.14 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting lxml && \
     python3.14 -m pip cache purge
