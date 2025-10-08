@@ -110,7 +110,7 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
       exception = ex,
       condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> ("Pipeline datasets do not currently support column " +
-        "constraints. Please remove and CHECK, UNIQUE, PK, and FK constraints specified on the " +
+        "constraints. Please remove any CHECK, UNIQUE, PK, and FK constraints specified on the " +
         "pipeline dataset.")),
       queryContext = ex.getQueryContext.map(toExpectedContext)
     )
