@@ -191,7 +191,8 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
           spark.sql("SELECT CAST('hello' AS CHAR(?))", Array(10))
         },
         condition = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "'?'", "hint" -> "")
+        parameters = Map("error" -> "'?'", "hint" -> ""),
+        queryContext = Array(ExpectedContext("SELECT CAST('hello' AS CHAR(?))", 0, 30))
       )
     }
   }
@@ -204,7 +205,9 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
           spark.sql("CREATE TABLE test (id INT) TBLPROPERTIES ('key' = ?)", Array("value"))
         },
         condition = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "'?'", "hint" -> "")
+        parameters = Map("error" -> "'?'", "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          "CREATE TABLE test (id INT) TBLPROPERTIES ('key' = ?)", 0, 51))
       )
 
       // Test that named parameters in TBLPROPERTIES cause parse errors
@@ -215,7 +218,9 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
                    Map("timeout" -> "300"))
         },
         condition = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "':'", "hint" -> "")
+        parameters = Map("error" -> "':'", "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          "CREATE TABLE test (id INT) TBLPROPERTIES ('timeout' = :timeout)", 0, 62))
       )
     }
   }
