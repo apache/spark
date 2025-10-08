@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.datasketches.common.SketchesArgumentException
+import java.util.Locale
+
+import org.apache.datasketches.common.{Family, SketchesArgumentException}
 import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
 import org.apache.datasketches.theta.CompactSketch
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
+
 
 object ThetaSketchUtils {
   /*
@@ -35,6 +38,11 @@ object ThetaSketchUtils {
   final val MIN_LG_NOM_LONGS = 4
   final val MAX_LG_NOM_LONGS = 26
   final val DEFAULT_LG_NOM_LONGS = 12
+
+  // Family constants for ThetaSketch
+  final val FAMILY_QUICKSELECT = "QUICKSELECT"
+  final val FAMILY_ALPHA = "ALPHA"
+  final val DEFAULT_FAMILY = FAMILY_QUICKSELECT
 
   /**
    * Validates the lgNomLongs parameter for Theta sketch size. Throws a Spark SQL exception if the
@@ -50,6 +58,26 @@ object ThetaSketchUtils {
         min = MIN_LG_NOM_LONGS,
         max = MAX_LG_NOM_LONGS,
         value = lgNomLongs)
+    }
+  }
+
+  /**
+   * Converts a family string to DataSketches Family enum.
+   * Throws a Spark SQL exception if the family name is invalid.
+   *
+   * @param familyName The family name string
+   * @param prettyName The display name of the function/expression for error messages
+   * @return The corresponding DataSketches Family enum value
+   */
+  def parseFamily(familyName: String, prettyName: String): Family = {
+    familyName.toUpperCase(Locale.ROOT) match {
+      case FAMILY_QUICKSELECT => Family.QUICKSELECT
+      case FAMILY_ALPHA => Family.ALPHA
+      case _ =>
+        throw QueryExecutionErrors.thetaInvalidFamily(
+          function = prettyName,
+          value = familyName,
+          validFamilies = Seq(FAMILY_QUICKSELECT, FAMILY_ALPHA))
     }
   }
 
