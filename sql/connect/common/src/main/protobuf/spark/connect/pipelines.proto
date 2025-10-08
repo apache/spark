@@ -95,12 +95,6 @@ message PipelineCommand {
 
     // The location in source code that this dataset was defined.
     optional SourceCodeLocation source_code_location = 9;
-
-    // Reserved field for protocol extensions.
-    // Used to support forward-compatibility by carrying additional fields
-    // that are not yet defined in this version of the proto. During planning, the
-    // engine will resolve and dispatch the concrete command contained in this field.
-    repeated google.protobuf.Any extension = 999;
   }
 
   // Request to define a flow targeting a dataset.
@@ -127,12 +121,6 @@ message PipelineCommand {
 
     // The location in source code that this flow was defined.
     optional SourceCodeLocation source_code_location = 7;
-
-    // Reserved field for protocol extensions.
-    // Used to support forward-compatibility by carrying additional fields
-    // that are not yet defined in this version of the proto. During planning, the
-    // engine will resolve and dispatch the concrete command contained in this field.
-    repeated google.protobuf.Any extension = 999;
 
     message Response {
       // Fully qualified flow name that uniquely identify a flow in the Dataflow graph.
@@ -247,6 +235,12 @@ message SourceCodeLocation {
   optional string file_name = 1;
   // The specific line number that this pipeline source code is located at, if applicable.
   optional int32 line_number = 2;
+
+  // Reserved field for protocol extensions.
+  // Used to support forward-compatibility by carrying additional fields
+  // that are not yet defined in this version of the proto. During planning, the
+  // engine will resolve and dispatch the concrete command contained in this field.
+  repeated google.protobuf.Any extension = 999;
 }
 
 // A signal from the server to the client to execute the query function for one or more flows, and

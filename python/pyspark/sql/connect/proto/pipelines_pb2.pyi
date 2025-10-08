@@ -235,7 +235,6 @@ class PipelineCommand(google.protobuf.message.Message):
         SCHEMA_FIELD_NUMBER: builtins.int
         FORMAT_FIELD_NUMBER: builtins.int
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
-        EXTENSION_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to attach this dataset to."""
         dataset_name: builtins.str
@@ -266,17 +265,6 @@ class PipelineCommand(google.protobuf.message.Message):
         @property
         def source_code_location(self) -> global___SourceCodeLocation:
             """The location in source code that this dataset was defined."""
-        @property
-        def extension(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            google.protobuf.any_pb2.Any
-        ]:
-            """Reserved field for protocol extensions.
-            Used to support forward-compatibility by carrying additional fields
-            that are not yet defined in this version of the proto. During planning, the
-            engine will resolve and dispatch the concrete command contained in this field.
-            """
         def __init__(
             self,
             *,
@@ -289,7 +277,6 @@ class PipelineCommand(google.protobuf.message.Message):
             schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             format: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
-            extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -349,8 +336,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"dataset_name",
                 "dataset_type",
                 b"dataset_type",
-                "extension",
-                b"extension",
                 "format",
                 b"format",
                 "partition_cols",
@@ -452,7 +437,6 @@ class PipelineCommand(google.protobuf.message.Message):
         SQL_CONF_FIELD_NUMBER: builtins.int
         CLIENT_ID_FIELD_NUMBER: builtins.int
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
-        EXTENSION_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to attach this flow to."""
         flow_name: builtins.str
@@ -476,17 +460,6 @@ class PipelineCommand(google.protobuf.message.Message):
         @property
         def source_code_location(self) -> global___SourceCodeLocation:
             """The location in source code that this flow was defined."""
-        @property
-        def extension(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            google.protobuf.any_pb2.Any
-        ]:
-            """Reserved field for protocol extensions.
-            Used to support forward-compatibility by carrying additional fields
-            that are not yet defined in this version of the proto. During planning, the
-            engine will resolve and dispatch the concrete command contained in this field.
-            """
         def __init__(
             self,
             *,
@@ -497,7 +470,6 @@ class PipelineCommand(google.protobuf.message.Message):
             sql_conf: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             client_id: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
-            extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -547,8 +519,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"client_id",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
-                "extension",
-                b"extension",
                 "flow_name",
                 b"flow_name",
                 "relation",
@@ -1226,15 +1196,28 @@ class SourceCodeLocation(google.protobuf.message.Message):
 
     FILE_NAME_FIELD_NUMBER: builtins.int
     LINE_NUMBER_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
     file_name: builtins.str
     """The file that this pipeline source code was defined in."""
     line_number: builtins.int
     """The specific line number that this pipeline source code is located at, if applicable."""
+    @property
+    def extension(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        google.protobuf.any_pb2.Any
+    ]:
+        """Reserved field for protocol extensions.
+        Used to support forward-compatibility by carrying additional fields
+        that are not yet defined in this version of the proto. During planning, the
+        engine will resolve and dispatch the concrete command contained in this field.
+        """
     def __init__(
         self,
         *,
         file_name: builtins.str | None = ...,
         line_number: builtins.int | None = ...,
+        extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1256,6 +1239,8 @@ class SourceCodeLocation(google.protobuf.message.Message):
             b"_file_name",
             "_line_number",
             b"_line_number",
+            "extension",
+            b"extension",
             "file_name",
             b"file_name",
             "line_number",
