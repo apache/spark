@@ -216,7 +216,7 @@ object FlowAnalysis {
 
     ctx.requestedInputs += datasetIdentifier
 
-    val i = if (!ctx.allInputs.contains(datasetIdentifier)) {
+    val input = if (!ctx.allInputs.contains(datasetIdentifier)) {
       // Dataset not defined in the dataflow graph
       throw GraphErrors.pipelineLocalDatasetNotDefinedError(datasetIdentifier.unquotedString)
     } else if (!ctx.availableInput.contains(datasetIdentifier)) {
@@ -227,8 +227,8 @@ object FlowAnalysis {
       ctx.availableInput(datasetIdentifier)
     }
 
-    val inputDF = i.load(readOptions)
-    i match {
+    val inputDF = input.load(readOptions)
+    input match {
       // If the referenced input is a [[Flow]], because the query plans will be fused
       // together, we also need to fuse their confs.
       case f: Flow => f.sqlConf.foreach { case (k, v) => ctx.setConf(k, v) }
@@ -263,7 +263,7 @@ object FlowAnalysis {
             droppedOptions = sro.droppedUserOptions.keys.toSeq
           )
         }
-        ctx.streamingInputs += ResolvedInput(i, aliasIdentifier)
+        ctx.streamingInputs += ResolvedInput(input, aliasIdentifier)
       case _ =>
         if (inputDF.isStreaming && incompatibleViewReadCheck) {
           throw new AnalysisException(
@@ -271,7 +271,7 @@ object FlowAnalysis {
             Map("datasetIdentifier" -> datasetIdentifier.toString)
           )
         }
-        ctx.batchInputs += ResolvedInput(i, aliasIdentifier)
+        ctx.batchInputs += ResolvedInput(input, aliasIdentifier)
     }
     Dataset.ofRows(
       ctx.spark,
