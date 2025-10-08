@@ -160,6 +160,7 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
       |name: test-pipeline
       |${spec.catalog.map(catalog => s"""catalog: "$catalog"""").getOrElse("")}
       |${spec.database.map(database => s"""database: "$database"""").getOrElse("")}
+      |storage: "${projectDir.resolve("storage").toAbsolutePath}"
       |configuration:
       |  "spark.remote": "sc://localhost:$serverPort"
       |libraries:

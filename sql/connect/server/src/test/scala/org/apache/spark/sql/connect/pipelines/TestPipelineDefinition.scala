@@ -42,23 +42,33 @@ class TestPipelineDefinition(graphId: String) {
       // specifiedSchema: Option[StructType] = None,
       partitionCols: Option[Seq[String]] = None,
       properties: Map[String, String] = Map.empty): Unit = {
+    val tableDetails = sc.PipelineCommand.DefineDataset.TableDetails
+      .newBuilder()
+      .addAllPartitionCols(partitionCols.getOrElse(Seq()).asJava)
+      .putAllTableProperties(properties.asJava)
+      .build()
+
     tableDefs += sc.PipelineCommand.DefineDataset
       .newBuilder()
       .setDataflowGraphId(graphId)
       .setDatasetName(name)
       .setDatasetType(datasetType)
       .setComment(comment.getOrElse(""))
-      .addAllPartitionCols(partitionCols.getOrElse(Seq()).asJava)
-      .putAllTableProperties(properties.asJava)
+      .setTableDetails(tableDetails)
       .build()
 
     query.foreach { q =>
+      val relationFlowDetails = sc.PipelineCommand.DefineFlow.WriteRelationFlowDetails
+        .newBuilder()
+        .setRelation(q)
+        .build()
+
       flowDefs += sc.PipelineCommand.DefineFlow
         .newBuilder()
         .setDataflowGraphId(graphId)
         .setFlowName(name)
         .setTargetDatasetName(name)
-        .setRelation(q)
+        .setRelationFlowDetails(relationFlowDetails)
         .putAllSqlConf(sparkConf.asJava)
         .build()
     }
@@ -92,12 +102,17 @@ class TestPipelineDefinition(graphId: String) {
       .setComment(comment.getOrElse(""))
       .build()
 
+    val relationFlowDetails = sc.PipelineCommand.DefineFlow.WriteRelationFlowDetails
+      .newBuilder()
+      .setRelation(query)
+      .build()
+
     flowDefs += sc.PipelineCommand.DefineFlow
       .newBuilder()
       .setDataflowGraphId(graphId)
       .setFlowName(name)
       .setTargetDatasetName(name)
-      .setRelation(query)
+      .setRelationFlowDetails(relationFlowDetails)
       .putAllSqlConf(sparkConf.asJava)
       .build()
 
@@ -118,12 +133,17 @@ class TestPipelineDefinition(graphId: String) {
       query: sc.Relation,
       sparkConf: Map[String, String] = Map.empty,
       once: Boolean = false): Unit = {
+    val relationFlowDetails = sc.PipelineCommand.DefineFlow.WriteRelationFlowDetails
+      .newBuilder()
+      .setRelation(query)
+      .build()
+
     flowDefs += sc.PipelineCommand.DefineFlow
       .newBuilder()
       .setDataflowGraphId(graphId)
       .setFlowName(name)
       .setTargetDatasetName(destinationName)
-      .setRelation(query)
+      .setRelationFlowDetails(relationFlowDetails)
       .putAllSqlConf(sparkConf.asJava)
       .build()
   }
