@@ -231,7 +231,8 @@ class PipelineCommand(google.protobuf.message.Message):
         COMMENT_FIELD_NUMBER: builtins.int
         TABLE_PROPERTIES_FIELD_NUMBER: builtins.int
         PARTITION_COLS_FIELD_NUMBER: builtins.int
-        SCHEMA_FIELD_NUMBER: builtins.int
+        SCHEMA_DATA_TYPE_FIELD_NUMBER: builtins.int
+        SCHEMA_STRING_FIELD_NUMBER: builtins.int
         FORMAT_FIELD_NUMBER: builtins.int
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
@@ -255,8 +256,8 @@ class PipelineCommand(google.protobuf.message.Message):
             dataset_type == MATERIALIZED_VIEW.
             """
         @property
-        def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
-            """Schema for the dataset. If unset, this will be inferred from incoming flows."""
+        def schema_data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+        schema_string: builtins.str
         format: builtins.str
         """The output table format of the dataset. Only applies to dataset_type == TABLE and
         dataset_type == MATERIALIZED_VIEW.
@@ -273,7 +274,8 @@ class PipelineCommand(google.protobuf.message.Message):
             comment: builtins.str | None = ...,
             table_properties: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             partition_cols: collections.abc.Iterable[builtins.str] | None = ...,
-            schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+            schema_data_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+            schema_string: builtins.str = ...,
             format: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
         ) -> None: ...
@@ -290,8 +292,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dataset_type",
                 "_format",
                 b"_format",
-                "_schema",
-                b"_schema",
                 "_source_code_location",
                 b"_source_code_location",
                 "comment",
@@ -306,6 +306,10 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"format",
                 "schema",
                 b"schema",
+                "schema_data_type",
+                b"schema_data_type",
+                "schema_string",
+                b"schema_string",
                 "source_code_location",
                 b"source_code_location",
             ],
@@ -323,8 +327,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dataset_type",
                 "_format",
                 b"_format",
-                "_schema",
-                b"_schema",
                 "_source_code_location",
                 b"_source_code_location",
                 "comment",
@@ -341,6 +343,10 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"partition_cols",
                 "schema",
                 b"schema",
+                "schema_data_type",
+                b"schema_data_type",
+                "schema_string",
+                b"schema_string",
                 "source_code_location",
                 b"source_code_location",
                 "table_properties",
@@ -370,15 +376,15 @@ class PipelineCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["format"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
-        ) -> typing_extensions.Literal["schema"] | None: ...
-        @typing.overload
-        def WhichOneof(
             self,
             oneof_group: typing_extensions.Literal[
                 "_source_code_location", b"_source_code_location"
             ],
         ) -> typing_extensions.Literal["source_code_location"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["schema", b"schema"]
+        ) -> typing_extensions.Literal["schema_data_type", "schema_string"] | None: ...
 
     class DefineFlow(google.protobuf.message.Message):
         """Request to define a flow targeting a dataset."""
