@@ -117,16 +117,18 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
      'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
-     'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql', 'pyspark-testing', 'repl',
-     'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
+     'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
+     'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
      'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
-     'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql', 'pyspark-testing', 'repl',
-     'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
+     'pyspark-streaming', 'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
+     'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
@@ -135,6 +137,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-core', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib', 'pyspark-pandas',
      'pyspark-pandas-connect', 'pyspark-pandas-slow', 'pyspark-pandas-slow-connect',
      'pyspark-pipelines', 'pyspark-resource', 'pyspark-sql', 'pyspark-streaming',
+     'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
      'pyspark-testing', 'repl', 'root', 'sparkr', 'sql', 'sql-kafka-0-10', 'streaming',
      'streaming-kafka-0-10', 'streaming-kinesis-asl']
     """
