@@ -1980,6 +1980,11 @@ class SparkConnectClient(object):
                     if info.metadata.get("errorClass") == "INVALID_HANDLE.SESSION_CHANGED":
                         self._closed = True
 
+                    if info.metadata.get("errorClass") == "CONNECT_INVALID_PLAN.CANNOT_PARSE":
+                        # Disable plan compression if the server fails to interpret the plan.
+                        logger.info(f"Disabling plan compression for the session due to {info.metadata["errorClass"]} error.")
+                        self._plan_compression_threshold, self._plan_compression_algorithm = -1, "NONE"
+
                     raise convert_exception(
                         info,
                         status.message,
@@ -1997,13 +2002,6 @@ class SparkConnectClient(object):
                 message=str(error),
                 grpc_status_code=status_code,
             ) from None
-# <<<<<<<
-# =======
-#         if info.metadata["errorClass"] == "CONNECT_INVALID_PLAN.CANNOT_PARSE":
-#             # Disable plan compression if the server fails to interpret the plan.
-#             logger.info(f"Disabling plan compression for the session due to {info.metadata["errorClass"]} error.")
-#             self._plan_compression_threshold, self._plan_compression_algorithm = -1, "NONE"
-# >>>>>>>
 
     def add_artifacts(self, *paths: str, pyfile: bool, archive: bool, file: bool) -> None:
         try:
