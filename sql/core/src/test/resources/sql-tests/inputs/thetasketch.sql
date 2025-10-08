@@ -465,6 +465,10 @@ FROM VALUES (15), (16), (17) tab(col);
 SELECT theta_sketch_agg(col, CAST(col AS INT)) AS lg_nom_entries_non_constant
 FROM VALUES (15), (16), (17) tab(col);
 
+-- family parameter is not foldable (non-constant)
+SELECT theta_sketch_agg(col, 12, CAST(col AS STRING)) AS family_non_constant
+FROM VALUES ('QUICKSELECT'), ('ALPHA'), ('QUICKSELECT') tab(col);
+
 -- lgNomEntries parameter has wrong type (STRING instead of INT)
 SELECT theta_sketch_agg(col, '15')
 FROM VALUES (50), (60), (60) tab(col);
