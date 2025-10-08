@@ -518,7 +518,7 @@ class ArrowTableToRowsConversion:
     @overload
     @staticmethod
     def _create_converter(
-        dataType: DataType, *, none_on_identity: bool = True
+        dataType: DataType, *, none_on_identity: bool = True, binary_as_bytes: bool = True
     ) -> Optional[Callable]:
         pass
 
@@ -555,7 +555,7 @@ class ArrowTableToRowsConversion:
                     assert isinstance(value, dict)
 
                     _values = [
-                        field_convs[i](value.get(name, None))  # type: ignore[misc]
+                        field_convs[i](value.get(name, None))
                         if field_convs[i] is not None
                         else value.get(name, None)
                         for i, name in enumerate(dedup_field_names)
@@ -723,23 +723,17 @@ class ArrowTableToRowsConversion:
 
     @overload
     @staticmethod
-    def convert(  # type: ignore[overload-overlap]
-        table: "pa.Table", schema: StructType
-    ) -> List[Row]:
+    def convert(table: "pa.Table", schema: StructType) -> List[Row]:
         pass
 
     @overload
     @staticmethod
-    def convert(
-        table: "pa.Table", schema: StructType, *, binary_as_bytes: bool = True
-    ) -> List[Row]:
+    def convert(table: "pa.Table", schema: StructType, *, binary_as_bytes: bool) -> List[Row]:
         pass
 
     @overload
     @staticmethod
-    def convert(
-        table: "pa.Table", schema: StructType, *, return_as_tuples: bool = True
-    ) -> List[tuple]:
+    def convert(table: "pa.Table", schema: StructType, *, return_as_tuples: bool) -> List[tuple]:
         pass
 
     @staticmethod  # type: ignore[misc]
