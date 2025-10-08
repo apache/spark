@@ -2136,10 +2136,11 @@ class SparkConnectClient(object):
         from pyspark.sql.connect.proto import base_pb2 as pb2
 
         request = pb2.CloneSessionRequest(
-            user_context=pb2.UserContext(user_id=self._user_id),
             session_id=self._session_id,
             client_type="python",
         )
+        if self._user_id is not None:
+            request.user_context.user_id = self._user_id
 
         if new_session_id is not None:
             request.new_session_id = new_session_id
@@ -2159,7 +2160,7 @@ class SparkConnectClient(object):
 
         # Create a new client with the cloned session ID
         new_connection = copy.deepcopy(self._builder)
-        new_connection._session_id = response.new_session_id
+        new_connection.set(ChannelBuilder.PARAM_SESSION_ID, response.new_session_id)
 
         # Create new client and explicitly set the session ID
         new_client = SparkConnectClient(
