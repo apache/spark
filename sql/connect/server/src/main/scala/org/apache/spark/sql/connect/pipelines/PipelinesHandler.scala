@@ -338,11 +338,17 @@ private[connect] object PipelinesHandler extends Logging {
         }
       }
 
+      if (cmd.getStorage.isEmpty) {
+        // server-side validation to ensure that storage is always specified
+        throw new IllegalArgumentException("Storage must be specified to start a run.")
+      }
+
       val pipelineUpdateContext = new PipelineUpdateContextImpl(
         graphElementRegistry.toDataflowGraph,
         eventCallback,
         tableFiltersResult.refresh,
-        tableFiltersResult.fullRefresh)
+        tableFiltersResult.fullRefresh,
+        cmd.getStorage)
       sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
 
       if (cmd.getDry) {

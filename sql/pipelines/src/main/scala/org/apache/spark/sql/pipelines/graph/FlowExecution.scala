@@ -191,6 +191,14 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
   /** Starts a stream and returns its streaming query. */
   protected def startStream(): StreamingQuery
 
+  private var _streamingQuery: Option[StreamingQuery] = None
+
+  /** Visible for testing */
+  def getStreamingQuery: StreamingQuery =
+    _streamingQuery.getOrElse(
+      throw new IllegalStateException(s"StreamingPhysicalFlow has not been started")
+    )
+
   /**
    * Executes this `StreamingFlowExecution` by starting its stream with the correct scheduling pool
    * and confs.
@@ -201,6 +209,7 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
       log"checkpoint location ${MDC(LogKeys.CHECKPOINT_PATH, checkpointPath)}"
     )
     val streamingQuery = SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*)(startStream())
+    _streamingQuery = Option(streamingQuery)
     Future(streamingQuery.awaitTermination())
   }
 }

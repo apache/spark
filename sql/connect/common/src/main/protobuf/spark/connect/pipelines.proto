@@ -143,6 +143,9 @@ message PipelineCommand {
     // If true, the run will not actually execute any flows, but will only validate the graph and
     // check for any errors. This is useful for testing and validation purposes.
     optional bool dry = 5;
+
+    // storage location for pipeline checkpoints and metadata.
+    optional string storage = 6;
   }
 
   // Parses the SQL file and registers all datasets and flows.
