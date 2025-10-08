@@ -274,3 +274,30 @@ class BatchTableWrite(
       }
     }
 }
+
+/** A `StreamingFlowExecution` that writes a streaming `DataFrame` to a `Table`. */
+class SinkWrite(
+  val identifier: TableIdentifier,
+  val flow: ResolvedFlow,
+  val graph: DataflowGraph,
+  val updateContext: PipelineUpdateContext,
+  val checkpointPath: String,
+  val trigger: Trigger,
+  val destination: Sink,
+  val sqlConf: Map[String, String]
+) extends StreamingFlowExecution {
+
+  override def getOrigin: QueryOrigin = flow.origin
+
+  def startStream(): StreamingQuery = {
+    val data = graph.reanalyzeFlow(flow).df
+    data.writeStream
+      .queryName(displayName)
+      .option("checkpointLocation", checkpointPath)
+      .trigger(trigger)
+      .outputMode(OutputMode.Append())
+      .format(destination.format)
+      .options(destination.options)
+      .start()
+  }
+}

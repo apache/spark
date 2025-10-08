@@ -141,7 +141,7 @@ class FlowProgressEventLogger(eventCallback: PipelineEvent => Unit) extends Logg
       messageOpt: Option[String] = None
   ): Unit = synchronized {
     val eventLogMessage = messageOpt.getOrElse(s"Flow '${flow.displayName}' has FAILED.")
-
+    exception.printStackTrace()
     eventCallback(
       ConstructPipelineEvent(
         origin = PipelineEventOrigin(
