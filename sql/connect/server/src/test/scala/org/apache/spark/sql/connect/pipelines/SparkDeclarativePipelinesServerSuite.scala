@@ -97,19 +97,23 @@ class SparkDeclarativePipelinesServerSuite
                 .setDataflowGraphId(graphId)
                 .setFlowName("mv")
                 .setTargetDatasetName("mv")
-                .setRelation(
-                  Relation
+                .setRelationFlowDetails(
+                  DefineFlow.WriteRelationFlowDetails
                     .newBuilder()
-                    .setUnresolvedTableValuedFunction(
-                      UnresolvedTableValuedFunction
+                    .setRelation(
+                      Relation
                         .newBuilder()
-                        .setFunctionName("range")
-                        .addArguments(Expression
+                        .setUnresolvedTableValuedFunction(UnresolvedTableValuedFunction
                           .newBuilder()
-                          .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                          .setFunctionName("range")
+                          .addArguments(Expression
+                            .newBuilder()
+                            .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                            .build())
                           .build())
                         .build())
-                    .build()))
+                    .build())
+                .build())
             .build()))
       registerGraphElementsFromSql(
         graphId = graphId,
@@ -698,17 +702,21 @@ class SparkDeclarativePipelinesServerSuite
         .setDataflowGraphId(graphId)
         .setFlowName(testCase.flowName)
         .setTargetDatasetName(testCase.flowName)
-        .setRelation(
-          Relation
+        .setRelationFlowDetails(
+          DefineFlow.WriteRelationFlowDetails
             .newBuilder()
-            .setUnresolvedTableValuedFunction(
-              UnresolvedTableValuedFunction
+            .setRelation(
+              Relation
                 .newBuilder()
-                .setFunctionName("range")
-                .addArguments(Expression
-                  .newBuilder()
-                  .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
-                  .build())
+                .setUnresolvedTableValuedFunction(
+                  UnresolvedTableValuedFunction
+                    .newBuilder()
+                    .setFunctionName("range")
+                    .addArguments(Expression
+                      .newBuilder()
+                      .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                      .build())
+                    .build())
                 .build())
             .build())
         .build()
@@ -762,17 +770,21 @@ class SparkDeclarativePipelinesServerSuite
         .setDataflowGraphId(graphId)
         .setFlowName(testCase.flowName)
         .setTargetDatasetName(testCase.flowName)
-        .setRelation(
-          Relation
+        .setRelationFlowDetails(
+          DefineFlow.WriteRelationFlowDetails
             .newBuilder()
-            .setUnresolvedTableValuedFunction(
-              UnresolvedTableValuedFunction
+            .setRelation(
+              Relation
                 .newBuilder()
-                .setFunctionName("range")
-                .addArguments(Expression
-                  .newBuilder()
-                  .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
-                  .build())
+                .setUnresolvedTableValuedFunction(
+                  UnresolvedTableValuedFunction
+                    .newBuilder()
+                    .setFunctionName("range")
+                    .addArguments(Expression
+                      .newBuilder()
+                      .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                      .build())
+                    .build())
                 .build())
             .build())
         .build()

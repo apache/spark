@@ -184,24 +184,26 @@ private[connect] object PipelinesHandler extends Logging {
             currentCatalog = Some(graphElementRegistry.defaultCatalog),
             currentDatabase = Some(graphElementRegistry.defaultDatabase))
           .identifier
+
+        val tableDetails = dataset.getTableDetails
         graphElementRegistry.registerTable(
           Table(
             identifier = qualifiedIdentifier,
             comment = Option(dataset.getComment),
-            specifiedSchema = dataset.getSchemaCase match {
-              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_DATA_TYPE =>
+            specifiedSchema = tableDetails.getSchemaCase match {
+              case proto.PipelineCommand.DefineDataset.TableDetails.SchemaCase.SCHEMA_DATA_TYPE =>
                 Some(
                   DataTypeProtoConverter
-                    .toCatalystType(dataset.getSchemaDataType)
+                    .toCatalystType(tableDetails.getSchemaDataType)
                     .asInstanceOf[StructType])
-              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_STRING =>
-                Some(StructType.fromDDL(dataset.getSchemaString))
-              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_NOT_SET =>
+              case proto.PipelineCommand.DefineDataset.TableDetails.SchemaCase.SCHEMA_STRING =>
+                Some(StructType.fromDDL(tableDetails.getSchemaString))
+              case proto.PipelineCommand.DefineDataset.TableDetails.SchemaCase.SCHEMA_NOT_SET =>
                 None
             },
-            partitionCols = Option(dataset.getPartitionColsList.asScala.toSeq)
+            partitionCols = Option(tableDetails.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
-            properties = dataset.getTablePropertiesMap.asScala.toMap,
+            properties = tableDetails.getTablePropertiesMap.asScala.toMap,
             origin = QueryOrigin(
               filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
                 dataset.getSourceCodeLocation.getFileName),
@@ -210,7 +212,7 @@ private[connect] object PipelinesHandler extends Logging {
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(qualifiedIdentifier.unquotedString),
               language = Option(Python())),
-            format = Option.when(dataset.hasFormat)(dataset.getFormat),
+            format = Option.when(tableDetails.hasFormat)(tableDetails.getFormat),
             normalizedPath = None,
             isStreamingTable = dataset.getDatasetType == proto.DatasetType.TABLE))
         qualifiedIdentifier
@@ -286,12 +288,13 @@ private[connect] object PipelinesHandler extends Logging {
         }
       }
 
+    val relationFlowDetails = flow.getRelationFlowDetails
     graphElementRegistry.registerFlow(
       new UnresolvedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = destinationIdentifier,
-        func =
-          FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getRelation)),
+        func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
+          transformRelationFunc(relationFlowDetails.getRelation)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = false,
         queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
