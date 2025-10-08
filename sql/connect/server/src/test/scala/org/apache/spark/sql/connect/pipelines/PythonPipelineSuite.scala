@@ -289,6 +289,31 @@ class PythonPipelineSuite
         graphIdentifier("supplement")))
   }
 
+  test("external sink") {
+    val graph = buildGraph(
+      """
+        |dp.create_sink(
+        |  "myKafkaSink",
+        |  format = "kafka",
+        |  options = {"kafka.bootstrap.servers": "host1:port1,host2:port2"}
+        |)
+        |
+        |@dp.append_flow(
+        |  target = "myKafkaSink"
+        |)
+        |def mySinkFlow():
+        |  return spark.readStream.format("rate").load()
+        |""".stripMargin)
+
+    assert(graph.sinks.map(_.identifier) == Seq(TableIdentifier("myKafkaSink")))
+    assert(
+      graph
+        .flowsTo(TableIdentifier("myKafkaSink"))
+        .map(_.identifier) == Seq(TableIdentifier("mySinkFlow")
+      )
+    )
+  }
+
   test("referencing internal datasets") {
     val graph = buildGraph("""
       |@dp.materialized_view

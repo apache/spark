@@ -24,6 +24,7 @@ from pyspark.pipelines.output import (
     Output,
     MaterializedView,
     Table,
+    Sink,
     StreamingTable,
     TemporaryView,
 )
@@ -96,6 +97,17 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
 
         command = pb2.Command()
         command.pipeline_command.define_output.CopyFrom(inner_command)
+        self._client.execute_command(command)
+
+    def register_sink(self, sink: Sink) -> None:
+        inner_command = pb2.PipelineCommand.DefineSink(
+            dataflow_graph_id=self._dataflow_graph_id,
+            sink_name=sink.name,
+            options=sink.options,
+            format=sink.format,
+        )
+        command = pb2.Command()
+        command.pipeline_command.define_sink.CopyFrom(inner_command)
         self._client.execute_command(command)
 
     def register_flow(self, flow: Flow) -> None:

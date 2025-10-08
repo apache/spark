@@ -26,7 +26,7 @@ from pyspark.pipelines.source_code_location import (
 from pyspark.pipelines.output import (
     MaterializedView,
     StreamingTable,
-    TemporaryView,
+    TemporaryView, Sink,
 )
 from pyspark.sql.types import StructType
 
@@ -447,3 +447,33 @@ def create_streaming_table(
         format=format,
     )
     get_active_graph_element_registry().register_output(table)
+
+def create_sink(
+    name: str,
+    format: str,
+    options: Optional[Dict[str, str]] = None,
+) -> None:
+    if type(name) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+        )
+    if type(format) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "format", "arg_type": type(format).__name__},
+        )
+    if options is not None and not isinstance(options, dict):
+        raise PySparkTypeError(
+            errorClass="NOT_DICT",
+            messageParameters={
+                "arg_name": "options",
+                "arg_type": type(options).__name__,
+            },
+        )
+    sink = Sink(
+        name=name,
+        format=format,
+        options=options or {},
+    )
+    get_active_graph_element_registry().register_output(sink)

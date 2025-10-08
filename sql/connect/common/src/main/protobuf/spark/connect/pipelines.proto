@@ -35,6 +35,7 @@ message PipelineCommand {
     CreateDataflowGraph create_dataflow_graph = 1;
     DefineOutput define_output = 2;
     DefineFlow define_flow = 3;
+    DefineSink define_sink = 9;
     DropDataflowGraph drop_dataflow_graph = 4;
     StartRun start_run = 5;
     DefineSqlGraphElements define_sql_graph_elements = 6;

@@ -159,7 +159,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
     val graphId = "test_graph"
     val pipelineUpdateContext = new PipelineUpdateContextImpl(
-      new DataflowGraph(Seq(), Seq(), Seq()),
+      new DataflowGraph(Seq(), Seq(), Seq(), Seq()),
       (_: PipelineEvent) => None,
       storageRoot = "test_storage_root")
     sessionHolder.cachePipelineExecution(graphId, pipelineUpdateContext)
