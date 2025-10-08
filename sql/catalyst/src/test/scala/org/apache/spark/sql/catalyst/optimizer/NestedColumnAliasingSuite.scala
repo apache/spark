@@ -1432,6 +1432,10 @@ object NestedColumnAliasingSuite {
       case a @ Alias(_, name) if name.startsWith("_extract_") =>
         aliases += name
         a
+      case at @ ArrayTransform(_, LambdaFunction(CreateNamedStruct(_), _, _)) =>
+        // New approach: ArrayTransform without alias
+        aliases += "array_transform_optimization"
+        at
     }
     aliases
   }

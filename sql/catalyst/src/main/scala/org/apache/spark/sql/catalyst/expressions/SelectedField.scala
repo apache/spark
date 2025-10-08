@@ -155,10 +155,33 @@ object SelectedField {
           case ArrayType(st: StructType, containsNull) =>
             // Get the lambda variable from the lambda function arguments
             val lambdaVar = lambda.arguments.head
-            val selectedFields = structExprs.grouped(2).collect {
-              case Seq(Literal(_, StringType), GetStructField(v, ordinal, _))
+            val selectedFields = structExprs.grouped(2).flatMap {
+              case Seq(Literal(fieldName: Any, StringType),
+                       nestedTransform @ ArrayTransform(_, _)) =>
+                // Nested ArrayTransform case - extract the pruned schema non-recursively
+                // by directly matching the nested transform pattern
+                nestedTransform match {
+                  case ArrayTransform(nestedChild,
+                      LambdaFunction(CreateNamedStruct(nestedStructExprs), _, _)) =>
+                    nestedChild.dataType match {
+                      case ArrayType(nestedSt: StructType, nestedContainsNull) =>
+                        val nestedFields = nestedStructExprs.grouped(2).collect {
+                          case Seq(Literal(nestedFieldName: Any, StringType), _) =>
+                            nestedSt.fields.find(_.name == nestedFieldName.toString)
+                        }.flatten.toArray
+                        Some(StructField(fieldName.toString,
+                          ArrayType(StructType(nestedFields), nestedContainsNull),
+                          nullable = true))
+                      case _ => None
+                    }
+                  case _ => None
+                }
+              case Seq(Literal(fieldName: Any, StringType), GetStructField(v, _, _))
                   if v == lambdaVar =>
-                st.fields(ordinal)
+                // Look up the field by name instead of ordinal to handle cases where
+                // the ordinal might be from the original schema before pruning
+                st.fields.find(_.name == fieldName.toString)
+              case _ => None
             }.toArray
 
             val prunedStructType = StructType(selectedFields)

@@ -36,10 +36,32 @@ import org.apache.spark.sql.util.SchemaUtils._
  * Also prunes the unnecessary metadata columns if any for all file formats.
  */
 object SchemaPruning extends Rule[LogicalPlan] {
+  import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform,
+    CreateNamedStruct, ExplodeBase, Expression, LambdaFunction, NamedExpression}
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
+  import org.apache.spark.sql.catalyst.plans.logical.Generate
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
+      // Handle plans with Generate nodes containing ArrayTransform
+      case p @ Project(projectList, g @ Generate(generator, _, _, _, _, _))
+          if hasArrayTransform(generator) && hasHadoopFsRelation(g) =>
+        // Try to prune based on the ArrayTransform pattern
+        pruneWithArrayTransform(p, g, generator, projectList).getOrElse {
+          // If pruning doesn't apply, recursively process child
+          val newChild = apply(g)
+          if (newChild eq g) p else p.copy(child = newChild)
+        }
+
+      // Handle Generate nodes without ArrayTransform - just recurse
+      case p @ Project(projectList, g: Generate) if hasHadoopFsRelation(g) =>
+        val newChild = apply(g)
+        if (newChild eq g) p else p.copy(child = newChild)
+
+      case g: Generate if hasHadoopFsRelation(g) =>
+        val newChild = apply(g.child)
+        if (newChild eq g.child) g else g.copy(child = newChild)
+
       case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
       l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
         val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
@@ -50,6 +72,62 @@ object SchemaPruning extends Rule[LogicalPlan] {
             buildPrunedRelation(l, prunedHadoopRelation, prunedMetadataSchema)
           }).getOrElse(op)
     }
+
+  private def hasHadoopFsRelation(plan: LogicalPlan): Boolean = {
+    plan.exists {
+      case LogicalRelation(_: HadoopFsRelation, _, _, _) => true
+      case _ => false
+    }
+  }
+
+  private def hasArrayTransform(expr: Expression): Boolean = {
+    expr.exists {
+      case ArrayTransform(_, LambdaFunction(CreateNamedStruct(_), _, _)) => true
+      case _ => false
+    }
+  }
+
+  private def pruneWithArrayTransform(
+      project: Project,
+      generate: Generate,
+      generator: Expression,
+      projectList: Seq[NamedExpression]): Option[LogicalPlan] = {
+    // Extract the ArrayTransform from the generator
+    generator match {
+      case e: ExplodeBase =>
+        e.child match {
+          case arrayTransform @ ArrayTransform(_, _) =>
+            // Try to prune the scan below based on the ArrayTransform
+            generate.child match {
+              case ScanOperation(scanProjects, filtersStayUp, filtersPushDown,
+                  l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
+                // Wrap the ArrayTransform as a NamedExpression
+                val arrayTransformAlias = Alias(arrayTransform, "_array_transform")()
+                // IMPORTANT: Only include the ArrayTransform, NOT the original array column
+                // The ArrayTransform already references the array column internally and
+                // the SelectedField extractor will extract the pruned schema from it
+                val allProjects = scanProjects.filterNot { proj =>
+                  arrayTransform.references.contains(proj)
+                } :+ arrayTransformAlias
+                val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+
+                prunePhysicalColumns(l, allProjects, allFilters, hadoopFsRelation,
+                  (prunedDataSchema, prunedMetadataSchema) => {
+                    val prunedHadoopRelation = hadoopFsRelation.copy(
+                      dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
+                    buildPrunedRelation(l, prunedHadoopRelation, prunedMetadataSchema)
+                  }).map { prunedScan =>
+                    // Rebuild the plan with the pruned scan
+                    val newGenerate = generate.copy(child = prunedScan)
+                    project.copy(child = newGenerate)
+                  }
+              case _ => None
+            }
+          case _ => None
+        }
+      case _ => None
+    }
+  }
 
   /**
    * This method returns optional logical plan. `None` is returned if no nested field is required or

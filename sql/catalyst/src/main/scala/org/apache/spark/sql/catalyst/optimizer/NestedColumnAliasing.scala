@@ -318,6 +318,64 @@ object NestedColumnAliasing {
  * This prunes unnecessary nested columns from [[Generate]], or [[Project]] -> [[Generate]]
  */
 object GeneratorNestedColumnAliasing {
+
+  /**
+   * Analyze the project list above a Generate to find nested array field accesses.
+   *
+   * For example, if projectList contains: request.servedItems.clicked
+   * where request is the output of explode(pv_requests), this returns:
+   *   Map("servedItems" -> Set("clicked"))
+   *
+   * This tells us that when we create the ArrayTransform for pv_requests, we should
+   * create a nested ArrayTransform for the servedItems field to prune it to just clicked.
+   */
+  private def collectNestedArrayFieldAccesses(
+      projectList: Seq[Expression],
+      generatorOutput: Seq[Attribute]): Map[String, Set[String]] = {
+    val accesses = collection.mutable.Map[String, Set[String]]()
+    val generatorOutputSet = AttributeSet(generatorOutput)
+
+    // scalastyle:off println
+    println(s"[DEBUG] collectNestedArrayFieldAccesses called")
+    println(s"[DEBUG] generatorOutput: ${generatorOutput.mkString(", ")}")
+    println(s"[DEBUG] projectList size: ${projectList.size}")
+    // scalastyle:on println
+
+    projectList.foreach { expr =>
+      // scalastyle:off println
+      println(s"[DEBUG] Examining expr: ${expr.getClass.getSimpleName} - $expr")
+      // scalastyle:on println
+
+      expr.foreach {
+        // Pattern: genOutput.arrayField.nestedField
+        // Example: request.servedItems.clicked
+        // where request is from the generator output
+        case gasf @ GetArrayStructFields(
+            gsf @ GetStructField(attr: Attribute, _, Some(arrayFieldName)),
+            field, _, _, _)
+            if generatorOutputSet.contains(attr) =>
+
+          // scalastyle:off println
+          println(s"[DEBUG] FOUND GetArrayStructFields!")
+          println(s"[DEBUG]   attr: $attr")
+          println(s"[DEBUG]   arrayFieldName: $arrayFieldName")
+          println(s"[DEBUG]   field: ${field.name}")
+          // scalastyle:on println
+
+          val currentFields = accesses.getOrElse(arrayFieldName, Set.empty)
+          accesses(arrayFieldName) = currentFields + field.name
+
+        case _ =>
+      }
+    }
+
+    // scalastyle:off println
+    println(s"[DEBUG] Collected accesses: $accesses")
+    // scalastyle:on println
+
+    accesses.toMap
+  }
+
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
     // Either `nestedPruningOnExpressions` or `nestedSchemaPruningEnabled` is enabled, we
     // need to prune nested columns through Project and under Generate. The difference is
@@ -355,8 +413,21 @@ object GeneratorNestedColumnAliasing {
     //       The push down is doable but more complicated in this case as the expression that
     //       operates on the col_i of the output needs to pushed down to every (kn+i)-th input
     //       expression where n is the total number of columns (or struct fields) of the output.
-    case Project(projectList, g: Generate) if (SQLConf.get.nestedPruningOnExpressions ||
+    case p @ Project(projectList, g: Generate) if (SQLConf.get.nestedPruningOnExpressions ||
         SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
+
+      // PHASE 1: Analyze the project list to find nested array field accesses
+      // Example: if projectList contains request.servedItems.clicked,
+      // this returns Map("servedItems" -> Set("clicked"))
+      val nestedArrayFieldAccesses = collectNestedArrayFieldAccesses(
+        projectList, g.qualifiedGeneratorOutput)
+
+      // DEBUG: Log what we found
+      // scalastyle:off println
+      if (nestedArrayFieldAccesses.nonEmpty) {
+        println(s"[DEBUG] Found nested array field accesses: $nestedArrayFieldAccesses")
+      }
+      // scalastyle:on println
       // On top on `Generate`, a `Project` that might have nested column accessors.
       // We try to get alias maps for both project list and generator's children expressions.
       val attrToExtractValues = NestedColumnAliasing.getAttributeToExtractValues(
@@ -411,9 +482,22 @@ object GeneratorNestedColumnAliasing {
       // For multiple field case, we reconstruct the struct with only the needed fields
       // and update the explode operation to work on this pruned struct.
       val nestedFieldsOnGenerator = attrToExtractValuesOnGenerator.values.flatten.toSet
+
+      // scalastyle:off println
+      println(s"[DEBUG] nestedFieldsOnGenerator size: ${nestedFieldsOnGenerator.size}")
+      println(s"[DEBUG] nestedFieldsOnGenerator: $nestedFieldsOnGenerator")
+      println(s"[DEBUG] nestedArrayFieldAccesses: $nestedArrayFieldAccesses")
+      // scalastyle:on println
+
       if (nestedFieldsOnGenerator.isEmpty) {
+        // scalastyle:off println
+        println(s"[DEBUG] Taking EMPTY path")
+        // scalastyle:on println
         Some(pushedThrough)
       } else if (nestedFieldsOnGenerator.size == 1) {
+        // scalastyle:off println
+        println(s"[DEBUG] Taking SINGLE FIELD path")
+        // scalastyle:on println
         // Single field optimization (existing logic)
         val nestedFieldOnGenerator = nestedFieldsOnGenerator.head
         pushedThrough match {
@@ -454,6 +538,9 @@ object GeneratorNestedColumnAliasing {
             throw new IllegalStateException(s"Unreasonable plan after optimization: $other")
         }
       } else {
+        // scalastyle:off println
+        println(s"[DEBUG] Taking MULTI-FIELD path (size=${nestedFieldsOnGenerator.size})")
+        // scalastyle:on println
         // Multi-field case: Use ArrayTransform to create a pruned struct
         pushedThrough match {
           case p @ Project(_, newG: Generate) =>
@@ -469,15 +556,34 @@ object GeneratorNestedColumnAliasing {
                     (gsf.ordinal, st.fields(gsf.ordinal))
                 }.toSeq.sortBy(_._1)
 
+                // scalastyle:off println
+                println(s"[DEBUG] directFieldAccesses size: ${directFieldAccesses.size}")
+                println(s"[DEBUG] directFieldAccesses: " +
+                  s"${directFieldAccesses.map(_._2.name).mkString(", ")}")
+                println(s"[DEBUG] st.fields.length: ${st.fields.length}")
+                // scalastyle:on println
+
                 // Only optimize if we have direct field accesses and not all fields
                 // Deep nesting should be handled by applying NestedColumnAliasing on pushedThrough
+                // EXCEPTION: If we have nested array field accesses, we should proceed even if
+                // all top-level fields are accessed, because we still need to prune nested arrays
+                val hasNestedArrayAccesses = nestedArrayFieldAccesses.nonEmpty
+
                 if (directFieldAccesses.isEmpty) {
+                  // scalastyle:off println
+                  println(s"[DEBUG] EARLY RETURN: directFieldAccesses is empty")
+                  // scalastyle:on println
                   // No direct field accesses - have deeply nested access
                   // The pushedThrough plan already has non-generator fields optimized
                   // For generator output with deep nesting, return pushedThrough
                   // to allow it to be handled by subsequent optimizer passes
                   Some(pushedThrough)
-                } else if (directFieldAccesses.length == st.fields.length) {
+                } else if (directFieldAccesses.length == st.fields.length &&
+                           !hasNestedArrayAccesses) {
+                  // scalastyle:off println
+                  println(s"[DEBUG] EARLY RETURN: all fields accessed " +
+                    s"(${directFieldAccesses.length}) and no nested array accesses")
+                  // scalastyle:on println
                   // All fields accessed - no optimization needed
                   Some(pushedThrough)
                 } else {
@@ -490,31 +596,85 @@ object GeneratorNestedColumnAliasing {
                   // transform(array, x -> named_struct('f1', x.f1, 'f2', x.f2))
                   val elementVar = NamedLambdaVariable("_gen_c", st, nullable = containsNull)
 
+                  // PHASE 2: Use the collected nested array field accesses
+                  // nestedArrayFieldAccesses was collected from the projectList in PHASE 1
+                  // It maps field names (like "servedItems") to the set of nested fields
+                  // accessed (like Set("clicked"))
+                  // We use this to create nested ArrayTransforms for array fields
+
+                  // scalastyle:off println
                   val structExprs = directFieldAccesses.flatMap { case (ordinal, field) =>
-                    Seq(
-                      Literal(field.name),
-                      GetStructField(elementVar, ordinal, Some(field.name))
-                    )
+                    // Check if this field is a nested array with field accesses
+                    println(s"[DEBUG] Processing field: ${field.name}, " +
+                      s"isArray: ${field.dataType.isInstanceOf[ArrayType]}, " +
+                      s"hasNestedAccess: ${nestedArrayFieldAccesses.contains(field.name)}")
+                    nestedArrayFieldAccesses.get(field.name) match {
+                      case Some(nestedFields) if field.dataType.isInstanceOf[ArrayType] =>
+                        println(s"[DEBUG] Creating nested transform for ${field.name} " +
+                          s"with fields: $nestedFields")
+                        // This field is an array with nested field accesses
+                        // Create nested transform
+                        field.dataType match {
+                          case ArrayType(nestedSt: StructType, nestedContainsNull) =>
+                            // Create nested lambda variable
+                            val nestedElementVar = NamedLambdaVariable("_nested_elem",
+                              nestedSt, nullable = nestedContainsNull)
+
+                            // Create nested struct expressions for accessed fields only
+                            val nestedStructExprs = nestedFields.toSeq.flatMap { nestedFieldName =>
+                              // scalastyle:off println
+                              println(s"[DEBUG] Looking for nested field: $nestedFieldName")
+                              // scalastyle:on println
+                              nestedSt.fields.zipWithIndex
+                                .find(_._1.name == nestedFieldName)
+                                .map { case (nestedField, nestedOrdinal) =>
+                                  // scalastyle:off println
+                                  println(s"[DEBUG] Found nested field at ordinal $nestedOrdinal")
+                                  // scalastyle:on println
+                                  Seq(
+                                    Literal(nestedFieldName),
+                                    GetStructField(nestedElementVar, nestedOrdinal,
+                                      Some(nestedFieldName))
+                                  )
+                                }.getOrElse(Seq.empty)
+                            }
+
+                            // scalastyle:off println
+                            println(s"[DEBUG] nestedStructExprs length: " +
+                              s"${nestedStructExprs.length}")
+                            // scalastyle:on println
+
+                            val nestedNamedStruct = CreateNamedStruct(nestedStructExprs)
+                            val nestedLambda = LambdaFunction(nestedNamedStruct,
+                              Seq(nestedElementVar))
+                            val nestedTransform = ArrayTransform(
+                              GetStructField(elementVar, ordinal, Some(field.name)),
+                              nestedLambda)
+
+                            Seq(Literal(field.name), nestedTransform)
+
+                          case _ =>
+                            // Not a struct array, use regular field access
+                            Seq(Literal(field.name),
+                              GetStructField(elementVar, ordinal, Some(field.name)))
+                        }
+
+                      case _ =>
+                        // No nested accesses or not an array field - regular field access
+                        Seq(Literal(field.name),
+                          GetStructField(elementVar, ordinal, Some(field.name)))
+                    }
                   }
+                  // scalastyle:on println
 
                   val namedStruct = CreateNamedStruct(structExprs)
                   val lambda = LambdaFunction(namedStruct, Seq(elementVar))
                   val transformedArray = ArrayTransform(arrayExpr, lambda)
 
-                  // Create an alias for the transformed array to enable tracking
-                  val fieldNames = directFieldAccesses.map(_._2.name).mkString("_")
-                  val transformAlias = Alias(transformedArray, s"_extract_$fieldNames")()
-
-                  // Add Project node with the alias before the generator
-                  val aliasProject = Project(
-                    newG.child.output :+ transformAlias,
-                    newG.child
-                  )
-
-                  // Update generator with the aliased expression
-                  val rewrittenG = newG.copy(child = aliasProject).transformExpressions {
+                  // Update generator with the transformed array directly (no alias)
+                  val rewrittenG = newG.transformExpressions {
                     case e: ExplodeBase if e.child == arrayExpr =>
-                      e.withNewChildren(Seq(transformAlias.toAttribute))
+                      e.withNewChildren(Seq(transformedArray))
                   }
 
                   // Update generator output data type
