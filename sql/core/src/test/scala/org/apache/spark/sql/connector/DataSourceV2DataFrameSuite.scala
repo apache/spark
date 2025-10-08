@@ -31,15 +31,16 @@ import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColu
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
-import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
-import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, BatchScanExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, StringType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2DataFrameSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
+  with AdaptiveSparkPlanHelper {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
@@ -856,6 +857,58 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("test advanced partition filtering") {
+    val t = "testcat.ns1.table"
+    withTable(t) {
+      sql(s"""CREATE table $t (a string, b string, c string) USING foo partitioned by (b)""")
+      sql(s"""ALTER TABLE $t SET TBLPROPERTIES ('use-keyed-partitioning' = 'true')""")
+      val df = Seq(("a", " b ", "c"), ("d", " e ", "f")).toDF("a", "b", "c")
+      val expected = Seq(("a", " b ", "c")).toDF("a", "b", "c")
+      df.write.mode("append").insertInto(t)
+      val query = spark.table(t).filter("trim(b) == \"b\"")
+      checkAnswer(query, expected)
+      collectScans(query.queryExecution.executedPlan) match {
+        case Seq(scan: BatchScanExec) =>
+          assert(scan.inputRDD.partitions.length == 1)
+          assert(scan.allFilters.nonEmpty)
+        case _ => fail("Expected a single batch scan")
+      }
+    }
+  }
+
+  test("test non-identity partition transform skips advanced partition filtering") {
+    val t = "testcat.ns1.table"
+    withTable(t) {
+      sql(
+        s"""CREATE table $t (id int, name string, ts timestamp)
+           |USING foo
+           |partitioned by (days(ts))""".stripMargin)
+      sql(s"""ALTER TABLE $t SET TBLPROPERTIES ('use-keyed-partitioning' = 'true')""")
+
+      val df = Seq(
+        (1, "alice", java.sql.Timestamp.valueOf("2023-01-01 10:00:00")),
+        (2, "bob", java.sql.Timestamp.valueOf("2023-01-01 15:00:00")),
+        (3, "charlie", java.sql.Timestamp.valueOf("2023-01-02 09:00:00")),
+        (4, "david", java.sql.Timestamp.valueOf("2023-01-03 12:00:00"))
+      ).toDF("id", "name", "ts")
+      df.write.mode("append").insertInto(t)
+
+      val query = spark.table(t).filter("date(ts) = '2023-01-01'")
+      val expected = Seq(
+        (1, "alice", java.sql.Timestamp.valueOf("2023-01-01 10:00:00")),
+        (2, "bob", java.sql.Timestamp.valueOf("2023-01-01 15:00:00"))
+      ).toDF("id", "name", "ts")
+
+      checkAnswer(query, expected)
+      collectScans(query.queryExecution.executedPlan) match {
+        case Seq(scan: BatchScanExec) =>
+          assert(scan.inputRDD.partitions.length == 3)
+          assert(scan.allFilters.nonEmpty)
+        case _ => fail("Expected no filtering")
+      }
+    }
+  }
+
   private def executeAndKeepPhysicalPlan[T <: SparkPlan](func: => Unit): T = {
     val qe = withQueryExecutionsCaptured(spark) {
       func
@@ -911,5 +964,9 @@ class DataSourceV2DataFrameSuite
       column.newCurrentDefault() == null,
       s"Default value mismatch for column '${column.toString}': " +
         s"expected empty but found ${column.newCurrentDefault()}")
+  }
+
+  private def collectScans(plan: SparkPlan): Seq[BatchScanExec] = {
+    collect(plan) { case s: BatchScanExec => s }
   }
 }

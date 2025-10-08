@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
-import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.read.partitioning.{KeyedPartitioning, KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.SQLConf
@@ -135,6 +135,8 @@ abstract class InMemoryBaseTable(
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
+  private val useKeyedPartitioning = properties.getOrDefault("use-keyed-partitioning", "false")
+    .toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
 
@@ -523,9 +525,15 @@ abstract class InMemoryBaseTable(
 
     override def outputPartitioning(): Partitioning = {
       if (InMemoryBaseTable.this.partitioning.nonEmpty) {
-        new KeyGroupedPartitioning(
-          InMemoryBaseTable.this.partitioning.map(_.asInstanceOf[Expression]),
-          data.size)
+        if (useKeyedPartitioning) {
+          new KeyedPartitioning(
+            InMemoryBaseTable.this.partitioning.map(_.asInstanceOf[Expression]),
+            data.size)
+        } else {
+          new KeyGroupedPartitioning(
+            InMemoryBaseTable.this.partitioning.map(_.asInstanceOf[Expression]),
+            data.size)
+        }
       } else {
         new UnknownPartitioning(data.size)
       }
@@ -761,7 +769,8 @@ object InMemoryBaseTable {
  */
 class BufferedRows(val key: Seq[Any], val schema: StructType)
   extends WriterCommitMessage
-    with InputPartition with HasPartitionKey with HasPartitionStatistics with Serializable {
+    with InputPartition with HasPartitionKey with HasPartitionKeys
+    with HasPartitionStatistics with Serializable {
   val log = new mutable.ArrayBuffer[InternalRow]()
   val rows = new mutable.ArrayBuffer[InternalRow]()
   val deletes = new mutable.ArrayBuffer[Int]()
@@ -774,6 +783,7 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
   def keyString(): String = key.toArray.mkString("/")
 
   override def partitionKey(): InternalRow = PartitionInternalRow(key.toArray)
+  override def partitionKeys(): Array[InternalRow] = Array(partitionKey())
   override def sizeInBytes(): OptionalLong = OptionalLong.of(100L)
   override def numRows(): OptionalLong = OptionalLong.of(rows.size)
   override def filesCount(): OptionalLong = OptionalLong.of(100L)

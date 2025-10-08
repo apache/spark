@@ -88,7 +88,7 @@ trait DataSourcePushdownTestUtils extends ExplainSuiteHelper {
 
   protected def checkAggregatePushed(df: DataFrame, funcName: String): Unit = {
     df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, _, _, _) =>
+      case DataSourceV2ScanRelation(_, scan, _, _, _, _) =>
         assert(scan.isInstanceOf[V1ScanWrapper])
         val wrapper = scan.asInstanceOf[V1ScanWrapper]
         assert(wrapper.pushedDownOperators.aggregation.isDefined)

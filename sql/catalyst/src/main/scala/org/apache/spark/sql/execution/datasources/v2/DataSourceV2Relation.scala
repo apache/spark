@@ -150,7 +150,8 @@ case class DataSourceV2ScanRelation(
     scan: Scan,
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
+    ordering: Option[Seq[SortOrder]] = None,
+    keyedPartitioning: Option[Seq[Expression]] = None) extends LeafNode with NamedRelation {
 
   override def name: String = relation.name
 

@@ -1734,7 +1734,7 @@ class Dataset[T] private[sql](
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
       case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _),
-          _, _, _, _) =>
+          _, _, _, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray

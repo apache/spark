@@ -79,7 +79,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         } else {
           None
         }
-      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _)) =>
+      case (resExp, r @ DataSourceV2ScanRelation(_,
+        scan: SupportsRuntimeV2Filtering, _, _, _, _)) =>
         val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](
           scan.filterAttributes.toImmutableArraySeq, r)
         if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {

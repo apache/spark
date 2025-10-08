@@ -258,7 +258,7 @@ class CollatedFilterPushDownToParquetV2Suite extends CollatedFilterPushDownToPar
   override def getPushedDownFilters(query: DataFrame): Seq[Filter] = {
     query.queryExecution.optimizedPlan.collectFirst {
       case PhysicalOperation(_, _,
-          DataSourceV2ScanRelation(_, scan: ParquetScan, _, _, _)) =>
+          DataSourceV2ScanRelation(_, scan: ParquetScan, _, _, _, _)) =>
         scan.pushedFilters.toSeq
     }.getOrElse(Seq.empty)
   }

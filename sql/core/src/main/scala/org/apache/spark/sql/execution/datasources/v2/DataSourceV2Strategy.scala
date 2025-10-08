@@ -112,7 +112,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
-      v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _, _)) =>
+      v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _, _, _)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -138,7 +138,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         project, filters, dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
-        DataSourceV2ScanRelation(_, scan: LocalScan, output, _, _)) =>
+        DataSourceV2ScanRelation(_, scan: LocalScan, output, _, _, _)) =>
       val localScanExec = LocalTableScanExec(output, scan.rows().toImmutableArraySeq, None)
       DataSourceV2Strategy.withProjectAndFilter(
         project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
@@ -153,7 +153,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table,
-        StoragePartitionJoinParams(relation.keyGroupedPartitioning))
+        StoragePartitionJoinParams(relation.keyGroupedPartitioning), filters,
+        relation.keyedPartitioning)
       DataSourceV2Strategy.withProjectAndFilter(
         project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 
@@ -301,7 +302,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case DeleteFromTable(relation, condition) =>
       relation match {
-        case DataSourceV2ScanRelation(r, _, output, _, _) =>
+        case DataSourceV2ScanRelation(r, _, output, _, _, _) =>
           val table = r.table
           if (SubqueryExpression.hasSubquery(condition)) {
             throw QueryCompilationErrors.unsupportedDeleteByConditionWithSubqueryError(condition)

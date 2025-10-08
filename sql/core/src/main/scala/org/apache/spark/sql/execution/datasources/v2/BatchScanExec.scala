@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.expressions.filter
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.partitioning.KeyedPartitioning
 import org.apache.spark.sql.execution.KeyGroupedPartitionedScan
 import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 import org.apache.spark.util.ArrayImplicits._
@@ -41,7 +43,9 @@ case class BatchScanExec(
     runtimeFilters: Seq[Expression],
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
-    spjParams: StoragePartitionJoinParams = StoragePartitionJoinParams()
+    spjParams: StoragePartitionJoinParams = StoragePartitionJoinParams(),
+    allFilters: Seq[Expression] = Seq.empty,
+    keyedPartitioning: Option[Seq[Expression]] = None
   ) extends DataSourceV2ScanExecBase with KeyGroupedPartitionedScan[InputPartition] {
 
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
@@ -67,59 +71,115 @@ case class BatchScanExec(
       case _ => None
     }
 
-    if (dataSourceFilters.nonEmpty) {
-      val originalPartitioning = outputPartitioning
-
-      // the cast is safe as runtime filters are only assigned if the scan can be filtered
-      val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
-      filterableScan.filter(dataSourceFilters.toArray)
-
-      // call toBatch again to get filtered partitions
-      val newPartitions = scan.toBatch.planInputPartitions()
-
-      originalPartitioning match {
-        case p: KeyGroupedPartitioning =>
-          if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
-            throw new SparkException("Data source must have preserved the original partitioning " +
-                "during runtime filtering: not all partitions implement HasPartitionKey after " +
-                "filtering")
-          }
-          val newPartitionValues = newPartitions.map(partition =>
-              InternalRowComparableWrapper(partition.asInstanceOf[HasPartitionKey], p.expressions))
-            .toSet
-          val oldPartitionValues = p.partitionValues
-            .map(partition => InternalRowComparableWrapper(partition, p.expressions)).toSet
-          // We require the new number of partition values to be equal or less than the old number
-          // of partition values here. In the case of less than, empty partitions will be added for
-          // those missing values that are not present in the new input partitions.
-          if (oldPartitionValues.size < newPartitionValues.size) {
-            throw new SparkException("During runtime filtering, data source must either report " +
-                "the same number of partition values, or a subset of partition values from the " +
-                s"original. Before: ${oldPartitionValues.size} partition values. " +
-                s"After: ${newPartitionValues.size} partition values")
-          }
-
-          if (!newPartitionValues.forall(oldPartitionValues.contains)) {
-            throw new SparkException("During runtime filtering, data source must not report new " +
-                "partition values that are not present in the original partitioning.")
-          }
-
-          groupPartitions(newPartitions.toImmutableArraySeq)
-            .map(_.groupedParts.map(_.parts)).getOrElse(Seq.empty)
-
-        case _ =>
-          // no validation is needed as the data source did not report any specific partitioning
-          newPartitions.map(Seq(_)).toImmutableArraySeq
-      }
-
+    val predicateFiltered = if (dataSourceFilters.nonEmpty) {
+      predicateFilter(dataSourceFilters)
     } else {
       partitions
+    }
+
+    // Apply additional filtering based on partition keys if available
+    if (allFilters.nonEmpty) {
+      catalystFilter(predicateFiltered)
+    } else {
+      predicateFiltered
+    }
+  }
+
+  private def predicateFilter(dataSourceFilters: Seq[filter.Predicate]) = {
+    val originalPartitioning = outputPartitioning
+
+    // the cast is safe as runtime filters are only assigned if the scan can be filtered
+    val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
+    filterableScan.filter(dataSourceFilters.toArray)
+
+    // call toBatch again to get filtered partitions
+    val newPartitions = scan.toBatch.planInputPartitions()
+
+    originalPartitioning match {
+      case p: KeyGroupedPartitioning =>
+        if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
+          throw new SparkException("Data source must have preserved the original partitioning " +
+            "during runtime filtering: not all partitions implement HasPartitionKey after " +
+            "filtering")
+        }
+        val newPartitionValues = newPartitions.map(partition =>
+            InternalRowComparableWrapper(partition.asInstanceOf[HasPartitionKey], p.expressions))
+          .toSet
+        val oldPartitionValues = p.partitionValues
+          .map(partition => InternalRowComparableWrapper(partition, p.expressions)).toSet
+        // We require the new number of partition values to be equal or less than the old number
+        // of partition values here. In the case of less than, empty partitions will be added for
+        // those missing values that are not present in the new input partitions.
+        if (oldPartitionValues.size < newPartitionValues.size) {
+          throw new SparkException("During runtime filtering, data source must either report " +
+            "the same number of partition values, or a subset of partition values from the " +
+            s"original. Before: ${oldPartitionValues.size} partition values. " +
+            s"After: ${newPartitionValues.size} partition values")
+        }
+
+        if (!newPartitionValues.forall(oldPartitionValues.contains)) {
+          throw new SparkException("During runtime filtering, data source must not report new " +
+            "partition values that are not present in the original partitioning.")
+        }
+
+        groupPartitions(newPartitions.toImmutableArraySeq)
+          .map(_.groupedParts.map(_.parts)).getOrElse(Seq.empty)
+
+      case _ =>
+        // no validation is needed as the data source did not report any specific partitioning
+        newPartitions.map(Seq(_)).toImmutableArraySeq
+    }
+  }
+
+  private def catalystFilter(
+      partitionGroups: Seq[Seq[InputPartition]]): Seq[Seq[InputPartition]] = {
+    if (allFilters.isEmpty) {
+      return partitionGroups
+    }
+
+    // Combine all filters into a single predicate
+    val combinedFilter = allFilters.reduce(And)
+
+    // Check if outputPartitioning is KeyGroupedPartitioning and extract attributes
+    keyedPartitioning match {
+      case Some(keyedPartitioningExprs) =>
+        val partitionAttrs: Seq[Attribute] = keyedPartitioningExprs.toIndexedSeq.collect {
+          case attr: Attribute => attr
+        }
+        partitionGroups.map { partitionGroup =>
+          partitionGroup.filter { partition =>
+            partition match {
+              case hasKeys: HasPartitionKeys =>
+                // Check if any of the partition keys satisfy the filter
+                val partitionKeys = hasKeys.partitionKeys()
+                partitionKeys.exists { key =>
+                  try {
+                    val predicate = Predicate.create(combinedFilter, partitionAttrs)
+                    predicate.eval(key)
+                  } catch {
+                    case e: Exception =>
+                      // If evaluation fails, include the partition (conservative)
+                      // scalastyle:off println
+                      println(e)
+                      // scalastyle:on println
+                      true
+                  }
+                }
+              case _ =>
+                // If partition doesn't implement HasPartitionKey, include it
+                true
+            }
+          }
+          // Keep groups for SPJ case, even if empty
+        }.filter(_.nonEmpty)
+      case _ => partitionGroups
     }
   }
 
   override def outputPartitioning: Partitioning = {
     super.outputPartitioning match {
       case k: KeyGroupedPartitioning => getOutputKeyGroupedPartitioning(k, spjParams)
+      case k: KeyedPartitioning => k
       case p => p
     }
   }
