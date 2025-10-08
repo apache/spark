@@ -784,6 +784,126 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies(
+    "RocksDB: purge version files with minVersionsToDelete > 0 " +
+    "and maxVersionsToDeletePerMaintenance > 0",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) {
+    case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
+      val remoteDir = Utils.createTempDir().toString
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      val conf = dbConf.copy(
+        minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 3,
+        maxVersionsToDeletePerMaintenance = 1)
+      withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled,
+        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds) { db =>
+        // Commit 5 versions
+        // stale versions: (1, 2)
+        // keep versions: (3, 4, 5)
+        for (version <- 0 to 4) {
+          // Should upload latest snapshot but not delete any files
+          // since number of stale versions < minVersionsToDelete
+          db.load(version)
+          db.commit()
+          db.doMaintenance()
+        }
+
+        // Commit 1 more version
+        // stale versions: (1, 2, 3)
+        // keep versions: (4, 5, 6)
+        db.load(5)
+        db.commit()
+
+        // Checkpoint directory before maintenance
+        if (isChangelogCheckpointingEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) == (1 to 5))
+          assert(changelogVersionsPresent(remoteDir) == (1 to 6))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) == (1 to 6))
+        }
+
+        // Should delete stale versions for zip files and change log files
+        // since number of stale versions >= minVersionsToDelete
+        db.doMaintenance()
+
+        // Checkpoint directory after maintenance
+        // Verify that only one version is deleted because maxVersionsToDeletePerMaintenance = 1
+        assert(snapshotVersionsPresent(remoteDir) == Seq(2, 3, 4, 5, 6))
+        if (isChangelogCheckpointingEnabled) {
+          assert(changelogVersionsPresent(remoteDir) == Seq(2, 3, 4, 5, 6))
+        }
+
+        // Commit 1 more version to ensure that minVersionsToDelete constraint is satisfied
+        db.load(6)
+        db.commit()
+        db.doMaintenance()
+        // Verify that only one version is deleted because maxVersionsToDeletePerMaintenance = 1
+        assert(snapshotVersionsPresent(remoteDir) == Seq(3, 4, 5, 6, 7))
+        if (isChangelogCheckpointingEnabled) {
+          assert(changelogVersionsPresent(remoteDir) == Seq(3, 4, 5, 6, 7))
+        }
+      }
+  }
+
+  testWithStateStoreCheckpointIdsAndColumnFamilies(
+    "RocksDB: purge version files with minVersionsToDelete < maxVersionsToDeletePerMaintenance",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) {
+    case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
+      val remoteDir = Utils.createTempDir().toString
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      val conf = dbConf.copy(
+        minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 1,
+        maxVersionsToDeletePerMaintenance = 2)
+      withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled,
+        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds) { db =>
+        // Commit 5 versions
+        // stale versions: (1, 2)
+        // keep versions: (3, 4, 5)
+        for (version <- 0 to 4) {
+          // Should upload latest snapshot but not delete any files
+          // since number of stale versions < minVersionsToDelete
+          db.load(version)
+          db.commit()
+          db.doMaintenance()
+        }
+
+        // Commit 1 more version
+        // stale versions: (1, 2, 3)
+        // keep versions: (4, 5, 6)
+        db.load(5)
+        db.commit()
+
+        // Checkpoint directory before maintenance
+        // Verify that 2 oldest stale versions are deleted
+        if (isChangelogCheckpointingEnabled) {
+          assert(snapshotVersionsPresent(remoteDir) == Seq(3, 4, 5))
+          assert(changelogVersionsPresent(remoteDir) == Seq(3, 4, 5, 6))
+        } else {
+          assert(snapshotVersionsPresent(remoteDir) == Seq(3, 4, 5, 6))
+        }
+
+        // Should delete stale versions for zip files and change log files
+        // since number of stale versions >= minVersionsToDelete
+        db.doMaintenance()
+
+        // Checkpoint directory after maintenance
+        // Verify that only one version is deleted since thats the only stale version left
+        assert(snapshotVersionsPresent(remoteDir) == Seq(4, 5, 6))
+        if (isChangelogCheckpointingEnabled) {
+          assert(changelogVersionsPresent(remoteDir) == Seq(4, 5, 6))
+        }
+
+        // Commit 1 more version to ensure that minVersionsToDelete constraint is satisfied
+        db.load(6)
+        db.commit()
+        db.doMaintenance()
+        // Verify that only one version is deleted since thats the only stale version left
+        assert(snapshotVersionsPresent(remoteDir) == Seq(5, 6, 7))
+        if (isChangelogCheckpointingEnabled) {
+          assert(changelogVersionsPresent(remoteDir) == Seq(5, 6, 7))
+        }
+      }
+  }
+
+  testWithStateStoreCheckpointIdsAndColumnFamilies(
     "RocksDB: minDeltasForSnapshot",
     TestWithChangelogCheckpointingEnabled) {
     case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
@@ -2665,6 +2785,52 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           RocksDBMemoryManager.resetWriteBufferManagerAndCache
         }
       }
+    }
+  }
+
+  test("SPARK-53792: RocksDBMemoryManager getInstancePinnedBlocksMemUsage") {
+    try {
+      // Clear any existing providers from previous tests
+      RocksDBMemoryManager.resetWriteBufferManagerAndCache
+
+      val boundedMemoryId1 = "test-instance-1"
+      val boundedMemoryId2 = "test-instance-2"
+      val unboundedMemoryId = "test-instance"
+      val cacheUsage = 1000L
+      val cacheUsage1 = 300L  // This should be ignored for bounded memory
+
+      // Register two bounded memory instances
+      RocksDBMemoryManager.updateMemoryUsage(boundedMemoryId1, 0L, isBoundedMemory = true)
+      RocksDBMemoryManager.updateMemoryUsage(boundedMemoryId2, 0L, isBoundedMemory = true)
+      RocksDBMemoryManager.updateMemoryUsage(unboundedMemoryId, 0L, isBoundedMemory = false)
+
+      // Test that both instances get the same divided value from globalPinnedUsage
+      val result1 = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+        boundedMemoryId1,
+        cacheUsage)
+      val result2 = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+        boundedMemoryId2,
+        cacheUsage)
+      val result3 = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+        unboundedMemoryId,
+        cacheUsage1)
+
+      // With 2 bounded instances, each should get half of globalPinnedUsage
+      assert(result1 === 500L, s"Expected 500L for bounded instance 1, got $result1")
+      assert(result2 === 500L, s"Expected 500L for bounded instance 2, got $result2")
+      assert(result3 === 300L, s"Expected 300L for unbounded instance, got $result3")
+
+      // Test with zero instances (unregistered instance)
+      RocksDBMemoryManager.resetWriteBufferManagerAndCache
+      val nonexistInstanceRes = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+        boundedMemoryId1,
+        cacheUsage)
+      assert(
+        nonexistInstanceRes === cacheUsage,
+        s"Expected $cacheUsage when no instances, got $nonexistInstanceRes"
+      )
+    } finally {
+      RocksDBMemoryManager.resetWriteBufferManagerAndCache
     }
   }
 

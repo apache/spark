@@ -188,10 +188,17 @@ private[connect] object PipelinesHandler extends Logging {
           Table(
             identifier = qualifiedIdentifier,
             comment = Option(dataset.getComment),
-            specifiedSchema = Option.when(dataset.hasSchema)(
-              DataTypeProtoConverter
-                .toCatalystType(dataset.getSchema)
-                .asInstanceOf[StructType]),
+            specifiedSchema = dataset.getSchemaCase match {
+              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_DATA_TYPE =>
+                Some(
+                  DataTypeProtoConverter
+                    .toCatalystType(dataset.getSchemaDataType)
+                    .asInstanceOf[StructType])
+              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_STRING =>
+                Some(StructType.fromDDL(dataset.getSchemaString))
+              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_NOT_SET =>
+                None
+            },
             partitionCols = Option(dataset.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
             properties = dataset.getTablePropertiesMap.asScala.toMap,
@@ -331,11 +338,17 @@ private[connect] object PipelinesHandler extends Logging {
         }
       }
 
+      if (cmd.getStorage.isEmpty) {
+        // server-side validation to ensure that storage is always specified
+        throw new IllegalArgumentException("Storage must be specified to start a run.")
+      }
+
       val pipelineUpdateContext = new PipelineUpdateContextImpl(
         graphElementRegistry.toDataflowGraph,
         eventCallback,
         tableFiltersResult.refresh,
-        tableFiltersResult.fullRefresh)
+        tableFiltersResult.fullRefresh,
+        cmd.getStorage)
       sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
 
       if (cmd.getDry) {

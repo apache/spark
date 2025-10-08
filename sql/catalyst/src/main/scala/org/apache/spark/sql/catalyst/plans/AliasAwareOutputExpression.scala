@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Constant, Empty2Null, Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -128,6 +128,8 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
         }
       }
     }
-    newOrdering.takeWhile(_.isDefined).flatten.toSeq
+    newOrdering.takeWhile(_.isDefined).flatten.toSeq ++ outputExpressions.collect {
+      case a @ Alias(child, _) if child.foldable => SortOrder(a.toAttribute, Constant)
+    }
   }
 }
