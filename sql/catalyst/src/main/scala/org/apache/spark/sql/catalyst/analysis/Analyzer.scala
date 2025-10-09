@@ -2706,14 +2706,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val newChild = rewrite(p.child)
         val projectList = ArrayBuffer.empty[NamedExpression]
         val newPList = p.projectList.map(rewriteSQLFunctions(_, projectList))
-        if (newPList != newChild.output) {
-          val newP = p.copy(newPList, Project(newChild.output ++ projectList, newChild))
-          newP.copyTagsFrom(p)
-          newP
+        val newProj = if (newPList != newChild.output) {
+          p.copy(newPList, Project(newChild.output ++ projectList, newChild))
         } else {
           assert(projectList.isEmpty)
           p.copy(child = newChild)
         }
+        newProj.copyTagsFrom(p)
+        newProj
 
       case f: Filter if f.resolved && hasSQLFunctionExpression(f.expressions) =>
         val newChild = rewrite(f.child)
