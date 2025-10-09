@@ -45,6 +45,8 @@ public class JavaModuleOptions {
       "--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED",
       "-Djdk.reflect.useDirectMethodHandle=false",
       "-Dio.netty.tryReflectionSetAccessible=true",
+      "-Dio.netty.allocator.type=pooled",
+      "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
       "--enable-native-access=ALL-UNNAMED"};
 
     /**
