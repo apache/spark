@@ -375,77 +375,41 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
   }
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
-    child.dataType match {
-      case ArrayType(et, _) =>
-        val inputArray = child.eval(input).asInstanceOf[ArrayData]
-        if (inputArray == null) {
-          Nil
-        } else {
-          new ArrayExplodeIterator(inputArray, et, position)
-        }
-      case MapType(kt, vt, _) =>
-        val inputMap = child.eval(input).asInstanceOf[MapData]
-        if (inputMap == null) {
-          Nil
-        } else {
-          new MapExplodeIterator(inputMap, kt, vt, position)
-        }
-    }
-  }
+    (child.dataType, child.eval(input)) match {
+      case (ArrayType(et, _), inputArray: ArrayData) if inputArray != null =>
+          new IterableOnce[InternalRow] {
+            override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
+              val numElements = inputArray.numElements()
+              var currentIndex = -1
 
-  private class ArrayExplodeIterator(
-      array: ArrayData,
-      elementType: DataType,
-      includePosition: Boolean)
-      extends IterableOnce[InternalRow] {
+              override def isEmpty: Boolean = numElements == 0
+              override def hasNext: Boolean = currentIndex + 1 < numElements
+              
+              override def next(): InternalRow = {
+                currentIndex += 1
+                val element = inputArray.getArrayElement(currentIndex).asInstanceOf[et]
+                if (position) InternalRow(currentIndex, element) else InternalRow(element)
+              }
+            }
+          }
+      case (MapType(kt, vt, _), inputMap: MapData) if inputMap != null =>
+          new IterableOnce[InternalRow] {
+            override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
+              val numElements = inputMap.numElements()
+              var currentIndex = -1
 
-    override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
-      private var currentIndex = 0
-      private val numElements = array.numElements()
-
-      override def hasNext: Boolean = currentIndex < numElements
-
-      override def next(): InternalRow = {
-        if (!hasNext) throw new NoSuchElementException("No more elements")
-        val element = array.get(currentIndex, elementType)
-        val row = if (includePosition) {
-          InternalRow(currentIndex, element)
-        } else {
-          InternalRow(element)
-        }
-        currentIndex += 1
-        row
-      }
-    }
-  }
-
-  private class MapExplodeIterator(
-      mapData: MapData,
-      keyType: DataType,
-      valueType: DataType,
-      includePosition: Boolean)
-      extends IterableOnce[InternalRow] {
-
-    override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
-      private var currentIndex = 0
-      private val numElements = mapData.numElements()
-      private val keyArray = mapData.keyArray()
-      private val valueArray = mapData.valueArray()
-
-      override def hasNext: Boolean = currentIndex < numElements
-
-      override def next(): InternalRow = {
-        if (!hasNext) throw new NoSuchElementException("No more elements")
-        val key = keyArray.get(currentIndex, keyType)
-        val value = valueArray.get(currentIndex, valueType)
-        val row = if (includePosition) {
-          InternalRow(currentIndex, key, value)
-        } else {
-          InternalRow(key, value)
-        }
-        currentIndex += 1
-        row
-      }
+              override def isEmpty: Boolean = numElements == 0
+              override def hasNext: Boolean = currentIndex + 1 < numElements
+              
+              override def next(): InternalRow = {
+                currentIndex += 1
+                val k = inputMap.keyArray().getArrayElement(currentIndex).asInstanceOf[kt]
+                val v = inputMap.valueArray().getArrayElement(currentIndex).asInstanceOf[vt]
+                if (position) InternalRow(currentIndex, k, v) else InternalRow(k, v)
+              }
+            }
+          }
+      case _ => Nil
     }
   }
 
