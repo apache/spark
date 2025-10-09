@@ -17,8 +17,6 @@
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, Union
 
-from mypyc.analysis import dataflow
-
 from pyspark.pipelines.source_code_location import SourceCodeLocation
 from pyspark.sql.types import StructType
 
@@ -78,10 +76,8 @@ class TemporaryView(Output):
     pass
 
 @dataclass(frozen=True)
-class Sink:
+class Sink(Dataset):
     """Definition of an external sink in a pipeline dataflow graph. An external sink's
     contents are written to an external system rather than managed by the pipeline itself."""
-    name: str
     format: str
     options: Mapping[str, str]
-    source_code_location: SourceCodeLocation

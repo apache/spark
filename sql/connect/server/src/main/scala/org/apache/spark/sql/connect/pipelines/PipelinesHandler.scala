@@ -117,21 +117,6 @@ private[connect] object PipelinesHandler extends Logging {
               .setResolvedIdentifier(identifierBuilder)
               .build())
           .build()
-      case proto.PipelineCommand.CommandTypeCase.DEFINE_SINK =>
-        logInfo(s"Define pipelines sink cmd received: $cmd")
-        val resolvedSink =
-          defineSink(cmd.getDefineSink, sessionHolder)
-        val identifier = ResolvedIdentifier.newBuilder()
-          .setTableName(resolvedSink.identifier)
-          .build()
-        PipelineCommandResult
-          .newBuilder()
-          .setDefineSinkResult(
-            PipelineCommandResult.DefineSinkResult
-              .newBuilder()
-              .setResolvedIdentifier(identifier)
-              .build())
-          .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
         logInfo(s"Start pipeline cmd received: $cmd")
         startRun(cmd.getStartRun, responseObserver, sessionHolder)
@@ -250,38 +235,34 @@ private[connect] object PipelinesHandler extends Logging {
             properties = Map.empty,
             sqlText = None))
         viewIdentifier
+      case proto.DatasetType.SINK =>
+        val dataflowGraphId = dataset.getDataflowGraphId
+        val graphElementRegistry =
+          sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+        val identifier = GraphIdentifierManager
+          .parseTableIdentifier(name = dataset.getDatasetName, spark = sessionHolder.session)
+        val sinkDetails = dataset.getSinkDetails
+        graphElementRegistry.registerSink(
+          SinkImpl(
+            identifier = identifier,
+            format = sinkDetails.getFormat,
+            options = sinkDetails.getOptionsMap.asScala.toMap,
+            origin = QueryOrigin(
+              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
+                dataset.getSourceCodeLocation.getFileName),
+              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
+                dataset.getSourceCodeLocation.getLineNumber),
+              objectType = Option(QueryOriginType.Sink.toString),
+              objectName = Option(identifier.unquotedString),
+              language = Option(Python())
+            ),
+            normalizedPath = None
+          )
+        )
+        identifier
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
     }
-  }
-
-  private def defineSink(
-    sink: proto.PipelineCommand.DefineSink,
-    sessionHolder: SessionHolder
-  ): TableIdentifier = {
-    val dataflowGraphId = sink.getDataflowGraphId
-    val graphElementRegistry =
-      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
-    val identifier = GraphIdentifierManager
-      .parseTableIdentifier(name = sink.getSinkName, spark = sessionHolder.session)
-    graphElementRegistry.registerSink(
-      SinkImpl(
-        identifier = identifier,
-        format = sink.getFormat,
-        options = sink.getOptionsMap.asScala.toMap,
-        origin = QueryOrigin(
-          filePath = Option.when(sink.getSourceCodeLocation.hasFileName)(
-            sink.getSourceCodeLocation.getFileName),
-          line = Option.when(sink.getSourceCodeLocation.hasLineNumber)(
-            sink.getSourceCodeLocation.getLineNumber),
-          objectType = Option(QueryOriginType.Sink.toString),
-          objectName = Option(identifier.unquotedString),
-          language = Option(Python())
-        ),
-        normalizedPath = None
-      )
-    )
-    identifier
   }
 
   private def defineFlow(

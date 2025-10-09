@@ -26,7 +26,8 @@ from pyspark.pipelines.source_code_location import (
 from pyspark.pipelines.output import (
     MaterializedView,
     StreamingTable,
-    TemporaryView, Sink,
+    TemporaryView,
+    Sink,
 )
 from pyspark.sql.types import StructType
 
@@ -476,5 +477,6 @@ def create_sink(
         format=format,
         options=options or {},
         source_code_location=get_caller_source_code_location(stacklevel=1),
+        comment=None,
     )
     get_active_graph_element_registry().register_output(sink)
