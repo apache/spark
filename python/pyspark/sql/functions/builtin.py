@@ -26595,25 +26595,25 @@ def theta_sketch_agg(
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value"))).show()
-    +--------------------------------------------------+
-    |theta_sketch_estimate(theta_sketch_agg(value, 12))|
-    +--------------------------------------------------+
-    |                                                 3|
-    +--------------------------------------------------+
+    +---------------------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 12, QUICKSELECT))|
+    +---------------------------------------------------------------+
+    |                                                              3|
+    +---------------------------------------------------------------+
 
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value", 15))).show()
-    +--------------------------------------------------+
-    |theta_sketch_estimate(theta_sketch_agg(value, 15))|
-    +--------------------------------------------------+
-    |                                                 3|
-    +--------------------------------------------------+
+    +---------------------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 15, QUICKSELECT))|
+    +---------------------------------------------------------------+
+    |                                                              3|
+    +---------------------------------------------------------------+
 
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value", 15, "ALPHA"))).show()
-    +-------------------------------------------------------+
-    |theta_sketch_estimate(theta_sketch_agg(value, 15, AL..|
-    +-------------------------------------------------------+
-    |                                                      3|
-    +-------------------------------------------------------+
+    +---------------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 15, ALPHA))|
+    +---------------------------------------------------------+
+    |                                                        3|
+    +---------------------------------------------------------+
     """
     fn = "theta_sketch_agg"
     if lgNomEntries is None and family is None:
@@ -27368,11 +27368,11 @@ def theta_sketch_estimate(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value"))).show()
-    +--------------------------------------------------+
-    |theta_sketch_estimate(theta_sketch_agg(value, 12))|
-    +--------------------------------------------------+
-    |                                                 3|
-    +--------------------------------------------------+
+    +---------------------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 12, QUICKSELECT))|
+    +---------------------------------------------------------------+
+    |                                                              3|
+    +---------------------------------------------------------------+
     """
 
     fn = "theta_sketch_estimate"

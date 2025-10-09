@@ -76,15 +76,13 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
     _FUNC_(expr, lgNomEntries, family) - Returns the ThetaSketch compact binary representation.
       `lgNomEntries` (optional) is the log-base-2 of nominal entries, with nominal entries deciding
       the number buckets or slots for the ThetaSketch.
-      `family` (optional) is the sketch family, either 'QUICKSELECT' or 'ALPHA' (defaults to 'QUICKSELECT').
-      Note: You can pass family as the second parameter to use default lgNomEntries with a specific family.""",
+      `family` (optional) is the sketch family, either 'QUICKSELECT' or 'ALPHA' (defaults to
+      'QUICKSELECT').""",
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
        3
       > SELECT theta_sketch_estimate(_FUNC_(col, 12)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
-       3
-      > SELECT theta_sketch_estimate(_FUNC_(col, 'ALPHA')) FROM VALUES (1), (1), (2), (2), (3) tab(col);
        3
       > SELECT theta_sketch_estimate(_FUNC_(col, 15, 'ALPHA')) FROM VALUES (1), (1), (2), (2), (3) tab(col);
        3
