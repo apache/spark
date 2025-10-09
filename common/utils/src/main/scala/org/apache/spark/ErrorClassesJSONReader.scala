@@ -204,9 +204,9 @@ private case class ErrorSubInfo(
  *                       mitigationConfig.
  */
 class BreakingChangeInfo(
-  val migrationMessage: Seq[String],
-  val mitigationConfig: Option[MitigationConfig] = None,
-  val needsAudit: Boolean = true) {
+    val migrationMessage: Seq[String],
+    val mitigationConfig: Option[MitigationConfig] = None,
+    val needsAudit: Boolean = true) {
   override def equals(other: Any): Boolean = other match {
     case that: BreakingChangeInfo =>
       migrationMessage == that.migrationMessage &&
