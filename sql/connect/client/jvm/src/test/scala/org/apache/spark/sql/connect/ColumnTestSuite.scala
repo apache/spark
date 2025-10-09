@@ -235,4 +235,11 @@ class ColumnTestSuite extends ConnectFunSuite {
     val expected = fn.when(a > 10, a * 2).otherwise(a)
     assert(transformed == expected)
   }
+
+  test("transform with built-in functions") {
+    val a = fn.col("a")
+    val transformed = a.transform(fn.trim).transform(fn.upper)
+    val expected = fn.upper(fn.trim(a))
+    assert(transformed == expected)
+  }
 }
