@@ -3145,7 +3145,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Seq((Duration.ofDays(2))).toDF())
   }
 
-  test("Column.transform") {
+  test("Column.transform: built-in functions") {
     val df = Seq("  hello  ", "  world  ").toDF("text")
 
     checkAnswer(
@@ -3154,7 +3154,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("Column.transform: chaining") {
+  test("Column.transform: lambda functions") {
     val df = Seq(10, 20, 30).toDF("value")
 
     checkAnswer(
