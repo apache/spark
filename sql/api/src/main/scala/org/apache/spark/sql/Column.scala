@@ -1432,8 +1432,7 @@ class Column(val node: ColumnNode) extends Logging with TableValuedFunctionArgum
    *   df.select($"name".transform(addPrefix))
    *
    *   // Chaining multiple transformations
-   *   def uppercase(c: Column): Column = upper(c)
-   *   df.select($"name".transform(addPrefix).transform(uppercase))
+   *   df.select($"name".transform(addPrefix).transform(upper))
    * }}}
    *
    * @group expr_ops
