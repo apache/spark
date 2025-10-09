@@ -61,7 +61,19 @@ class SparkSqlParser extends AbstractSqlParser {
     override def initialValue(): Boolean = true
   }
 
-  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+  /**
+   * Parse SQL with explicit parameter context, avoiding thread-local usage.
+   * This is the preferred method for parsing SQL with parameters.
+   *
+   * @param command The SQL text to parse
+   * @param parameterContext The parameter context containing parameter values
+   * @param toResult Function to convert the parser result
+   * @return The parsed result
+   */
+  def parseWithParameters[T](
+      command: String,
+      parameterContext: ParameterContext)
+      (toResult: SqlBaseParser => T): T = {
     val wasTopLevel = isTopLevelParse.get()
 
     // Clear any stale callback from previous parsing operations to prevent contamination.
@@ -73,23 +85,13 @@ class SparkSqlParser extends AbstractSqlParser {
     val (paramSubstituted, substitutionOccurred, hasParameters) =
       if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
         // Legacy mode: skip parameter substitution but still detect parameters for context mapping.
-        ThreadLocalParameterContext.get() match {
-          case Some(context) =>
-            // Parameters detected but substitution skipped in legacy mode.
-            // Position mapping callback will be set up below.
-            (command, false, true)
-          case None =>
-            (command, false, false) // No parameters detected.
-        }
+        // Parameters detected but substitution skipped in legacy mode.
+        // Position mapping callback will be set up below.
+        (command, false, true)
       } else {
         // Modern mode: perform parameter substitution if parameters are present.
-        ThreadLocalParameterContext.get() match {
-          case Some(context) =>
-            val substituted = substituteParametersOrSetupCallback(command, context)
-            (substituted, substituted != command, true) // Track if substitution occurred.
-          case None =>
-            (command, false, false)  // No parameters to substitute.
-        }
+        val substituted = substituteParametersOrSetupCallback(command, parameterContext)
+        (substituted, substituted != command, true) // Track if substitution occurred.
       }
 
     // Step 2: Apply existing variable substitution.
@@ -123,6 +125,47 @@ class SparkSqlParser extends AbstractSqlParser {
     }
 
     CurrentOrigin.withOrigin(originToUse) {
+      super.parse(variableSubstituted)(toResult)
+    }
+  }
+
+  /**
+   * Parse SQL plan with explicit parameter context, avoiding thread-local usage.
+   * This is the preferred method for parsing SQL plans with parameters.
+   *
+   * @param sqlText The SQL text to parse
+   * @param parameterContext The parameter context containing parameter values
+   * @return The parsed logical plan
+   */
+  override def parsePlanWithParameters(
+      sqlText: String,
+      parameterContext: ParameterContext): LogicalPlan = {
+    parseWithParameters(sqlText, parameterContext) { parser =>
+      parser.singleStatement().accept(astBuilder).asInstanceOf[LogicalPlan]
+    }
+  }
+
+  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+    val wasTopLevel = isTopLevelParse.get()
+
+    // Clear any stale callback from previous parsing operations to prevent contamination.
+    if (wasTopLevel) {
+      CurrentOrigin.set(CurrentOrigin.get.copy(parameterSubstitutionCallback = None))
+    }
+
+    // Step 1: No parameter substitution in this method - parameters should be handled
+    // by the new parseWithParameters method for better API design.
+    val paramSubstituted = command
+    val substitutionOccurred = false
+    val hasParameters = false
+
+    // Step 2: Apply existing variable substitution.
+    val variableSubstituted = substitutor.substitute(paramSubstituted)
+
+    // Step 3: Use current origin unchanged since no parameter handling.
+    val currentOrigin = CurrentOrigin.get
+
+    CurrentOrigin.withOrigin(currentOrigin) {
       super.parse(variableSubstituted)(toResult)
     }
   }

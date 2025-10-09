@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
-import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext, ThreadLocalParameterContext}
+import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -449,20 +449,18 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = if (args.nonEmpty) {
-          // Set parameter context for parsing
+          // Use parameter context directly for parsing
           val paramContext = PositionalParameterContext(args.map(lit(_).expr).toSeq)
-          ThreadLocalParameterContext.withContext(paramContext) {
-            val parsed = sessionState.sqlParser.parsePlan(sqlText)
-            // Check for SQL scripting with positional parameters
-            if (parsed.isInstanceOf[CompoundBody]) {
-              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-            }
-            // In legacy mode, wrap with PosParameterizedQuery for analyzer binding
-            if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
-              PosParameterizedQuery(parsed, paramContext.params)
-            } else {
-              parsed
-            }
+          val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
+          // Check for SQL scripting with positional parameters
+          if (parsed.isInstanceOf[CompoundBody]) {
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          }
+          // In legacy mode, wrap with PosParameterizedQuery for analyzer binding
+          if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+            PosParameterizedQuery(parsed, paramContext.params)
+          } else {
+            parsed
           }
         } else {
           sessionState.sqlParser.parsePlan(sqlText)
@@ -502,20 +500,18 @@ class SparkSession private(
       // Always set parameter context if we have actual parameters
       if (args.nonEmpty) {
         val paramContext = NamedParameterContext(args.transform((_, v) => lit(v).expr))
-        ThreadLocalParameterContext.withContext(paramContext) {
-          val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-            val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-            // In legacy mode, wrap the parsed plan with NameParameterizedQuery
-            // so that the BindParameters analyzer rule can bind the parameters
-            if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
-              NameParameterizedQuery(parsedPlan, paramContext.params)
-            } else {
-              parsedPlan
-            }
+        val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+          val parsedPlan = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
+          // In legacy mode, wrap the parsed plan with NameParameterizedQuery
+          // so that the BindParameters analyzer rule can bind the parameters
+          if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+            NameParameterizedQuery(parsedPlan, paramContext.params)
+          } else {
+            parsedPlan
           }
-
-          Dataset.ofRows(self, plan, tracker)
         }
+
+        Dataset.ofRows(self, plan, tracker)
       } else {
         // No parameters - parse normally without parameter context
         val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
@@ -570,24 +566,22 @@ class SparkSession private(
           }
           val paramContext = HybridParameterContext(paramExpressions, paramNames)
 
-          ThreadLocalParameterContext.withContext(paramContext) {
-            val parsed = sessionState.sqlParser.parsePlan(sqlText)
+          val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
 
-            // Check for SQL scripting with positional parameters
-            if (parsed.isInstanceOf[CompoundBody] && paramNames.isEmpty) {
-              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-            }
+          // Check for SQL scripting with positional parameters
+          if (parsed.isInstanceOf[CompoundBody] && paramNames.isEmpty) {
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          }
 
-            // In legacy mode, wrap with GeneralParameterizedQuery for analyzer binding
-            if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
-              GeneralParameterizedQuery(
-                parsed,
-                args.map(lit(_).expr).toImmutableArraySeq,
-                paramNames.toImmutableArraySeq
-              )
-            } else {
-              parsed
-            }
+          // In legacy mode, wrap with GeneralParameterizedQuery for analyzer binding
+          if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+            GeneralParameterizedQuery(
+              parsed,
+              args.map(lit(_).expr).toImmutableArraySeq,
+              paramNames.toImmutableArraySeq
+            )
+          } else {
+            parsed
           }
         } else {
           sessionState.sqlParser.parsePlan(sqlText)

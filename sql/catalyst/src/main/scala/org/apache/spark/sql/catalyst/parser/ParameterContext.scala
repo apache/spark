@@ -50,23 +50,3 @@ case class PositionalParameterContext(params: Seq[Expression]) extends Parameter
 case class HybridParameterContext(
     args: Array[_],
     paramNames: Array[String]) extends ParameterContext
-
-/**
- * Thread-local storage for parameter context to pass parameters
- * from SparkSession to the parser without changing method signatures.
- */
-object ThreadLocalParameterContext
-    extends org.apache.spark.util.LexicalThreadLocal[ParameterContext] {
-  /**
-   * Create a handle for the given parameter context.
-   */
-  def create(ctx: ParameterContext): Handle = createHandle(Some(ctx))
-
-  /**
-   * Execute a block of code with the given parameter context,
-   * ensuring cleanup happens even if an exception occurs.
-   */
-  def withContext[T](ctx: ParameterContext)(block: => T): T = {
-    create(ctx).runWith(block)
-  }
-}

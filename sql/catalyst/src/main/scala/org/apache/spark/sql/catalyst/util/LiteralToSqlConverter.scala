@@ -67,7 +67,6 @@ import org.apache.spark.sql.types._
  * @note This utility is thread-safe and can be used concurrently.
  * @note Only supports Literal expressions - all parameter values must be pre-evaluated.
  * @see [[ParameterHandler]] for the main parameter handling entry point
- * @since 4.0.0
  */
 object LiteralToSqlConverter {
 
