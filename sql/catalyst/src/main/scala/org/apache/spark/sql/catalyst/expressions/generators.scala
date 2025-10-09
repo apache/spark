@@ -384,7 +384,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 
               override def isEmpty: Boolean = numElements == 0
               override def hasNext: Boolean = currentIndex + 1 < numElements
-              
+
               override def next(): InternalRow = {
                 currentIndex += 1
                 val element = inputArray.getArrayElement(currentIndex).asInstanceOf[et]
@@ -400,7 +400,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 
               override def isEmpty: Boolean = numElements == 0
               override def hasNext: Boolean = currentIndex + 1 < numElements
-              
+
               override def next(): InternalRow = {
                 currentIndex += 1
                 val k = inputMap.keyArray().getArrayElement(currentIndex).asInstanceOf[kt]
