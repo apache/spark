@@ -517,7 +517,7 @@ class PipelineCommand(google.protobuf.message.Message):
         OPTIONS_FIELD_NUMBER: builtins.int
         FORMAT_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
-        """The graph to attach this dataset to."""
+        """The graph to attach this sink to."""
         sink_name: builtins.str
         """Name of the sink"""
         @property
