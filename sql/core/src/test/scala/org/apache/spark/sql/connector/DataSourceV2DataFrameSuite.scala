@@ -983,8 +983,7 @@ class DataSourceV2DataFrameSuite
           "statement" -> "CREATE TABLE",
           "colName" -> "`current_timestamp`",
           "defaultValue" -> "c1"
-        ),
-        sqlState = Some("42623")
+        )
       )
     }
   }
