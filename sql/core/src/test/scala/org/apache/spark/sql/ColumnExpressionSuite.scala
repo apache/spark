@@ -3147,10 +3147,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("Column.transform") {
     val df = Seq("  hello  ", "  world  ").toDF("text")
-    def trimAndUpper(c: Column): Column = upper(trim(c))
 
     checkAnswer(
-      df.select($"text".transform(trimAndUpper)),
+      df.select($"text".transform(trim).transform(upper)),
       Seq("HELLO", "WORLD").toDF()
     )
   }
