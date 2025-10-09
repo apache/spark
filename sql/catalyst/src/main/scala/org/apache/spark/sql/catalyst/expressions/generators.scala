@@ -387,7 +387,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 
               override def next(): InternalRow = {
                 currentIndex += 1
-                val element = inputArray.getArrayElement(currentIndex).asInstanceOf[et]
+                val element = inputArray.get(currentIndex, et)
                 if (position) InternalRow(currentIndex, element) else InternalRow(element)
               }
             }
@@ -403,8 +403,8 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 
               override def next(): InternalRow = {
                 currentIndex += 1
-                val k = inputMap.keyArray().getArrayElement(currentIndex).asInstanceOf[kt]
-                val v = inputMap.valueArray().getArrayElement(currentIndex).asInstanceOf[vt]
+                val k = inputMap.keyArray().get(currentIndex, kt)
+                val v = inputMap.valueArray().get(currentIndex, vt)
                 if (position) InternalRow(currentIndex, k, v) else InternalRow(k, v)
               }
             }
