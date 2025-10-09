@@ -82,11 +82,11 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         elif isinstance(output, TemporaryView):
             output_type = pb2.OutputType.TEMPORARY_VIEW
             table_details = None
-        elif isinstance(dataset, Sink):
-            output_type = pb2.DatasetType.SINK
-            sink_details = pb2.PipelineCommand.DefineDataset.SinkDetails(
-                options=dataset.options,
-                format=dataset.format,
+        elif isinstance(output, Sink):
+            output_type = pb2.OutputType.SINK
+            sink_details = pb2.PipelineCommand.DefineOutput.SinkDetails(
+                options=output.options,
+                format=output.format,
             )
         else:
             raise PySparkTypeError(

@@ -235,23 +235,23 @@ private[connect] object PipelinesHandler extends Logging {
             properties = Map.empty,
             sqlText = None))
         viewIdentifier
-      case proto.DatasetType.SINK =>
-        val dataflowGraphId = dataset.getDataflowGraphId
+      case proto.OutputType.SINK =>
+        val dataflowGraphId = output.getDataflowGraphId
         val graphElementRegistry =
           sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
         val identifier = GraphIdentifierManager
-          .parseTableIdentifier(name = dataset.getDatasetName, spark = sessionHolder.session)
-        val sinkDetails = dataset.getSinkDetails
+          .parseTableIdentifier(name = output.getOutputName, spark = sessionHolder.session)
+        val sinkDetails = output.getSinkDetails
         graphElementRegistry.registerSink(
           SinkImpl(
             identifier = identifier,
             format = sinkDetails.getFormat,
             options = sinkDetails.getOptionsMap.asScala.toMap,
             origin = QueryOrigin(
-              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
-                dataset.getSourceCodeLocation.getFileName),
-              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
-                dataset.getSourceCodeLocation.getLineNumber),
+              filePath = Option.when(output.getSourceCodeLocation.hasFileName)(
+                output.getSourceCodeLocation.getFileName),
+              line = Option.when(output.getSourceCodeLocation.hasLineNumber)(
+                output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Sink.toString),
               objectName = Option(identifier.unquotedString),
               language = Option(Python())
