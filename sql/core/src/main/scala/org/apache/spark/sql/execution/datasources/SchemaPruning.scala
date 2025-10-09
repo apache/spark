@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Generate, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 /**
@@ -34,22 +34,384 @@ import org.apache.spark.sql.util.SchemaUtils._
  * column, and a nested Parquet column corresponds to a [[StructField]].
  *
  * Also prunes the unnecessary metadata columns if any for all file formats.
+ *
+ * SPARK-47230: Enhanced to support pruning nested columns accessed through chained LATERAL VIEW.
  */
 object SchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
 
-  override def apply(plan: LogicalPlan): LogicalPlan =
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    // SPARK-47230: Collect GetArrayStructFields AND GetStructField expressions,
+    // plus Generate mappings
+    val allArrayStructFields = scala.collection.mutable.ArrayBuffer[GetArrayStructFields]()
+    val allStructFields = scala.collection.mutable.ArrayBuffer[GetStructField]()
+    val generateMappings = scala.collection.mutable.Map[ExprId, Expression]()
+
+    plan.foreach { node =>
+      // Collect Generate nodes to map exploded aliases back to original arrays
+      node match {
+        case g: Generate =>
+          // Generate creates new attributes for exploded array elements
+          // Map the output attribute IDs to the generator expression
+          g.generatorOutput.foreach { attr =>
+            generateMappings(attr.exprId) = g.generator
+          }
+        case _ =>
+      }
+
+      // Collect GetArrayStructFields and GetStructField
+      node.expressions.foreach { expr =>
+        expr.foreach {
+          case gasf: GetArrayStructFields => allArrayStructFields += gasf
+          case gsf: GetStructField => allStructFields += gsf
+          case _ =>
+        }
+      }
+    }
+
+
     plan transformDown {
+      // SPARK-47230: Handle cases with Generate nodes where ScanOperation doesn't match
+      case p @ Project(_, l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
+          if generateMappings.nonEmpty &&
+             canPruneDataSchema(hadoopFsRelation) &&
+             (allArrayStructFields.nonEmpty || allStructFields.nonEmpty) =>
+        // Use the expressions collected at the beginning
+        tryEnhancedNestedArrayPruning(
+          l, allArrayStructFields.toSeq, allStructFields.toSeq,
+          generateMappings.toMap, hadoopFsRelation) match {
+          case Some(prunedRelation) => p.copy(child = prunedRelation)
+          case None => p
+        }
+
       case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
-      l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
+        l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
+
+
         val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
-        prunePhysicalColumns(l, projects, allFilters, hadoopFsRelation,
+
+        // SPARK-47230: Try enhanced pruning only if there are Generate nodes (LATERAL VIEW)
+        val enhancedPruning = if (canPruneDataSchema(hadoopFsRelation) &&
+            generateMappings.nonEmpty &&
+            (allArrayStructFields.nonEmpty || allStructFields.nonEmpty)) {
+          tryEnhancedNestedArrayPruning(
+            l, allArrayStructFields.toSeq, allStructFields.toSeq,
+            generateMappings.toMap, hadoopFsRelation)
+        } else {
+          None
+        }
+
+        // Fall back to standard pruning if enhanced pruning doesn't apply
+        enhancedPruning.getOrElse {
+          prunePhysicalColumns(l, projects, allFilters, hadoopFsRelation,
           (prunedDataSchema, prunedMetadataSchema) => {
             val prunedHadoopRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
             buildPrunedRelation(l, prunedHadoopRelation, prunedMetadataSchema)
           }).getOrElse(op)
+        }
     }
+  }
+
+  /**
+   * SPARK-47230: Enhanced pruning for nested arrays accessed via GetArrayStructFields.
+   *
+   * This handles cases where arrays of structs are accessed through chained explodes.
+   * Standard Spark pruning doesn't handle GetArrayStructFields properly.
+   */
+  private def tryEnhancedNestedArrayPruning(
+      relation: LogicalRelation,
+      arrayStructFields: Seq[GetArrayStructFields],
+      structFields: Seq[GetStructField],
+      generateMappings: Map[ExprId, Expression],
+      hadoopFsRelation: HadoopFsRelation): Option[LogicalPlan] = {
+
+    if (arrayStructFields.isEmpty && structFields.isEmpty) {
+      return None
+    }
+
+
+    // Build a map: root column name -> set of field paths accessed
+    val nestedFieldAccesses = scala.collection.mutable.Map[String, Set[Seq[String]]]()
+    var tracedThroughGenerate = false
+
+    // Get relation column names and IDs
+    val relationColumnNames = relation.output.map(_.name).toSet
+    val relationExprIds = relation.output.map(_.exprId).toSet
+
+    // Process GetArrayStructFields
+    arrayStructFields.foreach { gasf =>
+      val (rootAndPath, usedGenerate) = traceToRootColumnThroughGenerates(
+        gasf, generateMappings, relationExprIds)
+      if (usedGenerate) tracedThroughGenerate = true
+      rootAndPath.foreach { case (rootCol, path) =>
+        val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
+        nestedFieldAccesses(rootCol) = existingPaths + path
+      }
+    }
+
+    // Process GetStructField expressions (like request.available)
+    structFields.foreach { gsf =>
+      val (rootAndPath, usedGenerate) = traceStructFieldThroughGenerates(
+        gsf, generateMappings, relationExprIds)
+      if (usedGenerate) tracedThroughGenerate = true
+      rootAndPath.foreach { case (rootCol, path) =>
+        val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
+        nestedFieldAccesses(rootCol) = existingPaths + path
+      }
+    }
+
+    // SPARK-47230: Only apply enhanced pruning if we actually traced through Generate nodes
+    // AND we have nested array accesses (chained explodes)
+    // This preserves existing behavior for single-level explode operations
+    if (!tracedThroughGenerate || arrayStructFields.isEmpty) {
+      return None
+    }
+
+
+    if (nestedFieldAccesses.isEmpty) {
+      return None
+    }
+
+    // Filter to only keep root columns that exist in the relation
+    val filteredAccesses = nestedFieldAccesses.filter { case (rootCol, _) =>
+      relationColumnNames.contains(rootCol)
+    }
+
+
+    if (filteredAccesses.isEmpty) {
+      return None
+    }
+
+    // Build pruned schema by keeping only accessed nested fields
+    val originalSchema = hadoopFsRelation.dataSchema
+    val prunedSchema = pruneNestedArraySchema(originalSchema, filteredAccesses.toMap)
+
+
+    // Check if we actually pruned anything
+    val originalFieldCount = countLeaves(originalSchema)
+    val prunedFieldCount = countLeaves(prunedSchema)
+
+    if (prunedFieldCount < originalFieldCount) {
+      val prunedHadoopRelation =
+        hadoopFsRelation.copy(dataSchema = prunedSchema)(hadoopFsRelation.sparkSession)
+      Some(buildPrunedRelation(relation, prunedHadoopRelation, StructType(Nil)))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * SPARK-47230: Trace a GetArrayStructFields back to its root column through Generate nodes.
+   * Returns (Option[(rootColumnName, Seq[fieldNames])], usedGenerate)
+   */
+  private def traceToRootColumnThroughGenerates(
+      expr: Expression,
+      generateMappings: Map[ExprId, Expression],
+      relationExprIds: Set[ExprId]): (Option[(String, Seq[String])], Boolean) = {
+    expr match {
+      case GetArrayStructFields(child, field, _, _, _) =>
+        val (result, usedGen) = traceArrayAccessThroughGenerates(
+          child, generateMappings, relationExprIds)
+        (result.map { case (rootCol, path) => (rootCol, path :+ field.name) }, usedGen)
+      case _ => (None, false)
+    }
+  }
+
+  /**
+   * SPARK-47230: Trace a GetStructField back to its root column through Generate nodes.
+   * Returns (Option[(rootColumnName, Seq[fieldNames])], usedGenerate)
+   */
+  private def traceStructFieldThroughGenerates(
+      expr: Expression,
+      generateMappings: Map[ExprId, Expression],
+      relationExprIds: Set[ExprId]): (Option[(String, Seq[String])], Boolean) = {
+    expr match {
+      case GetStructField(child, _, Some(fieldName)) =>
+        val (result, usedGen) = traceArrayAccessThroughGenerates(
+          child, generateMappings, relationExprIds)
+        (result.map { case (rootCol, path) => (rootCol, path :+ fieldName) }, usedGen)
+      case _ => (None, false)
+    }
+  }
+
+  /**
+   * Trace a GetArrayStructFields back to its root column and field path.
+   * Returns (rootColumnName, Seq[fieldNames])
+   */
+  private def traceToRootColumn(expr: Expression): Option[(String, Seq[String])] = {
+    expr match {
+      case GetArrayStructFields(child, field, _, _, _) =>
+        traceArrayAccess(child) match {
+          case Some((rootCol, path)) =>
+            Some((rootCol, path :+ field.name))
+          case None => None
+        }
+      case _ => None
+    }
+  }
+
+  /**
+   * SPARK-47230: Trace back through Generate nodes to find the original relation column.
+   * Returns (Option[(rootColumnName, Seq[fieldNamesLeadingToArray])], usedGenerate)
+   */
+  private def traceArrayAccessThroughGenerates(
+      expr: Expression,
+      generateMappings: Map[ExprId, Expression],
+      relationExprIds: Set[ExprId]): (Option[(String, Seq[String])], Boolean) = {
+    expr match {
+      case attr: AttributeReference =>
+        // Check if this attribute is from a Generate node
+        generateMappings.get(attr.exprId) match {
+          case Some(Explode(child)) =>
+            // This attribute comes from explode(child) - mark as used Generate
+            val (result, _) = traceArrayAccessThroughGenerates(
+              child, generateMappings, relationExprIds)
+            (result, true)
+          case Some(other) =>
+            // Other generator types - mark as used Generate
+            val (result, _) = traceArrayAccessThroughGenerates(
+              other, generateMappings, relationExprIds)
+            (result, true)
+          case None =>
+            // Not from a Generate node - this is a regular attribute
+            if (relationExprIds.contains(attr.exprId)) {
+              (Some((attr.name, Seq.empty)), false)
+            } else {
+              (None, false)
+            }
+        }
+
+      case GetStructField(child, _, nameOpt) =>
+        val (childResult, usedGen) = traceArrayAccessThroughGenerates(
+          child, generateMappings, relationExprIds)
+        (childResult.flatMap { case (rootCol, path) =>
+          nameOpt.map(fieldName => (rootCol, path :+ fieldName))
+        }, usedGen)
+
+      case GetArrayItem(child, _, _) =>
+        traceArrayAccessThroughGenerates(child, generateMappings, relationExprIds)
+
+      case GetArrayStructFields(child, field, _, _, _) =>
+        val (childResult, usedGen) = traceArrayAccessThroughGenerates(
+          child, generateMappings, relationExprIds)
+        (childResult.map { case (rootCol, path) =>
+          (rootCol, path :+ field.name)
+        }, usedGen)
+
+      case _ => (None, false)
+    }
+  }
+
+  /**
+   * Trace back to the root column through nested field accesses.
+   * Returns (rootColumnName, Seq[fieldNamesLeadingToArray])
+   */
+  private def traceArrayAccess(expr: Expression): Option[(String, Seq[String])] = {
+    expr match {
+      case attr: AttributeReference =>
+        Some((attr.name, Seq.empty))
+
+      case GetStructField(child, _, nameOpt) =>
+        traceArrayAccess(child).flatMap { case (rootCol, path) =>
+          nameOpt.map(fieldName => (rootCol, path :+ fieldName))
+        }
+
+      case GetArrayItem(child, _, _) =>
+        traceArrayAccess(child)
+
+      case GetArrayStructFields(child, field, _, _, _) =>
+        // Nested GetArrayStructFields
+        traceArrayAccess(child).map { case (rootCol, path) =>
+          (rootCol, path :+ field.name)
+        }
+
+      case _ => None
+    }
+  }
+
+  /**
+   * Prune schema keeping only accessed nested fields.
+   * Key fix: When a field path is accessed, we keep ONLY that path, not sibling fields.
+   */
+  private def pruneNestedArraySchema(
+      schema: StructType,
+      nestedFieldAccesses: Map[String, Set[Seq[String]]]): StructType = {
+
+    val prunedFields = schema.fields.flatMap { field =>
+      nestedFieldAccesses.get(field.name) match {
+        case Some(paths) if paths.nonEmpty =>
+          // This root field has specific nested paths accessed
+          Some(pruneFieldByPaths(field, paths.toSeq))
+        case None =>
+          // SPARK-47230: This field is not accessed, don't include it
+          None
+      }
+    }
+
+    StructType(prunedFields)
+  }
+
+  /**
+   * Prune a field to keep only the specified paths.
+   *
+   * Key insight: paths = Seq(Seq("a", "b"), Seq("a", "c")) means we need:
+   * - The field containing "a", which contains both "b" and "c"
+   * - NOT any sibling fields of "a"
+   */
+  private def pruneFieldByPaths(field: StructField, paths: Seq[Seq[String]]): StructField = {
+    // If any path is empty, we need the entire field
+    if (paths.exists(_.isEmpty)) {
+      return field
+    }
+
+    field.dataType match {
+      case ArrayType(elementType: StructType, containsNull) =>
+        // For array<struct<...>>, prune the struct element type
+        val prunedElementType = pruneStructByPaths(elementType, paths)
+        field.copy(dataType = ArrayType(prunedElementType, containsNull))
+
+      case struct: StructType =>
+        // For struct<...>, prune it
+        val prunedStruct = pruneStructByPaths(struct, paths)
+        field.copy(dataType = prunedStruct)
+
+      case _ =>
+        // Leaf type, return as-is
+        field
+    }
+  }
+
+  /**
+   * Prune a StructType to keep only fields in the given paths.
+   *
+   * For paths like Seq(Seq("a"), Seq("b", "c")):
+   * - Keep field "a" entirely
+   * - Keep field "b", but recursively prune it to only contain "c"
+   */
+  private def pruneStructByPaths(struct: StructType, paths: Seq[Seq[String]]): StructType = {
+    // Group paths by their first component
+    val pathsByFirstField = paths.groupBy(_.head)
+
+    // Keep only fields that are accessed
+    val prunedFields = pathsByFirstField.flatMap { case (fieldName, fieldPaths) =>
+      struct.find(_.name == fieldName).map { field =>
+        // Get remaining path components after removing the first
+        val remainingPaths = fieldPaths.map(_.tail).filter(_.nonEmpty)
+
+        if (remainingPaths.isEmpty) {
+          // This field itself is accessed, keep it entirely
+          field
+        } else {
+          // This field has nested accesses, recurse
+          pruneFieldByPaths(field, remainingPaths)
+        }
+      }
+    }.toSeq
+
+    StructType(prunedFields)
+  }
+
 
   /**
    * This method returns optional logical plan. `None` is returned if no nested field is required or
