@@ -112,6 +112,10 @@ class MemoryProfilerTests(PySparkTestCase):
             self.sc.dump_profiles(d)
             self.assertTrue(f"udf_{id}_memory.txt" in os.listdir(d))
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
     def test_profile_pandas_udf(self):
         udfs = [self.exec_pandas_udf_ser_to_ser, self.exec_pandas_udf_ser_to_scalar]
         udf_names = ["ser_to_ser", "ser_to_scalar"]
@@ -130,6 +134,10 @@ class MemoryProfilerTests(PySparkTestCase):
                 "Profiling UDFs with iterators input/output is not supported" in str(user_warns[0])
             )
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
     def test_profile_pandas_function_api(self):
         apis = [self.exec_grouped_map]
         f_names = ["grouped_map"]
