@@ -449,6 +449,7 @@ def create_streaming_table(
     )
     get_active_graph_element_registry().register_output(table)
 
+
 def create_sink(
     name: str,
     format: str,

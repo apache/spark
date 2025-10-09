@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
-from pyspark.pipelines.output import Output, Sink
+from pyspark.pipelines.output import Output
 from pyspark.pipelines.flow import Flow
 from pyspark.pipelines.graph_element_registry import GraphElementRegistry
 

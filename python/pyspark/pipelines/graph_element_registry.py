@@ -18,7 +18,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pyspark.pipelines.output import Output, Sink
+from pyspark.pipelines.output import Output
 from pyspark.pipelines.flow import Flow
 from contextlib import contextmanager
 from contextvars import ContextVar
