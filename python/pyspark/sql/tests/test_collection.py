@@ -365,6 +365,10 @@ class DataFrameCollectionTestsMixin:
                 break
         self.assertEqual(df.take(8), result)
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_collect_time(self):
         import pandas as pd
 

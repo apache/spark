@@ -237,6 +237,16 @@ class StatefulProcessorCompositeTypeFactory(StatefulProcessorFactory):
         return RowStatefulProcessorCompositeType()
 
 
+class ChunkCountProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasChunkCountProcessor()
+
+
+class ChunkCountProcessorWithInitialStateFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasChunkCountWithInitialStateProcessor()
+
+
 class CompositeOutputProcessorFactory(StatefulProcessorFactory):
     def pandas(self):
         return PandasCompositeOutputProcessor()
@@ -1835,6 +1845,39 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
             map_state_arr=json.dumps(attributes_map, sort_keys=True),
             nested_map_state_arr=json.dumps(confs_map, sort_keys=True),
         )
+
+    def close(self) -> None:
+        pass
+
+
+class PandasChunkCountProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        pass
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        chunk_count = 0
+        for _ in rows:
+            chunk_count += 1
+        yield pd.DataFrame({"id": [key[0]], "chunkCount": [chunk_count]})
+
+    def close(self) -> None:
+        pass
+
+
+class PandasChunkCountWithInitialStateProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.value_state = handle.getValueState("value_state", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        chunk_count = 0
+        for _ in rows:
+            chunk_count += 1
+        yield pd.DataFrame({"id": [key[0]], "chunkCount": [chunk_count]})
+
+    def handleInitialState(self, key, initialState, timerValues) -> None:
+        init_val = initialState.at[0, "initVal"]
+        self.value_state.update((init_val,))
 
     def close(self) -> None:
         pass
