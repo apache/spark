@@ -79,6 +79,7 @@ message PipelineCommand {
 
     oneof details {
       TableDetails table_details = 6;
+      ExternalSinkDetails external_sink_details = 7;
       google.protobuf.Any extension = 999;
     }
 
@@ -98,6 +99,15 @@ message PipelineCommand {
         spark.connect.DataType schema_data_type = 4;
         string schema_string = 5;
       }
+    }
+
+    // Metadata that's only applicable to external sinks.
+    message ExternalSinkDetails {
+      // Streaming write options
+      map<string, string> options = 1;
+
+      // Streaming write format
+      optional string format = 2;
     }
   }
 
@@ -230,6 +240,8 @@ enum DatasetType {
   TABLE = 2;
   // A view which is not published to the catalog
   TEMPORARY_VIEW = 3;
+  // A sink which is not published to the catalog
+  EXTERNAL_SINK = 4;
 }
 
 // A response containing an event emitted during the run of a pipeline.
