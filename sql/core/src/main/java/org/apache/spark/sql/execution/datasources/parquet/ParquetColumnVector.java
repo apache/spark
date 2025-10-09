@@ -25,7 +25,6 @@ import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.catalyst.types.DataTypeUtils;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
@@ -101,7 +100,8 @@ final class ParquetColumnVector {
 
     if (column.variantFileType().isDefined()) {
       ParquetColumn fileContentCol = column.variantFileType().get();
-      WritableColumnVector fileContent = vector.reserveNewColumn(capacity, fileContentCol.sparkType());
+      WritableColumnVector fileContent = vector.reserveNewColumn(
+        capacity, fileContentCol.sparkType());
       ParquetColumnVector contentVector = new ParquetColumnVector(fileContentCol, fileContent,
         capacity, missingColumns, /* isTopLevel= */ false, /* defaultValue= */ null);
       children.add(contentVector);
