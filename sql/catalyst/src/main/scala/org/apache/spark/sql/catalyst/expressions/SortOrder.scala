@@ -45,11 +45,6 @@ case object Descending extends SortDirection {
   override def defaultNullOrdering: NullOrdering = NullsLast
 }
 
-case object Constant extends SortDirection {
-  override def sql: String = "CONST"
-  override def defaultNullOrdering: NullOrdering = NullsFirst
-}
-
 case object NullsFirst extends NullOrdering {
   override def sql: String = "NULLS FIRST"
 }
@@ -74,13 +69,8 @@ case class SortOrder(
 
   override def children: Seq[Expression] = child +: sameOrderExpressions
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (direction == Constant) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeUtils.checkForOrderingExpr(dataType, prettyName)
-    }
-  }
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForOrderingExpr(dataType, prettyName)
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -91,8 +81,8 @@ case class SortOrder(
   def isAscending: Boolean = direction == Ascending
 
   def satisfies(required: SortOrder): Boolean = {
-    children.exists(required.child.semanticEquals) && (direction == Constant ||
-      direction == required.direction && nullOrdering == required.nullOrdering)
+    children.exists(required.child.semanticEquals) &&
+      direction == required.direction && nullOrdering == required.nullOrdering
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): SortOrder =
@@ -111,38 +101,21 @@ object SortOrder {
    * Returns if a sequence of SortOrder satisfies another sequence of SortOrder.
    *
    * SortOrder sequence A satisfies SortOrder sequence B if and only if B is an equivalent of A
-   * or of A's prefix, except for SortOrder in B that satisfies any constant SortOrder in A.
-   *
-   * Here are examples of ordering A satisfying ordering B:
+   * or of A's prefix. Here are examples of ordering A satisfying ordering B:
    * <ul>
    *   <li>ordering A is [x, y] and ordering B is [x]</li>
-   *   <li>ordering A is [z(const), x, y] and ordering B is [x, z]</li>
    *   <li>ordering A is [x(sameOrderExpressions=x1)] and ordering B is [x1]</li>
    *   <li>ordering A is [x(sameOrderExpressions=x1), y] and ordering B is [x1]</li>
    * </ul>
    */
-  def orderingSatisfies(
-      providedOrdering: Seq[SortOrder], requiredOrdering: Seq[SortOrder]): Boolean = {
-    if (requiredOrdering.isEmpty) {
-      return true
-    }
-
-    val (constantProvidedOrdering, nonConstantProvidedOrdering) = providedOrdering.partition {
-      case SortOrder(_, Constant, _, _) => true
-      case SortOrder(child, _, _, _) => child.foldable
-    }
-
-    val effectiveRequiredOrdering = requiredOrdering.filterNot { requiredOrder =>
-       constantProvidedOrdering.exists { providedOrder =>
-         providedOrder.satisfies(requiredOrder)
-       }
-    }
-
-    if (effectiveRequiredOrdering.length > nonConstantProvidedOrdering.length) {
+  def orderingSatisfies(ordering1: Seq[SortOrder], ordering2: Seq[SortOrder]): Boolean = {
+    if (ordering2.isEmpty) {
+      true
+    } else if (ordering2.length > ordering1.length) {
       false
     } else {
-      effectiveRequiredOrdering.zip(nonConstantProvidedOrdering).forall {
-        case (required, provided) => provided.satisfies(required)
+      ordering2.zip(ordering1).forall {
+        case (o2, o1) => o1.satisfies(o2)
       }
     }
   }

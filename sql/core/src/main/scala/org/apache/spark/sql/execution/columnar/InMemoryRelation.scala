@@ -439,7 +439,9 @@ case class InMemoryRelation(
   override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
-    withOutput(output.map(QueryPlan.normalizeExpressions(_, output)))
+    copy(output = output.map(QueryPlan.normalizeExpressions(_, output)),
+      cacheBuilder,
+      outputOrdering)
 
   @transient val partitionStatistics = new PartitionStatistics(output)
 
@@ -467,13 +469,8 @@ case class InMemoryRelation(
     }
   }
 
-  def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
-    val map = AttributeMap(output.zip(newOutput))
-    val newOutputOrdering = outputOrdering
-      .map(_.transform { case a: Attribute => map(a) })
-      .asInstanceOf[Seq[SortOrder]]
-    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, statsOfPlanToCache)
-  }
+  def withOutput(newOutput: Seq[Attribute]): InMemoryRelation =
+    InMemoryRelation(newOutput, cacheBuilder, outputOrdering, statsOfPlanToCache)
 
   override def newInstance(): this.type = {
     InMemoryRelation(
@@ -488,12 +485,6 @@ case class InMemoryRelation(
     val cloned = this.copy()
     cloned.statsOfPlanToCache = this.statsOfPlanToCache
     cloned
-  }
-
-  override def makeCopy(newArgs: Array[AnyRef]): LogicalPlan = {
-    val copied = super.makeCopy(newArgs).asInstanceOf[InMemoryRelation]
-    copied.statsOfPlanToCache = this.statsOfPlanToCache
-    copied
   }
 
   override def simpleString(maxFields: Int): String =
