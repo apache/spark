@@ -22,12 +22,12 @@ from pyspark.sql.types import StructType
 
 
 @dataclass(frozen=True)
-class Dataset:
-    """Base class for definitions of datasets in a pipeline dataflow graph.
+class Output:
+    """Base class for definitions of outputs in a pipeline dataflow graph.
 
-    :param name: The name of the dataset. May be a multi-part name, such as "db.table".
-    :param comment: Optional comment for the dataset.
-    :param source_code_location: The location of the source code that created this dataset.
+    :param name: The name of the outputs. May be a multi-part name, such as "db.table".
+    :param comment: Optional comment for the output.
+    :param source_code_location: The location of the source code that created this output.
         This is used for debugging and tracing purposes.
     """
 
@@ -37,7 +37,7 @@ class Dataset:
 
 
 @dataclass(frozen=True)
-class Table(Dataset):
+class Table(Output):
     """
     Definition of a table in a pipeline dataflow graph, i.e. a catalog object backed by data in
     physical storage.
@@ -69,7 +69,7 @@ class StreamingTable(Table):
 
 
 @dataclass(frozen=True)
-class TemporaryView(Dataset):
+class TemporaryView(Output):
     """Definition of a temporary view in a pipeline dataflow graph. Temporary views can be
     referenced by flows within the dataflow graph, but are not visible outside of the graph."""
 

@@ -113,6 +113,26 @@ class ColumnTestsMixin:
             ValueError, "Cannot apply 'in' operator against a column", lambda: 1 in cs
         )
 
+    def test_column_date_time_op(self):
+        query = """
+            SELECT * FROM VALUES
+            (TIME('00:00:00'), 1),
+            (TIME('01:02:03'), 2),
+            (TIME('11:12:13'), 3)
+            AS tab(t, i)
+            """
+
+        df = self.spark.sql(query)
+
+        res1 = df.select("i").where(sf.col("t") < datetime.time(3, 0, 0))
+        self.assertEqual([r.i for r in res1.collect()], [1, 2])
+
+        res2 = df.select("i").where(sf.col("t") > datetime.time(1, 0, 0))
+        self.assertEqual([r.i for r in res2.collect()], [2, 3])
+
+        res3 = df.select("i").where(sf.col("t") == datetime.time(0, 0, 0))
+        self.assertEqual([r.i for r in res3.collect()], [1])
+
     def test_column_accessor(self):
         from pyspark.sql.functions import col
 
