@@ -69,17 +69,24 @@ object SchemaPruning extends Rule[LogicalPlan] {
       }
     }
 
-
     plan transformDown {
       // SPARK-47230: Handle cases with Generate nodes where ScanOperation doesn't match
       case p @ Project(_, l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
           if generateMappings.nonEmpty &&
              canPruneDataSchema(hadoopFsRelation) &&
              (allArrayStructFields.nonEmpty || allStructFields.nonEmpty) =>
+        // SPARK-47230: Collect all top-level columns referenced in the Project
+        val relationExprIds = l.output.map(_.exprId).toSet
+        val requiredColumns = p.projectList.flatMap { expr =>
+          expr.collect {
+            case a: AttributeReference if relationExprIds.contains(a.exprId) => a.name
+          }
+        }.toSet
+
         // Use the expressions collected at the beginning
         tryEnhancedNestedArrayPruning(
           l, allArrayStructFields.toSeq, allStructFields.toSeq,
-          generateMappings.toMap, hadoopFsRelation) match {
+          generateMappings.toMap, hadoopFsRelation, requiredColumns) match {
           case Some(prunedRelation) => p.copy(child = prunedRelation)
           case None => p
         }
@@ -94,9 +101,17 @@ object SchemaPruning extends Rule[LogicalPlan] {
         val enhancedPruning = if (canPruneDataSchema(hadoopFsRelation) &&
             generateMappings.nonEmpty &&
             (allArrayStructFields.nonEmpty || allStructFields.nonEmpty)) {
+          // Collect all top-level columns referenced in projects and filters
+          val relationExprIds = l.output.map(_.exprId).toSet
+          val requiredColumns = (projects ++ allFilters).flatMap { expr =>
+            expr.collect {
+              case a: AttributeReference if relationExprIds.contains(a.exprId) => a.name
+            }
+          }.toSet
+
           tryEnhancedNestedArrayPruning(
             l, allArrayStructFields.toSeq, allStructFields.toSeq,
-            generateMappings.toMap, hadoopFsRelation)
+            generateMappings.toMap, hadoopFsRelation, requiredColumns)
         } else {
           None
         }
@@ -118,13 +133,17 @@ object SchemaPruning extends Rule[LogicalPlan] {
    *
    * This handles cases where arrays of structs are accessed through chained explodes.
    * Standard Spark pruning doesn't handle GetArrayStructFields properly.
+   *
+   * @param requiredColumns Top-level columns that must be preserved even if they have no
+   *                        nested field accesses (e.g., columns used in GROUP BY)
    */
   private def tryEnhancedNestedArrayPruning(
       relation: LogicalRelation,
       arrayStructFields: Seq[GetArrayStructFields],
       structFields: Seq[GetStructField],
       generateMappings: Map[ExprId, Expression],
-      hadoopFsRelation: HadoopFsRelation): Option[LogicalPlan] = {
+      hadoopFsRelation: HadoopFsRelation,
+      requiredColumns: Set[String]): Option[LogicalPlan] = {
 
     if (arrayStructFields.isEmpty && structFields.isEmpty) {
       return None
@@ -163,7 +182,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
     // SPARK-47230: Only apply enhanced pruning if we actually traced through Generate nodes
     // AND we have nested array accesses (chained explodes) OR struct field accesses
-    // This preserves existing behavior for single-level explode operations (SPARK-34638/SPARK-41961)
+    // This preserves existing behavior for single-level explode operations
+    // (SPARK-34638/SPARK-41961)
     if (!tracedThroughGenerate || (arrayStructFields.isEmpty && structFields.isEmpty)) {
       return None
     }
@@ -185,7 +205,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
     // Build pruned schema by keeping only accessed nested fields
     val originalSchema = hadoopFsRelation.dataSchema
-    val prunedSchema = pruneNestedArraySchema(originalSchema, filteredAccesses.toMap)
+    val prunedSchema = pruneNestedArraySchema(
+      originalSchema, filteredAccesses.toMap, requiredColumns)
 
 
     // Check if we actually pruned anything
@@ -336,7 +357,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
    */
   private def pruneNestedArraySchema(
       schema: StructType,
-      nestedFieldAccesses: Map[String, Set[Seq[String]]]): StructType = {
+      nestedFieldAccesses: Map[String, Set[Seq[String]]],
+      requiredColumns: Set[String]): StructType = {
 
     val prunedFields = schema.fields.flatMap { field =>
       nestedFieldAccesses.get(field.name) match {
@@ -344,8 +366,14 @@ object SchemaPruning extends Rule[LogicalPlan] {
           // This root field has specific nested paths accessed
           Some(pruneFieldByPaths(field, paths.toSeq))
         case None =>
-          // SPARK-47230: This field is not accessed, don't include it
-          None
+          // SPARK-47230: Preserve top-level columns that are directly referenced
+          // (e.g., columns used in GROUP BY, WHERE without nested access)
+          if (requiredColumns.contains(field.name)) {
+            Some(field)
+          } else {
+            // This field is not accessed, don't include it
+            None
+          }
       }
     }
 
