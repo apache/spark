@@ -64,11 +64,10 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       // Calculate the location of the entire parameter (including the colon)
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = ctx.getStop.getStopIndex + 1
-      namedParamLocations.getOrElseUpdate(
+      val locations = namedParamLocations.getOrElseUpdate(
         paramName,
-        scala.collection.mutable.ListBuffer[ParameterLocation]()) += ParameterLocation(
-        startIndex,
-        stopIndex)
+        scala.collection.mutable.ListBuffer[ParameterLocation]())
+      locations += ParameterLocation(startIndex, stopIndex)
 
       null // Return value not used
     }
@@ -102,11 +101,10 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       // Calculate the location of the entire parameter (including the colon)
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = ctx.getStop.getStopIndex + 1
-      namedParamLocations.getOrElseUpdate(
+      val locations = namedParamLocations.getOrElseUpdate(
         paramName,
-        scala.collection.mutable.ListBuffer[ParameterLocation]()) += ParameterLocation(
-        startIndex,
-        stopIndex)
+        scala.collection.mutable.ListBuffer[ParameterLocation]())
+      locations += ParameterLocation(startIndex, stopIndex)
 
       null // Return value not used
     }
@@ -124,11 +122,10 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       // Calculate the location of the entire parameter (including the colon)
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = ctx.getStop.getStopIndex + 1
-      namedParamLocations.getOrElseUpdate(
+      val locations = namedParamLocations.getOrElseUpdate(
         paramName,
-        scala.collection.mutable.ListBuffer[ParameterLocation]()) += ParameterLocation(
-        startIndex,
-        stopIndex)
+        scala.collection.mutable.ListBuffer[ParameterLocation]())
+      locations += ParameterLocation(startIndex, stopIndex)
 
       null // Return value not used
     }

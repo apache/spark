@@ -74,22 +74,18 @@ class SubstituteParamsParser extends Logging {
 
     // Use the same two-stage parsing strategy as the main parser for consistent error messages
     val ctx = try {
-      try {
-        // First attempt: SLL mode with bail error strategy
-        parser.setErrorHandler(new SparkParserBailErrorStrategy())
-        parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
-        parser.compoundOrSingleStatement()
-      } catch {
-        case e: ParseCancellationException =>
-          // Second attempt: LL mode with full error strategy
-          tokenStream.seek(0) // rewind input stream
-          parser.reset()
-          parser.setErrorHandler(new SparkParserErrorStrategy())
-          parser.getInterpreter.setPredictionMode(PredictionMode.LL)
-          parser.compoundOrSingleStatement()
-      }
+      // First attempt: SLL mode with bail error strategy
+      parser.setErrorHandler(new SparkParserBailErrorStrategy())
+      parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
+      parser.compoundOrSingleStatement()
     } catch {
-      case e: Throwable => throw e
+      case e: ParseCancellationException =>
+        // Second attempt: LL mode with full error strategy
+        tokenStream.seek(0) // rewind input stream
+        parser.reset()
+        parser.setErrorHandler(new SparkParserErrorStrategy())
+        parser.getInterpreter.setPredictionMode(PredictionMode.LL)
+        parser.compoundOrSingleStatement()
     }
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
@@ -138,22 +134,18 @@ class SubstituteParamsParser extends Logging {
 
     // Use the same two-stage parsing strategy as the main parser for consistent error messages
     val ctx = try {
-      try {
-        // First attempt: SLL mode with bail error strategy
-        parser.setErrorHandler(new SparkParserBailErrorStrategy())
-        parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
-        parser.compoundOrSingleStatement()
-      } catch {
-        case e: ParseCancellationException =>
-          // Second attempt: LL mode with full error strategy
-          tokenStream.seek(0) // rewind input stream
-          parser.reset()
-          parser.setErrorHandler(new SparkParserErrorStrategy())
-          parser.getInterpreter.setPredictionMode(PredictionMode.LL)
-          parser.compoundOrSingleStatement()
-      }
+      // First attempt: SLL mode with bail error strategy
+      parser.setErrorHandler(new SparkParserBailErrorStrategy())
+      parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
+      parser.compoundOrSingleStatement()
     } catch {
-      case e: Throwable => throw e
+      case e: ParseCancellationException =>
+        // Second attempt: LL mode with full error strategy
+        tokenStream.seek(0) // rewind input stream
+        parser.reset()
+        parser.setErrorHandler(new SparkParserErrorStrategy())
+        parser.getInterpreter.setPredictionMode(PredictionMode.LL)
+        parser.compoundOrSingleStatement()
     }
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
