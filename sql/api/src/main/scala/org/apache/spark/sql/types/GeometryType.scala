@@ -139,7 +139,7 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
       return GeometryType.MIXED_SRID
     }
     // For all other CRS values, we need to look up the corresponding SRID.
-    val srid = SpatialReferenceMapper.get().getSrid(crs)
+    val srid = SpatialReferenceSystemMapper.get().getSrid(crs)
     if (srid == null) {
       // If the CRS value is not recognized, we throw an exception.
       throw new SparkIllegalArgumentException(
@@ -171,7 +171,7 @@ object GeometryType extends SpatialType {
    * Constructors for GeometryType.
    */
   def apply(srid: Int): GeometryType = {
-    val crs = SpatialReferenceMapper.get().getStringId(srid)
+    val crs = SpatialReferenceSystemMapper.get().getStringId(srid)
     if (crs == null) {
       throw new SparkIllegalArgumentException(
         errorClass = "ST_INVALID_SRID_VALUE",

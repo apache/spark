@@ -23,15 +23,15 @@ import java.util.HashMap;
  * Class for maintaining mappings between supported SRID values and the string ID of the
  * corresponding CRS.
  */
-public class SpatialReferenceMapper {
+public class SpatialReferenceSystemMapper {
 
   // We implement this class as a singleton (we disallow construction).
-  private SpatialReferenceMapper() {}
+  private SpatialReferenceSystemMapper() {}
 
-  private static final SpatialReferenceMapper Instance = new SpatialReferenceMapper();
+  private static final SpatialReferenceSystemMapper Instance = new SpatialReferenceSystemMapper();
 
   // Returns the unique instance of this class.
-  public static SpatialReferenceMapper get() {
+  public static SpatialReferenceSystemMapper get() {
     return Instance;
   }
 
@@ -60,7 +60,7 @@ public class SpatialReferenceMapper {
     HashMap<Integer, String> map = new HashMap<>();
     map.put(0, "SRID:0"); // Unspecified
     map.put(3857, "EPSG:3857"); // Web Mercator
-    map.put(4326, "OGC:CRS84"); // WGS 84
+    map.put(4326, "OGC:CRS84"); // WGS84
     return map;
   }
 
@@ -69,7 +69,7 @@ public class SpatialReferenceMapper {
     HashMap<String, Integer> map = new HashMap<>();
     map.put("SRID:0", 0); // Unspecified
     map.put("EPSG:3857", 3857); // Web Mercator
-    map.put("OGC:CRS84", 4326); // WGS 84
+    map.put("OGC:CRS84", 4326); // WGS84
     return map;
   }
 }

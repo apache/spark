@@ -5520,19 +5520,19 @@
   },
   "ST_INVALID_ALGORITHM_VALUE" : {
     "message" : [
-      "Invalid or unsupported edge interpolation algorithm value <alg>."
+      "Invalid or unsupported edge interpolation algorithm value: '<alg>'."
     ],
     "sqlState" : "22023"
   },
   "ST_INVALID_CRS_VALUE" : {
     "message" : [
-      "Invalid or unsupported CRS (coordinate reference system) value <crs>."
+      "Invalid or unsupported CRS (coordinate reference system) value: '<crs>'."
     ],
     "sqlState" : "22023"
   },
   "ST_INVALID_SRID_VALUE" : {
     "message" : [
-      "Invalid or unsupported SRID (spatial reference identifier) value <srid>"
+      "Invalid or unsupported SRID (spatial reference identifier) value: <srid>"
     ],
     "sqlState" : "22023"
   },
