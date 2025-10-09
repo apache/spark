@@ -27,7 +27,8 @@ class DataFrameSuite extends QueryTest with RemoteSparkSession {
     // Create a simple SQL function / UDF for testing purposes.
     spark.sql("""CREATE OR REPLACE FUNCTION funct(x INT) RETURNS STRING RETURN
       CASE WHEN x >= 0 THEN 'foo' ELSE 'bar' END""")
-    val df = spark.sql("SELECT * FROM VALUES (0, 1)")
+    val df = spark
+      .sql("SELECT * FROM VALUES (0, 1)")
       .select(expr("funct(col1)").alias("col2"))
     // Now use the UDF in a query that will initiate plan rewrite by ResolveSQLFunctions.
     df.groupBy("col2").agg(count("*")).explain(true)
