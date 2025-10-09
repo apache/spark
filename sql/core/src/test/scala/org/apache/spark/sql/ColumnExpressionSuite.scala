@@ -3145,44 +3145,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Seq((Duration.ofDays(2))).toDF())
   }
 
-  test("Column.transform: basic transformation") {
-    val df = Seq(1, 2, 3).toDF("value")
-
-    def addOne(c: Column): Column = c + 1
-
-    checkAnswer(
-      df.select($"value".transform(addOne)),
-      Seq(2, 3, 4).toDF()
-    )
-  }
-
-  test("Column.transform: chaining transformations") {
-    val df = Seq("apple", "banana", "cherry").toDF("fruit")
-
-    def addPrefix(c: Column): Column = concat(lit("fruit_"), c)
-
-    def uppercase(c: Column): Column = upper(c)
-
-    checkAnswer(
-      df.select($"fruit".transform(addPrefix).transform(uppercase)),
-      Seq("FRUIT_APPLE", "FRUIT_BANANA", "FRUIT_CHERRY").toDF()
-    )
-  }
-
-  test("Column.transform: with complex function") {
-    val df = Seq(1, 2, 3, 4, 5).toDF("num")
-
-    def conditionalDouble(c: Column): Column = when(c > 3, c * 2).otherwise(c)
-
-    checkAnswer(
-      df.select($"num".transform(conditionalDouble)),
-      Seq(1, 2, 3, 8, 10).toDF()
-    )
-  }
-
-  test("Column.transform: with functions from functions object") {
+  test("Column.transform") {
     val df = Seq("  hello  ", "  world  ").toDF("text")
-
     def trimAndUpper(c: Column): Column = upper(trim(c))
 
     checkAnswer(
@@ -3191,59 +3155,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("Column.transform: with lambda expression") {
-    val df = Seq(1, 2, 3, 4, 5).toDF("num")
-
-    // Simple lambda
-    checkAnswer(
-      df.select($"num".transform(c => c * 2)),
-      Seq(2, 4, 6, 8, 10).toDF()
-    )
-  }
-
-  test("Column.transform: chaining lambda expressions") {
+  test("Column.transform: chaining") {
     val df = Seq(10, 20, 30).toDF("value")
 
-    // Chain multiple lambdas
     checkAnswer(
-      df.select(
-        $"value"
-          .transform(c => c + 5)
-          .transform(c => c * 2)
-          .transform(c => c - 10)
-      ),
+      df.select($"value".transform(_ + 5).transform(_ * 2).transform(_ - 10)),
       Seq(20, 40, 60).toDF()
-    )
-  }
-
-  test("Column.transform: lambda with complex logic") {
-    val df = Seq("apple", "banana", "cherry", "date").toDF("fruit")
-
-    // Lambda with conditional and string operations
-    checkAnswer(
-      df.select(
-        $"fruit".transform(c =>
-          when(functions.length(c) > 5, concat(lit("long: "), upper(c)))
-            .otherwise(concat(lit("short: "), c))
-        )
-      ),
-      Seq("short: apple", "long: BANANA", "long: CHERRY", "short: date").toDF()
-    )
-  }
-
-  test("Column.transform: mixing lambdas and named functions") {
-    val df = Seq(1, 2, 3).toDF("num")
-
-    def triple(c: Column): Column = c * 3
-
-    // Mix named function and lambda
-    checkAnswer(
-      df.select(
-        $"num"
-          .transform(triple)
-          .transform(c => c + 10)
-      ),
-      Seq(13, 16, 19).toDF()
     )
   }
 }

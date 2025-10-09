@@ -242,4 +242,18 @@ class ColumnTestSuite extends ConnectFunSuite {
     val expected = fn.upper(fn.trim(a))
     assert(transformed == expected)
   }
+
+  test("transform with arithmetic operations") {
+    val a = fn.col("a")
+    val transformed = a.transform(_ + 10).transform(_ * 2).transform(_ - 5)
+    assert(transformed == (((a + 10) * 2) - 5))
+  }
+
+  test("transform mixing named functions and lambdas") {
+    val a = fn.col("a")
+    def triple(c: Column): Column = c * 3
+    val transformed = a.transform(triple).transform(c => c + 10)
+    assert(transformed == ((a * 3) + 10))
+  }
+
 }
