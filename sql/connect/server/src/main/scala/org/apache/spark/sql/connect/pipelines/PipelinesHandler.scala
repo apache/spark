@@ -254,11 +254,8 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Sink.toString),
               objectName = Option(identifier.unquotedString),
-              language = Option(Python())
-            ),
-            normalizedPath = None
-          )
-        )
+              language = Option(Python())),
+            normalizedPath = None))
         identifier
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
@@ -295,8 +292,7 @@ private[connect] object PipelinesHandler extends Logging {
         .filter(_.isInstanceOf[TemporaryView])
         .exists(_.identifier == rawDestinationIdentifier)
     val flowWritesToSink =
-      graphElementRegistry
-        .getSinks
+      graphElementRegistry.getSinks
         .filter(_.isInstanceOf[Sink])
         .exists(_.identifier == rawDestinationIdentifier)
     // If the flow is created implicitly as part of defining a view or that it writes to a sink,

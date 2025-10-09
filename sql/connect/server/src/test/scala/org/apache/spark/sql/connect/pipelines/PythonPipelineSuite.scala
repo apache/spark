@@ -290,8 +290,7 @@ class PythonPipelineSuite
   }
 
   test("external sink") {
-    val graph = buildGraph(
-      """
+    val graph = buildGraph("""
         |dp.create_sink(
         |  "myKafkaSink",
         |  format = "kafka",
@@ -308,19 +307,16 @@ class PythonPipelineSuite
     assert(graph.sinks.map(_.identifier) == Seq(TableIdentifier("myKafkaSink")))
 
     // ensure format and options are properly set
-    graph.sinks.filter (_.identifier == TableIdentifier("myKafkaSink")).foreach { sink =>
+    graph.sinks.filter(_.identifier == TableIdentifier("myKafkaSink")).foreach { sink =>
       assert(sink.format == "kafka")
-      assert(
-        sink.options.get("kafka.bootstrap.servers").contains("host1:port1,host2:port2"))
+      assert(sink.options.get("kafka.bootstrap.servers").contains("host1:port1,host2:port2"))
     }
 
     // ensure the flow is properly linked to the sink
     assert(
       graph
         .flowsTo(TableIdentifier("myKafkaSink"))
-        .map(_.identifier) == Seq(TableIdentifier("mySinkFlow")
-      )
-    )
+        .map(_.identifier) == Seq(TableIdentifier("mySinkFlow")))
   }
 
   test("referencing internal datasets") {
