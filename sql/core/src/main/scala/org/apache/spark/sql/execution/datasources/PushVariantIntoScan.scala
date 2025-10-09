@@ -291,60 +291,37 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       filters: Seq[Expression],
       relation: LogicalRelation,
       hadoopFsRelation: HadoopFsRelation): LogicalPlan = {
-    val variants = new VariantInRelation
-
     val schemaAttributes = relation.resolve(hadoopFsRelation.dataSchema,
       hadoopFsRelation.sparkSession.sessionState.analyzer.resolver)
-    val defaultValues = ResolveDefaultColumns.existenceDefaultValues(StructType(
-      schemaAttributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
-    for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {
-      variants.addVariantFields(a.exprId, a.dataType, defaultValue, Nil)
-    }
+
+    // Collect variant fields from the relation output
+    val variants = collectAndRewriteVariants(schemaAttributes)
     if (variants.mapping.isEmpty) return originalPlan
 
+    // Collect requested fields from projections and filters
     projectList.foreach(variants.collectRequestedFields)
     filters.foreach(variants.collectRequestedFields)
     // `collectRequestedFields` may have removed all variant columns.
     if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
 
-    val attributeMap = schemaAttributes.map { a =>
-      if (variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
-        val newType = variants.rewriteType(a.exprId, a.dataType, Nil)
-        val newAttr = AttributeReference(a.name, newType, a.nullable, a.metadata)(
-          qualifier = a.qualifier)
-        (a.exprId, newAttr)
-      } else {
-        // `relation.resolve` actually returns `Seq[AttributeReference]`, although the return type
-        // is `Seq[Attribute]`.
-        (a.exprId, a.asInstanceOf[AttributeReference])
-      }
-    }.toMap
+    // Build attribute map with rewritten types
+    val attributeMap = buildAttributeMap(schemaAttributes, variants)
+
+    // Build new schema with variant types replaced by struct types
     val newFields = schemaAttributes.map { a =>
       val dataType = attributeMap(a.exprId).dataType
       StructField(a.name, dataType, a.nullable, a.metadata)
     }
+    // Update relation output attributes with new types
     val newOutput = relation.output.map(a => attributeMap.getOrElse(a.exprId, a))
 
+    // Update HadoopFsRelation's data schema so the file source reads the struct columns
     val newHadoopFsRelation = hadoopFsRelation.copy(dataSchema = StructType(newFields))(
       hadoopFsRelation.sparkSession)
     val newRelation = relation.copy(relation = newHadoopFsRelation, output = newOutput.toIndexedSeq)
 
-    val withFilter = if (filters.nonEmpty) {
-      Filter(filters.map(variants.rewriteExpr(_, attributeMap)).reduce(And), newRelation)
-    } else {
-      newRelation
-    }
-    val newProjectList = projectList.map { e =>
-      val rewritten = variants.rewriteExpr(e, attributeMap)
-      rewritten match {
-        case n: NamedExpression => n
-        // This is when the variant column is directly selected. We replace the attribute reference
-        // with a struct access, which is not a `NamedExpression` that `Project` requires. We wrap
-        // it with an `Alias`.
-        case _ => Alias(rewritten, e.name)(e.exprId, e.qualifier)
-      }
-    }
-    Project(newProjectList, withFilter)
+    // Build filter and project with rewritten expressions
+    buildFilterAndProject(newRelation, projectList, filters, variants, attributeMap)
   }
 
   private def rewriteV2RelationPlan(
@@ -354,30 +331,33 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       relation: DataSourceV2Relation): LogicalPlan = {
 
     // Collect variant fields from the relation output
-    val (variants, attributeMap) = collectAndRewriteVariants(relation.output)
-    if (attributeMap.isEmpty) return originalPlan
+    val variants = collectAndRewriteVariants(relation.output)
+    if (variants.mapping.isEmpty) return originalPlan
 
     // Collect requested fields from projections and filters
     projectList.foreach(variants.collectRequestedFields)
     filters.foreach(variants.collectRequestedFields)
+    // `collectRequestedFields` may have removed all variant columns.
     if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
 
     // Build attribute map with rewritten types
-    val finalAttributeMap = buildAttributeMap(relation.output, variants)
+    val attributeMap = buildAttributeMap(relation.output, variants)
 
-    // Rewrite the relation with new output
-    val newOutput = relation.output.map(a => finalAttributeMap.getOrElse(a.exprId, a))
+    // Update relation output attributes with new types
+    // Note: DSv2 doesn't need to update the schema in the relation itself. The schema will be
+    // communicated to the data source later via V2ScanRelationPushDown.pruneColumns() API.
+    val newOutput = relation.output.map(a => attributeMap.getOrElse(a.exprId, a))
     val newRelation = relation.copy(output = newOutput.toIndexedSeq)
 
     // Build filter and project with rewritten expressions
-    buildFilterAndProject(newRelation, projectList, filters, variants, finalAttributeMap)
+    buildFilterAndProject(newRelation, projectList, filters, variants, attributeMap)
   }
 
   /**
    * Collect variant fields and return initialized VariantInRelation.
    */
   private def collectAndRewriteVariants(
-      schemaAttributes: Seq[AttributeReference]): (VariantInRelation, Map[ExprId, Attribute]) = {
+      schemaAttributes: Seq[Attribute]): VariantInRelation = {
     val variants = new VariantInRelation
     val defaultValues = ResolveDefaultColumns.existenceDefaultValues(StructType(
       schemaAttributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
@@ -386,20 +366,14 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       variants.addVariantFields(a.exprId, a.dataType, defaultValue, Nil)
     }
 
-    val attributeMap = if (variants.mapping.isEmpty) {
-      Map.empty[ExprId, Attribute]
-    } else {
-      schemaAttributes.map(a => (a.exprId, a)).toMap
-    }
-
-    (variants, attributeMap)
+    variants
   }
 
   /**
    * Build attribute map with rewritten variant types.
    */
   private def buildAttributeMap(
-      schemaAttributes: Seq[AttributeReference],
+      schemaAttributes: Seq[Attribute],
       variants: VariantInRelation): Map[ExprId, AttributeReference] = {
     schemaAttributes.map { a =>
       if (variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
@@ -408,7 +382,9 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
           qualifier = a.qualifier)
         (a.exprId, newAttr)
       } else {
-        (a.exprId, a)
+        // `relation.resolve` actually returns `Seq[AttributeReference]`, although the return type
+        // is `Seq[Attribute]`.
+        (a.exprId, a.asInstanceOf[AttributeReference])
       }
     }.toMap
   }
@@ -433,6 +409,9 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       val rewritten = variants.rewriteExpr(e, attributeMap)
       rewritten match {
         case n: NamedExpression => n
+        // This is when the variant column is directly selected. We replace the attribute reference
+        // with a struct access, which is not a `NamedExpression` that `Project` requires. We wrap
+        // it with an `Alias`.
         case _ => Alias(rewritten, e.name)(e.exprId, e.qualifier)
       }
     }
