@@ -250,16 +250,11 @@ case class PersistedView(
 ) extends View {}
 
 trait Sink extends GraphElement with Output {
-
   /** format of the sink */
   val format: String
 
   /** options defined for the sink */
   val options: Map[String, String]
-
-  /** Is only for storing metadata, e.g. checkpoints. */
-  def normalizedPath: Option[String]
-  val origin: QueryOrigin
 }
 
 case class SinkImpl(
@@ -272,9 +267,8 @@ case class SinkImpl(
 
   /** Returns the normalized storage location for this [[Sink]]. */
   override def path: String = {
-    if (!normalized) {
-      throw GraphErrors.unresolvedSinkPath(identifier)
-    }
-    normalizedPath.get
+    throw new UnsupportedOperationException(
+      s"Sink does not support storage location"
+    )
   }
 }
