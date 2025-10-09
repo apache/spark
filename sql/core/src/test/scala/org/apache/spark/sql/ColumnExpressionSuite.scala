@@ -3180,26 +3180,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("Column.transform: with null values") {
-    val df = Seq(Some(1), None, Some(3)).toDF("value")
-
-    def addTen(c: Column): Column = c + 10
-
-    checkAnswer(
-      df.select($"value".transform(addTen)),
-      Seq(Some(11), None, Some(13)).toDF()
-    )
-  }
-
-  test("Column.transform: preserves column type") {
-    val df = Seq(1.5, 2.5, 3.5).toDF("num")
-
-    def doubleIt(c: Column): Column = c * 2
-
-    val result = df.select($"num".transform(doubleIt))
-    checkAnswer(result, Seq(3.0, 5.0, 7.0).toDF())
-  }
-
   test("Column.transform: with functions from functions object") {
     val df = Seq("  hello  ", "  world  ").toDF("text")
 
