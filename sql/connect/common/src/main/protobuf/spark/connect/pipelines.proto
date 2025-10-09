@@ -19,6 +19,7 @@ syntax = "proto3";
 
 package spark.connect;
 
+import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "spark/connect/common.proto";
 import "spark/connect/relations.proto";
@@ -73,22 +74,31 @@ message PipelineCommand {
     // Optional comment for the dataset.
     optional string comment = 4;
 
-    // Optional table properties. Only applies to dataset_type == TABLE and dataset_type == MATERIALIZED_VIEW.
-    map<string, string> table_properties = 5;
-
-    // Optional partition columns for the dataset. Only applies to dataset_type == TABLE and
-    // dataset_type == MATERIALIZED_VIEW.
-    repeated string partition_cols = 6;
-
-    // Schema for the dataset. If unset, this will be inferred from incoming flows.
-    optional spark.connect.DataType schema = 7;
-
-    // The output table format of the dataset. Only applies to dataset_type == TABLE and
-    // dataset_type == MATERIALIZED_VIEW.
-    optional string format = 8;
-
     // The location in source code that this dataset was defined.
-    optional SourceCodeLocation source_code_location = 9;
+    optional SourceCodeLocation source_code_location = 5;
+
+    oneof details {
+      TableDetails table_details = 6;
+      google.protobuf.Any extension = 999;
+    }
+
+    // Dataset metadata that's only applicable to tables and materialized views.
+    message TableDetails {
+      // Optional table properties.
+      map<string, string> table_properties = 1;
+
+      // Optional partition columns for the table.
+      repeated string partition_cols = 2;
+
+      // The output table format of the dataset.
+      optional string format = 3;
+
+      // Schema for the dataset. If unset, this will be inferred from incoming flows.
+      oneof schema {
+        spark.connect.DataType schema_data_type = 4;
+        string schema_string = 5;
+      }
+    }
   }
 
   // Request to define a flow targeting a dataset.
@@ -102,19 +112,27 @@ message PipelineCommand {
     // Name of the dataset this flow writes to. Can be partially or fully qualified.
     optional string target_dataset_name = 3;
 
-    // An unresolved relation that defines the dataset's flow. Empty if the query function
-    // that defines the flow cannot be analyzed at the time of flow definition.
-    optional spark.connect.Relation relation = 4;
-
     // SQL configurations set when running this flow.
-    map<string, string> sql_conf = 5;
+    map<string, string> sql_conf = 4;
 
     // Identifier for the client making the request. The server uses this to determine what flow
     // evaluation request stream to dispatch evaluation requests to for this flow.
-    optional string client_id = 6;
+    optional string client_id = 5;
 
     // The location in source code that this flow was defined.
-    optional SourceCodeLocation source_code_location = 7;
+    optional SourceCodeLocation source_code_location = 6;
+
+    oneof details {
+      WriteRelationFlowDetails relation_flow_details = 7;
+      google.protobuf.Any extension = 999;
+    }
+
+    // A flow that is that takes the contents of a relation and writes it to the target dataset.
+    message WriteRelationFlowDetails {
+      // An unresolved relation that defines the dataset's flow. Empty if the query function
+      // that defines the flow cannot be analyzed at the time of flow definition.
+      optional spark.connect.Relation relation = 1;
+    }
 
     message Response {
       // Fully qualified flow name that uniquely identify a flow in the Dataflow graph.
@@ -140,6 +158,9 @@ message PipelineCommand {
     // If true, the run will not actually execute any flows, but will only validate the graph and
     // check for any errors. This is useful for testing and validation purposes.
     optional bool dry = 5;
+
+    // storage location for pipeline checkpoints and metadata.
+    optional string storage = 6;
   }
 
   // Parses the SQL file and registers all datasets and flows.

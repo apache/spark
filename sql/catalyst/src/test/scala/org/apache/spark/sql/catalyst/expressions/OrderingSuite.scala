@@ -43,9 +43,10 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sortOrder = direction match {
           case Ascending => BoundReference(0, dataType, nullable = true).asc
           case Descending => BoundReference(0, dataType, nullable = true).desc
+          case Constant => BoundReference(0, dataType, nullable = true).const
         }
         val expectedCompareResult = direction match {
-          case Ascending => signum(expected)
+          case Ascending | Constant => signum(expected)
           case Descending => -1 * signum(expected)
         }
 

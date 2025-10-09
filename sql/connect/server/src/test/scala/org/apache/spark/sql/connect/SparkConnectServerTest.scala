@@ -70,12 +70,12 @@ trait SparkConnectServerTest extends SharedSparkSession {
     super.afterAll()
   }
 
-  override def beforeEach(): Unit = {
+  protected override def beforeEach(): Unit = {
     super.beforeEach()
     clearAllExecutions()
   }
 
-  override def afterEach(): Unit = {
+  protected override def afterEach(): Unit = {
     clearAllExecutions()
     super.afterEach()
   }
