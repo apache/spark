@@ -23,11 +23,11 @@ from pyspark.sql.types import StructType
 
 @dataclass(frozen=True)
 class Output:
-    """Base class for definitions of datasets in a pipeline dataflow graph.
+    """Base class for definitions of outputs in a pipeline dataflow graph.
 
-    :param name: The name of the dataset. May be a multi-part name, such as "db.table".
-    :param comment: Optional comment for the dataset.
-    :param source_code_location: The location of the source code that created this dataset.
+    :param name: The name of the outputs. May be a multi-part name, such as "db.table".
+    :param comment: Optional comment for the output.
+    :param source_code_location: The location of the source code that created this output.
         This is used for debugging and tracing purposes.
     """
 
