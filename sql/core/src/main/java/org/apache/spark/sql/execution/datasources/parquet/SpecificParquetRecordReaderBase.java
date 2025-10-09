@@ -204,6 +204,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.parquetColumn = new ParquetToSparkSchemaConverter(config)
       .convertParquetColumn(requestedSchema, Option.empty());
     this.sparkSchema = (StructType) parquetColumn.sparkType();
+    this.sparkRequestedSchema = this.sparkSchema;
     this.totalRowCount = fileReader.getFilteredRecordCount();
   }
 
@@ -225,6 +226,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.parquetColumn = new ParquetToSparkSchemaConverter(config)
       .convertParquetColumn(requestedSchema, Option.empty());
     this.sparkSchema = (StructType) parquetColumn.sparkType();
+    this.sparkRequestedSchema = this.sparkSchema;
     this.totalRowCount = totalRowCount;
   }
 
