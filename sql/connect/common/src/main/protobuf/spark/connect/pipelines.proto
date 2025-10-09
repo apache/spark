@@ -33,7 +33,7 @@ option go_package = "internal/generated";
 message PipelineCommand {
   oneof command_type {
     CreateDataflowGraph create_dataflow_graph = 1;
-    DefineDataset define_dataset = 2;
+    DefineOutput define_output = 2;
     DefineFlow define_flow = 3;
     DropDataflowGraph drop_dataflow_graph = 4;
     StartRun start_run = 5;
@@ -60,30 +60,30 @@ message PipelineCommand {
     optional string dataflow_graph_id = 1;
   }
 
-  // Request to define a dataset: a table, a materialized view, or a temporary view.
-  message DefineDataset {
-    // The graph to attach this dataset to.
+  // Request to define an output: a table, a materialized view, a temporary view or a sink.
+  message DefineOutput {
+    // The graph to attach this output to.
     optional string dataflow_graph_id = 1;
 
-    // Name of the dataset. Can be partially or fully qualified.
-    optional string dataset_name = 2;
+    // Name of the output. Can be partially or fully qualified.
+    optional string output_name = 2;
 
-    // The type of the dataset.
-    optional DatasetType dataset_type = 3;
+    // The type of the output.
+    optional OutputType output_type = 3;
 
-    // Optional comment for the dataset.
+    // Optional comment for the output.
     optional string comment = 4;
 
-    // The location in source code that this dataset was defined.
+    // The location in source code that this output was defined.
     optional SourceCodeLocation source_code_location = 5;
 
     oneof details {
       TableDetails table_details = 6;
-      ExternalSinkDetails external_sink_details = 7;
+      SinkDetails sink_details = 7;
       google.protobuf.Any extension = 999;
     }
 
-    // Dataset metadata that's only applicable to tables and materialized views.
+    // Metadata that's only applicable to tables and materialized views.
     message TableDetails {
       // Optional table properties.
       map<string, string> table_properties = 1;
@@ -91,18 +91,18 @@ message PipelineCommand {
       // Optional partition columns for the table.
       repeated string partition_cols = 2;
 
-      // The output table format of the dataset.
+      // The output table format for the table.
       optional string format = 3;
 
-      // Schema for the dataset. If unset, this will be inferred from incoming flows.
+      // Schema for the table. If unset, this will be inferred from incoming flows.
       oneof schema {
         spark.connect.DataType schema_data_type = 4;
         string schema_string = 5;
       }
     }
 
-    // Metadata that's only applicable to external sinks.
-    message ExternalSinkDetails {
+    // Metadata that's only applicable to sinks.
+    message SinkDetails {
       // Streaming write options
       map<string, string> options = 1;
 
@@ -213,15 +213,15 @@ message PipelineCommand {
 message PipelineCommandResult {
   oneof result_type {
     CreateDataflowGraphResult create_dataflow_graph_result = 1;
-    DefineDatasetResult define_dataset_result = 2;
+    DefineOutputResult define_output_result = 2;
     DefineFlowResult define_flow_result = 3;
   }
   message CreateDataflowGraphResult {
     // The ID of the created graph.
     optional string dataflow_graph_id = 1;
   }
-  message DefineDatasetResult {
-    // Resolved identifier of the dataset
+  message DefineOutputResult {
+    // Resolved identifier of the output
     optional ResolvedIdentifier resolved_identifier = 1;
   }
   message DefineFlowResult {
@@ -230,18 +230,18 @@ message PipelineCommandResult {
   }
 }
 
-// The type of dataset.
-enum DatasetType {
+// The type of output.
+enum OutputType {
   // Safe default value. Should not be used.
   DATASET_TYPE_UNSPECIFIED = 0;
-  // A materialized view dataset which is published to the catalog
+  // A materialized view which is published to the catalog
   MATERIALIZED_VIEW = 1;
   // A table which is published to the catalog
   TABLE = 2;
   // A view which is not published to the catalog
   TEMPORARY_VIEW = 3;
   // A sink which is not published to the catalog
-  EXTERNAL_SINK = 4;
+  SINK = 4;
 }
 
 // A response containing an event emitted during the run of a pipeline.

@@ -94,14 +94,14 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest with St
     }
   }
 
-  def registerPipelineDatasets(testPipelineDefinition: TestPipelineDefinition)(implicit
+  def registerPipelineOutputs(testPipelineDefinition: TestPipelineDefinition)(implicit
       stub: sc.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub): Unit = {
     (testPipelineDefinition.viewDefs ++ testPipelineDefinition.tableDefs).foreach { tv =>
       sendPlan(
         buildPlanFromPipelineCommand(
           sc.PipelineCommand
             .newBuilder()
-            .setDefineDataset(tv)
+            .setDefineOutput(tv)
             .build()))
     }
 
