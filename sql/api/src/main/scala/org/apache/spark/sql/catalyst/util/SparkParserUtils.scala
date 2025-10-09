@@ -207,9 +207,9 @@ trait SparkParserUtils {
         current.objectType,
         current.objectName)
 
-      // Preserve any existing callback when setting the new origin.
-      val finalOrigin = if (current.parameterSubstitutionCallback.isDefined) {
-        adjustedOrigin.copy(parameterSubstitutionCallback = current.parameterSubstitutionCallback)
+      // Preserve any existing substitution info when setting the new origin.
+      val finalOrigin = if (current.parameterSubstitutionInfo.isDefined) {
+        adjustedOrigin.copy(parameterSubstitutionInfo = current.parameterSubstitutionInfo)
       } else {
         adjustedOrigin
       }
@@ -219,17 +219,17 @@ trait SparkParserUtils {
     try {
       f
     } finally {
-      // When restoring origin, preserve any callback that was added during parsing.
+      // When restoring origin, preserve any substitution info from current or original context.
       val currentAfterParsing = CurrentOrigin.get
       val originToRestore =
-        if (currentAfterParsing.parameterSubstitutionCallback.isDefined ||
-          current.parameterSubstitutionCallback.isDefined) {
-          // Either the current or the original has a callback - preserve it.
-          val callbackToPreserve = currentAfterParsing.parameterSubstitutionCallback
-            .orElse(current.parameterSubstitutionCallback)
-          current.copy(parameterSubstitutionCallback = callbackToPreserve)
+        if (currentAfterParsing.parameterSubstitutionInfo.isDefined ||
+          current.parameterSubstitutionInfo.isDefined) {
+          // Either the current or the original has substitution info - preserve it.
+          val infoToPreserve = currentAfterParsing.parameterSubstitutionInfo
+            .orElse(current.parameterSubstitutionInfo)
+          current.copy(parameterSubstitutionInfo = infoToPreserve)
         } else {
-          // Neither has a callback - restore as normal.
+          // Neither has substitution info - restore as normal.
           current
         }
 
@@ -263,16 +263,35 @@ trait SparkParserUtils {
       objectType: Option[String],
       objectName: Option[String]): Origin = {
 
-    // Try to get parameter substitution callback from CurrentOrigin.
-    CurrentOrigin.get.parameterSubstitutionCallback match {
-      case Some(callback) =>
-        // Cast the callback from Any to the proper type.
-        val typedCallback = callback.asInstanceOf[SparkParserUtils.ParameterSubstitutionCallback]
-        typedCallback(startToken, stopToken, substitutedSql, objectType, objectName)
-          .getOrElse(
-            positionAndText(startToken, stopToken, substitutedSql, objectType, objectName))
+    // Try to get parameter substitution info from CurrentOrigin.
+    CurrentOrigin.get.parameterSubstitutionInfo match {
+      case Some(info) =>
+        if (info.isIdentity) {
+          // Identity mapping - use default behavior.
+          positionAndText(startToken, stopToken, substitutedSql, objectType, objectName)
+        } else {
+          // Parameter substitution occurred - map positions back to original SQL.
+          val startOpt = Option(startToken)
+          val stopOpt = Option(stopToken)
+
+          // Use the position mapper to map positions back to original SQL.
+          val originalStartIndex = startOpt.flatMap(token =>
+            info.positionMapper.map(_.mapToOriginal(token.getStartIndex)))
+          val originalStopIndex = stopOpt.flatMap(token =>
+            info.positionMapper.map(_.mapToOriginal(token.getStopIndex)))
+
+          // Create origin with original SQL text and mapped positions.
+          Origin(
+            line = startOpt.map(_.getLine),
+            startPosition = startOpt.map(_.getCharPositionInLine),
+            startIndex = originalStartIndex,
+            stopIndex = originalStopIndex,
+            sqlText = Some(info.originalSql), // Use original SQL for error reporting
+            objectType = objectType,
+            objectName = objectName)
+        }
       case None =>
-        // No parameter substitution callback - use default behavior.
+        // No parameter substitution info - use default behavior.
         positionAndText(startToken, stopToken, substitutedSql, objectType, objectName)
     }
   }
@@ -302,15 +321,4 @@ trait SparkParserUtils {
   }
 }
 
-object SparkParserUtils extends SparkParserUtils {
-
-  /**
-   * Type alias for parameter substitution callback function. Takes (startToken, stopToken,
-   * substitutedSql, objectType, objectName) and returns an optional Origin.
-   */
-  type ParameterSubstitutionCallback =
-    (Token, Token, String, Option[String], Option[String]) => Option[Origin]
-
-  // Note: Thread-local callback mechanism removed - parameter substitution info
-  // is now passed through CurrentOrigin.parameterSubstitutionCallback instead
-}
+object SparkParserUtils extends SparkParserUtils

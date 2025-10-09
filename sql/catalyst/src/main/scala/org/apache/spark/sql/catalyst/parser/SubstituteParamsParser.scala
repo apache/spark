@@ -240,11 +240,6 @@ class SubstituteParamsParser extends Logging {
   }
 }
 
-/**
- * Case class representing a text substitution.
- */
-case class Substitution(start: Int, end: Int, replacement: String)
-
 object SubstituteParamsParser {
   /** Singleton instance for convenience */
   private val instance = new SubstituteParamsParser()

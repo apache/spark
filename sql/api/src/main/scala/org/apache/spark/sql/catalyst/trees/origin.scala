@@ -19,8 +19,20 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.regex.Pattern
 
 import org.apache.spark.QueryContext
+import org.apache.spark.sql.catalyst.parser.PositionMapper
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.ArrayImplicits._
+
+/**
+ * Information needed for parameter substitution position mapping.
+ * Stored directly in Origin to avoid callback complexity.
+ */
+case class ParameterSubstitutionInfo(
+  originalSql: String,
+  isIdentity: Boolean,
+  // Store the position mapper directly for clean API
+  positionMapper: Option[PositionMapper] = None
+)
 
 /**
  * Contexts of TreeNodes, including location, SQL text, object type and object name. The only
@@ -37,50 +49,7 @@ case class Origin(
     objectName: Option[String] = None,
     stackTrace: Option[Array[StackTraceElement]] = None,
     pysparkErrorContext: Option[(String, String)] = None,
-    parameterSubstitutionCallback: Option[Any] = None) { // Store callback to avoid dependencies.
-
-  // Override equals to exclude parameterSubstitutionCallback from comparison.
-  // The callback is an implementation detail and shouldn't affect origin equality.
-  override def equals(obj: Any): Boolean = obj match {
-    case other: Origin =>
-      line == other.line &&
-      startPosition == other.startPosition &&
-      startIndex == other.startIndex &&
-      stopIndex == other.stopIndex &&
-      sqlText == other.sqlText &&
-      objectType == other.objectType &&
-      objectName == other.objectName &&
-      stackTraceEquals(stackTrace, other.stackTrace) &&
-      pysparkErrorContext == other.pysparkErrorContext
-    // Note: parameterSubstitutionCallback is intentionally excluded.
-    case _ => false
-  }
-
-  // Helper method to compare stack traces.
-  private def stackTraceEquals(
-      st1: Option[Array[StackTraceElement]],
-      st2: Option[Array[StackTraceElement]]): Boolean = {
-    (st1, st2) match {
-      case (None, None) => true
-      case (Some(arr1), Some(arr2)) => arr1.sameElements(arr2)
-      case _ => false
-    }
-  }
-
-  // Override hashCode to be consistent with equals.
-  override def hashCode(): Int = {
-    val state = Seq(
-      line,
-      startPosition,
-      startIndex,
-      stopIndex,
-      sqlText,
-      objectType,
-      objectName,
-      stackTrace.map(_.toSeq),
-      pysparkErrorContext)
-    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
-  }
+    parameterSubstitutionInfo: Option[ParameterSubstitutionInfo] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
     DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)
