@@ -256,4 +256,11 @@ class ColumnTestSuite extends ConnectFunSuite {
     assert(transformed == ((a * 3) + 10))
   }
 
+  test("transform with nested transform") {
+    val a = fn.col("a")
+    val transformed = a.transform(_.transform(fn.upper))
+    val expected = fn.upper(a)
+    assert(transformed == expected)
+  }
+
 }
