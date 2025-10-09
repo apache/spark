@@ -325,6 +325,19 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
         "detailMessage" -> "Tag mismatch[!]?"
       )
+    ),
+    // Empty input
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "",
+      "GCM",
+      expectedErrorClassOpt = Some("INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR"),
+      errorParamsMap = Map(
+        "parameter" -> "`expr`, `key`",
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`",
+        "detailMessage" -> "Invalid buffer arguments"
+      )
     )
   )
 

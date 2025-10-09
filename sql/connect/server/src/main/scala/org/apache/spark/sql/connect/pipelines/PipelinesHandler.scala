@@ -84,11 +84,11 @@ private[connect] object PipelinesHandler extends Logging {
         val resolvedDataset =
           defineDataset(cmd.getDefineDataset, sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
-        resolvedDataset.resolvedCatalog.foreach(identifierBuilder.setCatalogName)
-        resolvedDataset.resolvedDb.foreach { ns =>
+        resolvedDataset.catalog.foreach(identifierBuilder.setCatalogName)
+        resolvedDataset.database.foreach { ns =>
           identifierBuilder.addNamespace(ns)
         }
-        identifierBuilder.setTableName(resolvedDataset.resolvedId)
+        identifierBuilder.setTableName(resolvedDataset.identifier)
         val identifier = identifierBuilder.build()
         PipelineCommandResult
           .newBuilder()
@@ -103,11 +103,11 @@ private[connect] object PipelinesHandler extends Logging {
         val resolvedFlow =
           defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
-        resolvedFlow.resolvedCatalog.foreach(identifierBuilder.setCatalogName)
-        resolvedFlow.resolvedDb.foreach { ns =>
+        resolvedFlow.catalog.foreach(identifierBuilder.setCatalogName)
+        resolvedFlow.database.foreach { ns =>
           identifierBuilder.addNamespace(ns)
         }
-        identifierBuilder.setTableName(resolvedFlow.resolvedId)
+        identifierBuilder.setTableName(resolvedFlow.identifier)
         val identifier = identifierBuilder.build()
         PipelineCommandResult
           .newBuilder()
@@ -184,22 +184,35 @@ private[connect] object PipelinesHandler extends Logging {
             currentCatalog = Some(graphElementRegistry.defaultCatalog),
             currentDatabase = Some(graphElementRegistry.defaultDatabase))
           .identifier
+
+        val tableDetails = dataset.getTableDetails
         graphElementRegistry.registerTable(
           Table(
             identifier = qualifiedIdentifier,
             comment = Option(dataset.getComment),
-            specifiedSchema = Option.when(dataset.hasSchema)(
-              DataTypeProtoConverter
-                .toCatalystType(dataset.getSchema)
-                .asInstanceOf[StructType]),
-            partitionCols = Option(dataset.getPartitionColsList.asScala.toSeq)
+            specifiedSchema = tableDetails.getSchemaCase match {
+              case proto.PipelineCommand.DefineDataset.TableDetails.SchemaCase.SCHEMA_DATA_TYPE =>
+                Some(
+                  DataTypeProtoConverter
+                    .toCatalystType(tableDetails.getSchemaDataType)
+                    .asInstanceOf[StructType])
+              case proto.PipelineCommand.DefineDataset.TableDetails.SchemaCase.SCHEMA_STRING =>
+                Some(StructType.fromDDL(tableDetails.getSchemaString))
+              case proto.PipelineCommand.DefineDataset.TableDetails.SchemaCase.SCHEMA_NOT_SET =>
+                None
+            },
+            partitionCols = Option(tableDetails.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
-            properties = dataset.getTablePropertiesMap.asScala.toMap,
-            baseOrigin = QueryOrigin(
+            properties = tableDetails.getTablePropertiesMap.asScala.toMap,
+            origin = QueryOrigin(
+              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
+                dataset.getSourceCodeLocation.getFileName),
+              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
+                dataset.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(qualifiedIdentifier.unquotedString),
               language = Option(Python())),
-            format = Option.when(dataset.hasFormat)(dataset.getFormat),
+            format = Option.when(tableDetails.hasFormat)(tableDetails.getFormat),
             normalizedPath = None,
             isStreamingTable = dataset.getDatasetType == proto.DatasetType.TABLE))
         qualifiedIdentifier
@@ -212,6 +225,10 @@ private[connect] object PipelinesHandler extends Logging {
             identifier = viewIdentifier,
             comment = Option(dataset.getComment),
             origin = QueryOrigin(
+              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
+                dataset.getSourceCodeLocation.getFileName),
+              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
+                dataset.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
               language = Option(Python())),
@@ -271,16 +288,21 @@ private[connect] object PipelinesHandler extends Logging {
         }
       }
 
+    val relationFlowDetails = flow.getRelationFlowDetails
     graphElementRegistry.registerFlow(
       new UnresolvedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = destinationIdentifier,
-        func =
-          FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getRelation)),
+        func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
+          transformRelationFunc(relationFlowDetails.getRelation)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = false,
         queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
         origin = QueryOrigin(
+          filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
+            flow.getSourceCodeLocation.getFileName),
+          line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
+            flow.getSourceCodeLocation.getLineNumber),
           objectType = Option(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
           language = Option(Python()))))
@@ -319,11 +341,17 @@ private[connect] object PipelinesHandler extends Logging {
         }
       }
 
+      if (cmd.getStorage.isEmpty) {
+        // server-side validation to ensure that storage is always specified
+        throw new IllegalArgumentException("Storage must be specified to start a run.")
+      }
+
       val pipelineUpdateContext = new PipelineUpdateContextImpl(
         graphElementRegistry.toDataflowGraph,
         eventCallback,
         tableFiltersResult.refresh,
-        tableFiltersResult.fullRefresh)
+        tableFiltersResult.fullRefresh,
+        cmd.getStorage)
       sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
 
       if (cmd.getDry) {

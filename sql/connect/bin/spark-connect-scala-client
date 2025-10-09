@@ -31,6 +31,7 @@
 #
 # Set SCBUILD=0 to skip rebuilding the spark-connect server.
 # Set SCCLASSPATH to the client classpath to skip resolving it with sbt.
+# Set SCJVM_ARGS to optional JVM args for the client.
 
 # Go to the Spark project root directory
 FWDIR="$(cd "`dirname "$0"`"/../../..; pwd)"
@@ -70,6 +71,7 @@ JVM_ARGS="-XX:+IgnoreUnrecognizedVMOptions \
   --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED \
   -Djdk.reflect.useDirectMethodHandle=false \
   -Dio.netty.tryReflectionSetAccessible=true \
-  --enable-native-access=ALL-UNNAMED"
+  --enable-native-access=ALL-UNNAMED \
+  $SCJVM_ARGS"
 
 exec java $JVM_ARGS -cp "$SCCLASSPATH" org.apache.spark.sql.application.ConnectRepl "$@"

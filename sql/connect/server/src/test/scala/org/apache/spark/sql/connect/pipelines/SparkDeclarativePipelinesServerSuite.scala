@@ -97,19 +97,23 @@ class SparkDeclarativePipelinesServerSuite
                 .setDataflowGraphId(graphId)
                 .setFlowName("mv")
                 .setTargetDatasetName("mv")
-                .setRelation(
-                  Relation
+                .setRelationFlowDetails(
+                  DefineFlow.WriteRelationFlowDetails
                     .newBuilder()
-                    .setUnresolvedTableValuedFunction(
-                      UnresolvedTableValuedFunction
+                    .setRelation(
+                      Relation
                         .newBuilder()
-                        .setFunctionName("range")
-                        .addArguments(Expression
+                        .setUnresolvedTableValuedFunction(UnresolvedTableValuedFunction
                           .newBuilder()
-                          .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                          .setFunctionName("range")
+                          .addArguments(Expression
+                            .newBuilder()
+                            .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                            .build())
                           .build())
                         .build())
-                    .build()))
+                    .build())
+                .build())
             .build()))
       registerGraphElementsFromSql(
         graphId = graphId,
@@ -495,6 +499,7 @@ class SparkDeclarativePipelinesServerSuite
       datasetName: String,
       defaultCatalog: String = "",
       defaultDatabase: String = "",
+      expectedResolvedDatasetName: String,
       expectedResolvedCatalog: String,
       expectedResolvedNamespace: Seq[String])
 
@@ -503,18 +508,21 @@ class SparkDeclarativePipelinesServerSuite
       name = "TEMPORARY_VIEW",
       datasetType = DatasetType.TEMPORARY_VIEW,
       datasetName = "tv",
+      expectedResolvedDatasetName = "tv",
       expectedResolvedCatalog = "",
       expectedResolvedNamespace = Seq.empty),
     DefineDatasetTestCase(
       name = "TABLE",
       datasetType = DatasetType.TABLE,
-      datasetName = "tb",
+      datasetName = "`tb`",
+      expectedResolvedDatasetName = "tb",
       expectedResolvedCatalog = "spark_catalog",
       expectedResolvedNamespace = Seq("default")),
     DefineDatasetTestCase(
       name = "MV",
       datasetType = DatasetType.MATERIALIZED_VIEW,
       datasetName = "mv",
+      expectedResolvedDatasetName = "mv",
       expectedResolvedCatalog = "spark_catalog",
       expectedResolvedNamespace = Seq("default"))).map(tc => tc.name -> tc).toMap
 
@@ -525,22 +533,25 @@ class SparkDeclarativePipelinesServerSuite
       datasetName = "tv",
       defaultCatalog = "custom_catalog",
       defaultDatabase = "custom_db",
+      expectedResolvedDatasetName = "tv",
       expectedResolvedCatalog = "",
       expectedResolvedNamespace = Seq.empty),
     DefineDatasetTestCase(
       name = "TABLE",
       datasetType = DatasetType.TABLE,
-      datasetName = "tb",
-      defaultCatalog = "my_catalog",
-      defaultDatabase = "my_db",
-      expectedResolvedCatalog = "my_catalog",
-      expectedResolvedNamespace = Seq("my_db")),
+      datasetName = "`tb`",
+      defaultCatalog = "`my_catalog`",
+      defaultDatabase = "`my_db`",
+      expectedResolvedDatasetName = "tb",
+      expectedResolvedCatalog = "`my_catalog`",
+      expectedResolvedNamespace = Seq("`my_db`")),
     DefineDatasetTestCase(
       name = "MV",
       datasetType = DatasetType.MATERIALIZED_VIEW,
       datasetName = "mv",
       defaultCatalog = "another_catalog",
       defaultDatabase = "another_db",
+      expectedResolvedDatasetName = "mv",
       expectedResolvedCatalog = "another_catalog",
       expectedResolvedNamespace = Seq("another_db")))
     .map(tc => tc.name -> tc)
@@ -571,7 +582,7 @@ class SparkDeclarativePipelinesServerSuite
 
       assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
       assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
-      assert(identifier.getTableName == testCase.datasetName)
+      assert(identifier.getTableName == testCase.expectedResolvedDatasetName)
     }
   }
 
@@ -608,7 +619,7 @@ class SparkDeclarativePipelinesServerSuite
 
       assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
       assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
-      assert(identifier.getTableName == testCase.datasetName)
+      assert(identifier.getTableName == testCase.expectedResolvedDatasetName)
     }
   }
 
@@ -618,6 +629,7 @@ class SparkDeclarativePipelinesServerSuite
       flowName: String,
       defaultCatalog: String,
       defaultDatabase: String,
+      expectedResolvedFlowName: String,
       expectedResolvedCatalog: String,
       expectedResolvedNamespace: Seq[String])
 
@@ -625,9 +637,10 @@ class SparkDeclarativePipelinesServerSuite
     DefineFlowTestCase(
       name = "MV",
       datasetType = DatasetType.MATERIALIZED_VIEW,
-      flowName = "mv",
-      defaultCatalog = "spark_catalog",
-      defaultDatabase = "default",
+      flowName = "`mv`",
+      defaultCatalog = "`spark_catalog`",
+      defaultDatabase = "`default`",
+      expectedResolvedFlowName = "mv",
       expectedResolvedCatalog = "spark_catalog",
       expectedResolvedNamespace = Seq("default")),
     DefineFlowTestCase(
@@ -636,6 +649,7 @@ class SparkDeclarativePipelinesServerSuite
       flowName = "tv",
       defaultCatalog = "spark_catalog",
       defaultDatabase = "default",
+      expectedResolvedFlowName = "tv",
       expectedResolvedCatalog = "",
       expectedResolvedNamespace = Seq.empty)).map(tc => tc.name -> tc).toMap
 
@@ -646,6 +660,7 @@ class SparkDeclarativePipelinesServerSuite
       flowName = "mv",
       defaultCatalog = "custom_catalog",
       defaultDatabase = "custom_db",
+      expectedResolvedFlowName = "mv",
       expectedResolvedCatalog = "custom_catalog",
       expectedResolvedNamespace = Seq("custom_db")),
     DefineFlowTestCase(
@@ -654,6 +669,7 @@ class SparkDeclarativePipelinesServerSuite
       flowName = "tv",
       defaultCatalog = "custom_catalog",
       defaultDatabase = "custom_db",
+      expectedResolvedFlowName = "tv",
       expectedResolvedCatalog = "",
       expectedResolvedNamespace = Seq.empty)).map(tc => tc.name -> tc).toMap
 
@@ -686,17 +702,21 @@ class SparkDeclarativePipelinesServerSuite
         .setDataflowGraphId(graphId)
         .setFlowName(testCase.flowName)
         .setTargetDatasetName(testCase.flowName)
-        .setRelation(
-          Relation
+        .setRelationFlowDetails(
+          DefineFlow.WriteRelationFlowDetails
             .newBuilder()
-            .setUnresolvedTableValuedFunction(
-              UnresolvedTableValuedFunction
+            .setRelation(
+              Relation
                 .newBuilder()
-                .setFunctionName("range")
-                .addArguments(Expression
-                  .newBuilder()
-                  .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
-                  .build())
+                .setUnresolvedTableValuedFunction(
+                  UnresolvedTableValuedFunction
+                    .newBuilder()
+                    .setFunctionName("range")
+                    .addArguments(Expression
+                      .newBuilder()
+                      .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                      .build())
+                    .build())
                 .build())
             .build())
         .build()
@@ -711,7 +731,7 @@ class SparkDeclarativePipelinesServerSuite
 
       assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
       assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
-      assert(identifier.getTableName == testCase.flowName)
+      assert(identifier.getTableName == testCase.expectedResolvedFlowName)
     }
   }
 
@@ -750,17 +770,21 @@ class SparkDeclarativePipelinesServerSuite
         .setDataflowGraphId(graphId)
         .setFlowName(testCase.flowName)
         .setTargetDatasetName(testCase.flowName)
-        .setRelation(
-          Relation
+        .setRelationFlowDetails(
+          DefineFlow.WriteRelationFlowDetails
             .newBuilder()
-            .setUnresolvedTableValuedFunction(
-              UnresolvedTableValuedFunction
+            .setRelation(
+              Relation
                 .newBuilder()
-                .setFunctionName("range")
-                .addArguments(Expression
-                  .newBuilder()
-                  .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
-                  .build())
+                .setUnresolvedTableValuedFunction(
+                  UnresolvedTableValuedFunction
+                    .newBuilder()
+                    .setFunctionName("range")
+                    .addArguments(Expression
+                      .newBuilder()
+                      .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                      .build())
+                    .build())
                 .build())
             .build())
         .build()
@@ -775,7 +799,7 @@ class SparkDeclarativePipelinesServerSuite
 
       assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
       assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
-      assert(identifier.getTableName == testCase.flowName)
+      assert(identifier.getTableName == testCase.expectedResolvedFlowName)
     }
   }
 }
