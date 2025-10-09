@@ -162,9 +162,9 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
 
     // SPARK-47230: Only apply enhanced pruning if we actually traced through Generate nodes
-    // AND we have nested array accesses (chained explodes)
-    // This preserves existing behavior for single-level explode operations
-    if (!tracedThroughGenerate || arrayStructFields.isEmpty) {
+    // AND we have nested array accesses (chained explodes) OR struct field accesses
+    // This preserves existing behavior for single-level explode operations (SPARK-34638/SPARK-41961)
+    if (!tracedThroughGenerate || (arrayStructFields.isEmpty && structFields.isEmpty)) {
       return None
     }
 
