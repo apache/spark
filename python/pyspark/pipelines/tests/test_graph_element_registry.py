@@ -46,10 +46,10 @@ class GraphElementRegistryTest(unittest.TestCase):
             def flow2():
                 raise NotImplementedError()
 
-        self.assertEqual(len(registry.datasets), 3)
+        self.assertEqual(len(registry.outputs), 3)
         self.assertEqual(len(registry.flows), 4)
 
-        mv_obj = registry.datasets[0]
+        mv_obj = registry.outputs[0]
         self.assertEqual(mv_obj.name, "mv")
         assert mv_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
@@ -58,7 +58,7 @@ class GraphElementRegistryTest(unittest.TestCase):
         self.assertEqual(mv_flow_obj.target, "mv")
         assert mv_flow_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
-        st_obj = registry.datasets[1]
+        st_obj = registry.outputs[1]
         self.assertEqual(st_obj.name, "st")
         assert st_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
@@ -67,7 +67,7 @@ class GraphElementRegistryTest(unittest.TestCase):
         self.assertEqual(st_flow_obj.target, "st")
         assert mv_flow_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
-        st2_obj = registry.datasets[2]
+        st2_obj = registry.outputs[2]
         self.assertEqual(st2_obj.name, "st2")
         assert st2_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 

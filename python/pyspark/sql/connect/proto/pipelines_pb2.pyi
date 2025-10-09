@@ -54,36 +54,40 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-class _DatasetType:
+class _OutputType:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _DatasetTypeEnumTypeWrapper(
-    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_DatasetType.ValueType],
+class _OutputTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_OutputType.ValueType],
     builtins.type,
 ):  # noqa: F821
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-    DATASET_TYPE_UNSPECIFIED: _DatasetType.ValueType  # 0
+    OUTPUT_TYPE_UNSPECIFIED: _OutputType.ValueType  # 0
     """Safe default value. Should not be used."""
-    MATERIALIZED_VIEW: _DatasetType.ValueType  # 1
-    """A materialized view dataset which is published to the catalog"""
-    TABLE: _DatasetType.ValueType  # 2
+    MATERIALIZED_VIEW: _OutputType.ValueType  # 1
+    """A materialized view which is published to the catalog"""
+    TABLE: _OutputType.ValueType  # 2
     """A table which is published to the catalog"""
-    TEMPORARY_VIEW: _DatasetType.ValueType  # 3
+    TEMPORARY_VIEW: _OutputType.ValueType  # 3
     """A view which is not published to the catalog"""
+    SINK: _OutputType.ValueType  # 4
+    """A sink which is not published to the catalog"""
 
-class DatasetType(_DatasetType, metaclass=_DatasetTypeEnumTypeWrapper):
-    """The type of dataset."""
+class OutputType(_OutputType, metaclass=_OutputTypeEnumTypeWrapper):
+    """The type of output."""
 
-DATASET_TYPE_UNSPECIFIED: DatasetType.ValueType  # 0
+OUTPUT_TYPE_UNSPECIFIED: OutputType.ValueType  # 0
 """Safe default value. Should not be used."""
-MATERIALIZED_VIEW: DatasetType.ValueType  # 1
-"""A materialized view dataset which is published to the catalog"""
-TABLE: DatasetType.ValueType  # 2
+MATERIALIZED_VIEW: OutputType.ValueType  # 1
+"""A materialized view which is published to the catalog"""
+TABLE: OutputType.ValueType  # 2
 """A table which is published to the catalog"""
-TEMPORARY_VIEW: DatasetType.ValueType  # 3
+TEMPORARY_VIEW: OutputType.ValueType  # 3
 """A view which is not published to the catalog"""
-global___DatasetType = DatasetType
+SINK: OutputType.ValueType  # 4
+"""A sink which is not published to the catalog"""
+global___OutputType = OutputType
 
 class PipelineCommand(google.protobuf.message.Message):
     """Dispatch object for pipelines commands. See each individual command for documentation."""
@@ -204,13 +208,13 @@ class PipelineCommand(google.protobuf.message.Message):
             oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
         ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
 
-    class DefineDataset(google.protobuf.message.Message):
-        """Request to define a dataset: a table, a materialized view, or a temporary view."""
+    class DefineOutput(google.protobuf.message.Message):
+        """Request to define an output: a table, a materialized view, a temporary view or a sink."""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         class TableDetails(google.protobuf.message.Message):
-            """Dataset metadata that's only applicable to tables and materialized views."""
+            """Metadata that's only applicable to tables and materialized views."""
 
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -247,7 +251,7 @@ class PipelineCommand(google.protobuf.message.Message):
             ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
                 """Optional partition columns for the table."""
             format: builtins.str
-            """The output table format of the dataset."""
+            """The output table format for the table."""
             @property
             def schema_data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
             schema_string: builtins.str
@@ -303,37 +307,92 @@ class PipelineCommand(google.protobuf.message.Message):
                 self, oneof_group: typing_extensions.Literal["schema", b"schema"]
             ) -> typing_extensions.Literal["schema_data_type", "schema_string"] | None: ...
 
+        class SinkDetails(google.protobuf.message.Message):
+            """Metadata that's only applicable to sinks."""
+
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            class OptionsEntry(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+                KEY_FIELD_NUMBER: builtins.int
+                VALUE_FIELD_NUMBER: builtins.int
+                key: builtins.str
+                value: builtins.str
+                def __init__(
+                    self,
+                    *,
+                    key: builtins.str = ...,
+                    value: builtins.str = ...,
+                ) -> None: ...
+                def ClearField(
+                    self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+                ) -> None: ...
+
+            OPTIONS_FIELD_NUMBER: builtins.int
+            FORMAT_FIELD_NUMBER: builtins.int
+            @property
+            def options(
+                self,
+            ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+                """Streaming write options"""
+            format: builtins.str
+            """Streaming write format"""
+            def __init__(
+                self,
+                *,
+                options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+                format: builtins.str | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal["_format", b"_format", "format", b"format"],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_format", b"_format", "format", b"format", "options", b"options"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_format", b"_format"]
+            ) -> typing_extensions.Literal["format"] | None: ...
+
         DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        DATASET_NAME_FIELD_NUMBER: builtins.int
-        DATASET_TYPE_FIELD_NUMBER: builtins.int
+        OUTPUT_NAME_FIELD_NUMBER: builtins.int
+        OUTPUT_TYPE_FIELD_NUMBER: builtins.int
         COMMENT_FIELD_NUMBER: builtins.int
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
         TABLE_DETAILS_FIELD_NUMBER: builtins.int
+        SINK_DETAILS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
-        """The graph to attach this dataset to."""
-        dataset_name: builtins.str
-        """Name of the dataset. Can be partially or fully qualified."""
-        dataset_type: global___DatasetType.ValueType
-        """The type of the dataset."""
+        """The graph to attach this output to."""
+        output_name: builtins.str
+        """Name of the output. Can be partially or fully qualified."""
+        output_type: global___OutputType.ValueType
+        """The type of the output."""
         comment: builtins.str
-        """Optional comment for the dataset."""
+        """Optional comment for the output."""
         @property
         def source_code_location(self) -> global___SourceCodeLocation:
-            """The location in source code that this dataset was defined."""
+            """The location in source code that this output was defined."""
         @property
-        def table_details(self) -> global___PipelineCommand.DefineDataset.TableDetails: ...
+        def table_details(self) -> global___PipelineCommand.DefineOutput.TableDetails: ...
+        @property
+        def sink_details(self) -> global___PipelineCommand.DefineOutput.SinkDetails: ...
         @property
         def extension(self) -> google.protobuf.any_pb2.Any: ...
         def __init__(
             self,
             *,
             dataflow_graph_id: builtins.str | None = ...,
-            dataset_name: builtins.str | None = ...,
-            dataset_type: global___DatasetType.ValueType | None = ...,
+            output_name: builtins.str | None = ...,
+            output_type: global___OutputType.ValueType | None = ...,
             comment: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
-            table_details: global___PipelineCommand.DefineDataset.TableDetails | None = ...,
+            table_details: global___PipelineCommand.DefineOutput.TableDetails | None = ...,
+            sink_details: global___PipelineCommand.DefineOutput.SinkDetails | None = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
         def HasField(
@@ -343,24 +402,26 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_comment",
                 "_dataflow_graph_id",
                 b"_dataflow_graph_id",
-                "_dataset_name",
-                b"_dataset_name",
-                "_dataset_type",
-                b"_dataset_type",
+                "_output_name",
+                b"_output_name",
+                "_output_type",
+                b"_output_type",
                 "_source_code_location",
                 b"_source_code_location",
                 "comment",
                 b"comment",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
-                "dataset_name",
-                b"dataset_name",
-                "dataset_type",
-                b"dataset_type",
                 "details",
                 b"details",
                 "extension",
                 b"extension",
+                "output_name",
+                b"output_name",
+                "output_type",
+                b"output_type",
+                "sink_details",
+                b"sink_details",
                 "source_code_location",
                 b"source_code_location",
                 "table_details",
@@ -374,24 +435,26 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_comment",
                 "_dataflow_graph_id",
                 b"_dataflow_graph_id",
-                "_dataset_name",
-                b"_dataset_name",
-                "_dataset_type",
-                b"_dataset_type",
+                "_output_name",
+                b"_output_name",
+                "_output_type",
+                b"_output_type",
                 "_source_code_location",
                 b"_source_code_location",
                 "comment",
                 b"comment",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
-                "dataset_name",
-                b"dataset_name",
-                "dataset_type",
-                b"dataset_type",
                 "details",
                 b"details",
                 "extension",
                 b"extension",
+                "output_name",
+                b"output_name",
+                "output_type",
+                b"output_type",
+                "sink_details",
+                b"sink_details",
                 "source_code_location",
                 b"source_code_location",
                 "table_details",
@@ -409,12 +472,12 @@ class PipelineCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_dataset_name", b"_dataset_name"]
-        ) -> typing_extensions.Literal["dataset_name"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_output_name", b"_output_name"]
+        ) -> typing_extensions.Literal["output_name"] | None: ...
         @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_dataset_type", b"_dataset_type"]
-        ) -> typing_extensions.Literal["dataset_type"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_output_type", b"_output_type"]
+        ) -> typing_extensions.Literal["output_type"] | None: ...
         @typing.overload
         def WhichOneof(
             self,
@@ -425,7 +488,7 @@ class PipelineCommand(google.protobuf.message.Message):
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["details", b"details"]
-        ) -> typing_extensions.Literal["table_details", "extension"] | None: ...
+        ) -> typing_extensions.Literal["table_details", "sink_details", "extension"] | None: ...
 
     class DefineFlow(google.protobuf.message.Message):
         """Request to define a flow targeting a dataset."""
@@ -951,7 +1014,7 @@ class PipelineCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["relation"] | None: ...
 
     CREATE_DATAFLOW_GRAPH_FIELD_NUMBER: builtins.int
-    DEFINE_DATASET_FIELD_NUMBER: builtins.int
+    DEFINE_OUTPUT_FIELD_NUMBER: builtins.int
     DEFINE_FLOW_FIELD_NUMBER: builtins.int
     DROP_DATAFLOW_GRAPH_FIELD_NUMBER: builtins.int
     START_RUN_FIELD_NUMBER: builtins.int
@@ -961,7 +1024,7 @@ class PipelineCommand(google.protobuf.message.Message):
     @property
     def create_dataflow_graph(self) -> global___PipelineCommand.CreateDataflowGraph: ...
     @property
-    def define_dataset(self) -> global___PipelineCommand.DefineDataset: ...
+    def define_output(self) -> global___PipelineCommand.DefineOutput: ...
     @property
     def define_flow(self) -> global___PipelineCommand.DefineFlow: ...
     @property
@@ -982,7 +1045,7 @@ class PipelineCommand(google.protobuf.message.Message):
         self,
         *,
         create_dataflow_graph: global___PipelineCommand.CreateDataflowGraph | None = ...,
-        define_dataset: global___PipelineCommand.DefineDataset | None = ...,
+        define_output: global___PipelineCommand.DefineOutput | None = ...,
         define_flow: global___PipelineCommand.DefineFlow | None = ...,
         drop_dataflow_graph: global___PipelineCommand.DropDataflowGraph | None = ...,
         start_run: global___PipelineCommand.StartRun | None = ...,
@@ -999,12 +1062,12 @@ class PipelineCommand(google.protobuf.message.Message):
             b"command_type",
             "create_dataflow_graph",
             b"create_dataflow_graph",
-            "define_dataset",
-            b"define_dataset",
             "define_flow",
             b"define_flow",
             "define_flow_query_function_result",
             b"define_flow_query_function_result",
+            "define_output",
+            b"define_output",
             "define_sql_graph_elements",
             b"define_sql_graph_elements",
             "drop_dataflow_graph",
@@ -1022,12 +1085,12 @@ class PipelineCommand(google.protobuf.message.Message):
             b"command_type",
             "create_dataflow_graph",
             b"create_dataflow_graph",
-            "define_dataset",
-            b"define_dataset",
             "define_flow",
             b"define_flow",
             "define_flow_query_function_result",
             b"define_flow_query_function_result",
+            "define_output",
+            b"define_output",
             "define_sql_graph_elements",
             b"define_sql_graph_elements",
             "drop_dataflow_graph",
@@ -1043,7 +1106,7 @@ class PipelineCommand(google.protobuf.message.Message):
     ) -> (
         typing_extensions.Literal[
             "create_dataflow_graph",
-            "define_dataset",
+            "define_output",
             "define_flow",
             "drop_dataflow_graph",
             "start_run",
@@ -1095,13 +1158,13 @@ class PipelineCommandResult(google.protobuf.message.Message):
             oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
         ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
 
-    class DefineDatasetResult(google.protobuf.message.Message):
+    class DefineOutputResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
         @property
         def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
-            """Resolved identifier of the dataset"""
+            """Resolved identifier of the output"""
         def __init__(
             self,
             *,
@@ -1168,14 +1231,14 @@ class PipelineCommandResult(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["resolved_identifier"] | None: ...
 
     CREATE_DATAFLOW_GRAPH_RESULT_FIELD_NUMBER: builtins.int
-    DEFINE_DATASET_RESULT_FIELD_NUMBER: builtins.int
+    DEFINE_OUTPUT_RESULT_FIELD_NUMBER: builtins.int
     DEFINE_FLOW_RESULT_FIELD_NUMBER: builtins.int
     @property
     def create_dataflow_graph_result(
         self,
     ) -> global___PipelineCommandResult.CreateDataflowGraphResult: ...
     @property
-    def define_dataset_result(self) -> global___PipelineCommandResult.DefineDatasetResult: ...
+    def define_output_result(self) -> global___PipelineCommandResult.DefineOutputResult: ...
     @property
     def define_flow_result(self) -> global___PipelineCommandResult.DefineFlowResult: ...
     def __init__(
@@ -1183,7 +1246,7 @@ class PipelineCommandResult(google.protobuf.message.Message):
         *,
         create_dataflow_graph_result: global___PipelineCommandResult.CreateDataflowGraphResult
         | None = ...,
-        define_dataset_result: global___PipelineCommandResult.DefineDatasetResult | None = ...,
+        define_output_result: global___PipelineCommandResult.DefineOutputResult | None = ...,
         define_flow_result: global___PipelineCommandResult.DefineFlowResult | None = ...,
     ) -> None: ...
     def HasField(
@@ -1191,10 +1254,10 @@ class PipelineCommandResult(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "create_dataflow_graph_result",
             b"create_dataflow_graph_result",
-            "define_dataset_result",
-            b"define_dataset_result",
             "define_flow_result",
             b"define_flow_result",
+            "define_output_result",
+            b"define_output_result",
             "result_type",
             b"result_type",
         ],
@@ -1204,10 +1267,10 @@ class PipelineCommandResult(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "create_dataflow_graph_result",
             b"create_dataflow_graph_result",
-            "define_dataset_result",
-            b"define_dataset_result",
             "define_flow_result",
             b"define_flow_result",
+            "define_output_result",
+            b"define_output_result",
             "result_type",
             b"result_type",
         ],
@@ -1216,7 +1279,7 @@ class PipelineCommandResult(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
     ) -> (
         typing_extensions.Literal[
-            "create_dataflow_graph_result", "define_dataset_result", "define_flow_result"
+            "create_dataflow_graph_result", "define_output_result", "define_flow_result"
         ]
         | None
     ): ...
