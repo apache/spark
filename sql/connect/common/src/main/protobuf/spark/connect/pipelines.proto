@@ -233,7 +233,7 @@ message PipelineCommandResult {
 // The type of output.
 enum OutputType {
   // Safe default value. Should not be used.
-  DATASET_TYPE_UNSPECIFIED = 0;
+  OUTPUT_TYPE_UNSPECIFIED = 0;
   // A materialized view which is published to the catalog
   MATERIALIZED_VIEW = 1;
   // A table which is published to the catalog

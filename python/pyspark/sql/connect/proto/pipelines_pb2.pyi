@@ -63,7 +63,7 @@ class _OutputTypeEnumTypeWrapper(
     builtins.type,
 ):  # noqa: F821
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-    DATASET_TYPE_UNSPECIFIED: _OutputType.ValueType  # 0
+    OUTPUT_TYPE_UNSPECIFIED: _OutputType.ValueType  # 0
     """Safe default value. Should not be used."""
     MATERIALIZED_VIEW: _OutputType.ValueType  # 1
     """A materialized view which is published to the catalog"""
@@ -77,7 +77,7 @@ class _OutputTypeEnumTypeWrapper(
 class OutputType(_OutputType, metaclass=_OutputTypeEnumTypeWrapper):
     """The type of output."""
 
-DATASET_TYPE_UNSPECIFIED: OutputType.ValueType  # 0
+OUTPUT_TYPE_UNSPECIFIED: OutputType.ValueType  # 0
 """Safe default value. Should not be used."""
 MATERIALIZED_VIEW: OutputType.ValueType  # 1
 """A materialized view which is published to the catalog"""
