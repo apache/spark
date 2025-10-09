@@ -330,7 +330,8 @@ def run(
     register_definitions(spec_path, registry, spec)
 
     log_with_curr_timestamp(
-        f"Starting run (dry={dry}, full_refresh={full_refresh}, full_refresh_all={full_refresh_all}, refresh={refresh})..."
+        f"Starting run (dry={dry}, full_refresh={full_refresh}, " +
+        f"full_refresh_all={full_refresh_all}, refresh={refresh})..."
     )
     result_iter = start_run(
         spark,
