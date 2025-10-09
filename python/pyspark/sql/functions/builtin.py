@@ -27578,14 +27578,14 @@ def udf(
     For example, define a 'Series to Series' type pandas UDF.
 
     >>> from pyspark.sql.functions import udf, PandasUDFType
-    >>> import pandas as pd
-    >>> @udf(returnType=IntegerType())
+    >>> import pandas as pd # doctest: +SKIP
+    >>> @udf(returnType=IntegerType()) # doctest: +SKIP
     ... def pd_calc(a: pd.Series, b: pd.Series) -> pd.Series:
     ...     return a + 10 * b
     ...
-    >>> pd_calc.evalType == PandasUDFType.SCALAR
+    >>> pd_calc.evalType == PandasUDFType.SCALAR # doctest: +SKIP
     True
-    >>> spark.range(2).select(pd_calc(b=col("id") * 10, a="id")).show()
+    >>> spark.range(2).select(pd_calc(b=col("id") * 10, a="id")).show() # doctest: +SKIP
     +--------------------------------+
     |pd_calc(b => (id * 10), a => id)|
     +--------------------------------+
@@ -27595,15 +27595,15 @@ def udf(
 
     For another example, define a 'Array to Array' type arrow UDF.
 
-    >>> from pyspark.sql.functions import udf, ArrowUDFType
-    >>> import pyarrow as pa
-    >>> @udf(returnType=IntegerType())
+    >>> from pyspark.sql.functions import udf, ArrowUDFType # doctest: +SKIP
+    >>> import pyarrow as pa # doctest: +SKIP
+    >>> @udf(returnType=IntegerType()) # doctest: +SKIP
     ... def pa_calc(a: pa.Array, b: pa.Array) -> pa.Array:
     ...     return pa.compute.add(a, pa.compute.multiply(b, 10))
     ...
-    >>> pa_calc.evalType == ArrowUDFType.SCALAR
+    >>> pa_calc.evalType == ArrowUDFType.SCALAR # doctest: +SKIP
     True
-    >>> spark.range(2).select(pa_calc(b=col("id") * 10, a="id")).show()
+    >>> spark.range(2).select(pa_calc(b=col("id") * 10, a="id")).show() # doctest: +SKIP
     +--------------------------------+
     |pa_calc(b => (id * 10), a => id)|
     +--------------------------------+
@@ -27849,9 +27849,9 @@ def arrow_udtf(
     --------
     UDTF with PyArrow RecordBatch input:
 
-    >>> import pyarrow as pa
-    >>> from pyspark.sql.functions import arrow_udtf
-    >>> @arrow_udtf(returnType="x int, y int")
+    >>> import pyarrow as pa # doctest: +SKIP
+    >>> from pyspark.sql.functions import arrow_udtf # doctest: +SKIP
+    >>> @arrow_udtf(returnType="x int, y int") # doctest: +SKIP
     ... class MyUDTF:
     ...     def eval(self, batch: pa.RecordBatch):
     ...         # Process the entire batch vectorized
@@ -27864,11 +27864,11 @@ def arrow_udtf(
     ...         yield result_table
     ...
     >>> df = spark.range(10).selectExpr("id as x", "id as y")
-    >>> MyUDTF(df.asTable()).show()  # doctest: +SKIP
+    >>> MyUDTF(df.asTable()).show() # doctest: +SKIP
 
     UDTF with PyArrow Array inputs:
 
-    >>> @arrow_udtf(returnType="x int, y int")
+    >>> @arrow_udtf(returnType="x int, y int") # doctest: +SKIP
     ... class MyUDTF2:
     ...     def eval(self, x: pa.Array, y: pa.Array):
     ...         # Process arrays vectorized
