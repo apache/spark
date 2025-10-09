@@ -427,134 +427,6 @@ class PipelineCommand(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["details", b"details"]
         ) -> typing_extensions.Literal["table_details", "extension"] | None: ...
 
-    class DefineExternalSink(google.protobuf.message.Message):
-        """Request to define a sink"""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        class OptionsEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            KEY_FIELD_NUMBER: builtins.int
-            VALUE_FIELD_NUMBER: builtins.int
-            key: builtins.str
-            value: builtins.str
-            def __init__(
-                self,
-                *,
-                key: builtins.str = ...,
-                value: builtins.str = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-            ) -> None: ...
-
-        DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        SINK_NAME_FIELD_NUMBER: builtins.int
-        OPTIONS_FIELD_NUMBER: builtins.int
-        FORMAT_FIELD_NUMBER: builtins.int
-        SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
-        EXTENSION_FIELD_NUMBER: builtins.int
-        dataflow_graph_id: builtins.str
-        """The graph to attach this sink to."""
-        sink_name: builtins.str
-        """Name of the sink"""
-        @property
-        def options(
-            self,
-        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-            """Streaming write options"""
-        format: builtins.str
-        """Streaming write format"""
-        @property
-        def source_code_location(self) -> global___SourceCodeLocation:
-            """The location in source code that this sink was defined."""
-        @property
-        def extension(self) -> google.protobuf.any_pb2.Any:
-            """Reserved field for protocol extensions.
-            Used to support forward-compatibility by carrying additional command types
-            that are not yet defined in this version of the proto. During planning, the
-            engine will resolve and dispatch the concrete command contained in this field.
-            """
-        def __init__(
-            self,
-            *,
-            dataflow_graph_id: builtins.str | None = ...,
-            sink_name: builtins.str | None = ...,
-            options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
-            format: builtins.str | None = ...,
-            source_code_location: global___SourceCodeLocation | None = ...,
-            extension: google.protobuf.any_pb2.Any | None = ...,
-        ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_format",
-                b"_format",
-                "_sink_name",
-                b"_sink_name",
-                "_source_code_location",
-                b"_source_code_location",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "extension",
-                b"extension",
-                "format",
-                b"format",
-                "sink_name",
-                b"sink_name",
-                "source_code_location",
-                b"source_code_location",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_dataflow_graph_id",
-                b"_dataflow_graph_id",
-                "_format",
-                b"_format",
-                "_sink_name",
-                b"_sink_name",
-                "_source_code_location",
-                b"_source_code_location",
-                "dataflow_graph_id",
-                b"dataflow_graph_id",
-                "extension",
-                b"extension",
-                "format",
-                b"format",
-                "options",
-                b"options",
-                "sink_name",
-                b"sink_name",
-                "source_code_location",
-                b"source_code_location",
-            ],
-        ) -> None: ...
-        @typing.overload
-        def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
-        ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_format", b"_format"]
-        ) -> typing_extensions.Literal["format"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_sink_name", b"_sink_name"]
-        ) -> typing_extensions.Literal["sink_name"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal[
-                "_source_code_location", b"_source_code_location"
-            ],
-        ) -> typing_extensions.Literal["source_code_location"] | None: ...
-
     class DefineFlow(google.protobuf.message.Message):
         """Request to define a flow targeting a dataset."""
 
@@ -1081,7 +953,6 @@ class PipelineCommand(google.protobuf.message.Message):
     CREATE_DATAFLOW_GRAPH_FIELD_NUMBER: builtins.int
     DEFINE_DATASET_FIELD_NUMBER: builtins.int
     DEFINE_FLOW_FIELD_NUMBER: builtins.int
-    DEFINE_EXTERNAL_SINK_FIELD_NUMBER: builtins.int
     DROP_DATAFLOW_GRAPH_FIELD_NUMBER: builtins.int
     START_RUN_FIELD_NUMBER: builtins.int
     DEFINE_SQL_GRAPH_ELEMENTS_FIELD_NUMBER: builtins.int
@@ -1093,8 +964,6 @@ class PipelineCommand(google.protobuf.message.Message):
     def define_dataset(self) -> global___PipelineCommand.DefineDataset: ...
     @property
     def define_flow(self) -> global___PipelineCommand.DefineFlow: ...
-    @property
-    def define_external_sink(self) -> global___PipelineCommand.DefineExternalSink: ...
     @property
     def drop_dataflow_graph(self) -> global___PipelineCommand.DropDataflowGraph: ...
     @property
@@ -1115,7 +984,6 @@ class PipelineCommand(google.protobuf.message.Message):
         create_dataflow_graph: global___PipelineCommand.CreateDataflowGraph | None = ...,
         define_dataset: global___PipelineCommand.DefineDataset | None = ...,
         define_flow: global___PipelineCommand.DefineFlow | None = ...,
-        define_external_sink: global___PipelineCommand.DefineExternalSink | None = ...,
         drop_dataflow_graph: global___PipelineCommand.DropDataflowGraph | None = ...,
         start_run: global___PipelineCommand.StartRun | None = ...,
         define_sql_graph_elements: global___PipelineCommand.DefineSqlGraphElements | None = ...,
@@ -1133,8 +1001,6 @@ class PipelineCommand(google.protobuf.message.Message):
             b"create_dataflow_graph",
             "define_dataset",
             b"define_dataset",
-            "define_external_sink",
-            b"define_external_sink",
             "define_flow",
             b"define_flow",
             "define_flow_query_function_result",
@@ -1158,8 +1024,6 @@ class PipelineCommand(google.protobuf.message.Message):
             b"create_dataflow_graph",
             "define_dataset",
             b"define_dataset",
-            "define_external_sink",
-            b"define_external_sink",
             "define_flow",
             b"define_flow",
             "define_flow_query_function_result",
@@ -1181,7 +1045,6 @@ class PipelineCommand(google.protobuf.message.Message):
             "create_dataflow_graph",
             "define_dataset",
             "define_flow",
-            "define_external_sink",
             "drop_dataflow_graph",
             "start_run",
             "define_sql_graph_elements",
@@ -1304,46 +1167,9 @@ class PipelineCommandResult(google.protobuf.message.Message):
             oneof_group: typing_extensions.Literal["_resolved_identifier", b"_resolved_identifier"],
         ) -> typing_extensions.Literal["resolved_identifier"] | None: ...
 
-    class DefineExternalSinkResult(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        RESOLVED_IDENTIFIER_FIELD_NUMBER: builtins.int
-        @property
-        def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
-            """Resolved identifier of the sink"""
-        def __init__(
-            self,
-            *,
-            resolved_identifier: pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier
-            | None = ...,
-        ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_resolved_identifier",
-                b"_resolved_identifier",
-                "resolved_identifier",
-                b"resolved_identifier",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_resolved_identifier",
-                b"_resolved_identifier",
-                "resolved_identifier",
-                b"resolved_identifier",
-            ],
-        ) -> None: ...
-        def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_resolved_identifier", b"_resolved_identifier"],
-        ) -> typing_extensions.Literal["resolved_identifier"] | None: ...
-
     CREATE_DATAFLOW_GRAPH_RESULT_FIELD_NUMBER: builtins.int
     DEFINE_DATASET_RESULT_FIELD_NUMBER: builtins.int
     DEFINE_FLOW_RESULT_FIELD_NUMBER: builtins.int
-    DEFINE_EXTERNAL_SINK_RESULT_FIELD_NUMBER: builtins.int
     @property
     def create_dataflow_graph_result(
         self,
@@ -1352,10 +1178,6 @@ class PipelineCommandResult(google.protobuf.message.Message):
     def define_dataset_result(self) -> global___PipelineCommandResult.DefineDatasetResult: ...
     @property
     def define_flow_result(self) -> global___PipelineCommandResult.DefineFlowResult: ...
-    @property
-    def define_external_sink_result(
-        self,
-    ) -> global___PipelineCommandResult.DefineExternalSinkResult: ...
     def __init__(
         self,
         *,
@@ -1363,8 +1185,6 @@ class PipelineCommandResult(google.protobuf.message.Message):
         | None = ...,
         define_dataset_result: global___PipelineCommandResult.DefineDatasetResult | None = ...,
         define_flow_result: global___PipelineCommandResult.DefineFlowResult | None = ...,
-        define_external_sink_result: global___PipelineCommandResult.DefineExternalSinkResult
-        | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1373,8 +1193,6 @@ class PipelineCommandResult(google.protobuf.message.Message):
             b"create_dataflow_graph_result",
             "define_dataset_result",
             b"define_dataset_result",
-            "define_external_sink_result",
-            b"define_external_sink_result",
             "define_flow_result",
             b"define_flow_result",
             "result_type",
@@ -1388,8 +1206,6 @@ class PipelineCommandResult(google.protobuf.message.Message):
             b"create_dataflow_graph_result",
             "define_dataset_result",
             b"define_dataset_result",
-            "define_external_sink_result",
-            b"define_external_sink_result",
             "define_flow_result",
             b"define_flow_result",
             "result_type",
@@ -1400,10 +1216,7 @@ class PipelineCommandResult(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
     ) -> (
         typing_extensions.Literal[
-            "create_dataflow_graph_result",
-            "define_dataset_result",
-            "define_flow_result",
-            "define_external_sink_result",
+            "create_dataflow_graph_result", "define_dataset_result", "define_flow_result"
         ]
         | None
     ): ...
