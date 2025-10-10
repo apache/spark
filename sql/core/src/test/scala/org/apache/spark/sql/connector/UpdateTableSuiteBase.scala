@@ -660,6 +660,33 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, 42, "hr") :: Row(2, 2, "software") :: Row(3, 42, "hr") :: Nil)
   }
 
+  test("update with current_timestamp default value using DEFAULT keyword") {
+    sql(s"""CREATE TABLE $tableNameAsString
+      | (pk INT NOT NULL, current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""".stripMargin)
+    append("pk INT NOT NULL, current_timestamp TIMESTAMP",
+      """{ "pk": 1, "i": false, "current_timestamp": "2023-01-01 10:00:00" }
+        |{ "pk": 2, "i": true, "current_timestamp": "2023-01-01 11:00:00" }
+        |""".stripMargin)
+
+    val initialResult = sql(s"SELECT * FROM $tableNameAsString").collect()
+    assert(initialResult.length == 2)
+    val initialTimestamp1 = initialResult(0).getTimestamp(1)
+    val initialTimestamp2 = initialResult(1).getTimestamp(1)
+
+    sql(s"UPDATE $tableNameAsString SET current_timestamp = DEFAULT WHERE pk = 1")
+
+    val updatedResult = sql(s"SELECT * FROM $tableNameAsString").collect()
+    assert(updatedResult.length == 2)
+
+    val updatedRow = updatedResult.find(_.getInt(0) == 1).get
+    val unchangedRow = updatedResult.find(_.getInt(0) == 2).get
+
+    // The timestamp should be different (newer) after the update for pk=1
+    assert(updatedRow.getTimestamp(1).getTime > initialTimestamp1.getTime)
+    // The timestamp should remain unchanged for pk=2
+    assert(unchangedRow.getTimestamp(1).getTime == initialTimestamp2.getTime)
+  }
+
   test("update char/varchar columns") {
     createTable("pk INT NOT NULL, s STRUCT<n_c: CHAR(3), n_vc: VARCHAR(5)>, dep STRING")
 
