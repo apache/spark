@@ -246,6 +246,7 @@ class PipelineCommand(google.protobuf.message.Message):
                 self,
             ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
                 """Optional table properties."""
+
             @property
             def partition_cols(
                 self,
@@ -378,6 +379,7 @@ class PipelineCommand(google.protobuf.message.Message):
         @property
         def source_code_location(self) -> global___SourceCodeLocation:
             """The location in source code that this output was defined."""
+
         @property
         def table_details(self) -> global___PipelineCommand.DefineOutput.TableDetails: ...
         @property
@@ -524,6 +526,7 @@ class PipelineCommand(google.protobuf.message.Message):
                 """An unresolved relation that defines the dataset's flow. Empty if the query function
                 that defines the flow cannot be analyzed at the time of flow definition.
                 """
+
             def __init__(
                 self,
                 *,
@@ -598,6 +601,7 @@ class PipelineCommand(google.protobuf.message.Message):
         @property
         def source_code_location(self) -> global___SourceCodeLocation:
             """The location in source code that this flow was defined."""
+
         @property
         def relation_flow_details(
             self,
@@ -613,8 +617,9 @@ class PipelineCommand(google.protobuf.message.Message):
             sql_conf: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             client_id: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
-            relation_flow_details: global___PipelineCommand.DefineFlow.WriteRelationFlowDetails
-            | None = ...,
+            relation_flow_details: (
+                global___PipelineCommand.DefineFlow.WriteRelationFlowDetails | None
+            ) = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
         def HasField(
@@ -1169,6 +1174,7 @@ class PipelineCommandResult(google.protobuf.message.Message):
         @property
         def resolved_identifier(self) -> pyspark.sql.connect.proto.common_pb2.ResolvedIdentifier:
             """Resolved identifier of the output"""
+
         def __init__(
             self,
             *,
@@ -1251,8 +1257,9 @@ class PipelineCommandResult(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        create_dataflow_graph_result: global___PipelineCommandResult.CreateDataflowGraphResult
-        | None = ...,
+        create_dataflow_graph_result: (
+            global___PipelineCommandResult.CreateDataflowGraphResult | None
+        ) = ...,
         define_output_result: global___PipelineCommandResult.DefineOutputResult | None = ...,
         define_flow_result: global___PipelineCommandResult.DefineFlowResult | None = ...,
     ) -> None: ...
