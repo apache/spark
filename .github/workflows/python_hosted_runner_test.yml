@@ -76,6 +76,8 @@ jobs:
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect
           - >-
+            pyspark-structured-streaming, pyspark-structured-streaming-connect
+          - >-
             pyspark-connect
           - >-
             pyspark-pandas
