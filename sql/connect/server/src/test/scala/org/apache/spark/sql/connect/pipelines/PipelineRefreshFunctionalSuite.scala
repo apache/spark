@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.pipelines
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.connect.proto.{DatasetType, PipelineCommand, PipelineEvent}
+import org.apache.spark.connect.proto.{OutputType, PipelineCommand, PipelineEvent}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
@@ -57,15 +57,15 @@ class PipelineRefreshFunctionalSuite
       // Create tables that depend on the mv
       createTable(
         name = "a",
-        datasetType = DatasetType.TABLE,
+        outputType = OutputType.TABLE,
         sql = Some(s"SELECT id FROM STREAM $externalSourceTable"))
       createTable(
         name = "b",
-        datasetType = DatasetType.TABLE,
+        outputType = OutputType.TABLE,
         sql = Some(s"SELECT id FROM STREAM $externalSourceTable"))
       createTable(
         name = "mv",
-        datasetType = DatasetType.MATERIALIZED_VIEW,
+        outputType = OutputType.MATERIALIZED_VIEW,
         sql = Some(s"SELECT id FROM a"))
     }
   }
@@ -81,7 +81,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       // First run to populate tables
       startPipelineAndWaitForCompletion(graphId)
@@ -229,7 +229,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
@@ -252,7 +252,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
@@ -275,7 +275,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
@@ -299,7 +299,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
@@ -324,7 +324,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()

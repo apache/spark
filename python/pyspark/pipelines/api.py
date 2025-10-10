@@ -23,7 +23,7 @@ from pyspark.pipelines.flow import Flow, QueryFunction
 from pyspark.pipelines.source_code_location import (
     get_caller_source_code_location,
 )
-from pyspark.pipelines.dataset import (
+from pyspark.pipelines.output import (
     MaterializedView,
     StreamingTable,
     TemporaryView,
@@ -156,7 +156,7 @@ def table(
 
         resolved_name = name or decorated.__name__
         registry = get_active_graph_element_registry()
-        registry.register_dataset(
+        registry.register_output(
             StreamingTable(
                 comment=comment,
                 name=resolved_name,
@@ -258,7 +258,7 @@ def materialized_view(
 
         resolved_name = name or decorated.__name__
         registry = get_active_graph_element_registry()
-        registry.register_dataset(
+        registry.register_output(
             MaterializedView(
                 comment=comment,
                 name=resolved_name,
@@ -351,7 +351,7 @@ def temporary_view(
 
         resolved_name = name or decorated.__name__
         registry = get_active_graph_element_registry()
-        registry.register_dataset(
+        registry.register_output(
             TemporaryView(
                 comment=comment,
                 name=resolved_name,
@@ -446,4 +446,4 @@ def create_streaming_table(
         schema=schema,
         format=format,
     )
-    get_active_graph_element_registry().register_dataset(table)
+    get_active_graph_element_registry().register_output(table)

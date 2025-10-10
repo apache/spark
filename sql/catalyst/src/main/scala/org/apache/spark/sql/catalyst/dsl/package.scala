@@ -151,7 +151,6 @@ package object dsl extends SQLConfHelper {
 
     def asc: SortOrder = SortOrder(expr, Ascending)
     def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Seq.empty)
-    def const: SortOrder = SortOrder(expr, Constant)
     def desc: SortOrder = SortOrder(expr, Descending)
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()

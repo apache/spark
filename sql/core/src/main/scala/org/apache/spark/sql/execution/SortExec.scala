@@ -46,8 +46,7 @@ case class SortExec(
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputOrdering: Seq[SortOrder] =
-    sortOrder ++ child.outputOrdering.filter(_.direction == Constant)
+  override def outputOrdering: Seq[SortOrder] = sortOrder
 
   // sort performed is local within a given partition so will retain
   // child operator's partitioning
@@ -74,17 +73,15 @@ case class SortExec(
    * should make it public.
    */
   def createSorter(): UnsafeExternalRowSorter = {
-    val effectiveSortOrder = sortOrder.filterNot(_.direction == Constant)
-
     rowSorter = new ThreadLocal[UnsafeExternalRowSorter]()
 
     val ordering = RowOrdering.create(sortOrder, output)
 
     // The comparator for comparing prefix
-    val boundSortExpression = BindReferences.bindReference(effectiveSortOrder.head, output)
+    val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
     val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
 
-    val canUseRadixSort = enableRadixSort && effectiveSortOrder.length == 1 &&
+    val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
       SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
 
     // The generator for prefix

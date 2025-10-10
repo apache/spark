@@ -79,10 +79,10 @@ private[connect] object PipelinesHandler extends Logging {
         sessionHolder.dataflowGraphRegistry
           .dropDataflowGraph(cmd.getDropDataflowGraph.getDataflowGraphId)
         defaultResponse
-      case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
-        logInfo(s"Define pipelines dataset cmd received: $cmd")
+      case proto.PipelineCommand.CommandTypeCase.DEFINE_OUTPUT =>
+        logInfo(s"Define pipelines output cmd received: $cmd")
         val resolvedDataset =
-          defineDataset(cmd.getDefineDataset, sessionHolder)
+          defineOutput(cmd.getDefineOutput, sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
         resolvedDataset.catalog.foreach(identifierBuilder.setCatalogName)
         resolvedDataset.database.foreach { ns =>
@@ -92,8 +92,8 @@ private[connect] object PipelinesHandler extends Logging {
         val identifier = identifierBuilder.build()
         PipelineCommandResult
           .newBuilder()
-          .setDefineDatasetResult(
-            PipelineCommandResult.DefineDatasetResult
+          .setDefineOutputResult(
+            PipelineCommandResult.DefineOutputResult
               .newBuilder()
               .setResolvedIdentifier(identifier)
               .build())
@@ -168,65 +168,67 @@ private[connect] object PipelinesHandler extends Logging {
       sessionHolder.session)
   }
 
-  private def defineDataset(
-      dataset: proto.PipelineCommand.DefineDataset,
+  private def defineOutput(
+      output: proto.PipelineCommand.DefineOutput,
       sessionHolder: SessionHolder): TableIdentifier = {
-    val dataflowGraphId = dataset.getDataflowGraphId
+    val dataflowGraphId = output.getDataflowGraphId
     val graphElementRegistry =
       sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
 
-    dataset.getDatasetType match {
-      case proto.DatasetType.MATERIALIZED_VIEW | proto.DatasetType.TABLE =>
+    output.getOutputType match {
+      case proto.OutputType.MATERIALIZED_VIEW | proto.OutputType.TABLE =>
         val qualifiedIdentifier = GraphIdentifierManager
           .parseAndQualifyTableIdentifier(
             rawTableIdentifier = GraphIdentifierManager
-              .parseTableIdentifier(dataset.getDatasetName, sessionHolder.session),
+              .parseTableIdentifier(output.getOutputName, sessionHolder.session),
             currentCatalog = Some(graphElementRegistry.defaultCatalog),
             currentDatabase = Some(graphElementRegistry.defaultDatabase))
           .identifier
+
+        val tableDetails = output.getTableDetails
         graphElementRegistry.registerTable(
           Table(
             identifier = qualifiedIdentifier,
-            comment = Option(dataset.getComment),
-            specifiedSchema = dataset.getSchemaCase match {
-              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_DATA_TYPE =>
+            comment = Option(output.getComment),
+            specifiedSchema = tableDetails.getSchemaCase match {
+              case proto.PipelineCommand.DefineOutput.TableDetails.SchemaCase.SCHEMA_DATA_TYPE =>
                 Some(
                   DataTypeProtoConverter
-                    .toCatalystType(dataset.getSchemaDataType)
+                    .toCatalystType(tableDetails.getSchemaDataType)
                     .asInstanceOf[StructType])
-              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_STRING =>
-                Some(StructType.fromDDL(dataset.getSchemaString))
-              case proto.PipelineCommand.DefineDataset.SchemaCase.SCHEMA_NOT_SET =>
+              case proto.PipelineCommand.DefineOutput.TableDetails.SchemaCase.SCHEMA_STRING =>
+                Some(StructType.fromDDL(tableDetails.getSchemaString))
+              case proto.PipelineCommand.DefineOutput.TableDetails.SchemaCase.SCHEMA_NOT_SET =>
                 None
             },
-            partitionCols = Option(dataset.getPartitionColsList.asScala.toSeq)
+            partitionCols = Option(tableDetails.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
-            properties = dataset.getTablePropertiesMap.asScala.toMap,
+            properties = tableDetails.getTablePropertiesMap.asScala.toMap,
             origin = QueryOrigin(
-              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
-                dataset.getSourceCodeLocation.getFileName),
-              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
-                dataset.getSourceCodeLocation.getLineNumber),
+              filePath = Option.when(output.getSourceCodeLocation.hasFileName)(
+                output.getSourceCodeLocation.getFileName),
+              line = Option.when(output.getSourceCodeLocation.hasLineNumber)(
+                output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Table.toString),
               objectName = Option(qualifiedIdentifier.unquotedString),
               language = Option(Python())),
-            format = Option.when(dataset.hasFormat)(dataset.getFormat),
+            format = Option.when(tableDetails.hasFormat)(tableDetails.getFormat),
             normalizedPath = None,
-            isStreamingTable = dataset.getDatasetType == proto.DatasetType.TABLE))
+            isStreamingTable = output.getOutputType == proto.OutputType.TABLE))
         qualifiedIdentifier
-      case proto.DatasetType.TEMPORARY_VIEW =>
+      case proto.OutputType.TEMPORARY_VIEW =>
         val viewIdentifier = GraphIdentifierManager
           .parseAndValidateTemporaryViewIdentifier(rawViewIdentifier = GraphIdentifierManager
-            .parseTableIdentifier(dataset.getDatasetName, sessionHolder.session))
+            .parseTableIdentifier(output.getOutputName, sessionHolder.session))
         graphElementRegistry.registerView(
           TemporaryView(
             identifier = viewIdentifier,
-            comment = Option(dataset.getComment),
+            comment = Option(output.getComment),
             origin = QueryOrigin(
-              filePath = Option.when(dataset.getSourceCodeLocation.hasFileName)(
-                dataset.getSourceCodeLocation.getFileName),
-              line = Option.when(dataset.getSourceCodeLocation.hasLineNumber)(
-                dataset.getSourceCodeLocation.getLineNumber),
+              filePath = Option.when(output.getSourceCodeLocation.hasFileName)(
+                output.getSourceCodeLocation.getFileName),
+              line = Option.when(output.getSourceCodeLocation.hasLineNumber)(
+                output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
               language = Option(Python())),
@@ -234,7 +236,7 @@ private[connect] object PipelinesHandler extends Logging {
             sqlText = None))
         viewIdentifier
       case _ =>
-        throw new IllegalArgumentException(s"Unknown dataset type: ${dataset.getDatasetType}")
+        throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
     }
   }
 
@@ -286,12 +288,13 @@ private[connect] object PipelinesHandler extends Logging {
         }
       }
 
+    val relationFlowDetails = flow.getRelationFlowDetails
     graphElementRegistry.registerFlow(
       new UnresolvedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = destinationIdentifier,
-        func =
-          FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getRelation)),
+        func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
+          transformRelationFunc(relationFlowDetails.getRelation)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = false,
         queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),

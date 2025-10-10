@@ -53,8 +53,8 @@ class InitCLITests(ReusedConnectTestCase):
                 assert spec.name == project_name
                 registry = LocalGraphElementRegistry()
                 register_definitions(spec_path, registry, spec)
-                self.assertEqual(len(registry.datasets), 1)
-                self.assertEqual(registry.datasets[0].name, "example_python_materialized_view")
+                self.assertEqual(len(registry.outputs), 1)
+                self.assertEqual(registry.outputs[0].name, "example_python_materialized_view")
                 self.assertEqual(len(registry.flows), 1)
                 self.assertEqual(registry.flows[0].name, "example_python_materialized_view")
                 self.assertEqual(registry.flows[0].target, "example_python_materialized_view")

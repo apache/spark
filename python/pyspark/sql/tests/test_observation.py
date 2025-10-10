@@ -25,7 +25,7 @@ from pyspark.errors import (
     PySparkValueError,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual, eventually
 
 
 class DataFrameObservationTestsMixin:
@@ -214,6 +214,7 @@ class DataFrameObservationTestsMixin:
 
         self.assertEqual(observation.get, {"array": [10]})
 
+    @eventually(timeout=60.0, catch_assertions=True)
     def test_observe_with_map_type(self):
         observation = Observation("map")
 

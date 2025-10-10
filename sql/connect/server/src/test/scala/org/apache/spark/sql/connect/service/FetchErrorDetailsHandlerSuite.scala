@@ -291,9 +291,9 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     val migrationMessages =
       Seq("Please update your code to use new API", "See documentation for details")
     val mitigationConfig =
-      Some(MitigationConfig("spark.sql.legacy.behavior.enabled", "true"))
+      Some(new MitigationConfig("spark.sql.legacy.behavior.enabled", "true"))
     val breakingChangeInfo =
-      BreakingChangeInfo(migrationMessages, mitigationConfig, needsAudit = false)
+      new BreakingChangeInfo(migrationMessages, mitigationConfig, false)
 
     val testError = new TestSparkThrowableWithBreakingChange(
       "TEST_BREAKING_CHANGE_ERROR",
@@ -342,7 +342,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
   test(
     "throwableToFetchErrorDetailsResponse with breaking change info without mitigation config") {
     val migrationMessages = Seq("Migration message only")
-    val breakingChangeInfo = BreakingChangeInfo(migrationMessages, None, needsAudit = true)
+    val breakingChangeInfo = new BreakingChangeInfo(migrationMessages, None, true)
 
     val testError = new TestSparkThrowableWithBreakingChange(
       "TEST_BREAKING_CHANGE_NO_MITIGATION",
