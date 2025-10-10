@@ -455,55 +455,57 @@ trait APITest
     checkAnswer(spark.sql(s"SELECT * FROM mv_1"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
   }
 
-  test("Python Pipeline with sink") {
-    val session = spark
-    import session.implicits._
+  Seq("parquet", "json").foreach { format =>
+    test(s"Python Pipeline with $format sink") {
+      val session = spark
+      import session.implicits._
 
-    // create source data
-    spark.sql(s"CREATE TABLE src AS SELECT * FROM RANGE(5)")
+      // create source data
+      spark.sql(s"CREATE TABLE src AS SELECT * FROM RANGE(5)")
 
-    val dir = Utils.createTempDir()
-    try {
-      val pipelineSpec =
-        TestPipelineSpec(include = Seq("transformations/definition.py"))
-      val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
+      val dir = Utils.createTempDir()
+      try {
+        val pipelineSpec =
+          TestPipelineSpec(include = Seq("transformations/definition.py"))
+        val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
 
-      val sources = Seq(
-        PipelineSourceFile(
-          name = "transformations/definition.py",
-          contents =
-            s"""
-               |from pyspark import pipelines as dp
-               |from pyspark.sql import DataFrame, SparkSession
-               |
-               |spark = SparkSession.active()
-               |
-               |dp.create_sink(
-               |  "myParquetSink",
-               |  format = "parquet",
-               |  options = {"path": "${dir.getPath}"}
-               |)
-               |
-               |@dp.append_flow(
-               |  target = "myParquetSink",
-               |)
-               |def mySinkFlow():
-               |  return spark.readStream.table("src")
-               |""".stripMargin
+        val sources = Seq(
+          PipelineSourceFile(
+            name = "transformations/definition.py",
+            contents =
+              s"""
+                 |from pyspark import pipelines as dp
+                 |from pyspark.sql import DataFrame, SparkSession
+                 |
+                 |spark = SparkSession.active()
+                 |
+                 |dp.create_sink(
+                 |  "mySink",
+                 |  format = "$format",
+                 |  options = {"path": "${dir.getPath}"}
+                 |)
+                 |
+                 |@dp.append_flow(
+                 |  target = "mySink",
+                 |)
+                 |def mySinkFlow():
+                 |  return spark.readStream.table("src")
+                 |""".stripMargin
+          )
         )
-      )
 
-      val pipeline = createAndRunPipeline(pipelineConfig, sources)
-      awaitPipelineTermination(pipeline)
+        val pipeline = createAndRunPipeline(pipelineConfig, sources)
+        awaitPipelineTermination(pipeline)
 
-      // verify sink output
-      checkAnswer(
-        spark.read.format("parquet").load(dir.getPath),
-        Seq(0, 1, 2, 3, 4).toDF().collect().toSeq
-      )
-    } finally {
-      // clean up temp directory
-      Utils.deleteRecursively(dir)
+        // verify sink output
+        checkAnswer(
+          spark.read.format(format).load(dir.getPath),
+          Seq(0, 1, 2, 3, 4).toDF().collect().toSeq
+        )
+      } finally {
+        // clean up temp directory
+        Utils.deleteRecursively(dir)
+      }
     }
   }
 
