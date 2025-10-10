@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, ParameterSubstitutionInfo}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, ParameterSubstitutionInfo}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -83,7 +83,16 @@ class SparkSqlParser extends AbstractSqlParser {
       sqlText: String,
       parameterContext: ParameterContext): LogicalPlan = {
     parseWithParameters(sqlText, parameterContext) { parser =>
-      parser.singleStatement().accept(astBuilder).asInstanceOf[LogicalPlan]
+      val ctx = parser.compoundOrSingleStatement()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitCompoundOrSingleStatement(ctx) match {
+          case compoundBody: CompoundPlanStatement => compoundBody
+          case plan: LogicalPlan => plan
+          case _ =>
+            val position = Origin(None, None)
+            throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
+        }
+      }
     }
   }
 
@@ -186,23 +195,35 @@ class SparkSqlParser extends AbstractSqlParser {
     }
   }
 
+  /**
+   * Internal parse method for identifiers and data types that bypasses parameter logic.
+   * This ensures clean parsing without parameter substitution side effects.
+   */
+  private def parseIdentifierInternal[T](command: String)(toResult: SqlBaseParser => T): T = {
+    val variableSubstituted = substitutor.substitute(command)
+    super.parse(variableSubstituted)(toResult)
+  }
+
   // Override parsing methods that should NOT use parameter substitution.
   // These methods parse identifiers and data types where parameters don't make sense.
   override def parseTableIdentifier(sqlText: String): TableIdentifier = {
-    parseInternal(sqlText, None, isTopLevel = false) { parser =>
+    parseIdentifierInternal(sqlText) { parser =>
       parser.tableIdentifier().accept(astBuilder).asInstanceOf[TableIdentifier]
     }
   }
 
   override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
-    parseInternal(sqlText, None, isTopLevel = false) { parser =>
+    parseIdentifierInternal(sqlText) { parser =>
       parser.multipartIdentifier().accept(astBuilder).asInstanceOf[FunctionIdentifier]
     }
   }
 
   override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
-    parseInternal(sqlText, None, isTopLevel = false) { parser =>
-      parser.multipartIdentifier().accept(astBuilder).asInstanceOf[Seq[String]]
+    parseIdentifierInternal(sqlText) { parser =>
+      val ctx = parser.singleMultipartIdentifier()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitSingleMultipartIdentifier(ctx)
+      }
     }
   }
 

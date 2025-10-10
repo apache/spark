@@ -22,13 +22,17 @@ package org.apache.spark.sql.catalyst.parser
 case class Substitution(start: Int, end: Int, replacement: String)
 
 /**
- * Represents a range mapping from substituted positions to original positions.
- * This is used for efficient O(k) position mapping where k = number of substitutions.
+ * Represents a range mapping from substituted positions to original positions. This is used for
+ * efficient O(k) position mapping where k = number of substitutions.
  *
- * @param substitutedStart Start position in substituted text (inclusive)
- * @param substitutedEnd End position in substituted text (exclusive)
- * @param originalStart Start position in original text
- * @param offsetDelta Offset difference between original and substituted positions
+ * @param substitutedStart
+ *   Start position in substituted text (inclusive)
+ * @param substitutedEnd
+ *   End position in substituted text (exclusive)
+ * @param originalStart
+ *   Start position in original text
+ * @param offsetDelta
+ *   Offset difference between original and substituted positions
  */
 case class PositionRange(
     substitutedStart: Int,
@@ -42,9 +46,12 @@ case class PositionRange(
  * This implementation uses O(k) space and O(log k) lookup time where k = number of substitutions,
  * instead of the previous O(n) space where n = SQL text length.
  *
- * @param originalText The original SQL text with parameter markers
- * @param substitutedText The SQL text after parameter substitution
- * @param substitutions List of substitutions that were applied
+ * @param originalText
+ *   The original SQL text with parameter markers
+ * @param substitutedText
+ *   The SQL text after parameter substitution
+ * @param substitutions
+ *   List of substitutions that were applied
  */
 class PositionMapper(
     val originalText: String,
@@ -55,17 +62,18 @@ class PositionMapper(
   private val positionRanges = buildPositionRanges()
 
   /**
-   * Map a position in the substituted text back to the original text.
-   * Uses binary search for O(log k) lookup time.
+   * Map a position in the substituted text back to the original text. Uses binary search for
+   * O(log k) lookup time.
    *
-   * @param substitutedPos Position in the substituted text
-   * @return Position in the original text, or the same position if no mapping exists
+   * @param substitutedPos
+   *   Position in the substituted text
+   * @return
+   *   Position in the original text, or the same position if no mapping exists
    */
   def mapToOriginal(substitutedPos: Int): Int = {
     // Binary search for the range containing this position
     positionRanges.find(range =>
-      substitutedPos >= range.substitutedStart && substitutedPos < range.substitutedEnd
-    ) match {
+      substitutedPos >= range.substitutedStart && substitutedPos < range.substitutedEnd) match {
       case Some(range) =>
         // Position is within a substitution range
         range.originalStart
@@ -80,8 +88,8 @@ class PositionMapper(
   }
 
   /**
-   * Build sparse position ranges using functional approach.
-   * O(k) space complexity where k = number of substitutions.
+   * Build sparse position ranges using functional approach. O(k) space complexity where k =
+   * number of substitutions.
    */
   private def buildPositionRanges(): List[PositionRange] = {
     if (substitutions.isEmpty) return List.empty
@@ -108,14 +116,12 @@ class PositionMapper(
           substitutedStart = newSubstitutedPos,
           substitutedEnd = newSubstitutedPos + substitutedLength,
           originalStart = substitution.start,
-          offsetDelta = offsetDelta
-        )
+          offsetDelta = offsetDelta)
 
         PositionState(
           originalPos = substitution.end,
           substitutedPos = newSubstitutedPos + substitutedLength,
-          ranges = ranges :+ newRange
-        )
+          ranges = ranges :+ newRange)
     }
 
     finalState.ranges
@@ -130,10 +136,14 @@ object PositionMapper {
   /**
    * Create a PositionMapper from substitution information.
    *
-   * @param originalText The original SQL text
-   * @param substitutedText The substituted SQL text
-   * @param substitutions The substitutions that were applied
-   * @return A PositionMapper instance
+   * @param originalText
+   *   The original SQL text
+   * @param substitutedText
+   *   The substituted SQL text
+   * @param substitutions
+   *   The substitutions that were applied
+   * @return
+   *   A PositionMapper instance
    */
   def apply(
       originalText: String,
@@ -143,11 +153,13 @@ object PositionMapper {
   }
 
   /**
-   * Create an identity PositionMapper for when no substitutions occurred.
-   * This is used as an optimization when no parameter markers are present.
+   * Create an identity PositionMapper for when no substitutions occurred. This is used as an
+   * optimization when no parameter markers are present.
    *
-   * @param text The SQL text (both original and substituted are the same)
-   * @return A PositionMapper that maps positions to themselves
+   * @param text
+   *   The SQL text (both original and substituted are the same)
+   * @return
+   *   A PositionMapper that maps positions to themselves
    */
   def identity(text: String): PositionMapper = {
     new PositionMapper(text, text, List.empty)
