@@ -27895,8 +27895,13 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.functions.builtin
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.functions.builtin.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.functions.builtin.udf.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()
     )
