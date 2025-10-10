@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * A sink that stores the results in memory. This [[org.apache.spark.sql.execution.streaming.Sink]]
  * is primarily intended for use in unit tests and does not provide durability.
- * This is mostly copied from MemorySink, except that the data needs to be availalbe not in
+ * This is mostly copied from MemorySink, except that the data needs to be available not in
  * commit() but after each write.
  */
 class ContinuousMemorySink
