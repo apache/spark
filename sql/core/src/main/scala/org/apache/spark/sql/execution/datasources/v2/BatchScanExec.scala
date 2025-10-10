@@ -149,7 +149,6 @@ case class BatchScanExec(
 
   override def doCanonicalize(): BatchScanExec = {
     this.copy(
-      scan = scan.doCanonicalize(),
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),

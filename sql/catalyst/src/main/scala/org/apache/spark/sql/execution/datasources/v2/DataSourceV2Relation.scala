@@ -165,15 +165,13 @@ case class DataSourceV2ScanRelation(
     }
   }
 
-  override def doCanonicalize(): LogicalPlan = {
-    val canonicalized = this.copy(
+  override def doCanonicalize(): DataSourceV2ScanRelation = {
+    this.copy(
       relation = this.relation.copy(
         output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
       ),
-      output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
-      scan = this.scan.doCanonicalize()
+      output = this.output.map(QueryPlan.normalizeExpressions(_, this.output))
     )
-    canonicalized
   }
 }
 

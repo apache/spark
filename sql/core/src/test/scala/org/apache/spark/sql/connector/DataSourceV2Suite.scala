@@ -976,6 +976,37 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       assert(result.length == 1)
     }
   }
+
+  test("SPARK-53809: scan canonicalization") {
+    val df = spark.read.format(classOf[CanonicalizedScanDataSourceV2].getName).load()
+    val q1 = df.select($"i").where($"i" > 1 && $"i" > 2)
+    val q2 = df.select($"i").where($"i" > 2 && $"i" > 1)
+    val optimized1 = q1.queryExecution.optimizedPlan
+    val optimized2 = q2.queryExecution.optimizedPlan
+    val executed1 = q1.queryExecution.executedPlan
+    val executed2 = q2.queryExecution.executedPlan
+    val dsv2ScanRelation1 = optimized1.collect {
+      case d: DataSourceV2ScanRelation => d
+    }.head
+    val dsv2ScanRelation2 = optimized2.collect {
+      case d: DataSourceV2ScanRelation => d
+    }.head
+    val batchScanExec1 = executed1.collect {
+      case b: BatchScanExec => b
+    }.head
+    val batchScanExec2 = executed2.collect {
+      case b: BatchScanExec => b
+    }.head
+
+    assert(optimized1.equals(optimized2))
+    assert(optimized1.canonicalized == optimized2.canonicalized)
+    assert(executed1.equals(executed2))
+    assert(executed1.canonicalized == executed2.canonicalized)
+    assert(dsv2ScanRelation1.equals(dsv2ScanRelation2))
+    assert(dsv2ScanRelation1.canonicalized == dsv2ScanRelation2.canonicalized)
+    assert(batchScanExec1.equals(batchScanExec2))
+    assert(batchScanExec1.canonicalized == batchScanExec2.canonicalized)
+  }
 }
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition
@@ -1070,6 +1101,91 @@ class ScanDefinedColumnarSupport extends TestingV2Source {
     }
   }
 
+}
+
+class CanonicalizedScanDataSourceV2 extends TestingV2Source {
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    TestingV2Source.schema
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new CanonicalizedScanBuilder()
+    }
+  }
+}
+
+class CanonicalizedScanBuilder extends ScanBuilder
+                               with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
+
+  var requiredSchema: StructType = TestingV2Source.schema
+  var filters = Array.empty[Filter]
+
+  override def build(): Scan = new ScanWithCanonicalization(requiredSchema, filters)
+
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+    val (supported, unsupported) = filters.partition {
+      case GreaterThan("i", _: Int) => true
+      case _ => false
+    }
+    this.filters = supported
+    unsupported
+  }
+
+  override def pushedFilters(): Array[Filter] = filters
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+}
+
+class ScanWithCanonicalization(readSchema: StructType, val filters: Array[Filter])
+  extends Scan with Batch {
+
+  override def readSchema(): StructType = readSchema
+
+  override def toBatch: Batch = this
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case that: ScanWithCanonicalization =>
+        this.readSchema == that.readSchema &&
+          this.filters.sortBy(_.hashCode()).sameElements(that.filters.sortBy(_.hashCode()))
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    var result = readSchema.hashCode()
+    result = 31 * result + java.util.Arrays.hashCode(
+      filters.asInstanceOf[Array[AnyRef]])
+    result
+  }
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val lowerBound = filters.collectFirst {
+      case GreaterThan("i", v: Int) => v
+    }
+
+    val res = scala.collection.mutable.ArrayBuffer.empty[InputPartition]
+
+    if (lowerBound.isEmpty) {
+      res.append(RangeInputPartition(0, 5))
+      res.append(RangeInputPartition(5, 10))
+    } else if (lowerBound.get < 4) {
+      res.append(RangeInputPartition(lowerBound.get + 1, 5))
+      res.append(RangeInputPartition(5, 10))
+    } else if (lowerBound.get < 9) {
+      res.append(RangeInputPartition(lowerBound.get + 1, 10))
+    }
+
+    res.toArray
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    new AdvancedReaderFactory(readSchema)
+  }
 }
 
 
