@@ -275,7 +275,7 @@ class BatchTableWrite(
     }
 }
 
-/** A `StreamingFlowExecution` that writes a streaming `DataFrame` to a `Table`. */
+/** A `StreamingFlowExecution` that writes a streaming `DataFrame` to a `Sink`. */
 class SinkWrite(
   val identifier: TableIdentifier,
   val flow: ResolvedFlow,
