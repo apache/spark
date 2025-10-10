@@ -60,10 +60,7 @@ private[spark] object SparkThrowableHelper {
       context: String): String = {
     val displayMessage = errorReader.getErrorMessage(errorClass, messageParameters)
     val sqlState = getSqlState(errorClass)
-    val displaySqlState = if (sqlState == null) "" else s" SQLSTATE: $sqlState"
-    val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
-    val prefix = if (errorClass.startsWith("_LEGACY_ERROR_")) "" else s"[$errorClass] "
-    s"$prefix$displayMessage$displaySqlState$displayQueryContext"
+    formatErrorMessage(errorClass, displayMessage, sqlState, context)
   }
 
   def getMessage(
@@ -75,9 +72,18 @@ private[spark] object SparkThrowableHelper {
       errorClass,
       messageTemplate,
       messageParameters)
+    formatErrorMessage(errorClass, displayMessage, sqlState, "")
+  }
+
+  def formatErrorMessage(
+      errorClass: String,
+      displayMessage: String,
+      sqlState: String,
+      context: String): String = {
     val displaySqlState = if (sqlState == null) "" else s" SQLSTATE: $sqlState"
+    val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
     val prefix = if (errorClass.startsWith("_LEGACY_ERROR_")) "" else s"[$errorClass] "
-    s"$prefix$displayMessage$displaySqlState"
+    s"$prefix$displayMessage$displaySqlState$displayQueryContext"
   }
 
   def getSqlState(errorClass: String): String = {

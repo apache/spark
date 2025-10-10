@@ -64,7 +64,7 @@ class AnalysisException protected (
       cause = cause)
 
   /**
-   * External constructor for callers that want to supply NERF fields directly,
+   * External constructor for callers that want to supply error fields directly,
    * without requiring a local JSON definition for the error class.
    *
    * If `message` is provided (Some), it is used verbatim. Otherwise, the message
