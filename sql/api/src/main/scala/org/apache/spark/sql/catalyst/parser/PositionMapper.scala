@@ -90,9 +90,22 @@ class PositionMapper(
   /**
    * Build sparse position ranges using functional approach. O(k) space complexity where k =
    * number of substitutions.
+   *
+   * @example
+   *   For original "SELECT :name, :age" -> substituted "SELECT 'John', 25":
+   *   - Substitution(7, 12, "'John'") replaces ":name" with "'John'"
+   *   - Substitution(14, 18, "25") replaces ":age" with "25"
+   *
+   * Creates PositionRanges:
+   *   - Range for "'John'": substituted[7,13) -> original[7,12), offset=-1
+   *   - Range for "25": substituted[15,17) -> original[14,18), offset=-3
+   *
+   * This allows mapping any position in "SELECT 'John', 25" back to "SELECT :name, :age".
    */
   private def buildPositionRanges(): List[PositionRange] = {
-    if (substitutions.isEmpty) return List.empty
+    if (substitutions.isEmpty) {
+      return List.empty
+    }
 
     val sortedSubstitutions = substitutions.sortBy(_.start)
 

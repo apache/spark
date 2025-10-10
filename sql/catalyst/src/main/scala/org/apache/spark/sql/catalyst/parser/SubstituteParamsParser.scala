@@ -17,8 +17,6 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
-import org.antlr.v4.runtime.atn.PredictionMode
-import org.antlr.v4.runtime.misc.ParseCancellationException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -41,7 +39,7 @@ class SubstituteParamsParser extends Logging {
    * @param namedParams      Map of named parameter values (paramName -> value)
    * @param positionalParams List of positional parameter values in order
    * @return A tuple of (modified SQL string with parameters substituted,
-   *         number of consumed positional parameters)
+   *                   number of consumed positional parameters)
    */
   def substitute(
       sqlText: String,
@@ -59,42 +57,23 @@ class SubstituteParamsParser extends Logging {
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
-    // Match main parser configuration for consistent error messages
-    parser.addParseListener(PostProcessor)
-    parser.addParseListener(UnclosedCommentProcessor(sqlText, tokenStream))
-    parser.removeErrorListeners()
-    parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enabled = SQLConf.get.setOpsPrecedenceEnforced
-    parser.legacy_exponent_literal_as_decimal_enabled = SQLConf.get.exponentLiteralAsDecimalEnabled
-    parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
-    parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
-    parser.parameter_substitution_enabled = !SQLConf.get.legacyParameterSubstitutionConstantsOnly
+
+    // Use shared parser configuration to ensure consistency with main parser.
+    AbstractParser.configureParser(parser, sqlText, tokenStream, SQLConf.get)
 
     val astBuilder = new SubstituteParmsAstBuilder()
 
-    // Use the same two-stage parsing strategy as the main parser for consistent error messages
-    val ctx = try {
-      // First attempt: SLL mode with bail error strategy
-      parser.setErrorHandler(new SparkParserBailErrorStrategy())
-      parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
-      parser.compoundOrSingleStatement()
-    } catch {
-      case e: ParseCancellationException =>
-        // Second attempt: LL mode with full error strategy
-        tokenStream.seek(0) // rewind input stream
-        parser.reset()
-        parser.setErrorHandler(new SparkParserErrorStrategy())
-        parser.getInterpreter.setPredictionMode(PredictionMode.LL)
-        parser.compoundOrSingleStatement()
-    }
+    // Use shared two-stage parsing strategy for consistent error handling.
+    val ctx = AbstractParser.executeWithTwoStageStrategy(parser, tokenStream,
+      _.compoundOrSingleStatement())
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
-    // Substitute parameters in the original text
+    // Substitute parameters in the original text.
     val (substitutedSql, appliedSubstitutions) = substituteAtLocations(sqlText, parameterLocations,
       namedParams, positionalParams)
     val consumedPositionalParams = parameterLocations.positionalParameterLocations.length
 
-    // Create position mapper for error context translation
+    // Create position mapper for error context translation.
     val positionMapper = PositionMapper(sqlText, substitutedSql, appliedSubstitutions)
 
     (substitutedSql, consumedPositionalParams, positionMapper)
@@ -119,34 +98,15 @@ class SubstituteParamsParser extends Logging {
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
-    // Match main parser configuration for consistent error messages
-    parser.addParseListener(PostProcessor)
-    parser.addParseListener(UnclosedCommentProcessor(sqlText, tokenStream))
-    parser.removeErrorListeners()
-    parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enabled = SQLConf.get.setOpsPrecedenceEnforced
-    parser.legacy_exponent_literal_as_decimal_enabled = SQLConf.get.exponentLiteralAsDecimalEnabled
-    parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
-    parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
-    parser.parameter_substitution_enabled = !SQLConf.get.legacyParameterSubstitutionConstantsOnly
+
+    // Use shared parser configuration to ensure consistency with main parser.
+    AbstractParser.configureParser(parser, sqlText, tokenStream, SQLConf.get)
 
     val astBuilder = new SubstituteParmsAstBuilder()
 
-    // Use the same two-stage parsing strategy as the main parser for consistent error messages
-    val ctx = try {
-      // First attempt: SLL mode with bail error strategy
-      parser.setErrorHandler(new SparkParserBailErrorStrategy())
-      parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
-      parser.compoundOrSingleStatement()
-    } catch {
-      case e: ParseCancellationException =>
-        // Second attempt: LL mode with full error strategy
-        tokenStream.seek(0) // rewind input stream
-        parser.reset()
-        parser.setErrorHandler(new SparkParserErrorStrategy())
-        parser.getInterpreter.setPredictionMode(PredictionMode.LL)
-        parser.compoundOrSingleStatement()
-    }
+    // Use shared two-stage parsing strategy for consistent error handling.
+    val ctx = AbstractParser.executeWithTwoStageStrategy(parser, tokenStream,
+      _.compoundOrSingleStatement())
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
     val hasPositionalParams = parameterLocations.positionalParameterLocations.nonEmpty

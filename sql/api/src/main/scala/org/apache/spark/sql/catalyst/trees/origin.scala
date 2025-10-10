@@ -24,8 +24,7 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Information needed for parameter substitution position mapping. Stored directly in Origin to
- * avoid callback complexity.
+ * Information needed for parameter substitution position mapping.
  */
 case class ParameterSubstitutionInfo(
     originalSql: String,

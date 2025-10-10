@@ -219,17 +219,9 @@ trait SparkParserUtils {
     try {
       f
     } finally {
-      // When restoring origin, only preserve substitution info if it was already present
-      // in the original context. This prevents contamination across unrelated parsing operations.
-      val originToRestore = if (current.parameterSubstitutionInfo.isDefined) {
-        // Original context had substitution info - preserve it.
-        current
-      } else {
-        // Original context had no substitution info - don't add any.
-        current
-      }
-
-      CurrentOrigin.set(originToRestore)
+      // When restoring origin, preserve the original context to prevent contamination
+      // across unrelated parsing operations.
+      CurrentOrigin.set(current)
     }
   }
 

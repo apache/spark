@@ -107,61 +107,57 @@ object LiteralToSqlConverter {
           s"${expr.getClass.getSimpleName}. All expressions should be resolved before " +
           s"parameter conversion.")
       }
-      if (expr.foldable) {
-        val value = expr.eval()
-        val dataType = expr.dataType
-        convertLiteral(Literal.create(value, dataType))
-      } else {
+      if (!expr.foldable) {
         throw SparkException.internalError(
           s"LiteralToSqlConverter cannot convert non-foldable expression: " +
           s"${expr.getClass.getSimpleName}. All parameter values should be evaluable to " +
           s"literals before conversion.")
       }
+      val value = expr.eval()
+      val dataType = expr.dataType
+      convertLiteral(Literal.create(value, dataType))
   }
 
   private def convertLiteral(lit: Literal): String = {
-    // For simple cases, delegate to the existing Literal.sql method
-    // which already has the correct logic for most data types
+    // Try the existing Literal.sql method first for simple cases
     try {
-      lit.sql
+      return lit.sql
     } catch {
       case _: MatchError =>
-        // Fallback to manual conversion for cases where Literal.sql doesn't have
-        // a pattern match for the specific (value, dataType) combination
-        lit match {
-          case Literal(null, _) => "NULL"
-          case Literal(value, dataType) => dataType match {
-            case ArrayType(elementType, _) => convertArrayLiteral(value, elementType)
-            case MapType(keyType, valueType, _) => convertMapLiteral(value, keyType, valueType)
-            case _: StructType =>
-              // Struct literals (row values) - convert to ROW constructor
-              value match {
-                case row: InternalRow =>
-                  val structType = dataType.asInstanceOf[StructType]
-                  val fieldValues = (0 until row.numFields).map { i =>
-                    if (row.isNullAt(i)) {
-                      "NULL"
-                    } else {
-                      val fieldType = structType.fields(i).dataType
-                      val fieldValue = row.get(i, fieldType)
-                      val fieldLiteral = Literal.create(fieldValue, fieldType)
-                      convert(fieldLiteral)
-                    }
-                  }
-                  s"ROW(${fieldValues.mkString(", ")})"
-                case _ => s"ROW(${value.toString})"
-              }
-            case _ =>
-              // For any other unsupported type, fall back to string representation
-              s"'${value.toString.replace("'", "''")}'"
+        // Fall through to manual conversion below
+    }
+
+    // Manual conversion for cases where Literal.sql doesn't have a pattern match
+    lit match {
+      case Literal(null, _) => "NULL"
+      case Literal(value, ArrayType(elementType, _)) =>
+        convertArrayLiteral(value, elementType)
+      case Literal(value, MapType(keyType, valueType, _)) =>
+        convertMapLiteral(value, keyType, valueType)
+      case Literal(row: InternalRow, structType @ StructType(_)) =>
+        val fieldValues = (0 until row.numFields).map { i =>
+          if (row.isNullAt(i)) {
+            "NULL"
+          } else {
+            val fieldType = structType.fields(i).dataType
+            val fieldValue = row.get(i, fieldType)
+            val fieldLiteral = Literal.create(fieldValue, fieldType)
+            convert(fieldLiteral)
           }
         }
+        s"ROW(${fieldValues.mkString(", ")})"
+      case Literal(value, _: StructType) =>
+        s"ROW(${value.toString})"
+      case Literal(value, _) =>
+        // For any other unsupported type, fall back to string representation
+        s"'${value.toString.replace("'", "''")}'"
     }
   }
 
   private def convertArrayLiteral(value: Any, elementType: DataType): String = {
-    if (value == null) "NULL"
-    else {
+    if (value == null) {
+      "NULL"
+    } else {
       // Handle both Scala collections and Spark's GenericArrayData
       val arraySeq = value match {
         case gad: GenericArrayData =>
@@ -182,8 +178,9 @@ object LiteralToSqlConverter {
   }
 
   private def convertMapLiteral(value: Any, keyType: DataType, valueType: DataType): String = {
-    if (value == null) "NULL"
-    else {
+    if (value == null) {
+      "NULL"
+    } else {
       // Handle both Scala collections and Spark's ArrayBasedMapData
       val mapValue = value match {
         case abmd: ArrayBasedMapData =>

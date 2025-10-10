@@ -65,36 +65,14 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
-    if (conf.manageParserCaches) AbstractParser.installCaches(parser)
-    parser.addParseListener(PostProcessor)
-    parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
-    parser.removeErrorListeners()
-    parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
-    parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
-    parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
-    parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
-    parser.parameter_substitution_enabled = !conf.legacyParameterSubstitutionConstantsOnly
+
+    // Use shared parser configuration to ensure consistency.
+    AbstractParser.configureParser(parser, command, tokenStream, conf)
 
     // https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
     // Save a great deal of time on correct inputs by using a two-stage parsing strategy.
     try {
-      try {
-        // first, try parsing with potentially faster SLL mode w/ SparkParserBailErrorStrategy
-        parser.setErrorHandler(new SparkParserBailErrorStrategy())
-        parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
-        toResult(parser)
-      } catch {
-        case e: ParseCancellationException =>
-          // if we fail, parse with LL mode w/ SparkParserErrorStrategy
-          tokenStream.seek(0) // rewind input stream
-          parser.reset()
-
-          // Try Again.
-          parser.setErrorHandler(new SparkParserErrorStrategy())
-          parser.getInterpreter.setPredictionMode(PredictionMode.LL)
-          toResult(parser)
-      }
+      AbstractParser.executeWithTwoStageStrategy(parser, tokenStream, toResult)
     } catch {
       case e: ParseException if e.command.isDefined =>
         throw e
@@ -463,6 +441,77 @@ object AbstractParser extends Logging {
   final val BYTES_PER_DFA_STATE = 9700
 
   private val DRIVER_MEMORY = Runtime.getRuntime.maxMemory()
+
+  /**
+   * Configures an ANTLR SqlBaseParser with the standard Spark SQL settings. This ensures all
+   * parsers (main parser, identifier parser, parameter substitution parser) use identical ANTLR
+   * configuration to prevent drift and inconsistencies.
+   *
+   * @param parser
+   *   The SqlBaseParser to configure
+   * @param command
+   *   The SQL command being parsed (for error listeners)
+   * @param tokenStream
+   *   The token stream (for unclosed comment detection)
+   * @param conf
+   *   The configuration to use for parser settings
+   */
+  def configureParser(
+      parser: SqlBaseParser,
+      command: String,
+      tokenStream: CommonTokenStream,
+      conf: SqlApiConf): Unit = {
+    // Install managed caches if enabled.
+    if (conf.manageParserCaches) installCaches(parser)
+
+    // Configure parse listeners.
+    parser.addParseListener(PostProcessor)
+    parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
+
+    // Configure error listeners.
+    parser.removeErrorListeners()
+    parser.addErrorListener(ParseErrorListener)
+
+    // Configure parser behavior settings.
+    parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
+    parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
+    parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
+    parser.parameter_substitution_enabled = !conf.legacyParameterSubstitutionConstantsOnly
+  }
+
+  /**
+   * Executes a parsing operation using the standard two-stage parsing strategy. This ensures
+   * consistent error handling and performance optimization across all parsers.
+   *
+   * @param parser
+   *   The configured SqlBaseParser to use
+   * @param tokenStream
+   *   The token stream (for rewinding on retry)
+   * @param parseOperation
+   *   The parsing operation to execute
+   * @return
+   *   The result of the parsing operation
+   */
+  def executeWithTwoStageStrategy[T](
+      parser: SqlBaseParser,
+      tokenStream: CommonTokenStream,
+      parseOperation: SqlBaseParser => T): T = {
+    try {
+      // First attempt: SLL mode with bail error strategy.
+      parser.setErrorHandler(new SparkParserBailErrorStrategy())
+      parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
+      parseOperation(parser)
+    } catch {
+      case e: ParseCancellationException =>
+        // Second attempt: LL mode with full error strategy.
+        tokenStream.seek(0) // rewind input stream
+        parser.reset()
+        parser.setErrorHandler(new SparkParserErrorStrategy())
+        parser.getInterpreter.setPredictionMode(PredictionMode.LL)
+        parseOperation(parser)
+    }
+  }
 
   private case class AntlrCaches(atn: ATN) {
     private[parser] val predictionContextCache: PredictionContextCache =

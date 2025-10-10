@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.collection.mutable
+
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -27,11 +29,10 @@ import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
  */
 class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
-  private val namedParams = scala.collection.mutable.Set[String]()
-  private val positionalParams = scala.collection.mutable.ListBuffer[Int]()
-  private val namedParamLocations =
-    scala.collection.mutable.Map[String, scala.collection.mutable.ListBuffer[ParameterLocation]]()
-  private val positionalParamLocations = scala.collection.mutable.ListBuffer[ParameterLocation]()
+  private val namedParams = mutable.Set[String]()
+  private val positionalParams = mutable.ListBuffer[Int]()
+  private val namedParamLocations = mutable.Map[String, mutable.ListBuffer[ParameterLocation]]()
+  private val positionalParamLocations = mutable.ListBuffer[ParameterLocation]()
 
   /**
    * Extract parameter location information from a parse context. This method traverses the parse
@@ -64,9 +65,8 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       // Calculate the location of the entire parameter (including the colon)
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = ctx.getStop.getStopIndex + 1
-      val locations = namedParamLocations.getOrElseUpdate(
-        paramName,
-        scala.collection.mutable.ListBuffer[ParameterLocation]())
+      val locations =
+        namedParamLocations.getOrElseUpdate(paramName, mutable.ListBuffer[ParameterLocation]())
       locations += ParameterLocation(startIndex, stopIndex)
 
       null // Return value not used
@@ -101,9 +101,8 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       // Calculate the location of the entire parameter (including the colon)
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = ctx.getStop.getStopIndex + 1
-      val locations = namedParamLocations.getOrElseUpdate(
-        paramName,
-        scala.collection.mutable.ListBuffer[ParameterLocation]())
+      val locations =
+        namedParamLocations.getOrElseUpdate(paramName, mutable.ListBuffer[ParameterLocation]())
       locations += ParameterLocation(startIndex, stopIndex)
 
       null // Return value not used
@@ -166,7 +165,9 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    * Visit all children of a node to find parameters.
    */
   override def visitChildren(node: RuleNode): AnyRef = {
-    if (node == null) return null
+    if (node == null) {
+      return null
+    }
 
     var result: AnyRef = null
     for (i <- 0 until node.getChildCount) {
