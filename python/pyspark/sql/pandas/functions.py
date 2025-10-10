@@ -882,6 +882,10 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.functions
+    from pyspark.testing.utils import have_pandas, have_pyarrow
+
+    if not have_pandas or not have_pyarrow:
+        sys.exit(0)
 
     globs = pyspark.sql.column.__dict__.copy()
     spark = (
