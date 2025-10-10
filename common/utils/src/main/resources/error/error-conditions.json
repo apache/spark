@@ -224,12 +224,6 @@
     ],
     "sqlState" : "42846"
   },
-  "CANNOT_CONVERT_DSV2_PREDICATE_TO_CATALYST" : {
-    "message" : [
-      "Cannot convert the datasource v2 predicate <predicate> to Catalyst expression."
-    ],
-    "sqlState" : "42846"
-  },
   "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
     "message" : [
       "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
