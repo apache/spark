@@ -96,16 +96,22 @@ trait WithOrigin {
             field.set(this, translatedContexts)
             return this // Successfully updated in-place!
           } catch {
-            case _: Exception => // Field update failed, continue to try other methods
+            case _: NoSuchFieldException | _: IllegalAccessException |
+                 _: IllegalArgumentException =>
+              // Field update failed, continue to try other methods
           }
         } catch {
-          case _: Exception => // Method doesn't exist, try next
+          case _: NoSuchMethodException | _: IllegalAccessException | _: IllegalArgumentException |
+               _: java.lang.reflect.InvocationTargetException | _: ClassCastException =>
+            // Method doesn't exist or invocation failed, try next
         }
       }
 
       this // No update possible, return unchanged
     } catch {
-      case _: Exception => this // Return unchanged if anything fails
+      case _: SecurityException =>
+        // Security manager prevented reflection access
+        this
     }
   }
 }

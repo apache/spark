@@ -55,12 +55,6 @@ class SparkSqlParser extends AbstractSqlParser {
   private val substitutor = new VariableSubstitution()
   private[execution] val parameterHandler = new ParameterHandler()
 
-  // Thread-local flag to track whether we're in a top-level parse operation
-  // This is used to prevent parameter substitution during identifier/data type parsing
-  private val isTopLevelParse = new ThreadLocal[Boolean] {
-    override def initialValue(): Boolean = true
-  }
-
   /**
    * Parse SQL with explicit parameter context, avoiding thread-local usage.
    * This is the preferred method for parsing SQL with parameters.
@@ -74,32 +68,73 @@ class SparkSqlParser extends AbstractSqlParser {
       command: String,
       parameterContext: ParameterContext)
       (toResult: SqlBaseParser => T): T = {
-    val wasTopLevel = isTopLevelParse.get()
+    parseInternal(command, Some(parameterContext), isTopLevel = true)(toResult)
+  }
+
+  /**
+   * Parse SQL plan with explicit parameter context, avoiding thread-local usage.
+   * This is the preferred method for parsing SQL plans with parameters.
+   *
+   * @param sqlText The SQL text to parse
+   * @param parameterContext The parameter context containing parameter values
+   * @return The parsed logical plan
+   */
+  override def parsePlanWithParameters(
+      sqlText: String,
+      parameterContext: ParameterContext): LogicalPlan = {
+    parseWithParameters(sqlText, parameterContext) { parser =>
+      parser.singleStatement().accept(astBuilder).asInstanceOf[LogicalPlan]
+    }
+  }
+
+  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+    parseInternal(command, None, isTopLevel = true)(toResult)
+  }
+
+  /**
+   * Internal parse method that handles both parameter substitution and regular parsing.
+   *
+   * @param command The SQL text to parse
+   * @param parameterContext Optional parameter context for parameter substitution
+   * @param isTopLevel Whether this is a top-level parse (vs identifier/data type parsing)
+   * @param toResult Function to convert the parser result
+   * @return The parsed result
+   */
+  private def parseInternal[T](
+      command: String,
+      parameterContext: Option[ParameterContext],
+      isTopLevel: Boolean)
+      (toResult: SqlBaseParser => T): T = {
 
     // Clear any stale substitution info from previous parsing operations to prevent contamination.
-    if (wasTopLevel) {
+    if (isTopLevel) {
       CurrentOrigin.set(CurrentOrigin.get.copy(parameterSubstitutionInfo = None))
     }
 
     // Step 1: Check if parameter substitution should occur.
-    val (paramSubstituted, substitutionOccurred, hasParameters) =
-      if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-        // Legacy mode: skip parameter substitution but still detect parameters for context mapping.
-        // Parameters detected but substitution skipped in legacy mode.
-        // Position mapping will be set up below.
-        (command, false, true)
-      } else {
-        // Modern mode: perform parameter substitution if parameters are present.
-        val substituted = substituteParametersOrSetupCallback(command, parameterContext)
-        (substituted, substituted != command, true) // Track if substitution occurred.
-      }
+    val (paramSubstituted, substitutionOccurred, hasParameters) = parameterContext match {
+      case Some(context) if isTopLevel =>
+        if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
+          // Legacy mode: skip parameter substitution but still detect parameters for context.
+          // Parameters detected but substitution skipped in legacy mode.
+          // Position mapping will be set up below.
+          (command, false, true)
+        } else {
+          // Modern mode: perform parameter substitution if parameters are present.
+          val substituted = substituteParametersOrSetupCallback(command, context)
+          (substituted, substituted != command, true) // Track if substitution occurred.
+        }
+      case _ =>
+        // No parameter context or not top-level - no parameter substitution.
+        (command, false, false)
+    }
 
     // Step 2: Apply existing variable substitution.
     val variableSubstituted = substitutor.substitute(paramSubstituted)
 
     // Step 3: Set up origin with original SQL text for parameter-aware error reporting.
     val currentOrigin = CurrentOrigin.get
-    val originToUse = if ((substitutionOccurred || hasParameters) && wasTopLevel) {
+    val originToUse = if ((substitutionOccurred || hasParameters) && isTopLevel) {
       // Parameter substitution occurred or parameters detected in legacy mode.
       // Set original SQL text for accurate error position mapping.
       // IMPORTANT: Preserve any substitution info set by parameter substitution.
@@ -132,47 +167,6 @@ class SparkSqlParser extends AbstractSqlParser {
     }
   }
 
-  /**
-   * Parse SQL plan with explicit parameter context, avoiding thread-local usage.
-   * This is the preferred method for parsing SQL plans with parameters.
-   *
-   * @param sqlText The SQL text to parse
-   * @param parameterContext The parameter context containing parameter values
-   * @return The parsed logical plan
-   */
-  override def parsePlanWithParameters(
-      sqlText: String,
-      parameterContext: ParameterContext): LogicalPlan = {
-    parseWithParameters(sqlText, parameterContext) { parser =>
-      parser.singleStatement().accept(astBuilder).asInstanceOf[LogicalPlan]
-    }
-  }
-
-  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    val wasTopLevel = isTopLevelParse.get()
-
-    // Clear any stale substitution info from previous parsing operations to prevent contamination.
-    if (wasTopLevel) {
-      CurrentOrigin.set(CurrentOrigin.get.copy(parameterSubstitutionInfo = None))
-    }
-
-    // Step 1: No parameter substitution in this method - parameters should be handled
-    // by the new parseWithParameters method for better API design.
-    val paramSubstituted = command
-    val substitutionOccurred = false
-    val hasParameters = false
-
-    // Step 2: Apply existing variable substitution.
-    val variableSubstituted = substitutor.substitute(paramSubstituted)
-
-    // Step 3: Use current origin unchanged since no parameter handling.
-    val currentOrigin = CurrentOrigin.get
-
-    CurrentOrigin.withOrigin(currentOrigin) {
-      super.parse(variableSubstituted)(toResult)
-    }
-  }
-
   private def substituteParametersOrSetupCallback(
       command: String,
       context: ParameterContext): String = {
@@ -195,32 +189,20 @@ class SparkSqlParser extends AbstractSqlParser {
   // Override parsing methods that should NOT use parameter substitution.
   // These methods parse identifiers and data types where parameters don't make sense.
   override def parseTableIdentifier(sqlText: String): TableIdentifier = {
-    val wasTopLevel = isTopLevelParse.get()
-    isTopLevelParse.set(false)  // Disable parameter substitution for identifier parsing
-    try {
-      super.parseTableIdentifier(sqlText)
-    } finally {
-      isTopLevelParse.set(wasTopLevel)  // Restore previous state
+    parseInternal(sqlText, None, isTopLevel = false) { parser =>
+      parser.tableIdentifier().accept(astBuilder).asInstanceOf[TableIdentifier]
     }
   }
 
   override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
-    val wasTopLevel = isTopLevelParse.get()
-    isTopLevelParse.set(false)  // Disable parameter substitution for identifier parsing
-    try {
-      super.parseFunctionIdentifier(sqlText)
-    } finally {
-      isTopLevelParse.set(wasTopLevel)  // Restore previous state
+    parseInternal(sqlText, None, isTopLevel = false) { parser =>
+      parser.multipartIdentifier().accept(astBuilder).asInstanceOf[FunctionIdentifier]
     }
   }
 
   override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
-    val wasTopLevel = isTopLevelParse.get()
-    isTopLevelParse.set(false)  // Disable parameter substitution for identifier parsing
-    try {
-      super.parseMultipartIdentifier(sqlText)
-    } finally {
-      isTopLevelParse.set(wasTopLevel)  // Restore previous state
+    parseInternal(sqlText, None, isTopLevel = false) { parser =>
+      parser.multipartIdentifier().accept(astBuilder).asInstanceOf[Seq[String]]
     }
   }
 

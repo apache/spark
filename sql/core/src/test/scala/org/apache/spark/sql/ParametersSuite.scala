@@ -88,6 +88,85 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         stop = 8))
   }
 
+  test("case sensitivity for named parameters in shared grammar contexts") {
+    // Test parameters in WHERE clause with integer comparison
+    // (uses integerValue -> parameterMarker rule)
+    withTempView("test_data") {
+      spark.range(10).createOrReplaceTempView("test_data")
+
+      checkAnswer(
+        spark.sql(
+          "SELECT id FROM test_data WHERE id >= :min_val AND id <= :MIN_VAL ORDER BY id",
+          Map("min_val" -> 2, "MIN_VAL" -> 5)
+        ),
+        Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil
+      )
+
+      // Verify that mismatched case fails in integerValue context
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(
+            "SELECT id FROM test_data WHERE id = :param",
+            Map("PARAM" -> 1)  // Wrong case
+          )
+        },
+        condition = "UNBOUND_SQL_PARAMETER",
+        parameters = Map("name" -> "param"),
+        context = ExpectedContext(
+          fragment = ":param",
+          start = 36,
+          stop = 41))
+    }
+
+    // Test parameters in LIMIT clause (uses integerValue -> parameterMarker rule)
+    withTempView("limit_test") {
+      spark.range(10).createOrReplaceTempView("limit_test")
+
+      checkAnswer(
+        spark.sql(
+          "SELECT id FROM limit_test ORDER BY id LIMIT :limit_param",
+          Map("limit_param" -> 3)
+        ),
+        Row(0) :: Row(1) :: Row(2) :: Nil
+      )
+
+      // Verify that mismatched case fails in LIMIT context
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(
+            "SELECT id FROM limit_test ORDER BY id LIMIT :limit_param",
+            Map("LIMIT_PARAM" -> 3)  // Wrong case
+          )
+        },
+        condition = "UNBOUND_SQL_PARAMETER",
+        parameters = Map("name" -> "limit_param"),
+        context = ExpectedContext(
+          fragment = ":limit_param",
+          start = 44,
+          stop = 55))
+    }
+
+    // Test case sensitivity consistency between legacy and modern modes
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "false") {
+      val modernResult = spark.sql(
+        "SELECT 1 WHERE 1 = :param AND 2 = :Param",
+        Map("param" -> 1, "Param" -> 2)
+      ).collect()
+
+      withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+        val legacyResult = spark.sql(
+          "SELECT 1 WHERE 1 = :param AND 2 = :Param",
+          Map("param" -> 1, "Param" -> 2)
+        ).collect()
+
+        // Both modes should produce the same results
+        assert(modernResult.sameElements(legacyResult))
+        assert(modernResult.length == 1)
+        assert(modernResult(0).getInt(0) == 1)
+      }
+    }
+  }
+
   test("named parameters in CTE") {
     val sqlText =
       """

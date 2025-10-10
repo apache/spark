@@ -44,9 +44,9 @@ class SubstituteParamsParser extends Logging {
    *         number of consumed positional parameters)
    */
   def substitute(
-                  sqlText: String,
-                  namedParams: Map[String, String] = Map.empty,
-                  positionalParams: List[String] = List.empty): (String, Int, PositionMapper) = {
+      sqlText: String,
+      namedParams: Map[String, String] = Map.empty,
+      positionalParams: List[String] = List.empty): (String, Int, PositionMapper) = {
 
     // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
     if (!sqlText.contains("?") && !sqlText.contains(":")) {

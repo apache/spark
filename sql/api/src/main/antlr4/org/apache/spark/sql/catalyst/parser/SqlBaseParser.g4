@@ -1604,8 +1604,7 @@ number
 
 integerValue
     : INTEGER_VALUE                                                                          #integerVal
-    | {parameter_substitution_enabled}? namedParameterMarker                                 #namedParameterIntegerValue
-    | {parameter_substitution_enabled}? QUESTION                                             #positionalParameterIntegerValue
+    | parameterMarker                                                                        #parameterIntegerValue
     ;
 
 columnConstraintDefinition
@@ -1686,10 +1685,14 @@ stringLitWithoutMarker
     | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #doubleQuotedStringLiteralValue
 ;
 
+parameterMarker
+    : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule
+    | {parameter_substitution_enabled}? QUESTION                                               #positionalParameterMarkerRule
+    ;
+
 stringLit
     : stringLitWithoutMarker                                                                   #stringLiteralInContext
-    | {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterValue
-    | {parameter_substitution_enabled}? QUESTION                                               #positionalParameterValue
+    | parameterMarker                                                                          #parameterStringValue
     ;
 
 comment

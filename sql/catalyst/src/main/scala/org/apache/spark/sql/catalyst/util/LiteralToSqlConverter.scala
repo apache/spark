@@ -125,9 +125,9 @@ object LiteralToSqlConverter {
     try {
       lit.sql
     } catch {
-      case _: Exception =>
-        // Fallback to manual conversion for cases where Literal.sql doesn't work
-        // (e.g., complex types that need constructor syntax)
+      case _: MatchError =>
+        // Fallback to manual conversion for cases where Literal.sql doesn't have
+        // a pattern match for the specific (value, dataType) combination
         lit match {
           case Literal(null, _) => "NULL"
           case Literal(value, dataType) => dataType match {

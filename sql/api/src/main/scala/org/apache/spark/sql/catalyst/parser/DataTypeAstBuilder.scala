@@ -59,30 +59,24 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     visit(ctx.stringLitWithoutMarker).asInstanceOf[Token]
   }
 
-  override def visitNamedParameterValue(ctx: NamedParameterValueContext): Token = {
+  override def visitNamedParameterMarkerRule(ctx: NamedParameterMarkerRuleContext): Token = {
     // This should be unreachable due to grammar-level blocking of parameter markers
     // when legacy parameter substitution is enabled
     QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
   }
 
-  override def visitNamedParameterIntegerValue(ctx: NamedParameterIntegerValueContext): Token = {
+  override def visitPositionalParameterMarkerRule(
+      ctx: PositionalParameterMarkerRuleContext): Token = {
     // This should be unreachable due to grammar-level blocking of parameter markers
     // when legacy parameter substitution is enabled
     QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
   }
 
-  override def visitPositionalParameterIntegerValue(
-      ctx: PositionalParameterIntegerValueContext): Token = {
-    // This should be unreachable due to grammar-level blocking of parameter markers
-    // when legacy parameter substitution is enabled
-    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
-  }
-
-  override def visitPositionalParameterValue(ctx: PositionalParameterValueContext): Token = {
-    // This should be unreachable due to grammar-level blocking of parameter markers
-    // when legacy parameter substitution is enabled
-    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
-  }
+  /**
+   * Visit a stringLit context by delegating to the appropriate labeled visitor.
+   */
+  def visitStringLit(ctx: StringLitContext): Token =
+    Option(ctx).map(visit(_).asInstanceOf[Token]).orNull
 
   /**
    * Create a multi-part identifier.
@@ -287,12 +281,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitCommentSpec(ctx: CommentSpecContext): String = withOrigin(ctx) {
     string(visitStringLit(ctx.stringLit))
   }
-
-  /**
-   * Visit a stringLit context by delegating to the appropriate labeled visitor.
-   */
-  def visitStringLit(ctx: StringLitContext): Token =
-    Option(ctx).map(visit(_).asInstanceOf[Token]).orNull
 
   /**
    * Returns a collation name.
