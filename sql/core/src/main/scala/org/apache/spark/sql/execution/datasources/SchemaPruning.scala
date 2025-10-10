@@ -152,6 +152,10 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
     // Build a map: root column name -> set of field paths accessed
     val nestedFieldAccesses = scala.collection.mutable.Map[String, Set[Seq[String]]]()
+    // Track paths from GetArrayStructFields separately - these use ordinals
+    // and need special handling to preserve field order
+    val arrayStructFieldPaths =
+      scala.collection.mutable.Map[String, Set[Seq[String]]]()
     var tracedThroughGenerate = false
 
     // Get relation column names and IDs
@@ -164,49 +168,94 @@ object SchemaPruning extends Rule[LogicalPlan] {
         gasf, generateMappings, relationExprIds)
       if (usedGenerate) tracedThroughGenerate = true
       rootAndPath.foreach { case (rootCol, path) =>
+        logInfo(s"SCHEMA_PRUNING_DEBUG: GetArrayStructFields path=$path")
         val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
         nestedFieldAccesses(rootCol) = existingPaths + path
+        // Track this as an array struct field path
+        val existingArrayPaths = arrayStructFieldPaths.getOrElse(rootCol, Set.empty)
+        arrayStructFieldPaths(rootCol) = existingArrayPaths + path
       }
     }
 
     // Process GetStructField expressions (like request.available)
+    // BUT skip paths that are prefixes of GetArrayStructFields paths
+    // (e.g., if we have request.servedItems.clicked via GetArrayStructFields,
+    // don't also add request.servedItems from GetStructField)
     structFields.foreach { gsf =>
       val (rootAndPath, usedGenerate) = traceStructFieldThroughGenerates(
         gsf, generateMappings, relationExprIds)
       if (usedGenerate) tracedThroughGenerate = true
       rootAndPath.foreach { case (rootCol, path) =>
-        val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
-        nestedFieldAccesses(rootCol) = existingPaths + path
+        // Check if this path is a prefix of any GetArrayStructFields path
+        val arrayPathsForCol = arrayStructFieldPaths.getOrElse(rootCol, Set.empty)
+        val isPrefix = arrayPathsForCol.exists(_.startsWith(path))
+
+        logInfo(s"SCHEMA_PRUNING_DEBUG: GetStructField path=$path, " +
+          s"arrayPaths=$arrayPathsForCol, isPrefix=$isPrefix")
+
+        if (!isPrefix) {
+          // Only add if it's not a prefix of a GetArrayStructFields path
+          val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
+          nestedFieldAccesses(rootCol) = existingPaths + path
+        }
       }
     }
 
     // SPARK-47230: Only apply enhanced pruning if we actually traced through Generate nodes
-    // AND we have nested array accesses (chained explodes) OR struct field accesses
-    // This preserves existing behavior for single-level explode operations
-    // (SPARK-34638/SPARK-41961)
-    if (!tracedThroughGenerate || (arrayStructFields.isEmpty && structFields.isEmpty)) {
+    // This enables pruning for explode/posexplode cases
+    if (!tracedThroughGenerate) {
       return None
     }
-
 
     if (nestedFieldAccesses.isEmpty) {
       return None
     }
 
+    // Don't prune when multiple fields AT THE SAME DEPTH are accessed from the same
+    // root column after a generator
+    // (SPARK-34638/SPARK-41961: "Currently we don't prune multiple field case")
+    // This prevents pruning when accessing like friend.first AND friend.middle
+    // But allows pruning for chained explodes: request.available (depth 1) +
+    // request.servedItems.clicked (depth 2)
+    nestedFieldAccesses.foreach { case (rootCol, paths) =>
+      logInfo(s"SCHEMA_PRUNING_DEBUG: rootCol=$rootCol, allPaths=$paths")
+      val groupedByDepth = paths.groupBy(_.length)
+      groupedByDepth.foreach { case (depth, pathsAtDepth) =>
+        logInfo(s"SCHEMA_PRUNING_DEBUG: depth=$depth, pathsAtDepth=$pathsAtDepth, " +
+          s"count=${pathsAtDepth.size}")
+      }
+    }
+    if (nestedFieldAccesses.values.exists { paths =>
+      // Group paths by their depth (length), check if any depth level has multiple paths
+      val hasMultipleAtSameDepth = paths.groupBy(_.length).values.exists(_.size > 1)
+      if (hasMultipleAtSameDepth) {
+        logInfo(s"SCHEMA_PRUNING_DEBUG: BLOCKING PRUNING - multiple fields at same depth: $paths")
+      }
+      hasMultipleAtSameDepth
+    }) {
+      return None
+    }
+
     // Filter to only keep root columns that exist in the relation
+    logInfo(s"SCHEMA_PRUNING_DEBUG: relationColumnNames=$relationColumnNames")
     val filteredAccesses = nestedFieldAccesses.filter { case (rootCol, _) =>
       relationColumnNames.contains(rootCol)
     }
 
-
+    logInfo(s"SCHEMA_PRUNING_DEBUG: filteredAccesses=$filteredAccesses")
     if (filteredAccesses.isEmpty) {
+      logInfo(s"SCHEMA_PRUNING_DEBUG: RETURNING None - filteredAccesses is empty!")
       return None
     }
 
     // Build pruned schema by keeping only accessed nested fields
     val originalSchema = hadoopFsRelation.dataSchema
+    // Pass arrayStructFieldPaths to avoid pruning array structs with ordinal-based access
+    val filteredArrayPaths = arrayStructFieldPaths.filter { case (rootCol, _) =>
+      relationColumnNames.contains(rootCol)
+    }
     val prunedSchema = pruneNestedArraySchema(
-      originalSchema, filteredAccesses.toMap, requiredColumns)
+      originalSchema, filteredAccesses.toMap, requiredColumns, filteredArrayPaths.toMap)
 
 
     // Check if we actually pruned anything
@@ -284,13 +333,14 @@ object SchemaPruning extends Rule[LogicalPlan] {
       case attr: AttributeReference =>
         // Check if this attribute is from a Generate node
         generateMappings.get(attr.exprId) match {
-          case Some(Explode(child)) =>
-            // This attribute comes from explode(child) - mark as used Generate
+          case Some(gen: UnaryExpression) =>
+            // This attribute comes from a unary generator (explode, posexplode, etc.)
+            // Extract the child and trace through it
             val (result, _) = traceArrayAccessThroughGenerates(
-              child, generateMappings, relationExprIds)
+              gen.child, generateMappings, relationExprIds)
             (result, true)
           case Some(other) =>
-            // Other generator types - mark as used Generate
+            // Other generator types without a single child - mark as used Generate
             val (result, _) = traceArrayAccessThroughGenerates(
               other, generateMappings, relationExprIds)
             (result, true)
@@ -358,13 +408,25 @@ object SchemaPruning extends Rule[LogicalPlan] {
   private def pruneNestedArraySchema(
       schema: StructType,
       nestedFieldAccesses: Map[String, Set[Seq[String]]],
-      requiredColumns: Set[String]): StructType = {
+      requiredColumns: Set[String],
+      arrayStructFieldPaths: Map[String, Set[Seq[String]]]): StructType = {
+
+    logInfo(s"SCHEMA_PRUNING_DEBUG: pruneNestedArraySchema called")
+    logInfo(s"SCHEMA_PRUNING_DEBUG: nestedFieldAccesses=$nestedFieldAccesses")
+    logInfo(s"SCHEMA_PRUNING_DEBUG: arrayStructFieldPaths=$arrayStructFieldPaths")
 
     val prunedFields = schema.fields.flatMap { field =>
       nestedFieldAccesses.get(field.name) match {
         case Some(paths) if paths.nonEmpty =>
           // This root field has specific nested paths accessed
-          Some(pruneFieldByPaths(field, paths.toSeq))
+          // Get the GetArrayStructFields paths for this field to pass down
+          val arrayPaths = arrayStructFieldPaths.getOrElse(field.name, Set.empty)
+          logInfo(s"SCHEMA_PRUNING_DEBUG: Processing field ${field.name}, " +
+            s"paths=$paths, arrayPaths=$arrayPaths")
+          val prunedField = pruneFieldByPaths(field, paths.toSeq, arrayPaths)
+          logInfo(s"SCHEMA_PRUNING_DEBUG: After pruning ${field.name}, " +
+            s"fieldCount=${countLeaves(prunedField.dataType)}")
+          Some(prunedField)
         case None =>
           // SPARK-47230: Preserve top-level columns that are directly referenced
           // (e.g., columns used in GROUP BY, WHERE without nested access)
@@ -381,27 +443,101 @@ object SchemaPruning extends Rule[LogicalPlan] {
   }
 
   /**
+   * Prune a StructType while preserving all field positions (for GetArrayStructFields ordinals).
+   *
+   * This function keeps ALL fields in the struct to maintain ordinal positions,
+   * but recursively prunes nested levels for fields that have deeper paths (length > 1).
+   *
+   * For example, if paths = Seq(Seq("a"), Seq("b", "c")) and the struct has fields a, b, d:
+   * - Keep field "a" entirely (path length 1)
+   * - Keep field "b" but recursively prune it to only contain "c"
+   * - Keep field "d" as-is (not accessed, but needed for ordinal preservation)
+   */
+  private def pruneStructPreservingFieldOrder(struct: StructType, paths: Seq[Seq[String]],
+      arrayStructFieldPaths: Set[Seq[String]]): StructType = {
+    logInfo(s"SCHEMA_PRUNING_DEBUG: pruneStructPreservingFieldOrder called with " +
+      s"${struct.fields.length} fields, paths=$paths")
+
+    // Group paths by their first component
+    val pathsByFirstField = paths.groupBy(_.head)
+
+    // Keep ALL fields to preserve ordinal positions, but prune nested levels
+    val prunedFields = struct.fields.map { field =>
+      pathsByFirstField.get(field.name) match {
+        case Some(fieldPaths) =>
+          // This field is accessed. Check if there are nested paths to prune.
+          val remainingPaths = fieldPaths.map(_.tail).filter(_.nonEmpty)
+
+          // Get array paths for this field (removing first component)
+          val fieldArrayPaths = arrayStructFieldPaths
+            .filter(_.headOption.contains(field.name))
+            .map(_.tail)
+
+          if (remainingPaths.isEmpty) {
+            // Direct access to this field (path length was 1), keep it entirely
+            logInfo(s"SCHEMA_PRUNING_DEBUG: Keeping field ${field.name} entirely (direct access)")
+            field
+          } else {
+            // Has nested accesses - recursively prune nested levels
+            logInfo(s"SCHEMA_PRUNING_DEBUG: Recursively pruning field ${field.name} " +
+              s"with remainingPaths=$remainingPaths")
+            pruneFieldByPaths(field, remainingPaths, fieldArrayPaths)
+          }
+        case None =>
+          // Field not accessed, but keep it anyway to preserve ordinals
+          logInfo(s"SCHEMA_PRUNING_DEBUG: Keeping field ${field.name} for ordinal preservation")
+          field
+      }
+    }
+
+    StructType(prunedFields)
+  }
+
+  /**
    * Prune a field to keep only the specified paths.
    *
    * Key insight: paths = Seq(Seq("a", "b"), Seq("a", "c")) means we need:
    * - The field containing "a", which contains both "b" and "c"
    * - NOT any sibling fields of "a"
    */
-  private def pruneFieldByPaths(field: StructField, paths: Seq[Seq[String]]): StructField = {
+  private def pruneFieldByPaths(field: StructField, paths: Seq[Seq[String]],
+      arrayStructFieldPaths: Set[Seq[String]] = Set.empty): StructField = {
+    logInfo(s"SCHEMA_PRUNING_DEBUG: pruneFieldByPaths field=${field.name}, " +
+      s"paths=$paths, arrayStructFieldPaths=$arrayStructFieldPaths")
+
     // If any path is empty, we need the entire field
     if (paths.exists(_.isEmpty)) {
+      logInfo(s"SCHEMA_PRUNING_DEBUG: Empty path found, keeping entire field ${field.name}")
       return field
     }
 
     field.dataType match {
       case ArrayType(elementType: StructType, containsNull) =>
-        // For array<struct<...>>, prune the struct element type
-        val prunedElementType = pruneStructByPaths(elementType, paths)
+        // For array<struct<...>>, check if GetArrayStructFields directly accesses
+        // fields at THIS struct level (paths of length 1).
+        // GetArrayStructFields uses ORDINALS, so we can't prune if it accesses this level.
+        val hasDirectArrayAccess = arrayStructFieldPaths.exists(_.length == 1)
+        logInfo(s"SCHEMA_PRUNING_DEBUG: Field ${field.name} is array<struct>, " +
+          s"hasDirectArrayAccess=$hasDirectArrayAccess")
+
+        val prunedElementType = if (hasDirectArrayAccess) {
+          // GetArrayStructFields accesses fields at this struct level using ordinals.
+          // We MUST keep all fields to preserve ordinal positions.
+          // BUT: we still recursively prune nested levels (paths with length > 1)
+          logInfo(s"SCHEMA_PRUNING_DEBUG: Preserving field order for ${field.name}, " +
+            s"but pruning nested levels...")
+          pruneStructPreservingFieldOrder(elementType, paths, arrayStructFieldPaths)
+        } else {
+          // No GetArrayStructFields at this level - safe to prune normally
+          logInfo(s"SCHEMA_PRUNING_DEBUG: Safe to prune ${field.name} normally")
+          pruneStructByPaths(elementType, paths, arrayStructFieldPaths)
+        }
         field.copy(dataType = ArrayType(prunedElementType, containsNull))
 
       case struct: StructType =>
         // For struct<...>, prune it
-        val prunedStruct = pruneStructByPaths(struct, paths)
+        // (GetArrayStructFields doesn't apply to non-array structs)
+        val prunedStruct = pruneStructByPaths(struct, paths, arrayStructFieldPaths)
         field.copy(dataType = prunedStruct)
 
       case _ =>
@@ -417,25 +553,32 @@ object SchemaPruning extends Rule[LogicalPlan] {
    * - Keep field "a" entirely
    * - Keep field "b", but recursively prune it to only contain "c"
    */
-  private def pruneStructByPaths(struct: StructType, paths: Seq[Seq[String]]): StructType = {
+  private def pruneStructByPaths(struct: StructType, paths: Seq[Seq[String]],
+      arrayStructFieldPaths: Set[Seq[String]] = Set.empty): StructType = {
     // Group paths by their first component
     val pathsByFirstField = paths.groupBy(_.head)
 
-    // Keep only fields that are accessed
-    val prunedFields = pathsByFirstField.flatMap { case (fieldName, fieldPaths) =>
-      struct.find(_.name == fieldName).map { field =>
+    // Keep only fields that are accessed, preserving original field order
+    // to maintain field ordinals for GetArrayStructFields expressions
+    val prunedFields = struct.fields.flatMap { field =>
+      pathsByFirstField.get(field.name).map { fieldPaths =>
         // Get remaining path components after removing the first
         val remainingPaths = fieldPaths.map(_.tail).filter(_.nonEmpty)
+
+        // Get array paths for this field (removing first component)
+        val fieldArrayPaths = arrayStructFieldPaths
+          .filter(_.headOption.contains(field.name))
+          .map(_.tail)
 
         if (remainingPaths.isEmpty) {
           // This field itself is accessed, keep it entirely
           field
         } else {
           // This field has nested accesses, recurse
-          pruneFieldByPaths(field, remainingPaths)
+          pruneFieldByPaths(field, remainingPaths, fieldArrayPaths)
         }
       }
-    }.toSeq
+    }
 
     StructType(prunedFields)
   }
