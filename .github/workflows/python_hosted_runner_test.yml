@@ -59,8 +59,7 @@ jobs:
   build:
     name: "PySpark test on macos: ${{ matrix.modules }}"
     runs-on: ${{ inputs.os }}
-    # TODO(SPARK-53605): Restore pyspark execution timeout to 2 hours after fixing test_pandas_transform_with_state
-    timeout-minutes: 150
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
