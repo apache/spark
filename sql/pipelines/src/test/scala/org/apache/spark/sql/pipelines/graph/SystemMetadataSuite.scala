@@ -237,7 +237,7 @@ trait SystemMetadataTestHelpers {
       updateContext: PipelineUpdateContext
   ): Path = {
     val expectedRawCheckPointDir = tableOrSinkElement match {
-      case t if t.isInstanceOf[Table] || t.isInstanceOf[SinkImpl] =>
+      case t if t.isInstanceOf[Table] || t.isInstanceOf[Sink] =>
         new Path(updateContext.storageRoot)
         .suffix(s"/_checkpoints/${t.identifier.table}/${flowElement.identifier.table}")
         .toString
