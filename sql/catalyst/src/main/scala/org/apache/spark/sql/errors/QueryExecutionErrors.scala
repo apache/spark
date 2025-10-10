@@ -48,6 +48,7 @@ import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTime
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.streaming.OutputMode
@@ -2837,6 +2838,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "MERGE_CARDINALITY_VIOLATION",
       messageParameters = Map.empty)
+  }
+
+  def failedToEvaluateV2Predicate(predicate: Predicate): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "FAILED_TO_EVALUATE_DSV2_PREDICATE",
+      messageParameters = Map("predicate" -> predicate.name())
+    )
   }
 
   def unsupportedPurgePartitionError(): SparkUnsupportedOperationException = {

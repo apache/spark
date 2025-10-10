@@ -2,12 +2,14 @@ package org.apache.spark.sql.connector.util;
 
 import java.util.Optional;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import static org.apache.spark.sql.connector.util.V2ExpressionEvaluator.dsv2PredicateToCatalystExpression;
+import static org.apache.spark.sql.connector.util.V2ExpressionEvaluator.convertV2PredicateToCatalyst;
 import static org.apache.spark.sql.connector.util.V2ExpressionEvaluator.evaluateInternalRowOnDsv2Predicate;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.apache.spark.SparkRuntimeException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.Expression;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
@@ -77,7 +79,7 @@ public class V2ExpressionEvaluatorSuite {
           new org.apache.spark.sql.connector.expressions.Expression[]{idRef});
 
   @Test
-  public void testDsv2PredicateToCatalystExpression() {
+  public void testV2ExpressionEvaluator() throws Throwable {
     // Null tests
     checkExpressionConversionAndEvaluation(isNullPredicate, true, new Boolean[]{false, false, true, false});
     checkExpressionConversionAndEvaluation(isNotNullPredicate, true, new Boolean[]{true, true, false, true});
@@ -111,23 +113,38 @@ public class V2ExpressionEvaluatorSuite {
   private void checkExpressionConversionAndEvaluation(
       org.apache.spark.sql.connector.expressions.filter.Predicate predicate,
       boolean isConvertible,
-      Boolean[] expectedResults) {
-    Optional<Expression> catalystExpr = dsv2PredicateToCatalystExpression(predicate, testSchema);
+      Boolean[] expectedResults) throws Throwable {
+    Optional<Expression> catalystExpr = convertV2PredicateToCatalyst(predicate, testSchema);
 
     if (isConvertible) {
       assertTrue(catalystExpr.isPresent(), "Predicate should be convertible");
       for (int i = 0; i < testData.length; i++) {
-        Optional<Boolean> evalResult = evaluateInternalRowOnDsv2Predicate(predicate, testData[i], testSchema);
-        assertTrue(evalResult.isPresent(), "Evaluation result should be present");
-        assertEquals(evalResult.get(), expectedResults[i], String.format("Row %d: expected %s but got %s", i, expectedResults[i], evalResult.get()));
+        Boolean evalResult = evaluateInternalRowOnDsv2Predicate(predicate, testData[i], testSchema, true);
+        assertEquals(evalResult, expectedResults[i], String.format("Row %d: expected %s but got %s", i, expectedResults[i], evalResult));
       }
     } else {
       assertTrue(catalystExpr.isEmpty(), "Predicate should not be convertible");
       for (InternalRow row : testData) {
-        Optional<Boolean> evalResult = evaluateInternalRowOnDsv2Predicate(predicate, row, testSchema);
-        assertTrue(evalResult.isEmpty(), "Evaluation result should not be present");
+        Boolean evalResult = evaluateInternalRowOnDsv2Predicate(predicate, row, testSchema, true);
+        assertTrue(evalResult, "Unconvertible predicate should return true when 'alwaysTrueOnUnconverted' is true");
       }
     }
   }
 
+  @Test
+  public void testV2ExpressionEvaluatorThrowException() {
+    SparkRuntimeException e = Assertions.assertThrows(SparkRuntimeException.class,
+      () -> {
+        try {
+          evaluateInternalRowOnDsv2Predicate(unsupportedPredicate, testData[0], testSchema, false);
+        } catch (Throwable throwable) {
+          if (throwable instanceof SparkRuntimeException sparkException) {
+            throw sparkException;
+          }
+          throw new RuntimeException(throwable);
+        }
+      });
+    Assertions.assertEquals("FAILED_TO_EVALUATE_DSV2_PREDICATE", e.getCondition());
+    Assertions.assertTrue(e.getMessage().contains("UNSUPPORTED_OP"));
+  }
 }

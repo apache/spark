@@ -224,6 +224,12 @@
     ],
     "sqlState" : "42846"
   },
+  "CANNOT_CONVERT_DSV2_PREDICATE_TO_CATALYST" : {
+    "message" : [
+      "Cannot convert the datasource v2 predicate <predicate> to Catalyst expression."
+    ],
+    "sqlState" : "42846"
+  },
   "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
     "message" : [
       "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
@@ -1795,6 +1801,12 @@
       "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
     ],
     "sqlState" : "2203G"
+  },
+  "FAILED_TO_EVALUATE_DSV2_PREDICATE" : {
+    "message" : [
+      "Failed to evaluate internalRow on datasource v2 predicate <predicate>, because cannot convert the predicate to Catalyst expression."
+    ],
+    "sqlState" : "42846"
   },
   "FAILED_TO_LOAD_ROUTINE" : {
     "message" : [
