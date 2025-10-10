@@ -17,15 +17,13 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util.Identifiable
 
-trait ArimaParams extends Params {
+private[regression] trait ArimaParams extends Params {
+  final val p = new IntParam(this, "p", "AR order")
+  final val d = new IntParam(this, "d", "Differencing order")
+  final val q = new IntParam(this, "q", "MA order")
 
-  final val p: IntParam = new IntParam(this, "p", "AR order (p)")
-  final val d: IntParam = new IntParam(this, "d", "Differencing order (d)")
-  final val q: IntParam = new IntParam(this, "q", "MA order (q)")
-
-  setDefault(p -> 1, d -> 0, q -> 0)
+  setDefault(p -> 1, d -> 0, q -> 1)
 
   def getP: Int = $(p)
   def getD: Int = $(d)

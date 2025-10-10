@@ -36,3 +36,4 @@ class ArimaRegressionSuite extends SparkFunSuite {
     assert(transformed.count() == df.count())
   }
 }
+

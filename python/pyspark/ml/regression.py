@@ -218,55 +218,56 @@ class _LinearRegressionParams(
 
 
 @inherit_doc
-class ArimaRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter):
-    """
-    ARIMA regression for univariate time series forecasting.
+def test_arima_regression(self):
+    import numpy as np
+    import tempfile
+    from pyspark.ml.linalg import Vectors
+    from pyspark.ml.regression import ArimaRegression, ArimaRegressionModel
 
-    Parameters
-    ----------
-    p : int
-        Order of AR (AutoRegressive) term.
-    d : int
-        Degree of differencing.
-    q : int
-        Order of MA (Moving Average) term.
-    """
+    spark = self.spark
 
-    @keyword_only
-    def __init__(self, p=1, d=0, q=0, featuresCol="features", labelCol="label", predictionCol="prediction"):
-        super(ArimaRegression, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.ArimaRegression", self.uid)
-        self._setDefault(p=1, d=0, q=0)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+    # Time series data in a single column named "y"
+    df = spark.createDataFrame(
+        [(1.2,), (2.3,), (3.1,), (4.0,), (5.5,)],
+        ["y"]
+    )
 
-    @keyword_only
-    def setParams(self, p=1, d=0, q=0, featuresCol="features", labelCol="label", predictionCol="prediction"):
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
+    arima = ArimaRegression(
+        p=1,
+        d=0,
+        q=1,
+    )
 
-    def setP(self, value): return self._set(p=value)
-    def getP(self): return self.getOrDefault("p")
+    self.assertEqual(arima.getP(), 1)
+    self.assertEqual(arima.getD(), 0)
+    self.assertEqual(arima.getQ(), 1)
 
-    def setD(self, value): return self._set(d=value)
-    def getD(self): return self.getOrDefault("d")
+    model = arima.fit(df)
+    self.assertEqual(model.uid, arima.uid)
 
-    def setQ(self, value): return self._set(q=value)
-    def getQ(self): return self.getOrDefault("q")
+    output = model.transform(df)
+    expected_cols = ["y", "prediction"]
+    self.assertEqual(output.columns, expected_cols)
+    self.assertEqual(output.count(), 5)
 
-    def _create_model(self, java_model):
-        return ArimaRegressionModel(java_model)
-        
-@inherit_doc
-class ArimaRegressionModel(JavaModel):
-    """
-    Model fitted by :py:class:`ArimaRegression`.
+    # Predict a single value if API supports it
+    if hasattr(model, "predict"):
+        pred = model.predict(3.0)
+        self.assertIsInstance(pred, float)
 
-    Returned by `.fit()` and used for `.transform()`.
-    """
+    # Model save/load
+    with tempfile.TemporaryDirectory(prefix="arima_regression") as d:
+        arima_path = d + "/arima"
+        model_path = d + "/arima_model"
 
-    def __init__(self, java_model):
-        super(ArimaRegressionModel, self).__init__(java_model)
+        arima.write().overwrite().save(arima_path)
+        loaded_arima = ArimaRegression.load(arima_path)
+        self.assertEqual(str(arima), str(loaded_arima))
+
+        model.write().overwrite().save(model_path)
+        loaded_model = ArimaRegressionModel.load(model_path)
+        self.assertEqual(str(model), str(loaded_model))
+
 
 @inherit_doc
 class LinearRegression(
