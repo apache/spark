@@ -200,6 +200,12 @@ class SparkSqlParser extends AbstractSqlParser {
    * This ensures clean parsing without parameter substitution side effects.
    */
   private def parseIdentifierInternal[T](command: String)(toResult: SqlBaseParser => T): T = {
+    // Clear any stale substitution info to prevent contamination between tests/operations
+    val currentOrigin = CurrentOrigin.get
+    if (currentOrigin.parameterSubstitutionInfo.isDefined) {
+      CurrentOrigin.set(currentOrigin.copy(parameterSubstitutionInfo = None))
+    }
+
     val variableSubstituted = substitutor.substitute(command)
     super.parse(variableSubstituted)(toResult)
   }
