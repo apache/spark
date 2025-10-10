@@ -254,8 +254,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Sink.toString),
               objectName = Option(identifier.unquotedString),
-              language = Option(Python())),
-            normalizedPath = None))
+              language = Option(Python()))))
         identifier
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")

@@ -109,12 +109,12 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         graphRegistrationContext.toDataflowGraph
       },
-      condition = "PIPELINE_DUPLICATE_IDENTIFIERS.DATASET",
+      condition = "PIPELINE_DUPLICATE_IDENTIFIERS.OUTPUT",
       sqlState = Option("42710"),
       parameters = Map(
-        "datasetName" -> fullyQualifiedIdentifier("table").quotedString,
-        "datasetType1" -> "TABLE",
-        "datasetType2" -> "VIEW"
+        "outputName" -> fullyQualifiedIdentifier("table").quotedString,
+        "outputType1" -> "TABLE",
+        "outputType2" -> "VIEW"
       )
     )
   }

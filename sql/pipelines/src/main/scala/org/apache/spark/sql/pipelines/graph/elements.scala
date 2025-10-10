@@ -78,8 +78,12 @@ trait Input extends GraphElement {
  * Represents a node in a [[DataflowGraph]] that can be written to by a [[Flow]].
  * Must be backed by a file source.
  */
-sealed trait Output {
+sealed trait Output {}
 
+/**
+ * A type of [[Output]] that represents a materialized dataset in a [[DataflowGraph]].
+ */
+sealed trait Dataset extends Output {
   /**
    * Normalized storage location used for storing materializations for this [[Output]].
    * If None, it means this [[Output]] has not been normalized yet.
@@ -127,7 +131,7 @@ case class Table(
     isStreamingTable: Boolean,
     format: Option[String]
 ) extends TableInput
-    with Output {
+    with Dataset {
 
   // Load this table's data from underlying storage.
   override def load(readOptions: InputReadOptions): DataFrame = {
@@ -261,14 +265,5 @@ case class SinkImpl(
    identifier: TableIdentifier,
    format: String,
    options: Map[String, String],
-   normalizedPath: Option[String],
    origin: QueryOrigin
- ) extends Sink {
-
-  /** Returns the normalized storage location for this [[Sink]]. */
-  override def path: String = {
-    throw new UnsupportedOperationException(
-      s"Sink does not support storage location"
-    )
-  }
-}
+ ) extends Sink {}

@@ -285,8 +285,7 @@ class TestGraphRegistrationContext(
         identifier = sinkIdentifier,
         format = format,
         origin = origin,
-        options = options,
-        normalizedPath = None
+        options = options
       )
     )
   }

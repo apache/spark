@@ -430,7 +430,7 @@ class PythonPipelineSuite
            |  return spark.range(1)
            |""".stripMargin)
     }
-    assert(ex.getCondition == "PIPELINE_DUPLICATE_IDENTIFIERS.DATASET")
+    assert(ex.getCondition == "PIPELINE_DUPLICATE_IDENTIFIERS.OUTPUT")
   }
 
   test("create datasets with fully/partially qualified names") {
