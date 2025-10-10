@@ -947,33 +947,41 @@ class ApplyInPandasTestsMixin:
                 self.assertEqual(row[1], 123)
 
     def test_arrow_batch_slicing(self):
-        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1000}):
-            df = self.spark.range(10000000).select(
-                (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
-            )
-            cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
-            df = df.withColumns(cols)
+        df = self.spark.range(10000000).select(
+            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+        )
+        cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
+        df = df.withColumns(cols)
 
-            def min_max_v(pdf):
-                return pd.DataFrame(
+        def min_max_v(pdf):
+            return pd.DataFrame(
+                {
+                    "key": [pdf.key.iloc[0]],
+                    "min": [pdf.v.min()],
+                    "max": [pdf.v.max()],
+                }
+            )
+
+        expected = (
+            df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
+        ).collect()
+
+        int_max = 2147483647
+        for maxRecords, maxBytes in [(1000, int_max), (0, 1048576), (1000, 1048576)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
                     {
-                        "key": [pdf.key.iloc[0]],
-                        "min": [pdf.v.min()],
-                        "max": [pdf.v.max()],
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
                     }
-                )
+                ):
+                    result = (
+                        df.groupBy("key")
+                        .applyInPandas(min_max_v, "key long, min long, max long")
+                        .sort("key")
+                    ).collect()
 
-            result = (
-                df.groupBy("key")
-                .applyInPandas(min_max_v, "key long, min long, max long")
-                .sort("key")
-            )
-            expected = (
-                df.groupby("key")
-                .agg(sf.min("v").alias("min"), sf.max("v").alias("max"))
-                .sort("key")
-            )
-            self.assertEqual(expected.collect(), result.collect())
+                    self.assertEqual(expected, result)
 
     def test_negative_and_zero_batch_size(self):
         for batch_size in [0, -1]:
