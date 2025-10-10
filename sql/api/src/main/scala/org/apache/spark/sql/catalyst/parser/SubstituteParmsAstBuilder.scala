@@ -110,9 +110,9 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
 
   /**
-   * Collect information about positional parameter markers. This handles the QUESTION case
-   * in the shared parameterMarker grammar rule. Note: The return value is not used; this method
-   * operates via side effects.
+   * Collect information about positional parameter markers. This handles the QUESTION case in the
+   * shared parameterMarker grammar rule. Note: The return value is not used; this method operates
+   * via side effects.
    */
   override def visitPositionalParameterMarkerRule(
       ctx: PositionalParameterMarkerRuleContext): AnyRef =

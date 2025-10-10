@@ -24,15 +24,14 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Information needed for parameter substitution position mapping.
- * Stored directly in Origin to avoid callback complexity.
+ * Information needed for parameter substitution position mapping. Stored directly in Origin to
+ * avoid callback complexity.
  */
 case class ParameterSubstitutionInfo(
-  originalSql: String,
-  isIdentity: Boolean,
-  // Store the position mapper directly for clean API
-  positionMapper: Option[PositionMapper] = None
-)
+    originalSql: String,
+    isIdentity: Boolean,
+    // Store the position mapper directly for clean API
+    positionMapper: Option[PositionMapper] = None)
 
 /**
  * Contexts of TreeNodes, including location, SQL text, object type and object name. The only
@@ -97,13 +96,14 @@ trait WithOrigin {
             return this // Successfully updated in-place!
           } catch {
             case _: NoSuchFieldException | _: IllegalAccessException |
-                 _: IllegalArgumentException =>
-              // Field update failed, continue to try other methods
+                _: IllegalArgumentException =>
+            // Field update failed, continue to try other methods
           }
         } catch {
-          case _: NoSuchMethodException | _: IllegalAccessException | _: IllegalArgumentException |
-               _: java.lang.reflect.InvocationTargetException | _: ClassCastException =>
-            // Method doesn't exist or invocation failed, try next
+          case _: NoSuchMethodException | _: IllegalAccessException |
+              _: IllegalArgumentException | _: java.lang.reflect.InvocationTargetException |
+              _: ClassCastException =>
+          // Method doesn't exist or invocation failed, try next
         }
       }
 

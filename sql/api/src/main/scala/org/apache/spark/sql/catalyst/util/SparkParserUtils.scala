@@ -277,8 +277,8 @@ trait SparkParserUtils {
           // Use the position mapper to map positions back to original SQL.
           val originalStartIndex = startOpt.flatMap(token =>
             info.positionMapper.map(_.mapToOriginal(token.getStartIndex)))
-          val originalStopIndex = stopOpt.flatMap(token =>
-            info.positionMapper.map(_.mapToOriginal(token.getStopIndex)))
+          val originalStopIndex =
+            stopOpt.flatMap(token => info.positionMapper.map(_.mapToOriginal(token.getStopIndex)))
 
           // Create origin with original SQL text and mapped positions.
           Origin(
