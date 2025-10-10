@@ -36,6 +36,9 @@ from pyspark.sql.types import (
     IntegerType,
     TimestampType,
     DecimalType,
+    ArrayType,
+    MapType,
+    DoubleType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
@@ -72,6 +75,7 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     StatefulProcessorCompositeTypeFactory,
     ChunkCountProcessorFactory,
     ChunkCountProcessorWithInitialStateFactory,
+    CompositeOutputProcessorFactory,
 )
 
 
@@ -1595,6 +1599,307 @@ class TransformWithStateTestsMixin:
 
         self._test_transform_with_state_basic(
             StatefulProcessorCompositeTypeFactory(), check_results, output_schema=output_schema
+        )
+
+    # run a test with composite types where the output of TWS (not just the states) are complex.
+    def test_composite_output_schema(self):
+        def check_results(batch_df, batch_id):
+            batch_df.collect()
+            # Cannot use set() wrapper because Row objects contain unhashable types (lists)
+            if batch_id == 0:
+                assert batch_df.sort("primitiveValue").collect() == [
+                    Row(
+                        primitiveValue="key_0_count_2",
+                        listOfPrimitive=["item_0", "item_1"],
+                        mapOfPrimitive={"key0": "value0", "key1": "value1"},
+                        listOfComposite=[
+                            Row(
+                                intValue=0,
+                                doubleValue=0.0,
+                                arrayValue=["elem_0_0"],
+                                mapValue={"map_0_0": "val_0_0"},
+                            ),
+                            Row(
+                                intValue=1,
+                                doubleValue=1.5,
+                                arrayValue=["elem_1_0", "elem_1_1"],
+                                mapValue={"map_1_0": "val_1_0", "map_1_1": "val_1_1"},
+                            ),
+                        ],
+                        mapOfComposite={
+                            "nested_key0": Row(
+                                intValue=0,
+                                doubleValue=0.0,
+                                arrayValue=["elem_0_0"],
+                                mapValue={"map_0_0": "val_0_0"},
+                            ),
+                            "nested_key1": Row(
+                                intValue=10,
+                                doubleValue=2.5,
+                                arrayValue=["elem_1_0", "elem_1_1"],
+                                mapValue={"map_1_0": "val_1_0", "map_1_1": "val_1_1"},
+                            ),
+                        },
+                    ),
+                    Row(
+                        primitiveValue="key_1_count_2",
+                        listOfPrimitive=["item_0", "item_1"],
+                        mapOfPrimitive={"key0": "value0", "key1": "value1"},
+                        listOfComposite=[
+                            Row(
+                                intValue=0,
+                                doubleValue=0.0,
+                                arrayValue=["elem_0_0"],
+                                mapValue={"map_0_0": "val_0_0"},
+                            ),
+                            Row(
+                                intValue=1,
+                                doubleValue=1.5,
+                                arrayValue=["elem_1_0", "elem_1_1"],
+                                mapValue={"map_1_0": "val_1_0", "map_1_1": "val_1_1"},
+                            ),
+                        ],
+                        mapOfComposite={
+                            "nested_key0": Row(
+                                intValue=0,
+                                doubleValue=0.0,
+                                arrayValue=["elem_0_0"],
+                                mapValue={"map_0_0": "val_0_0"},
+                            ),
+                            "nested_key1": Row(
+                                intValue=10,
+                                doubleValue=2.5,
+                                arrayValue=["elem_1_0", "elem_1_1"],
+                                mapValue={"map_1_0": "val_1_0", "map_1_1": "val_1_1"},
+                            ),
+                        },
+                    ),
+                ]
+            else:
+                assert batch_df.sort("primitiveValue").collect() == [
+                    Row(
+                        primitiveValue="key_0_count_5",
+                        listOfPrimitive=["item_0", "item_1", "item_2", "item_3", "item_4"],
+                        mapOfPrimitive={
+                            "key0": "value0",
+                            "key1": "value1",
+                            "key2": "value2",
+                            "key3": "value3",
+                            "key4": "value4",
+                        },
+                        listOfComposite=[
+                            Row(
+                                intValue=0,
+                                doubleValue=0.0,
+                                arrayValue=["elem_0_0"],
+                                mapValue={"map_0_0": "val_0_0"},
+                            ),
+                            Row(
+                                intValue=1,
+                                doubleValue=1.5,
+                                arrayValue=["elem_1_0", "elem_1_1"],
+                                mapValue={"map_1_0": "val_1_0", "map_1_1": "val_1_1"},
+                            ),
+                            Row(
+                                intValue=2,
+                                doubleValue=3.0,
+                                arrayValue=["elem_2_0", "elem_2_1", "elem_2_2"],
+                                mapValue={
+                                    "map_2_0": "val_2_0",
+                                    "map_2_1": "val_2_1",
+                                    "map_2_2": "val_2_2",
+                                },
+                            ),
+                            Row(
+                                intValue=3,
+                                doubleValue=4.5,
+                                arrayValue=["elem_3_0", "elem_3_1", "elem_3_2", "elem_3_3"],
+                                mapValue={
+                                    "map_3_0": "val_3_0",
+                                    "map_3_1": "val_3_1",
+                                    "map_3_2": "val_3_2",
+                                    "map_3_3": "val_3_3",
+                                },
+                            ),
+                            Row(
+                                intValue=4,
+                                doubleValue=6.0,
+                                arrayValue=[
+                                    "elem_4_0",
+                                    "elem_4_1",
+                                    "elem_4_2",
+                                    "elem_4_3",
+                                    "elem_4_4",
+                                ],
+                                mapValue={
+                                    "map_4_0": "val_4_0",
+                                    "map_4_1": "val_4_1",
+                                    "map_4_2": "val_4_2",
+                                    "map_4_3": "val_4_3",
+                                    "map_4_4": "val_4_4",
+                                },
+                            ),
+                        ],
+                        mapOfComposite={
+                            "nested_key0": Row(
+                                intValue=0,
+                                doubleValue=0.0,
+                                arrayValue=["elem_0_0"],
+                                mapValue={"map_0_0": "val_0_0"},
+                            ),
+                            "nested_key1": Row(
+                                intValue=10,
+                                doubleValue=2.5,
+                                arrayValue=["elem_1_0", "elem_1_1"],
+                                mapValue={"map_1_0": "val_1_0", "map_1_1": "val_1_1"},
+                            ),
+                            "nested_key2": Row(
+                                intValue=20,
+                                doubleValue=5.0,
+                                arrayValue=["elem_2_0", "elem_2_1", "elem_2_2"],
+                                mapValue={
+                                    "map_2_0": "val_2_0",
+                                    "map_2_1": "val_2_1",
+                                    "map_2_2": "val_2_2",
+                                },
+                            ),
+                            "nested_key3": Row(
+                                intValue=30,
+                                doubleValue=7.5,
+                                arrayValue=["elem_3_0", "elem_3_1", "elem_3_2", "elem_3_3"],
+                                mapValue={
+                                    "map_3_0": "val_3_0",
+                                    "map_3_1": "val_3_1",
+                                    "map_3_2": "val_3_2",
+                                    "map_3_3": "val_3_3",
+                                },
+                            ),
+                            "nested_key4": Row(
+                                intValue=40,
+                                doubleValue=10.0,
+                                arrayValue=[
+                                    "elem_4_0",
+                                    "elem_4_1",
+                                    "elem_4_2",
+                                    "elem_4_3",
+                                    "elem_4_4",
+                                ],
+                                mapValue={
+                                    "map_4_0": "val_4_0",
+                                    "map_4_1": "val_4_1",
+                                    "map_4_2": "val_4_2",
+                                    "map_4_3": "val_4_3",
+                                    "map_4_4": "val_4_4",
+                                },
+                            ),
+                        },
+                    ),
+                    Row(
+                        primitiveValue="key_1_count_4",
+                        listOfPrimitive=["item_0", "item_1", "item_2", "item_3"],
+                        mapOfPrimitive={
+                            "key0": "value0",
+                            "key1": "value1",
+                            "key2": "value2",
+                            "key3": "value3",
+                        },
+                        listOfComposite=[
+                            Row(
+                                intValue=0,
+                                doubleValue=0.0,
+                                arrayValue=["elem_0_0"],
+                                mapValue={"map_0_0": "val_0_0"},
+                            ),
+                            Row(
+                                intValue=1,
+                                doubleValue=1.5,
+                                arrayValue=["elem_1_0", "elem_1_1"],
+                                mapValue={"map_1_0": "val_1_0", "map_1_1": "val_1_1"},
+                            ),
+                            Row(
+                                intValue=2,
+                                doubleValue=3.0,
+                                arrayValue=["elem_2_0", "elem_2_1", "elem_2_2"],
+                                mapValue={
+                                    "map_2_0": "val_2_0",
+                                    "map_2_1": "val_2_1",
+                                    "map_2_2": "val_2_2",
+                                },
+                            ),
+                            Row(
+                                intValue=3,
+                                doubleValue=4.5,
+                                arrayValue=["elem_3_0", "elem_3_1", "elem_3_2", "elem_3_3"],
+                                mapValue={
+                                    "map_3_0": "val_3_0",
+                                    "map_3_1": "val_3_1",
+                                    "map_3_2": "val_3_2",
+                                    "map_3_3": "val_3_3",
+                                },
+                            ),
+                        ],
+                        mapOfComposite={
+                            "nested_key0": Row(
+                                intValue=0,
+                                doubleValue=0.0,
+                                arrayValue=["elem_0_0"],
+                                mapValue={"map_0_0": "val_0_0"},
+                            ),
+                            "nested_key1": Row(
+                                intValue=10,
+                                doubleValue=2.5,
+                                arrayValue=["elem_1_0", "elem_1_1"],
+                                mapValue={"map_1_0": "val_1_0", "map_1_1": "val_1_1"},
+                            ),
+                            "nested_key2": Row(
+                                intValue=20,
+                                doubleValue=5.0,
+                                arrayValue=["elem_2_0", "elem_2_1", "elem_2_2"],
+                                mapValue={
+                                    "map_2_0": "val_2_0",
+                                    "map_2_1": "val_2_1",
+                                    "map_2_2": "val_2_2",
+                                },
+                            ),
+                            "nested_key3": Row(
+                                intValue=30,
+                                doubleValue=7.5,
+                                arrayValue=["elem_3_0", "elem_3_1", "elem_3_2", "elem_3_3"],
+                                mapValue={
+                                    "map_3_0": "val_3_0",
+                                    "map_3_1": "val_3_1",
+                                    "map_3_2": "val_3_2",
+                                    "map_3_3": "val_3_3",
+                                },
+                            ),
+                        },
+                    ),
+                ]
+
+        # Define the output schema with inner nested class schema
+        inner_nested_class_schema = StructType(
+            [
+                StructField("intValue", IntegerType(), True),
+                StructField("doubleValue", DoubleType(), True),
+                StructField("arrayValue", ArrayType(StringType()), True),
+                StructField("mapValue", MapType(StringType(), StringType()), True),
+            ]
+        )
+
+        output_schema = StructType(
+            [
+                StructField("primitiveValue", StringType(), True),
+                StructField("listOfPrimitive", ArrayType(StringType()), True),
+                StructField("mapOfPrimitive", MapType(StringType(), StringType()), True),
+                StructField("listOfComposite", ArrayType(inner_nested_class_schema), True),
+                StructField(
+                    "mapOfComposite", MapType(StringType(), inner_nested_class_schema), True
+                ),
+            ]
+        )
+
+        self._test_transform_with_state_basic(
+            CompositeOutputProcessorFactory(), check_results, output_schema=output_schema
         )
 
     # run the same test suites again but with single shuffle partition
