@@ -129,7 +129,7 @@ class PythonPipelineSuite
         |    return df.select("name")
         |""".stripMargin)
 
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
 
     assertFlowProgressEvent(
@@ -174,7 +174,7 @@ class PythonPipelineSuite
         |   return spark.readStream.table('mv2')
         |""".stripMargin)
 
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -602,7 +602,8 @@ class PythonPipelineSuite
         )
     """)
 
-    val updateContext = new PipelineUpdateContextImpl(graph, _ => ())
+    val updateContext =
+      new PipelineUpdateContextImpl(graph, _ => (), storageRoot = storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -628,18 +629,19 @@ class PythonPipelineSuite
   test("MV/ST with partition columns works") {
     withTable("mv", "st") {
       val graph = buildGraph("""
-             |from pyspark.sql.functions import col
-             |
-             |@dp.materialized_view(partition_cols = ["id_mod"])
-             |def mv():
-             |  return spark.range(5).withColumn("id_mod", col("id") % 2)
-             |
-             |@dp.table(partition_cols = ["id_mod"])
-             |def st():
-             |  return spark.readStream.table("mv")
-             |""".stripMargin)
+            |from pyspark.sql.functions import col
+            |
+            |@dp.materialized_view(partition_cols = ["id_mod"])
+            |def mv():
+            |  return spark.range(5).withColumn("id_mod", col("id") % 2)
+            |
+            |@dp.table(partition_cols = ["id_mod"])
+            |def st():
+            |  return spark.readStream.table("mv")
+            |""".stripMargin)
 
-      val updateContext = new PipelineUpdateContextImpl(graph, eventCallback = _ => ())
+      val updateContext =
+        new PipelineUpdateContextImpl(graph, eventCallback = _ => (), storageRoot = storageRoot)
       updateContext.pipelineExecution.runPipeline()
       updateContext.pipelineExecution.awaitCompletion()
 

@@ -30,19 +30,23 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
       val pipeline = new TestPipelineDefinition(graphId) {
         createTable(
           name = "a",
-          datasetType = proto.DatasetType.MATERIALIZED_VIEW,
+          outputType = proto.OutputType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "b",
-          datasetType = proto.DatasetType.TABLE,
+          outputType = proto.OutputType.TABLE,
           sql = Some("SELECT * FROM STREAM a"))
       }
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
         val startRunRequest = buildStartRunPlan(
-          proto.PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build())
+          proto.PipelineCommand.StartRun
+            .newBuilder()
+            .setDataflowGraphId(graphId)
+            .setStorage(storageRoot)
+            .build())
         val responseIterator = client.execute(startRunRequest)
         while (responseIterator.hasNext) {
           val response = responseIterator.next()
@@ -79,14 +83,14 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
         val pipeline = new TestPipelineDefinition(graphId) {
           createTable(
             name = "a",
-            datasetType = proto.DatasetType.MATERIALIZED_VIEW,
+            outputType = proto.OutputType.MATERIALIZED_VIEW,
             sql = Some("SELECT * FROM unknown_table"))
           createTable(
             name = "b",
-            datasetType = proto.DatasetType.TABLE,
+            outputType = proto.OutputType.TABLE,
             sql = Some("SELECT * FROM STREAM a"))
         }
-        registerPipelineDatasets(pipeline)
+        registerPipelineOutputs(pipeline)
 
         val capturedEvents = new ArrayBuffer[PipelineEvent]()
         withClient { client =>
@@ -94,6 +98,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
             proto.PipelineCommand.StartRun
               .newBuilder()
               .setDataflowGraphId(graphId)
+              .setStorage(storageRoot)
               .setDry(dry)
               .build())
           val ex = intercept[AnalysisException] {
@@ -129,14 +134,14 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
       val pipeline = new TestPipelineDefinition(graphId) {
         createTable(
           name = "a",
-          datasetType = proto.DatasetType.MATERIALIZED_VIEW,
+          outputType = proto.OutputType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "b",
-          datasetType = proto.DatasetType.TABLE,
+          outputType = proto.OutputType.TABLE,
           sql = Some("SELECT * FROM STREAM a"))
       }
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
@@ -144,6 +149,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           proto.PipelineCommand.StartRun
             .newBuilder()
             .setDataflowGraphId(graphId)
+            .setStorage(storageRoot)
             .setDry(true)
             .build())
         val responseIterator = client.execute(startRunRequest)

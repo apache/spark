@@ -19,6 +19,7 @@ from pathlib import Path
 
 SPEC = """
 name: {{ name }}
+storage: storage-root
 libraries:
   - glob:
       include: transformations/**

@@ -237,6 +237,24 @@ class StatefulProcessorCompositeTypeFactory(StatefulProcessorFactory):
         return RowStatefulProcessorCompositeType()
 
 
+class ChunkCountProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasChunkCountProcessor()
+
+
+class ChunkCountProcessorWithInitialStateFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasChunkCountWithInitialStateProcessor()
+
+
+class CompositeOutputProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasCompositeOutputProcessor()
+
+    def row(self):
+        return RowCompositeOutputProcessor()
+
+
 # StatefulProcessor implementations
 
 
@@ -1826,6 +1844,197 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
             list_state_arr=",".join(map(str, flattened_ids)),
             map_state_arr=json.dumps(attributes_map, sort_keys=True),
             nested_map_state_arr=json.dumps(confs_map, sort_keys=True),
+        )
+
+    def close(self) -> None:
+        pass
+
+
+class PandasChunkCountProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        pass
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        chunk_count = 0
+        for _ in rows:
+            chunk_count += 1
+        yield pd.DataFrame({"id": [key[0]], "chunkCount": [chunk_count]})
+
+    def close(self) -> None:
+        pass
+
+
+class PandasChunkCountWithInitialStateProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.value_state = handle.getValueState("value_state", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        chunk_count = 0
+        for _ in rows:
+            chunk_count += 1
+        yield pd.DataFrame({"id": [key[0]], "chunkCount": [chunk_count]})
+
+    def handleInitialState(self, key, initialState, timerValues) -> None:
+        init_val = initialState.at[0, "initVal"]
+        self.value_state.update((init_val,))
+
+    def close(self) -> None:
+        pass
+
+
+# A Pandas stateful processor with a simple ValueState computation and composite output schema:
+#
+# primitiveValue: StringType
+# listOfPrimitive: ArrayType(StringType)
+# mapOfPrimitive: MapType(StringType, StringType)
+# listOfComposite: ArrayType(InnerNestedClass)
+# mapOfComposite: MapType(StringType, InnerNestedClass)
+#
+# where InnerNestedClass is a StructType with:
+# intValue: IntegerType
+# doubleValue: DoubleType
+# arrayValue: ArrayType(StringType)
+# mapValue: MapType(StringType, StringType)
+class PandasCompositeOutputProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        # Simple value state to track counts
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.count_state = handle.getValueState("count_state", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        # Calculate count from input rows
+        count = 0
+        if self.count_state.exists():
+            count = self.count_state.get()[0]
+
+        for pdf in rows:
+            count += len(pdf)
+
+        self.count_state.update((count,))
+
+        # Build output matching the composite schema
+        key_str = key[0]
+
+        # primitiveValue: StringType
+        primitive_value = f"key_{key_str}_count_{count}"
+
+        # listOfPrimitive: ArrayType(StringType)
+        list_of_primitive = [f"item_{i}" for i in range(count)]
+
+        # mapOfPrimitive: MapType(StringType, StringType)
+        map_of_primitive = {f"key{i}": f"value{i}" for i in range(count)}
+
+        # listOfComposite: ArrayType(StructType)
+        # Each Row schema matches the InnerNestedClass mentioned above.
+        list_of_composite = [
+            {
+                "intValue": i,
+                "doubleValue": float(i * 1.5),
+                "arrayValue": [f"elem_{i}_{j}" for j in range(i + 1)],
+                "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            }
+            for i in range(count)
+        ]
+
+        # mapOfComposite: MapType(StringType, StructType)
+        # Each (value) Row schema matches the InnerNestedClass mentioned above.
+        map_of_composite = {
+            f"nested_key{i}": {
+                "intValue": i * 10,
+                "doubleValue": float(i * 2.5),
+                "arrayValue": [f"elem_{i}_{j}" for j in range(i + 1)],
+                "mapValue": {f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            }
+            for i in range(count)
+        }
+
+        yield pd.DataFrame(
+            {
+                "primitiveValue": [primitive_value],
+                "listOfPrimitive": [list_of_primitive],
+                "mapOfPrimitive": [map_of_primitive],
+                "listOfComposite": [list_of_composite],
+                "mapOfComposite": [map_of_composite],
+            }
+        )
+
+    def close(self) -> None:
+        pass
+
+
+# A Row stateful processor with a simple ValueState computation and composite output schema:
+#
+# primitiveValue: StringType
+# listOfPrimitive: ArrayType(StringType)
+# mapOfPrimitive: MapType(StringType, StringType)
+# listOfComposite: ArrayType(InnerNestedClass)
+# mapOfComposite: MapType(StringType, InnerNestedClass)
+#
+# where InnerNestedClass is a StructType with:
+# intValue: IntegerType
+# doubleValue: DoubleType
+# arrayValue: ArrayType(StringType)
+# mapValue: MapType(StringType, StringType)
+class RowCompositeOutputProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        # Simple value state to track counts
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.count_state = handle.getValueState("count_state", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        # Calculate count from input rows
+        count = 0
+        if self.count_state.exists():
+            count = self.count_state.get()[0]
+
+        for row in rows:
+            count += 1
+
+        self.count_state.update((count,))
+
+        # Build output matching the composite schema
+        key_str = key[0]
+
+        # primitiveValue: StringType
+        primitive_value = f"key_{key_str}_count_{count}"
+
+        # listOfPrimitive: ArrayType(StringType)
+        list_of_primitive = [f"item_{i}" for i in range(count)]
+
+        # mapOfPrimitive: MapType(StringType, StringType)
+        map_of_primitive = {f"key{i}": f"value{i}" for i in range(count)}
+
+        # listOfComposite: ArrayType(StructType)
+        # Each Row schema matches the InnerNestedClass mentioned above.
+        list_of_composite = [
+            Row(
+                intValue=i,
+                doubleValue=float(i * 1.5),
+                arrayValue=[f"elem_{i}_{j}" for j in range(i + 1)],
+                mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            )
+            for i in range(count)
+        ]
+
+        # mapOfComposite: MapType(StringType, StructType)
+        # Each (value) Row schema matches the InnerNestedClass mentioned above.
+        map_of_composite = {
+            f"nested_key{i}": Row(
+                intValue=i * 10,
+                doubleValue=float(i * 2.5),
+                arrayValue=[f"elem_{i}_{j}" for j in range(i + 1)],
+                mapValue={f"map_{i}_{j}": f"val_{i}_{j}" for j in range(i + 1)},
+            )
+            for i in range(count)
+        }
+
+        yield Row(
+            primitiveValue=primitive_value,
+            listOfPrimitive=list_of_primitive,
+            mapOfPrimitive=map_of_primitive,
+            listOfComposite=list_of_composite,
+            mapOfComposite=map_of_composite,
         )
 
     def close(self) -> None:
