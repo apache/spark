@@ -134,16 +134,8 @@ public class V2ExpressionEvaluatorSuite {
   @Test
   public void testV2ExpressionEvaluatorThrowException() {
     SparkRuntimeException e = Assertions.assertThrows(SparkRuntimeException.class,
-      () -> {
-        try {
-          evaluateInternalRowOnDsv2Predicate(unsupportedPredicate, testData[0], testSchema, false);
-        } catch (Throwable throwable) {
-          if (throwable instanceof SparkRuntimeException sparkException) {
-            throw sparkException;
-          }
-          throw new RuntimeException(throwable);
-        }
-      });
+      () -> evaluateInternalRowOnDsv2Predicate(
+              unsupportedPredicate, testData[0], testSchema, false));
     Assertions.assertEquals("FAILED_TO_EVALUATE_DSV2_PREDICATE", e.getCondition());
     Assertions.assertTrue(e.getMessage().contains("UNSUPPORTED_OP"));
   }
