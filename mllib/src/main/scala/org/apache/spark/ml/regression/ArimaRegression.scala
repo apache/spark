@@ -19,40 +19,26 @@ package org.apache.spark.ml.regression
 import org.apache.spark.ml.Estimator
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.DefaultParamsWritable
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 
 class ArimaRegression(override val uid: String)
-  extends Estimator[ArimaRegressionModel]
-    with ArimaParams
-    with DefaultParamsWritable {
+  extends Estimator[ArimaRegressionModel] with ArimaParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("arimaReg"))
 
-  def setP(value: Int): this.type = set(p, value)
-  def setD(value: Int): this.type = set(d, value)
-  def setQ(value: Int): this.type = set(q, value)
-
   override def fit(dataset: Dataset[_]): ArimaRegressionModel = {
-    // Dummy: assumes data is ordered with one feature column "y"
-    val ts = dataset.select("y").rdd.map(_.getDouble(0)).collect()
-
-    // [TO DO]: Replace with actual ARIMA fitting logic
-    val model = new ArimaRegressionModel(uid)
-      .setParent(this)
-    model
+    // NOTE: this is placeholder logic (you’ll need to write distributed logic)
+    // For now, just return an empty model with dummy values
+    copyValues(new ArimaRegressionModel(uid).setParent(this))
   }
 
   override def copy(extra: ParamMap): ArimaRegression = defaultCopy(extra)
 
   override def transformSchema(schema: StructType): StructType = {
-    require(schema.fieldNames.contains("y"), "Dataset must contain 'y' column.")
-    schema.add(StructField("prediction", DoubleType, false))
+    // Add prediction column to schema
+    schema.add("prediction", schema("value").dataType)
   }
 }
-
-object ArimaRegression extends DefaultParamsReadable[ArimaRegression]

@@ -218,65 +218,55 @@ class _LinearRegressionParams(
 
 
 @inherit_doc
-class ArimaRegression(JavaEstimator):
+class ArimaRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter):
     """
-    ArimaRegression(p=1, d=0, q=1)
-
-    ARIMA time series regression model.
+    ARIMA regression for univariate time series forecasting.
 
     Parameters
     ----------
     p : int
-        Autoregressive order.
+        Order of AR (AutoRegressive) term.
     d : int
-        Differencing order.
+        Degree of differencing.
     q : int
-        Moving average order.
-
-    Notes
-    -----
-    Requires a column named "y" as the input time series column.
+        Order of MA (Moving Average) term.
     """
 
-    p = Param(Params._dummy(), "p", "Autoregressive order.")
-    d = Param(Params._dummy(), "d", "Differencing order.")
-    q = Param(Params._dummy(), "q", "Moving average order.")
-
-    def __init__(self, p=1, d=0, q=1):
+    @keyword_only
+    def __init__(self, p=1, d=0, q=0, featuresCol="features", labelCol="label", predictionCol="prediction"):
         super(ArimaRegression, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.ArimaRegression", self.uid)
-        self._setDefault(p=1, d=0, q=1)
+        self._setDefault(p=1, d=0, q=0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    def setParams(self, p=1, d=0, q=1):
-        """
-        Set parameters for ArimaRegression.
-        """
+    @keyword_only
+    def setParams(self, p=1, d=0, q=0, featuresCol="features", labelCol="label", predictionCol="prediction"):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    def setP(self, value):
-        return self._set(p=value)
+    def setP(self, value): return self._set(p=value)
+    def getP(self): return self.getOrDefault("p")
 
-    def getP(self):
-        return self.getOrDefault(self.p)
+    def setD(self, value): return self._set(d=value)
+    def getD(self): return self.getOrDefault("d")
 
-    def setD(self, value):
-        return self._set(d=value)
-
-    def getD(self):
-        return self.getOrDefault(self.d)
-
-    def setQ(self, value):
-        return self._set(q=value)
-
-    def getQ(self):
-        return self.getOrDefault(self.q)
+    def setQ(self, value): return self._set(q=value)
+    def getQ(self): return self.getOrDefault("q")
 
     def _create_model(self, java_model):
         return ArimaRegressionModel(java_model)
+        
+@inherit_doc
+class ArimaRegressionModel(JavaModel):
+    """
+    Model fitted by :py:class:`ArimaRegression`.
 
+    Returned by `.fit()` and used for `.transform()`.
+    """
+
+    def __init__(self, java_model):
+        super(ArimaRegressionModel, self).__init__(java_model)
 
 @inherit_doc
 class LinearRegression(
