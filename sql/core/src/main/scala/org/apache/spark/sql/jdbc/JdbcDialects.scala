@@ -444,7 +444,15 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
-      super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
+      if (isSupportedFunction(funcName)) {
+        super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
+      } else {
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
+      }
     }
 
     override def visitInverseDistributionFunction(
