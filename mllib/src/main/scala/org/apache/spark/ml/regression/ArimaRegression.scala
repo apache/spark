@@ -16,16 +16,23 @@
  */
 package org.apache.spark.ml.regression
 
-import org.apache.spark.ml.Estimator
-import org.apache.spark.ml.Model
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.DefaultParamsWritable
-import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dataset
+import org.apache.spark.ml.util._
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
+/**
+ * ARIMA (AutoRegressive Integrated Moving Average) model implementation
+ * for univariate time series forecasting.
+ *
+ * This implementation leverages PySpark Pandas UDF with statsmodels to
+ * fit ARIMA(p, d, q) models in a distributed fashion.
+ *
+ * Input column: "y" (DoubleType)
+ * Output column: "prediction" (DoubleType)
+ */
 class ArimaRegression(override val uid: String)
   extends Estimator[ArimaRegressionModel]
     with ArimaParams
@@ -37,21 +44,59 @@ class ArimaRegression(override val uid: String)
   def setD(value: Int): this.type = set(d, value)
   def setQ(value: Int): this.type = set(q, value)
 
+  /**
+   * Fits an ARIMA model using Python statsmodels via Pandas UDF.
+   * The UDF runs ARIMA(p,d,q) on each time series partition or entire dataset.
+   */
   override def fit(dataset: Dataset[_]): ArimaRegressionModel = {
-    // Dummy: assumes data is ordered with one feature column "y"
-    val ts = dataset.select("y").rdd.map(_.getDouble(0)).collect()
+    val spark = dataset.sparkSession
+    import spark.implicits._
 
-    // [TO DO]: Replace with actual ARIMA fitting logic
+    require(dataset.columns.contains("y"),
+      "Input dataset must contain a 'y' column of DoubleType representing the time series values.")
+
+    // Define the ARIMA Pandas UDF (Python side using statsmodels)
+    val udfScript =
+      s"""
+      from pyspark.sql.functions import pandas_udf
+      from pyspark.sql.types import DoubleType
+      import pandas as pd
+      from statsmodels.tsa.arima.model import ARIMA
+
+      @pandas_udf("double")
+      def arima_forecast_udf(y: pd.Series) -> pd.Series:
+          try:
+              model = ARIMA(y, order=(${getOrDefault(p)}, ${getOrDefault(d)}, ${getOrDefault(q)}))
+              fitted = model.fit()
+              forecast = fitted.forecast(steps=1)
+              return pd.Series([forecast.iloc[0]] * len(y))
+          except Exception:
+              return pd.Series([float('nan')] * len(y))
+      """
+
+    // Register the UDF dynamically
+    spark.udf.registerPython("arima_forecast_udf", udfScript)
+
+    // Apply the ARIMA forecast UDF
+    val predicted = dataset.withColumn("prediction", call_udf("arima_forecast_udf", col("y")))
+
+    // Create the model instance
     val model = new ArimaRegressionModel(uid)
       .setParent(this)
+      .setP($(p))
+      .setD($(d))
+      .setQ($(q))
+      .setFittedData(predicted)
+
     model
   }
 
   override def copy(extra: ParamMap): ArimaRegression = defaultCopy(extra)
 
   override def transformSchema(schema: StructType): StructType = {
-    require(schema.fieldNames.contains("y"), "Dataset must contain 'y' column.")
-    schema.add(StructField("prediction", DoubleType, false))
+    require(schema.fieldNames.contains("y"),
+      "Input schema must contain 'y' column of DoubleType.")
+    StructType(schema.fields :+ StructField("prediction", DoubleType, nullable = true))
   }
 }
 

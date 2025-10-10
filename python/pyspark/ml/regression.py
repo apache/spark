@@ -23,6 +23,11 @@ from functools import cached_property
 from pyspark import keyword_only, since
 from pyspark.ml import Predictor, PredictionModel
 from pyspark.ml.base import _PredictorParams
+
+from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.param.shared import Param, Params, TypeConverters
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable
+
 from pyspark.ml.param.shared import (
     HasFeaturesCol,
     HasLabelCol,
@@ -148,13 +153,86 @@ class _JavaRegressionModel(RegressionModel, JavaPredictionModel[T], metaclass=AB
 
     pass
 
-class ArimaRegressionModel(JavaModel):
+class _ArimaRegressionParams(Params):
+    """
+    Parameters for :py:class:`ArimaRegression` and :py:class:`ArimaRegressionModel`.
+    """
+
+    p = Param(Params._dummy(), "p", "AR order (number of autoregressive terms)",
+              typeConverter=TypeConverters.toInt)
+    d = Param(Params._dummy(), "d", "Differencing order",
+              typeConverter=TypeConverters.toInt)
+    q = Param(Params._dummy(), "q", "MA order (number of moving average terms)",
+              typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(_ArimaRegressionParams, self).__init__()
+        self._setDefault(p=1, d=0, q=1)
+
+    def getP(self):
+        return self.getOrDefault(self.p)
+
+    def getD(self):
+        return self.getOrDefault(self.d)
+
+    def getQ(self):
+        return self.getOrDefault(self.q)
+
+class ArimaRegression(
+    JavaEstimator,
+    _ArimaRegressionParams,
+    JavaMLWritable,
+    JavaMLReadable["ArimaRegression"]
+):
+    """
+    ARIMA (AutoRegressive Integrated Moving Average) model for univariate time series forecasting.
+    """
+
+    @keyword_only
+    def __init__(self, *, p=1, d=0, q=1):
+        super(ArimaRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.ArimaRegression", self.uid
+        )
+        self._setDefault(p=1, d=0, q=1)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, *, p=1, d=0, q=1):
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return ArimaRegressionModel(java_model)
+
+    def setP(self, value: int):
+        return self._set(p=value)
+
+    def setD(self, value: int):
+        return self._set(d=value)
+
+    def setQ(self, value: int):
+        return self._set(q=value)
+
+
+class ArimaRegressionModel(
+    JavaModel,
+    _ArimaRegressionParams,
+    JavaMLWritable,
+    JavaMLReadable["ArimaRegressionModel"]
+):
     """
     Model fitted by :py:class:`ArimaRegression`.
-
-    This model supports `.transform()` and optional `.predict()`.
     """
-    pass
+
+    @property
+    def coefficients(self):
+        return self._call_java("coefficients")
+
+    @property
+    def order(self):
+        return (self.getP(), self.getD(), self.getQ())
 
 class _LinearRegressionParams(
     _PredictorParams,

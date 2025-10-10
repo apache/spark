@@ -16,14 +16,23 @@
  */
 package org.apache.spark.ml.regression
 
-import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.{IntParam, Params}
 
-private[regression] trait ArimaParams extends Params {
-  final val p = new IntParam(this, "p", "AR order")
-  final val d = new IntParam(this, "d", "Differencing order")
-  final val q = new IntParam(this, "q", "MA order")
+/**
+ * Shared parameters for ARIMA models.
+ */
+trait ArimaParams extends Params {
 
-  setDefault(p -> 1, d -> 0, q -> 1)
+  /** The autoregressive order (p). */
+  final val p: IntParam = new IntParam(this, "p", "Autoregressive order (p)")
+
+  /** The differencing order (d). */
+  final val d: IntParam = new IntParam(this, "d", "Differencing order (d)")
+
+  /** The moving average order (q). */
+  final val q: IntParam = new IntParam(this, "q", "Moving average order (q)")
+
+  setDefault(p -> 1, d -> 1, q -> 1)
 
   def getP: Int = $(p)
   def getD: Int = $(d)

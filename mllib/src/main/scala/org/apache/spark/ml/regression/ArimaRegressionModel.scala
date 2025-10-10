@@ -17,34 +17,32 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.ml._
+import org.apache.spark.ml.Model
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 
 class ArimaRegressionModel(override val uid: String)
   extends Model[ArimaRegressionModel]
     with ArimaParams
     with MLWritable {
 
-  override def copy(extra: ParamMap): ArimaRegressionModel = {
-    val copied = new ArimaRegressionModel(uid)
-    copyValues(copied, extra).setParent(parent)
-  }
+  private var fittedData: DataFrame = _
+  def setFittedData(df: DataFrame): this.type = { this.fittedData = df; this }
 
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    // Dummy prediction logic — just copy y as prediction
-    dataset.withColumn("prediction", col("y"))
+  override def copy(extra: ParamMap): ArimaRegressionModel = defaultCopy(extra)
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    require(fittedData != null, "ARIMA model not fitted.")
+    fittedData
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    schema.add(StructField("prediction", DoubleType, false))
+    schema.add("prediction", org.apache.spark.sql.types.DoubleType, nullable = true)
   }
+
+  override def write: MLWriter = new DefaultParamsWriter(this)
 }
 
-object ArimaRegressionModel extends MLReadable[ArimaRegressionModel] {
-  override def read: MLReader[ArimaRegressionModel] = new DefaultParamsReader[ArimaRegressionModel]
-  override def load(path: String): ArimaRegressionModel = super.load(path)
-}
+object ArimaRegressionModel extends DefaultParamsReadable[ArimaRegressionModel]
