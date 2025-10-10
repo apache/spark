@@ -4709,6 +4709,7 @@ def _test() -> None:
 
     if not have_pandas or not have_pyarrow:
         del pyspark.sql.connect.functions.builtin.udf.__doc__
+        del pyspark.sql.connect.functions.builtin.arrow_udtf.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

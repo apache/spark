@@ -27901,6 +27901,7 @@ def _test() -> None:
 
     if not have_pandas or not have_pyarrow:
         del pyspark.sql.functions.builtin.udf.__doc__
+        del pyspark.sql.functions.builtin.arrow_udtf.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()
