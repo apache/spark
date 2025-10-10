@@ -226,7 +226,7 @@
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
       also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
     -->
-    <sbt-jupiter-interface.version>0.15.1</sbt-jupiter-interface.version>
+    <sbt-jupiter-interface.version>0.17.0</sbt-jupiter-interface.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
