@@ -77,7 +77,7 @@ trait WithOrigin {
     try {
       val thisClass = this.getClass
 
-      // Try to find query context using common method names
+      // Try to find query context using common method names.
       val contextMethodNames = Seq("getQueryContext", "context")
 
       for (methodName <- contextMethodNames) {
@@ -86,30 +86,23 @@ trait WithOrigin {
           val currentContexts = getMethod.invoke(this).asInstanceOf[Array[QueryContext]]
           val translatedContexts = translator(currentContexts)
 
-          // Try to update the field in-place
+          // Try to update the field in-place.
           val fieldName = if (methodName == "getQueryContext") "queryContext" else "context"
-          try {
-            val field = thisClass.getDeclaredField(fieldName)
-            field.setAccessible(true)
-            field.set(this, translatedContexts)
-            return this // Successfully updated in-place!
-          } catch {
-            case _: NoSuchFieldException | _: IllegalAccessException |
-                _: IllegalArgumentException =>
-            // Field update failed, continue to try other methods
-          }
+          val field = thisClass.getDeclaredField(fieldName)
+          field.setAccessible(true)
+          field.set(this, translatedContexts)
         } catch {
           case _: NoSuchMethodException | _: IllegalAccessException |
               _: IllegalArgumentException | _: java.lang.reflect.InvocationTargetException |
-              _: ClassCastException =>
-          // Method doesn't exist or invocation failed, try next
+              _: ClassCastException | _: NoSuchFieldException =>
+          // Method doesn't exist, invocation failed, or field update failed - try next.
         }
       }
 
-      this // No update possible, return unchanged
+      this // No update possible, return unchanged.
     } catch {
       case _: SecurityException =>
-        // Security manager prevented reflection access
+        // Security manager prevented reflection access.
         this
     }
   }

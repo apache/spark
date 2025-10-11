@@ -64,7 +64,6 @@ class ParameterHandler {
   // Compiled regex pattern for efficient parameter marker detection.
   private val parameterMarkerPattern = java.util.regex.Pattern.compile("[?:]")
 
-
   /**
    * Helper method to perform parameter substitution and store position mapper.
    *
