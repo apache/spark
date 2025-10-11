@@ -319,13 +319,10 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       sessionId: String,
       observationAndPlanIds: Map[String, Long],
       dataframe: DataFrame): Option[ExecutePlanResponse] = {
-    val qe = dataframe.queryExecution
-    val observedMetrics = qe.executedPlan.synchronized {
-      qe.observedMetrics.collect {
-        case (name, row) if !executeHolder.observations.contains(name) =>
-          val values = SparkConnectPlanExecution.toObservedMetricsValues(row)
-          name -> values
-      }
+    val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
+      case (name, row) if !executeHolder.observations.contains(name) =>
+        val values = SparkConnectPlanExecution.toObservedMetricsValues(row)
+        name -> values
     }
     if (observedMetrics.nonEmpty) {
       Some(
