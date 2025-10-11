@@ -272,18 +272,11 @@ class QueryExecution(
    */
   def toRdd: RDD[InternalRow] = lazyToRdd.get
 
-  @volatile private var _observedMetrics: Map[String, Row] = null
+  private val observedMetricsLock = new Object
 
   /** Get the metrics observed during the execution of the query plan. */
-  def observedMetrics: Map[String, Row] = {
-    if (_observedMetrics == null) {
-      executedPlan.synchronized {
-        if (_observedMetrics == null) {
-          _observedMetrics = CollectMetricsExec.collect(executedPlan)
-        }
-      }
-    }
-    _observedMetrics
+  def observedMetrics: Map[String, Row] = observedMetricsLock.synchronized {
+    CollectMetricsExec.collect(executedPlan)
   }
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
