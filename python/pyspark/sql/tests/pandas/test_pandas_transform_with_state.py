@@ -200,7 +200,6 @@ class TransformWithStateTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_basic(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -217,7 +216,6 @@ class TransformWithStateTestsMixin:
 
         self._test_transform_with_state_basic(SimpleStatefulProcessorFactory(), check_results)
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_non_exist_value_state(self):
         def check_results(batch_df, _):
             batch_df.collect()
@@ -230,7 +228,6 @@ class TransformWithStateTestsMixin:
             InvalidSimpleStatefulProcessorFactory(), check_results, True
         )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_query_restarts(self):
         root_path = tempfile.mkdtemp()
         input_path = root_path + "/input"
@@ -305,7 +302,6 @@ class TransformWithStateTestsMixin:
             Row(id="1", countAsString="2"),
         }
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_list_state(self):
         def check_results(batch_df, _):
             batch_df.collect()
@@ -318,7 +314,6 @@ class TransformWithStateTestsMixin:
             ListStateProcessorFactory(), check_results, True, "processingTime"
         )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_list_state_large_list(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -394,7 +389,6 @@ class TransformWithStateTestsMixin:
         self.assertTrue(q.exception() is None)
 
     # test list state with ttl has the same behavior as list state when state doesn't expire.
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_list_state_large_ttl(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -407,7 +401,6 @@ class TransformWithStateTestsMixin:
             ListStateLargeTTLProcessorFactory(), check_results, True, "processingTime"
         )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_map_state(self):
         def check_results(batch_df, _):
             batch_df.collect()
@@ -419,7 +412,6 @@ class TransformWithStateTestsMixin:
         self._test_transform_with_state_basic(MapStateProcessorFactory(), check_results, True)
 
     # test map state with ttl has the same behavior as map state when state doesn't expire.
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_map_state_large_ttl(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -434,7 +426,6 @@ class TransformWithStateTestsMixin:
 
     # test value state with ttl has the same behavior as value state when
     # state doesn't expire.
-    @unittest.skip("Temporarily disabled for testing")
     def test_value_state_ttl_basic(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -455,7 +446,6 @@ class TransformWithStateTestsMixin:
 
     # TODO SPARK-50908 holistic fix for TTL suite
     @unittest.skip("test is flaky and it is only a timing issue, skipping until we can resolve")
-    @unittest.skip("Temporarily disabled for testing")
     def test_value_state_ttl_expiration(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -605,7 +595,6 @@ class TransformWithStateTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_proc_timer(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -723,7 +712,6 @@ class TransformWithStateTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_event_time(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -756,7 +744,6 @@ class TransformWithStateTestsMixin:
             EventTimeStatefulProcessorFactory(), check_results
         )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_with_wmark_and_non_event_time(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -855,7 +842,6 @@ class TransformWithStateTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_init_state(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -880,7 +866,6 @@ class TransformWithStateTestsMixin:
             SimpleStatefulProcessorWithInitialStateFactory(), check_results
         )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_init_state_with_extra_transformation(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -960,7 +945,6 @@ class TransformWithStateTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_non_contiguous_grouping_cols(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -973,7 +957,6 @@ class TransformWithStateTestsMixin:
             SimpleStatefulProcessorWithInitialStateFactory(), check_results
         )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_non_contiguous_grouping_cols_with_init_state(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -1057,7 +1040,6 @@ class TransformWithStateTestsMixin:
         q.processAllAvailable()
         q.awaitTermination(10)
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_chaining_ops(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -1094,7 +1076,6 @@ class TransformWithStateTestsMixin:
             ["outputTimestamp", "id"],
         )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_init_state_with_timers(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
@@ -1125,7 +1106,6 @@ class TransformWithStateTestsMixin:
             StatefulProcessorWithInitialStateTimersFactory(), check_results, "processingTime"
         )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_batch_query(self):
         data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]
         df = self.spark.createDataFrame(data, "id string, temperature int")
@@ -1157,7 +1137,6 @@ class TransformWithStateTestsMixin:
             Row(id="1", countAsString="2"),
         }
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_batch_query_initial_state(self):
         data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]
         df = self.spark.createDataFrame(data, "id string, temperature int")
@@ -1202,11 +1181,9 @@ class TransformWithStateTestsMixin:
     @unittest.skipIf(
         "COVERAGE_PROCESS_START" in os.environ, "Flaky with coverage enabled, skipping for now."
     )
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_map_state_metadata(self):
         self._test_transform_with_map_state_metadata(None)
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_map_state_metadata_with_init_state(self):
         # run the same test suite again but with no-op initial state
         # TWS with initial state is using a different python runner
@@ -1339,7 +1316,6 @@ class TransformWithStateTestsMixin:
         )
 
     # This test covers multiple list state variables and flatten option
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_list_state_metadata(self):
         checkpoint_path = tempfile.mktemp()
 
@@ -1420,7 +1396,6 @@ class TransformWithStateTestsMixin:
 
     # This test covers value state variable and read change feed,
     # snapshotStartBatchId related options
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_value_state_metadata(self):
         checkpoint_path = tempfile.mktemp()
 
@@ -1511,7 +1486,6 @@ class TransformWithStateTestsMixin:
                 checkpoint_path=checkpoint_path,
             )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_restart_with_multiple_rows_init_state(self):
         def check_results(batch_df, _):
             batch_df.collect()
@@ -1571,7 +1545,6 @@ class TransformWithStateTestsMixin:
             initial_state=init_df,
         )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_in_pandas_composite_type(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
@@ -1931,7 +1904,6 @@ class TransformWithStateTestsMixin:
         )
 
     # run the same test suites again but with single shuffle partition
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_with_timers_single_partition(self):
         with self.sql_conf({"spark.sql.shuffle.partitions": "1"}):
             self.test_transform_with_state_init_state_with_timers()
@@ -1980,7 +1952,6 @@ class TransformWithStateTestsMixin:
         q.processAllAvailable()
         q.awaitTermination(10)
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_schema_evolution_scenarios(self):
         """Test various schema evolution scenarios"""
         with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
@@ -2049,7 +2020,6 @@ class TransformWithStateTestsMixin:
 
     # This test case verifies that an exception is thrown when downcasting, which violates
     # Avro's schema evolution rules
-    @unittest.skip("Temporarily disabled for testing")
     def test_schema_evolution_fails(self):
         with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
             with tempfile.TemporaryDirectory() as checkpoint_dir:
@@ -2102,7 +2072,6 @@ class TransformWithStateTestsMixin:
                         and "Schema evolution is not possible" in error_msg
                     )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_not_nullable_fails(self):
         with self.sql_conf({"spark.sql.streaming.stateStore.encodingFormat": "avro"}):
             with tempfile.TemporaryDirectory() as checkpoint_dir:
@@ -2135,7 +2104,6 @@ class TransformWithStateTestsMixin:
                         and "column family state must be nullable" in error_msg
                     )
 
-    @unittest.skip("Temporarily disabled for testing")
     def test_transform_with_state_int_to_decimal_coercion(self):
         if not self.use_pandas():
             return
