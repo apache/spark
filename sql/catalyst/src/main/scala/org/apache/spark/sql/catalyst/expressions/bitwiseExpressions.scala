@@ -231,14 +231,17 @@ case class BitwiseCount(child: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
     case BooleanType => defineCodeGen(ctx, ev, c => s"($c) ? 1 : 0")
+    case ByteType => defineCodeGen(ctx, ev, c => s"java.lang.Integer.bitCount($c & 0xFF)")
+    case ShortType => defineCodeGen(ctx, ev, c => s"java.lang.Integer.bitCount($c & 0xFFFF)")
+    case IntegerType => defineCodeGen(ctx, ev, c => s"java.lang.Integer.bitCount($c)")
     case _ => defineCodeGen(ctx, ev, c => s"java.lang.Long.bitCount($c)")
   }
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case BooleanType => if (input.asInstanceOf[Boolean]) 1 else 0
-    case ByteType => java.lang.Long.bitCount(input.asInstanceOf[Byte])
-    case ShortType => java.lang.Long.bitCount(input.asInstanceOf[Short])
-    case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
+    case ByteType => java.lang.Integer.bitCount(input.asInstanceOf[Byte] & 0xFF)
+    case ShortType => java.lang.Integer.bitCount(input.asInstanceOf[Short] & 0xFFFF)
+    case IntegerType => java.lang.Integer.bitCount(input.asInstanceOf[Int])
     case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
   }
 

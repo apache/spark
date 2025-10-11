@@ -128,6 +128,30 @@ struct<bit_count(-1):int>
 
 
 -- !query
+select bit_count(-2)
+-- !query schema
+struct<bit_count(-2):int>
+-- !query output
+31
+
+
+-- !query
+select bit_count(-3S)
+-- !query schema
+struct<bit_count(-3):int>
+-- !query output
+15
+
+
+-- !query
+select bit_count(-4Y)
+-- !query schema
+struct<bit_count(-4):int>
+-- !query output
+6
+
+
+-- !query
 select bit_count(9223372036854775807L)
 -- !query schema
 struct<bit_count(9223372036854775807):int>

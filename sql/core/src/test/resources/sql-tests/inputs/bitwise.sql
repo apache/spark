@@ -29,6 +29,9 @@ select bit_count(3L);
 
 -- negative num
 select bit_count(-1L);
+select bit_count(-2);
+select bit_count(-3S);
+select bit_count(-4Y);
 
 -- edge value
 select bit_count(9223372036854775807L);

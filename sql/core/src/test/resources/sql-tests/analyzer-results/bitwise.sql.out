@@ -112,6 +112,27 @@ Project [bit_count(-1) AS bit_count(-1)#x]
 
 
 -- !query
+select bit_count(-2)
+-- !query analysis
+Project [bit_count(-2) AS bit_count(-2)#x]
++- OneRowRelation
+
+
+-- !query
+select bit_count(-3S)
+-- !query analysis
+Project [bit_count(-3) AS bit_count(-3)#x]
++- OneRowRelation
+
+
+-- !query
+select bit_count(-4Y)
+-- !query analysis
+Project [bit_count(-4) AS bit_count(-4)#x]
++- OneRowRelation
+
+
+-- !query
 select bit_count(9223372036854775807L)
 -- !query analysis
 Project [bit_count(9223372036854775807) AS bit_count(9223372036854775807)#x]
