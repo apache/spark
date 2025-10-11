@@ -46,7 +46,9 @@ private[sql] class ObservationManager(session: SparkSession) {
   }
 
   private def tryComplete(qe: QueryExecution): Unit = {
-    val allMetrics = qe.observedMetrics
+    val allMetrics = qe.executedPlan.synchronized {
+      qe.observedMetrics
+    }
     qe.logical.foreach {
       case c: CollectMetrics =>
         allMetrics.get(c.name).foreach { metrics =>
