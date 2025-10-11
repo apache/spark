@@ -40,6 +40,11 @@ message PipelineCommand {
     DefineSqlGraphElements define_sql_graph_elements = 6;
     GetQueryFunctionExecutionSignalStream get_query_function_execution_signal_stream = 7;
     DefineFlowQueryFunctionResult define_flow_query_function_result = 8;
+    // Reserved field for protocol extensions.
+    // Used to support forward-compatibility by carrying additional command types
+    // that are not yet defined in this version of the proto. During planning, the
+    // engine will resolve and dispatch the concrete command contained in this field.
+    google.protobuf.Any extension = 999;
   }
 
   // Request to create a new dataflow graph.
@@ -262,6 +267,12 @@ message SourceCodeLocation {
   optional string file_name = 1;
   // The specific line number that this pipeline source code is located at, if applicable.
   optional int32 line_number = 2;
+
+  // Reserved field for protocol extensions.
+  // Used to support forward-compatibility by carrying additional fields
+  // that are not yet defined in this version of the proto. During planning, the
+  // engine will resolve and dispatch the concrete command contained in this field.
+  repeated google.protobuf.Any extension = 999;
 }
 
 // A signal from the server to the client to execute the query function for one or more flows, and
