@@ -272,7 +272,7 @@ class QueryExecution(
    */
   def toRdd: RDD[InternalRow] = lazyToRdd.get
 
-  @volatile var _observedMetrics: Map[String, Row] = null
+  @volatile private var _observedMetrics: Map[String, Row] = null
 
   /** Get the metrics observed during the execution of the query plan. */
   def observedMetrics: Map[String, Row] = {
