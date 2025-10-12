@@ -133,15 +133,19 @@ private[connect] object PipelinesHandler extends Logging {
     val defaultCatalog = Option
       .when(cmd.hasDefaultCatalog)(cmd.getDefaultCatalog)
       .getOrElse {
-        logInfo(s"No default catalog was supplied. Falling back to the current catalog.")
-        sessionHolder.session.catalog.currentCatalog()
+        val currentCatalog = sessionHolder.session.catalog.currentCatalog()
+        logInfo("No default catalog was supplied. " +
+          s"Falling back to the current catalog: $currentCatalog.")
+        currentCatalog
       }
 
     val defaultDatabase = Option
       .when(cmd.hasDefaultDatabase)(cmd.getDefaultDatabase)
       .getOrElse {
-        logInfo(s"No default database was supplied. Falling back to the current database.")
-        sessionHolder.session.catalog.currentDatabase
+        val currentDatabase = sessionHolder.session.catalog.currentDatabase
+        logInfo("No default database was supplied. " +
+          s"Falling back to the current database: $currentDatabase.")
+        currentDatabase
       }
 
     val defaultSqlConf = cmd.getSqlConfMap.asScala.toMap
