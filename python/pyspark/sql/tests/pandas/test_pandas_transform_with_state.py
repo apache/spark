@@ -1601,6 +1601,48 @@ class TransformWithStateInPandasTestsMixin:
                     check_exception=check_exception,
                 )
 
+    def test_transform_with_state_in_pandas_large_values(self):
+        """Test large state values (512KB) to validate readFully fix for SPARK-53870"""
+        def check_results(batch_df, batch_id):
+            batch_df.collect()
+            target_size_bytes = 512 * 1024
+            large_string = "a" * target_size_bytes
+            expected_list_elements = ",".join(
+                [large_string, large_string + "b", large_string + "c"]
+            )
+            expected_map_result = f"large_string_key:{large_string}"
+
+            assert set(batch_df.sort("id").collect()) == {
+                Row(
+                    id="0",
+                    valueStateResult=large_string,
+                    listStateResult=expected_list_elements,
+                    mapStateResult=expected_map_result,
+                ),
+                Row(
+                    id="1",
+                    valueStateResult=large_string,
+                    listStateResult=expected_list_elements,
+                    mapStateResult=expected_map_result,
+                ),
+            }
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("valueStateResult", StringType(), True),
+                StructField("listStateResult", StringType(), True),
+                StructField("mapStateResult", StringType(), True),
+            ]
+        )
+
+        self._test_transform_with_state_in_pandas_basic(
+            PandasLargeValueStatefulProcessor(),
+            check_results,
+            single_batch=True,
+            output_schema=output_schema,
+        )
+
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe
@@ -2367,6 +2409,45 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
                 "nested_map_state_arr": [
                     json.dumps(confs_map, default=np_int64_to_int, sort_keys=True)
                 ],
+            }
+        )
+
+    def close(self) -> None:
+        pass
+
+
+class PandasLargeValueStatefulProcessor(StatefulProcessor):
+    """Test processor for large state values (512KB) to validate readFully fix"""
+    def init(self, handle: StatefulProcessorHandle):
+        value_state_schema = StructType([StructField("value", StringType(), True)])
+        self.value_state = handle.getValueState("valueState", value_state_schema)
+
+        list_state_schema = StructType([StructField("value", StringType(), True)])
+        self.list_state = handle.getListState("listState", list_state_schema)
+
+        self.map_state = handle.getMapState("mapState", "key string", "value string")
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        target_size_bytes = 512 * 1024
+        large_string = "a" * target_size_bytes
+
+        self.value_state.update((large_string,))
+        value_retrieved = self.value_state.get()[0]
+
+        self.list_state.put([(large_string,), (large_string + "b",), (large_string + "c",)])
+        list_retrieved = list(self.list_state.get())
+        list_elements = ",".join([elem[0] for elem in list_retrieved])
+
+        map_key = ("large_string_key",)
+        self.map_state.updateValue(map_key, (large_string,))
+        map_retrieved = f"{map_key[0]}:{self.map_state.getValue(map_key)[0]}"
+
+        yield pd.DataFrame(
+            {
+                "id": key,
+                "valueStateResult": [value_retrieved],
+                "listStateResult": [list_elements],
+                "mapStateResult": [map_retrieved],
             }
         )
 
