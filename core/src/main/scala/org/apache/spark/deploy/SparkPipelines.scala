@@ -46,7 +46,6 @@ object SparkPipelines extends Logging {
       pipelinesCliFile: String,
       args: Array[String]): Seq[String] = {
     val (sparkSubmitArgs, pipelinesArgs) = splitArgs(args)
-    logInfo(s"Running $pipelinesCliFile with arguments: ${pipelinesArgs.mkString(" ")}")
     sparkSubmitArgs ++ Seq(pipelinesCliFile) ++ pipelinesArgs
   }
 
