@@ -328,11 +328,6 @@ def run(
     log_with_curr_timestamp("Registering graph elements...")
     registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
     register_definitions(spec_path, registry, spec)
-
-    log_with_curr_timestamp(
-        f"Starting run (dry={dry}, full_refresh={full_refresh}, " +
-        f"full_refresh_all={full_refresh_all}, refresh={refresh})..."
-    )
     result_iter = start_run(
         spark,
         dataflow_graph_id,
@@ -395,7 +390,7 @@ def main() -> None:
     # "init" subcommand
     init_parser = subparsers.add_parser(
         "init",
-        help="Generate a sample pipeline project, including a spec file and example definitions.",
+        help="Generate a sample pipeline project, including a spec file and example transformations.",
     )
     init_parser.add_argument(
         "--name",
@@ -424,7 +419,7 @@ def main() -> None:
                 full_refresh=args.full_refresh,
                 full_refresh_all=args.full_refresh_all,
                 refresh=args.refresh,
-                dry=args.command == "dry-run",
+                dry=False,
             )
         else:
             assert args.command == "dry-run"
