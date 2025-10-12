@@ -93,12 +93,13 @@ class GraphRegistrationContext(
         )
       }
 
-    for (flow <- qualifiedFlows)
+    qualifiedFlows.foreach { flow =>
       assertFlowIdentifierIsUnique(
         flow = flow,
         datasetType = TableType,
         flows = qualifiedFlows
       )
+    }
   }
 
   private def assertDatasetIdentifierIsUnique(
