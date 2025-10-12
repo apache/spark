@@ -191,7 +191,7 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
   /** Visible for testing */
   def getStreamingQuery: StreamingQuery =
     _streamingQuery.getOrElse(
-      throw new IllegalStateException(s"StreamingPhysicalFlow has not been started")
+      throw new IllegalStateException("StreamingPhysicalFlow has not been started")
     )
 
   /**
