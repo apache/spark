@@ -32,13 +32,12 @@ class DataflowGraphRegistry {
 
   private val dataflowGraphs = new ConcurrentHashMap[String, GraphRegistrationContext]()
 
-  /** Registers a DataflowGraph and generates a unique id to associate with the graph */
+  /** Registers a GraphRegistrationContext and generates a unique id to associate with the graph */
   def createDataflowGraph(
       defaultCatalog: String,
       defaultDatabase: String,
       defaultSqlConf: Map[String, String]): String = {
     val graphId = java.util.UUID.randomUUID().toString
-    // TODO: propagate pipeline catalog and schema from pipeline spec here.
     dataflowGraphs.put(
       graphId,
       new GraphRegistrationContext(defaultCatalog, defaultDatabase, defaultSqlConf))
