@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Constant, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -199,27 +199,13 @@ object V1WritesUtils {
     expressions.exists(_.exists(_.isInstanceOf[Empty2Null]))
   }
 
-  // SortOrder sequence A (outputOrdering) satisfies SortOrder sequence B (requiredOrdering)
-  // if and only if B is an equivalent of A or of A's prefix, except for SortOrder in B that
-  // satisfies any constant SortOrder in A.
   def isOrderingMatched(
       requiredOrdering: Seq[Expression],
       outputOrdering: Seq[SortOrder]): Boolean = {
-    val (constantOutputOrdering, nonConstantOutputOrdering) = outputOrdering.partition {
-      case SortOrder(_, Constant, _, _) => true
-      case SortOrder(child, _, _, _) => child.foldable
-    }
-
-    val effectiveRequiredOrdering = requiredOrdering.filterNot { requiredOrder =>
-      constantOutputOrdering.exists { outputOrder =>
-        outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
-      }
-    }
-
-    if (effectiveRequiredOrdering.length > nonConstantOutputOrdering.length) {
+    if (requiredOrdering.length > outputOrdering.length) {
       false
     } else {
-      effectiveRequiredOrdering.zip(nonConstantOutputOrdering).forall {
+      requiredOrdering.zip(outputOrdering).forall {
         case (requiredOrder, outputOrder) =>
           outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
       }

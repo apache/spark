@@ -436,6 +436,89 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     processedRowsPerSecondJSON shouldBe processedRowsPerSecondExpected +- epsilon
   }
 
+  test("SPARK-53690: avgOffsetsBehindLatest should never be in scientific notation") {
+    val progress = testProgress5.jsonValue
+    val progressPretty = testProgress5.prettyJson
+
+    // Actual values
+    val avgOffsetsBehindLatest: Double = 2.70941269E8
+
+    // Get values from progress metrics JSON and cast back to Double
+    // for numeric comparison
+    val metricsJSON = (progress \ "sources")(0) \ "metrics"
+    val avgOffsetsBehindLatestJSON = (metricsJSON \ "avgOffsetsBehindLatest")
+      .values.toString
+
+    // Get expected values after type casting
+    val avgOffsetsBehindLatestExpected = BigDecimal(avgOffsetsBehindLatest)
+      .setScale(1, RoundingMode.HALF_UP)
+
+    // This should fail if avgOffsetsBehindLatest contains E notation
+    avgOffsetsBehindLatestJSON should not include "E"
+
+    // Value in progress metrics should be equal to the Decimal conversion of the same
+    // Using epsilon to compare floating-point values
+    val epsilon = 1e-6
+    avgOffsetsBehindLatestJSON.toDouble shouldBe avgOffsetsBehindLatestExpected.toDouble +- epsilon
+
+    // Validating that the pretty JSON of metrics reported is same as defined
+    progressPretty shouldBe
+      s"""
+         |{
+         |  "id" : "${testProgress5.id.toString}",
+         |  "runId" : "${testProgress5.runId.toString}",
+         |  "name" : "KafkaMetricsTest",
+         |  "timestamp" : "2025-09-23T06:00:00.000Z",
+         |  "batchId" : 1250,
+         |  "batchDuration" : 111255,
+         |  "numInputRows" : 800000,
+         |  "inputRowsPerSecond" : 75291.3,
+         |  "processedRowsPerSecond" : 71906.9,
+         |  "durationMs" : {
+         |    "addBatch" : 110481,
+         |    "commitBatch" : 410,
+         |    "commitOffsets" : 107,
+         |    "getBatch" : 0,
+         |    "latestOffset" : 2,
+         |    "queryPlanning" : 179,
+         |    "triggerExecution" : 111255,
+         |    "walCommit" : 74
+         |  },
+         |  "stateOperators" : [ ],
+         |  "sources" : [ {
+         |    "description" : "KafkaV2[Subscribe[bigdata_omsTrade_cdc]]",
+         |    "startOffset" : {
+         |      "bigdata_omsTrade_cdc" : {
+         |        "0" : 18424809459
+         |      }
+         |    },
+         |    "endOffset" : {
+         |      "bigdata_omsTrade_cdc" : {
+         |        "0" : 18432809459
+         |      }
+         |    },
+         |    "latestOffset" : {
+         |      "bigdata_omsTrade_cdc" : {
+         |        "0" : 18703750728
+         |      }
+         |    },
+         |    "numInputRows" : 800000,
+         |    "inputRowsPerSecond" : 75291.3,
+         |    "processedRowsPerSecond" : 71906.9,
+         |    "metrics" : {
+         |      "avgOffsetsBehindLatest" : "270941269.0",
+         |      "maxOffsetsBehindLatest" : "270941269",
+         |      "minOffsetsBehindLatest" : "270941269"
+         |    }
+         |  } ],
+         |  "sink" : {
+         |    "description" : "DeltaSink[s3://<masked-storage>/delta-source]",
+         |    "numOutputRows" : -1
+         |  }
+         |}
+  """.stripMargin.trim
+  }
+
   def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>
     eventually(Timeout(streamingTimeout)) {
       if (q.exception.isEmpty) {
@@ -595,6 +678,46 @@ object StreamingQueryStatusAndProgressSuite {
       "event1" -> row(schema1, 1L, 3.0d),
       "event2" -> row(schema2, 1L, "hello", "world")).asJava)
   )
+
+  val testProgress5 = new StreamingQueryProgress(
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
+    name = "KafkaMetricsTest",
+    timestamp = "2025-09-23T06:00:00.000Z",
+    batchId = 1250,
+    batchDuration = 111255,
+    durationMs = new java.util.HashMap(
+      Map(
+        "addBatch" -> 110481,
+        "commitBatch" -> 410,
+        "commitOffsets" -> 107,
+        "getBatch" -> 0,
+        "latestOffset" -> 2,
+        "queryPlanning" -> 179,
+        "triggerExecution" -> 111255,
+        "walCommit" -> 74
+      ).transform((_, v) => long2Long(v)).asJava
+    ),
+    eventTime = new java.util.HashMap(),
+    stateOperators = Array.empty,
+    sources = Array(
+      new SourceProgress(
+        description = "KafkaV2[Subscribe[bigdata_omsTrade_cdc]]",
+        startOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18424809459\n    }\n}",
+        endOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18432809459\n    }\n}",
+        latestOffset = "{\n    \"bigdata_omsTrade_cdc\" : {\n        \"0\" : 18703750728\n    }\n}",
+        numInputRows = 800000L,
+        inputRowsPerSecond = 75291.2831516931,
+        processedRowsPerSecond = 71906.88058963642,
+        metrics = new java.util.HashMap(Map(
+          "avgOffsetsBehindLatest" -> "2.70941269E8",
+          "minOffsetsBehindLatest" -> "270941269",
+          "maxOffsetsBehindLatest" -> "270941269").asJava))),
+    sink = SinkProgress(
+      "DeltaSink[s3://<masked-storage>/delta-source]"
+      , None
+    ),
+    observedMetrics = new java.util.HashMap())
 
   val testStatus = new StreamingQueryStatus("active", true, false)
 }

@@ -912,8 +912,7 @@ case class Sort(
   override def maxRowsPerPartition: Option[Long] = {
     if (global) maxRows else child.maxRowsPerPartition
   }
-  override def outputOrdering: Seq[SortOrder] =
-    order ++ child.outputOrdering.filter(_.direction == Constant)
+  override def outputOrdering: Seq[SortOrder] = order
   final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
