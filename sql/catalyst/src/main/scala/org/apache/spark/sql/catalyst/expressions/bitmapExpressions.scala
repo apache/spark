@@ -322,3 +322,97 @@ case class BitmapOrAgg(child: Expression,
     buffer.getBinary(mutableAggBufferOffset)
   }
 }
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(child) - Returns a bitmap that is the bitwise AND of all of the bitmaps from the child
+    expression. The input should be bitmaps created from bitmap_construct_agg().
+  """,
+  // scalastyle:off line.size.limit
+  examples = """
+    Examples:
+      > SELECT substring(hex(_FUNC_(col)), 0, 6) FROM VALUES (X '10'), (X '20'), (X '40') AS tab(col);
+       000000
+      > SELECT substring(hex(_FUNC_(col)), 0, 6) FROM VALUES (X '10'), (X '10'), (X '30') AS tab(col);
+       100000
+  """,
+  // scalastyle:on line.size.limit
+  since = "4.1.0",
+  group = "agg_funcs"
+)
+case class BitmapAndAgg(child: Expression,
+                       mutableAggBufferOffset: Int = 0,
+                       inputAggBufferOffset: Int = 0)
+  extends ImperativeAggregate with UnaryLike[Expression] {
+
+  def this(child: Expression) = {
+    this(child = child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.dataType != BinaryType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(BinaryType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  override def dataType: DataType = BinaryType
+
+  override def prettyName: String = "bitmap_and_agg"
+
+  override protected def withNewChildInternal(newChild: Expression): BitmapAndAgg =
+    copy(child = newChild)
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def nullable: Boolean = false
+
+  override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
+
+  // The aggregation buffer is a fixed size binary.
+  private val bitmapAttr = AttributeReference("bitmap", BinaryType, false)()
+
+  override def aggBufferAttributes: Seq[AttributeReference] = bitmapAttr :: Nil
+
+  override def defaultResult: Option[Literal] =
+    Option(Literal(Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0)))
+
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
+
+  final override def initialize(buffer: InternalRow): Unit = {
+    val dummy = Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0xFF.toByte)
+    buffer.update(mutableAggBufferOffset, dummy)
+  }
+
+  override def update(buffer: InternalRow, input: InternalRow): Unit = {
+    val input_bitmap = child.eval(input).asInstanceOf[Array[Byte]]
+    if (input_bitmap != null) {
+      val bitmap = buffer.getBinary(mutableAggBufferOffset)
+      BitmapExpressionUtils.bitmapMergeAnd(bitmap, input_bitmap)
+    }
+  }
+
+  override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
+    val bitmap1 = buffer1.getBinary(mutableAggBufferOffset)
+    val bitmap2 = buffer2.getBinary(inputAggBufferOffset)
+    BitmapExpressionUtils.bitmapMergeAnd(bitmap1, bitmap2)
+  }
+
+  override def eval(buffer: InternalRow): Any = {
+    buffer.getBinary(mutableAggBufferOffset)
+  }
+}

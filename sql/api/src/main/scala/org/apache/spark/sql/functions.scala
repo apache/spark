@@ -4236,6 +4236,15 @@ object functions {
    */
   def bitmap_or_agg(col: Column): Column = Column.fn("bitmap_or_agg", col)
 
+  /**
+   * Returns a bitmap that is the bitwise AND of all of the bitmaps from the input column. The
+   * input column should be bitmaps created from bitmap_construct_agg().
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def bitmap_and_agg(col: Column): Column = Column.fn("bitmap_and_agg", col)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

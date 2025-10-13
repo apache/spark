@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions.{bitmap_bit_position, bitmap_bucket_number, bitmap_construct_agg, bitmap_count, bitmap_or_agg, col, hex, lit, substring, to_binary}
+import org.apache.spark.sql.functions.{bitmap_and_agg, bitmap_bit_position, bitmap_bucket_number, bitmap_construct_agg, bitmap_count, bitmap_or_agg, col, hex, lit, substring, to_binary}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
@@ -131,6 +131,24 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
                  |""".stripMargin)
             checkAnswer(df, expected)
         }
+
+        // Compute over one of the partitions
+        Seq("part1", "part2").foreach {
+          case part =>
+            val expected = spark.sql(
+              s"""
+                 | select $part, count (distinct col) c from $table group by 1 order by 1
+                 |""".stripMargin).collect()
+
+            val df = spark.sql(
+              s"""
+                 | select $part, sum(c) from (
+                 |   select $part, bn, bitmap_count(bitmap_and_agg(bm)) c
+                 |   from $precomputed group by 1, 2
+                 | ) group by 1 order by 1
+                 |""".stripMargin)
+            checkAnswer(df, expected)
+        }
       }
     }
   }
@@ -208,6 +226,18 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("bitmap_and_agg") {
+    val df = Seq("30", "70", "F0").toDF("a")
+    checkAnswer(
+      df.selectExpr("substring(hex(bitmap_and_agg(to_binary(a, 'hex'))), 0, 6)"),
+      Seq(Row("300000"))
+    )
+    checkAnswer(
+      df.select(substring(hex(bitmap_and_agg(to_binary(col("a"), lit("hex")))), 0, 6)),
+      Seq(Row("300000"))
+    )
+  }
+
   test("bitmap_count called with non-binary type") {
     val df = Seq(12).toDF("a")
     checkError(
@@ -246,6 +276,28 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
       ),
       context = ExpectedContext(
         fragment = "bitmap_or_agg(a)",
+        start = 0,
+        stop = 15
+      )
+    )
+  }
+
+  test("bitmap_and_agg called with non-binary type") {
+    val df = Seq(12).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("bitmap_and_agg(a)")
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"bitmap_and_agg(a)\"",
+        "paramIndex" -> "first",
+        "requiredType" -> "\"BINARY\"",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "bitmap_and_agg(a)",
         start = 0,
         stop = 15
       )
