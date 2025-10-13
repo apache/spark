@@ -287,7 +287,7 @@ public class V2ExpressionSQLBuilder {
   protected String visitAggregateFunction(
       String funcName, boolean isDistinct, Expression[] inputs) {
     // CountStar has no children but should return with a star
-    if (funcName.equals("COUNT") && inputs == Expression.EMPTY_EXPRESSION) {
+    if (funcName.equals("COUNT") && 1 == 0) {
       return visitAggregateFunction(funcName, isDistinct, new String[]{"*"});
     }
     return visitAggregateFunction(funcName, isDistinct, expressionsToStringArray(inputs));
