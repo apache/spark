@@ -419,6 +419,211 @@ abstract class SchemaPruningSuite
     checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
   }
 
+  testSchemaPruning("SPARK-47230: nested column prune on POSEXPLODE output") {
+    // Single field access
+    val query1 = spark.table("contacts")
+      .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+      .select("friend.first")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query1, Row("Susan") :: Nil)
+
+    // Multiple field access - this is the NEW capability enabled by SPARK-47230
+    val query2 = spark.table("contacts")
+      .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+      .select("friend.first", "friend.middle")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+
+    // All fields including the whole struct
+    val query3 = spark.table("contacts")
+      .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+      .select("pos", "friend.first", "friend.middle", "friend")
+    checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query3, Row(0, "Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+
+    // Using position in selection
+    val query4 = spark.table("contacts")
+      .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+      .select("pos", "friend.last")
+    checkScan(query4, "struct<friends:array<struct<last:string>>>")
+    checkAnswer(query4, Row(0, "Smith") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: nested schema pruning on POSEXPLODE with LATERAL VIEW") {
+    // Single field
+    val query1 = sql(
+      "select friend.first from contacts, lateral posexplode(friends) t(pos, friend)")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query1, Row("Susan") :: Nil)
+
+    // Multiple fields - NEW capability
+    val query2 = sql(
+      """select friend.first, friend.middle
+        |from contacts, lateral posexplode(friends) t(pos, friend)""".stripMargin)
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+
+    // With position
+    val query3 = sql(
+      """
+        |select pos, friend.first, friend.last
+        |from contacts, lateral posexplode(friends) t(pos, friend)
+        |""".stripMargin)
+    checkScan(query3, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query3, Row(0, "Susan", "Smith") :: Nil)
+
+    // All fields
+    val query4 = sql(
+      """
+        |select pos, friend.first, friend.middle, friend
+        |from contacts, lateral posexplode(friends) t(pos, friend)
+        |""".stripMargin)
+    checkScan(query4, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query4, Row(0, "Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: multi-field pruning with case-insensitive EXPLODE") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      // Mixed case field names with multiple fields
+      val query1 = spark.table("contacts")
+        .select(explode(col("friends")).as("friend"))
+        .select("friend.FIRST", "friend.Middle")
+      checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+      // With LATERAL VIEW
+      val query2 = sql(
+        "select friend.FiRsT, friend.MiDdLe from contacts, lateral explode(friends) t(friend)")
+      checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: multi-field pruning with case-insensitive POSEXPLODE") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      // Mixed case with POSEXPLODE
+      val query1 = spark.table("contacts")
+        .select(posexplode(col("friends")).as(Seq("pos", "friend")))
+        .select("friend.First", "friend.MIDDLE")
+      checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+      // With LATERAL VIEW
+      val query2 = sql(
+        """select friend.LAST, friend.first
+          |from contacts, lateral posexplode(friends) t(pos, friend)""".stripMargin)
+      checkScan(query2, "struct<friends:array<struct<first:string,last:string>>>")
+      checkAnswer(query2, Row("Smith", "Susan") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: chained LATERAL VIEWs with multi-field pruning") {
+    // Direct query on contacts table with LATERAL VIEW
+    val query = sql(
+      """
+        |select name.first as contact_name, friend.first as friend_first, friend.middle
+        |from contacts
+        |lateral view explode(friends) t1 as friend
+        |where id = 0
+        |""".stripMargin)
+    checkScan(query, "struct<id:int,name:struct<first:string>," +
+      "friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query, Row("Jane", "Susan", "Z.") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: EXPLODE with filter predicates on nested fields") {
+    // Filter on exploded struct fields - should only prune to needed fields
+    val query1 = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .where("friend.middle = 'Z.'")
+      .select("friend.first", "friend.middle")
+    checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+    // SQL syntax with WHERE clause
+    val query2 = sql(
+      """
+        |select friend.first, friend.last
+        |from contacts, lateral explode(friends) t(friend)
+        |where friend.middle is not null
+        |""".stripMargin)
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query2, Row("Susan", "Smith") :: Nil)
+
+    // Complex filter with multiple conditions
+    val query3 = sql(
+      """
+        |select friend.first
+        |from contacts, lateral explode(friends) t(friend)
+        |where friend.first = 'Susan' and friend.middle = 'Z.'
+        |""".stripMargin)
+    checkScan(query3, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query3, Row("Susan") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: POSEXPLODE with filter on position and nested fields") {
+    // Filter using position
+    val query1 = sql(
+      """
+        |select friend.first, friend.middle
+        |from contacts, lateral posexplode(friends) t(pos, friend)
+        |where pos = 0
+        |""".stripMargin)
+    checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query1, Row("Susan", "Z.") :: Nil)
+
+    // Filter on both position and field
+    val query2 = sql(
+      """
+        |select pos, friend.last
+        |from contacts, lateral posexplode(friends) t(pos, friend)
+        |where pos < 1 and friend.first = 'Susan'
+        |""".stripMargin)
+    checkScan(query2, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query2, Row(0, "Smith") :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: aggregate functions on exploded multi-field structs") {
+    // Aggregate on multiple fields from exploded array
+    val query1 = sql(
+      """
+        |select count(distinct friend.first), count(distinct friend.middle)
+        |from contacts, lateral explode(friends) t(friend)
+        |""".stripMargin)
+    checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkAnswer(query1, Row(1, 1) :: Nil)
+
+    // Group by with exploded fields
+    val query2 = sql(
+      """
+        |select friend.first, count(*)
+        |from contacts, lateral explode(friends) t(friend)
+        |group by friend.first
+        |""".stripMargin)
+    checkScan(query2, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query2, Row("Susan", 1) :: Nil)
+  }
+
+  testSchemaPruning("SPARK-47230: join operations with exploded nested fields") {
+    withTempView("contacts2") {
+      // Create a second contacts table
+      sql("select * from contacts").createOrReplaceTempView("contacts2")
+
+      // Join on exploded fields with multi-field access
+      val query = sql(
+        """
+          |select c1.name.first, f1.first as friend1, f1.middle, f2.first as friend2
+          |from contacts c1, lateral explode(c1.friends) t1(f1)
+          |join contacts2 c2, lateral explode(c2.friends) t2(f2)
+          |on f1.first = f2.first
+          |""".stripMargin)
+      checkScan(query,
+        "struct<name:struct<first:string>,friends:array<struct<first:string,middle:string>>>",
+        "struct<friends:array<struct<first:string>>>")
+      checkAnswer(query, Row("Jane", "Susan", "Z.", "Susan") :: Nil)
+    }
+  }
+
   testSchemaPruning("select one deep nested complex field after repartition") {
     val query = sql("select * from contacts")
       .repartition(100)
