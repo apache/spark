@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.{SupportsDeleteV2, SupportsRowLevelOperations, TruncatableTable}
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -40,11 +40,11 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case d @ DeleteFromTable(aliasedTable, cond) if d.resolved =>
       EliminateSubqueryAliases(aliasedTable) match {
-        case ExtractTable(_: TruncatableTable) if cond == TrueLiteral =>
+        case ExtractV2Table(_: TruncatableTable) if cond == TrueLiteral =>
           // don't rewrite as the table supports truncation
           d
 
-        case r @ ExtractTable(t: SupportsRowLevelOperations) =>
+        case r @ ExtractV2Table(t: SupportsRowLevelOperations) =>
           val table = buildOperationTable(t, DELETE, CaseInsensitiveStringMap.empty())
           table.operation match {
             case _: SupportsDelta =>
@@ -53,7 +53,7 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
               buildReplaceDataPlan(r, table, cond)
           }
 
-        case ExtractTable(_: SupportsDeleteV2) =>
+        case ExtractV2Table(_: SupportsDeleteV2) =>
           // don't rewrite as the table supports deletes only with filters
           d
 

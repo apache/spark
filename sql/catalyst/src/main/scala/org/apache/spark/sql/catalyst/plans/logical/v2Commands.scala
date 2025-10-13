@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowL
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -263,7 +263,7 @@ case class ReplaceData(
 
   lazy val operation: RowLevelOperation = {
     EliminateSubqueryAliases(table) match {
-      case ExtractTable(RowLevelOperationTable(_, operation)) =>
+      case ExtractV2Table(RowLevelOperationTable(_, operation)) =>
         operation
       case _ =>
         throw new AnalysisException(
@@ -345,7 +345,7 @@ case class WriteDelta(
 
   lazy val operation: SupportsDelta = {
     EliminateSubqueryAliases(table) match {
-      case ExtractTable(RowLevelOperationTable(_, operation)) =>
+      case ExtractV2Table(RowLevelOperationTable(_, operation)) =>
         operation.asInstanceOf[SupportsDelta]
       case _ =>
         throw new AnalysisException(
@@ -834,7 +834,7 @@ case class UpdateTable(
 
   lazy val rewritable: Boolean = {
     EliminateSubqueryAliases(table) match {
-      case ExtractTable(_: SupportsRowLevelOperations) => true
+      case ExtractV2Table(_: SupportsRowLevelOperations) => true
       case _ => false
     }
   }
@@ -878,7 +878,7 @@ case class MergeIntoTable(
 
   lazy val rewritable: Boolean = {
     EliminateSubqueryAliases(targetTable) match {
-      case ExtractTable(_: SupportsRowLevelOperations) => true
+      case ExtractV2Table(_: SupportsRowLevelOperations) => true
       case _ => false
     }
   }
