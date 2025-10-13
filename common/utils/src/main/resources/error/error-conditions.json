@@ -5952,7 +5952,7 @@
   },
   "THETA_INVALID_FAMILY" : {
     "message" : [
-      "Invalid call to <function>; the `family` parameter must be one of: <validFamilies>. Got: <value>."
+      "Invalid call to <function>; the `family` parameter must be one of: <validFamilies>, but got: <value>."
     ],
     "sqlState" : "22546"
   },
