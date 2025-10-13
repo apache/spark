@@ -440,6 +440,12 @@
     ],
     "sqlState" : "46110"
   },
+  "CANNOT_MODIFY_STATIC_CONFIG" : {
+    "message" : [
+      "Cannot modify the value of the static Spark config: <key>."
+    ],
+    "sqlState" : "46111"
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal. Please ensure that the input is a valid number with optional decimal point or comma separators."

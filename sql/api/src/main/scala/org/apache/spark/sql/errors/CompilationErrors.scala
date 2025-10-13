@@ -135,9 +135,8 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
 
   def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
     new AnalysisException(
-      errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters =
-        Map("key" -> toSQLConf(key), "docroot" -> SparkBuildInfo.spark_doc_root))
+      errorClass = "CANNOT_MODIFY_STATIC_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key)))
   }
 
   def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
