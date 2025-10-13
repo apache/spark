@@ -34,6 +34,8 @@ Spark Connect follows a similar lazy evaluation model. Transformations are const
 
 ## Comparison
 
+Both Spark Classic and Spark Connect follow the same lazy execution model for query execution.
+
 | Code                                                                                  | Spark Classic   | Spark Connect   |
 |:--------------------------------------------------------------------------------------|:----------------|:----------------|
 | Transformations: `df.filter(...)`, `df.select(...)`, `df.limit(...)`, etc             | Lazy execution  | Lazy execution  |
@@ -51,11 +53,13 @@ For example, executing `spark.sql("select 1 as a, 2 as b").filter("c > 1")` will
 
 ## Spark Connect
 
-Spark Connect differs from Classic’s eager analysis because the client constructs unresolved proto plans during transformation. When accessing a schema or executing an action, the client sends the unresolved plans to the server. The server then performs the schema analysis and execution. This design defers in schema analysis.
+Spark Connect differs from Classic's eager analysis because the client constructs unresolved proto plans during transformation. When accessing a schema or executing an action, the client sends the unresolved plans to the server. The server then performs the schema analysis and execution. This design defers schema analysis.
 
 For example, `spark.sql("select 1 as a, 2 as b").filter("c > 1")` will not throw any error because the unresolved plan is client-side only, but on `df.columns` or `df.show()` an error will be thrown because the unresolved plan is sent to the server for analysis.
 
 ## Comparison
+
+Unlike query execution, Spark Classic and Spark Connect differ in when schema analysis occurs.
 
 | Code                                                                      | Spark Classic | Spark Connect                                                              |
 |:--------------------------------------------------------------------------|:--------------|:---------------------------------------------------------------------------|
@@ -124,7 +128,7 @@ df10 = create_temp_view_and_create_dataframe(10)
 assert len(df10.collect()) == 10
 
 df100 = create_temp_view_and_create_dataframe(100)
-assert len(df10.collect()) == 10  # It works as exepected now.
+assert len(df10.collect()) == 10  # It works as expected now.
 assert len(df100.collect()) == 100
 ```
 
@@ -175,7 +179,7 @@ for j in ['column_1', 'column_2']:
 df.show() # It shows 2 for both 'column_1' and 'column_2' 
 ```
 
-This is the same issue as above. It happens because Python closures capture variables by reference, not by value, and UDF serialization and registration is deferred when there is an action on the DataFrame. So both UDFs end up using the last value of j — in this case 'column\_2'.
+This is the same issue as above. It happens because Python closures capture variables by reference, not by value, and UDF serialization and registration is deferred when there is an action on the DataFrame. So both UDFs end up using the last value of j — in this case 'column_2'.
 
 **Mitigation:**
 
@@ -210,7 +214,7 @@ try:
   df = df.select("name", "age")
   df = df.withColumn(
       "age_group",
-      when(col("age") < 18, "minor").otherwise("adult")  )
+      when(col("age") < 18, "minor").otherwise("adult"))
   df = df.filter(col("age_with_typo") > 6) # <-- The use of non-existing column name will not throw analysis exception in Spark Connect
 except Exception as e:
   print(f"Error: {repr(e)}")
