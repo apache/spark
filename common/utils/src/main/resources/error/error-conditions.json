@@ -444,7 +444,7 @@
     "message" : [
       "Cannot modify the value of the static Spark config: <key>."
     ],
-    "sqlState" : "46111"
+    "sqlState" : "46110"
   },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
