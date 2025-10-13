@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, ParameterSubstitutionInfo}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -115,11 +115,6 @@ class SparkSqlParser extends AbstractSqlParser {
       isTopLevel: Boolean)
       (toResult: SqlBaseParser => T): T = {
 
-    // Clear any stale substitution info from previous parsing operations to prevent contamination.
-    if (isTopLevel) {
-      CurrentOrigin.set(CurrentOrigin.get.copy(parameterSubstitutionInfo = None))
-    }
-
     // Step 1: Check if parameter substitution should occur.
     val (paramSubstituted, substitutionOccurred, hasParameters) = parameterContext match {
       case Some(context) if isTopLevel =>
@@ -144,28 +139,12 @@ class SparkSqlParser extends AbstractSqlParser {
     // Step 3: Set up origin with original SQL text for parameter-aware error reporting.
     val currentOrigin = CurrentOrigin.get
     val originToUse = if ((substitutionOccurred || hasParameters) && isTopLevel) {
-      // Parameter substitution occurred or parameters detected in legacy mode.
-      // Set original SQL text for accurate error position mapping.
-      // IMPORTANT: Preserve any substitution info set by parameter substitution.
-      val baseOrigin = currentOrigin.copy(
-        sqlText = Some(command), // Use original SQL text, not substituted.
+      // Set up origin with the substituted SQL text for proper error reporting
+      currentOrigin.copy(
+        sqlText = Some(variableSubstituted), // Use substituted SQL text
         startIndex = Some(0),
-        stopIndex = Some(command.length - 1)
-        // parameterSubstitutionInfo is preserved by copy().
+        stopIndex = Some(variableSubstituted.length - 1)
       )
-
-      // Set up identity substitution info for legacy mode parameter error reporting.
-      if (hasParameters && !substitutionOccurred) {
-        // Legacy mode - set up identity info for proper error context.
-        val identityInfo = ParameterSubstitutionInfo(
-          originalSql = command,
-          isIdentity = true,
-          positionMapper = None
-        )
-        baseOrigin.copy(parameterSubstitutionInfo = Some(identityInfo))
-      } else {
-        baseOrigin
-      }
     } else {
       // No substitution or nested call - use existing origin unchanged.
       currentOrigin
@@ -182,13 +161,7 @@ class SparkSqlParser extends AbstractSqlParser {
 
     // Check legacy configuration - if true, skip parameter substitution during parsing.
     if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-      // In legacy mode, set up identity mapping to ensure clean error context.
-      parameterHandler.setupSubstitutionContext(
-        command,
-        command, // Original = substituted in legacy mode.
-        PositionMapper.identity(command), // Identity mapper since no substitution.
-        true // isIdentity = true.
-      )
+      // In legacy mode, return original command without substitution.
       command
     } else {
       parameterHandler.substituteParameters(command, context)
@@ -200,12 +173,6 @@ class SparkSqlParser extends AbstractSqlParser {
    * This ensures clean parsing without parameter substitution side effects.
    */
   private def parseIdentifierInternal[T](command: String)(toResult: SqlBaseParser => T): T = {
-    // Clear any stale substitution info to prevent contamination between tests/operations.
-    val currentOrigin = CurrentOrigin.get
-    if (currentOrigin.parameterSubstitutionInfo.isDefined) {
-      CurrentOrigin.set(currentOrigin.copy(parameterSubstitutionInfo = None))
-    }
-
     val variableSubstituted = substitutor.substitute(command)
     super.parse(variableSubstituted)(toResult)
   }

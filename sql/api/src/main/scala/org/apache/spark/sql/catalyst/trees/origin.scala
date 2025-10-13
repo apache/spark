@@ -19,18 +19,8 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.regex.Pattern
 
 import org.apache.spark.QueryContext
-import org.apache.spark.sql.catalyst.parser.PositionMapper
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.ArrayImplicits._
-
-/**
- * Information needed for parameter substitution position mapping.
- */
-case class ParameterSubstitutionInfo(
-    originalSql: String,
-    isIdentity: Boolean,
-    // Store the position mapper directly for clean API
-    positionMapper: Option[PositionMapper] = None)
 
 /**
  * Contexts of TreeNodes, including location, SQL text, object type and object name. The only
@@ -46,8 +36,7 @@ case class Origin(
     objectType: Option[String] = None,
     objectName: Option[String] = None,
     stackTrace: Option[Array[StackTraceElement]] = None,
-    pysparkErrorContext: Option[(String, String)] = None,
-    parameterSubstitutionInfo: Option[ParameterSubstitutionInfo] = None) {
+    pysparkErrorContext: Option[(String, String)] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
     DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)

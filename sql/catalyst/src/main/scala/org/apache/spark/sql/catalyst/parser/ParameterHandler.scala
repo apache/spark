@@ -18,7 +18,6 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.SubstituteParamsParser
-import org.apache.spark.sql.catalyst.trees.ParameterSubstitutionInfo
 import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -71,8 +70,6 @@ class ParameterHandler {
 
     // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely.
     if (!parameterMarkerPattern.matcher(sqlText).find()) {
-      val identityMapper = PositionMapper.identity(sqlText)
-      setupSubstitutionContext(sqlText, sqlText, identityMapper, isIdentity = true)
       return sqlText
     }
 
@@ -80,36 +77,7 @@ class ParameterHandler {
     val (substituted, _, positionMapper) = substitutor.substitute(sqlText,
       namedParams = namedParams, positionalParams = positionalParams)
 
-    setupSubstitutionContext(sqlText, substituted, positionMapper, isIdentity = false)
     substituted
-  }
-
-  /**
-   * Set up parameter substitution context in CurrentOrigin for error reporting.
-   * This creates a ParameterSubstitutionInfo object with position mapping data.
-   *
-   * @param originalSql The original SQL text before substitution
-   * @param substitutedSql The SQL text after substitution
-   * @param positionMapper The mapper for translating positions
-   * @param isIdentity Whether this is an identity mapping (no substitution occurred)
-   */
-  private[sql] def setupSubstitutionContext(
-      originalSql: String,
-      substitutedSql: String,
-      positionMapper: PositionMapper,
-      isIdentity: Boolean): Unit = {
-
-    // Create parameter substitution info with the position mapper.
-    val substitutionInfo = ParameterSubstitutionInfo(
-      originalSql = originalSql,
-      isIdentity = isIdentity,
-      positionMapper = if (isIdentity) None else Some(positionMapper)
-    )
-
-    // Store the info in CurrentOrigin for position mapping during error reporting.
-    val currentOrigin = org.apache.spark.sql.catalyst.trees.CurrentOrigin.get
-    val updatedOrigin = currentOrigin.copy(parameterSubstitutionInfo = Some(substitutionInfo))
-    org.apache.spark.sql.catalyst.trees.CurrentOrigin.set(updatedOrigin)
   }
 
   /**

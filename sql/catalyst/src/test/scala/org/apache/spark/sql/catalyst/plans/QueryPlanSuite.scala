@@ -37,13 +37,7 @@ class QueryPlanSuite extends SparkFunSuite {
     CurrentOrigin.reset()
 
     val mappedQuery = query mapExpressions {
-      case _: Expression =>
-        // Ensure CurrentOrigin is clean when creating the new Literal to prevent contamination
-        // from previous tests that might have set ParameterSubstitutionInfo
-        val cleanOrigin = CurrentOrigin.get.copy(parameterSubstitutionInfo = None)
-        CurrentOrigin.withOrigin(cleanOrigin) {
-          Literal(1)
-        }
+      case _: Expression => Literal(1)
     }
 
     val mappedOrigin = mappedQuery.expressions.apply(0).origin

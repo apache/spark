@@ -162,8 +162,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       val params = typeCtx.integerValue().asScala.map { intVal =>
         // Assert that parameter markers have been substituted before reaching DataTypeAstBuilder
         assert(intVal.getChild(0).getClass.getSimpleName != "ParameterIntegerValueContext",
-          "Parameter markers should be substituted before DataTypeAstBuilder processes the parse tree. " +
-          s"Found unsubstituted parameter: ${intVal.getText}")
+          "Parameter markers should be substituted before DataTypeAstBuilder processes the " +
+          s"parse tree. Found unsubstituted parameter: ${intVal.getText}")
         intVal.getText
       }.toList
       val dtStr =

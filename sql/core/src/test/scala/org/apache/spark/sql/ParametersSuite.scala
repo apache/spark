@@ -528,23 +528,15 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.sql("select :param1, ?", Map("param1" -> 1))
       },
-      condition = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "_16"),
-      context = ExpectedContext(
-        fragment = "?",
-        start = 16,
-        stop = 16))
+      condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+      parameters = Map.empty[String, String])
 
     checkError(
       exception = intercept[AnalysisException] {
         spark.sql("select :param1, ?", Array(1))
       },
-      condition = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "param1"),
-      context = ExpectedContext(
-        fragment = ":param1",
-        start = 7,
-        stop = 13))
+      condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+      parameters = Map.empty[String, String])
   }
 
   test("SPARK-44680: parameters in DEFAULT now work") {

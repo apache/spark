@@ -722,9 +722,10 @@ class AstBuilder extends DataTypeAstBuilder
             "RECURSIVE", ctx)
         }
         // Assert that parameter markers have been substituted before reaching AstBuilder
-        assert(nCtx.integerValue().getChild(0).getClass.getSimpleName != "ParameterIntegerValueContext",
-          "Parameter markers should be substituted before AstBuilder processes the parse tree. " +
-          s"Found unsubstituted parameter: ${nCtx.integerValue().getText}")
+        assert(nCtx.integerValue().getChild(0).getClass.getSimpleName !=
+          "ParameterIntegerValueContext",
+          "Parameter markers should be substituted before AstBuilder processes the " +
+          s"parse tree. Found unsubstituted parameter: ${nCtx.integerValue().getText}")
         Some(nCtx.integerValue().getText().toInt)
       } else {
         None
@@ -2205,12 +2206,13 @@ class AstBuilder extends DataTypeAstBuilder
 
       case ctx: SampleByPercentileContext =>
         val fraction = if (ctx.DECIMAL_VALUE() != null) { ctx.DECIMAL_VALUE().getText.toDouble }
-        else { 
+        else {
           // Assert that parameter markers have been substituted before reaching AstBuilder
-          assert(ctx.integerValue().getChild(0).getClass.getSimpleName != "ParameterIntegerValueContext",
-            "Parameter markers should be substituted before AstBuilder processes the parse tree. " +
-            s"Found unsubstituted parameter: ${ctx.integerValue().getText}")
-          ctx.integerValue().getText.toDouble 
+          assert(ctx.integerValue().getChild(0).getClass.getSimpleName !=
+            "ParameterIntegerValueContext",
+            "Parameter markers should be substituted before AstBuilder processes the " +
+            s"parse tree. Found unsubstituted parameter: ${ctx.integerValue().getText}")
+          ctx.integerValue().getText.toDouble
         }
         val sign = if (ctx.negativeSign == null) 1 else -1
         sample(sign * fraction / 100.0d, seed)
@@ -4198,9 +4200,10 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitBucketSpec(ctx: BucketSpecContext): BucketSpec = withOrigin(ctx) {
     // Assert that parameter markers have been substituted before reaching AstBuilder
-    assert(ctx.integerValue().getChild(0).getClass.getSimpleName != "ParameterIntegerValueContext",
-      "Parameter markers should be substituted before AstBuilder processes the parse tree. " +
-      s"Found unsubstituted parameter: ${ctx.integerValue().getText}")
+    assert(ctx.integerValue().getChild(0).getClass.getSimpleName !=
+      "ParameterIntegerValueContext",
+      "Parameter markers should be substituted before AstBuilder processes the " +
+      s"parse tree. Found unsubstituted parameter: ${ctx.integerValue().getText}")
     BucketSpec(
       ctx.integerValue().getText.toInt,
       visitIdentifierList(ctx.identifierList),

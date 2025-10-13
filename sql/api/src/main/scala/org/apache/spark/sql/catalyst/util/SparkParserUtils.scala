@@ -199,22 +199,9 @@ trait SparkParserUtils {
     if (text.isEmpty) {
       CurrentOrigin.set(position(ctx.getStart))
     } else {
-      // Check if parameter substitution occurred and adjust origin accordingly.
-      val adjustedOrigin = adjustOriginForParameterSubstitution(
-        ctx.getStart,
-        ctx.getStop,
-        text.get,
-        current.objectType,
-        current.objectName)
-
-      // Preserve any existing substitution info when setting the new origin.
-      val finalOrigin = if (current.parameterSubstitutionInfo.isDefined) {
-        adjustedOrigin.copy(parameterSubstitutionInfo = current.parameterSubstitutionInfo)
-      } else {
-        adjustedOrigin
-      }
-
-      CurrentOrigin.set(finalOrigin)
+      // Use the standard position method with the provided SQL text
+      CurrentOrigin.set(positionAndText(ctx.getStart, ctx.getStop, text.get,
+        current.objectType, current.objectName))
     }
     try {
       f
@@ -222,65 +209,6 @@ trait SparkParserUtils {
       // When restoring origin, preserve the original context to prevent contamination
       // across unrelated parsing operations.
       CurrentOrigin.set(current)
-    }
-  }
-
-  /**
-   * Adjust origin information to account for parameter substitution.
-   *
-   * If parameter substitution occurred, this method maps positions from the substituted SQL back
-   * to the original SQL and uses the original SQL text in the origin.
-   *
-   * @param startToken
-   *   The start token from the substituted SQL
-   * @param stopToken
-   *   The stop token from the substituted SQL
-   * @param substitutedSql
-   *   The SQL text after substitution
-   * @param objectType
-   *   The object type for the origin
-   * @param objectName
-   *   The object name for the origin
-   * @return
-   *   Origin with positions and text adjusted for parameter substitution
-   */
-  private def adjustOriginForParameterSubstitution(
-      startToken: Token,
-      stopToken: Token,
-      substitutedSql: String,
-      objectType: Option[String],
-      objectName: Option[String]): Origin = {
-
-    // Try to get parameter substitution info from CurrentOrigin.
-    CurrentOrigin.get.parameterSubstitutionInfo match {
-      case Some(info) =>
-        if (info.isIdentity) {
-          // Identity mapping - use default behavior.
-          positionAndText(startToken, stopToken, substitutedSql, objectType, objectName)
-        } else {
-          // Parameter substitution occurred - map positions back to original SQL.
-          val startOpt = Option(startToken)
-          val stopOpt = Option(stopToken)
-
-          // Use the position mapper to map positions back to original SQL.
-          val originalStartIndex = startOpt.flatMap(token =>
-            info.positionMapper.map(_.mapToOriginal(token.getStartIndex)))
-          val originalStopIndex =
-            stopOpt.flatMap(token => info.positionMapper.map(_.mapToOriginal(token.getStopIndex)))
-
-          // Create origin with original SQL text and mapped positions.
-          Origin(
-            line = startOpt.map(_.getLine),
-            startPosition = startOpt.map(_.getCharPositionInLine),
-            startIndex = originalStartIndex,
-            stopIndex = originalStopIndex,
-            sqlText = Some(info.originalSql), // Use original SQL for error reporting
-            objectType = objectType,
-            objectName = objectName)
-        }
-      case None =>
-        // No parameter substitution info - use default behavior.
-        positionAndText(startToken, stopToken, substitutedSql, objectType, objectName)
     }
   }
 
