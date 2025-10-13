@@ -478,11 +478,14 @@ class ColumnTestsMixin:
         # Test with lambda functions
         df = self.spark.createDataFrame([(10,), (20,), (30,)], ["value"])
         result = df.select(
-            df.value.transform(lambda c: c + 5).transform(lambda c: c * 2).transform(lambda c: c - 10)
+            df.value.transform(lambda c: c + 5)
+            .transform(lambda c: c * 2)
+            .transform(lambda c: c - 10)
         ).collect()
         self.assertEqual(result[0][0], 20)
         self.assertEqual(result[1][0], 40)
         self.assertEqual(result[2][0], 60)
+
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
     pass

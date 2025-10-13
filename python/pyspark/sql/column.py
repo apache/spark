@@ -1565,27 +1565,29 @@ class Column(TableValuedFunctionArgument):
 
         >>> from pyspark.sql.functions import trim, upper
         >>> df = spark.createDataFrame([("  hello  ",), ("  world  ",)], ["text"])
-        >>> df.select(df.text.transform(trim).transform(upper)).show()
-        +-----------+
-        |upper(text)|
-        +-----------+
-        |      HELLO|
-        |      WORLD|
-        +-----------+
+        >>> df.select(df.text.transform(trim).transform(upper).alias("result")).show()
+        +------+
+        |result|
+        +------+
+        | HELLO|
+        | WORLD|
+        +------+
 
         Example 2: Use lambda functions
 
         >>> df = spark.createDataFrame([(10,), (20,), (30,)], ["value"])
         >>> df.select(
-        ...     df.value.transform(lambda c: c + 5).transform(lambda c: c * 2).transform(lambda c: c - 10)
+        ...     df.value.transform(lambda c: c + 5)
+        ...     .transform(lambda c: c * 2)
+        ...     .transform(lambda c: c - 10).alias("result")
         ... ).show()
-        +-----+
-        |value|
-        +-----+
-        |   20|
-        |   40|
-        |   60|
-        +-----+
+        +------+
+        |result|
+        +------+
+        |    20|
+        |    40|
+        |    60|
+        +------+
         """
         ...
 
