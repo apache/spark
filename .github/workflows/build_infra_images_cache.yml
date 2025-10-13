@@ -272,16 +272,3 @@ jobs:
       - name: Image digest (PySpark with Python 3.14 no GIL)
         if: hashFiles('dev/spark-test-image/python-314-nogil/Dockerfile') != ''
         run: echo ${{ steps.docker_build_pyspark_python_314_nogil.outputs.digest }}
-      - name: Build and push (PySpark with Numpy 2.1.3)
-        if: hashFiles('dev/spark-test-image/numpy-213/Dockerfile') != ''
-        id: docker_build_pyspark_numpy_213
-        uses: docker/build-push-action@v6
-        with:
-          context: ./dev/spark-test-image/numpy-213/
-          push: true
-          tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-numpy-213-cache:${{ github.ref_name }}-static
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-numpy-213-cache:${{ github.ref_name }}
-          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-numpy-213-cache:${{ github.ref_name }},mode=max
-      - name: Image digest (PySpark with Numpy 2.1.3)
-        if: hashFiles('dev/spark-test-image/numpy-213/Dockerfile') != ''
-        run: echo ${{ steps.docker_build_pyspark_numpy_213.outputs.digest }}
