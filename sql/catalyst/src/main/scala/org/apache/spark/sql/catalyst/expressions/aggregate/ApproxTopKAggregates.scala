@@ -178,12 +178,9 @@ object ApproxTopK {
 
   val DEFAULT_K: Int = 5
   val DEFAULT_MAX_ITEMS_TRACKED: Int = 10000
-  private val MAX_ITEMS_TRACKED_LIMIT: Int = 1000000
+  val MAX_ITEMS_TRACKED_LIMIT: Int = 1000000
   // A special value indicating no explicit maxItemsTracked input in function approx_top_k_combine
   val VOID_MAX_ITEMS_TRACKED = -1
-  // A placeholder value for maxItemsTracked in the initial buffer of approx_top_k_combine, when
-  // there is no explicit maxItemsTracked input in approx_top_k_combine function call.
-  val SKETCH_SIZE_PLACEHOLDER = 8
 
   def checkExpressionNotNull(expr: Expression, exprName: String): Unit = {
     if (expr == null || expr.eval() == null) {
@@ -697,10 +694,11 @@ case class ApproxTopKCombine(
         null,
         maxItemsTrackedVal)
     } else {
-      // If maxItemsTracked is not specified, create a placeholder sketch with a small size.
-      // The actual maxItemsTracked will be set during the first update.
+      // If maxItemsTracked is not specified, create a sketch with the maximum allowed size.
+      // No need to worry about memory waste, as the sketch always grows from a small init size.
+      // The actual maxItemsTracked will be checked during the updates.
       new CombineInternal[Any](
-        new ItemsSketch[Any](ApproxTopK.SKETCH_SIZE_PLACEHOLDER),
+        new ItemsSketch[Any](ApproxTopK.MAX_ITEMS_TRACKED_LIMIT),
         null,
         ApproxTopK.VOID_MAX_ITEMS_TRACKED)
     }
