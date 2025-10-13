@@ -179,7 +179,10 @@ object ApproxTopK {
   val DEFAULT_K: Int = 5
   val DEFAULT_MAX_ITEMS_TRACKED: Int = 10000
   private val MAX_ITEMS_TRACKED_LIMIT: Int = 1000000
+  // A special value indicating no explicit maxItemsTracked input in function approx_top_k_combine
   val VOID_MAX_ITEMS_TRACKED = -1
+  // A placeholder value for maxItemsTracked in the initial buffer of approx_top_k_combine, when
+  // there is no explicit maxItemsTracked input in approx_top_k_combine function call.
   val SKETCH_SIZE_PLACEHOLDER = 8
 
   def checkExpressionNotNull(expr: Expression, exprName: String): Unit = {
