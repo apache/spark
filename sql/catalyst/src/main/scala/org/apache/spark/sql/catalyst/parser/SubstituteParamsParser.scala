@@ -133,7 +133,7 @@ class SubstituteParamsParser extends Logging {
         case Some(value) =>
           // Substitute all occurrences of this parameter
           locationList.foreach { location =>
-            substitutions += Substitution(location.start, location.end, value)
+            substitutions += Substitution(location, value)
           }
         case None =>
           // Use the first location for error reporting
@@ -176,7 +176,7 @@ class SubstituteParamsParser extends Logging {
 
     locations.positionalParameterLocations.zip(positionalParams).foreach {
       case (location, value) =>
-        substitutions += Substitution(location.start, location.end, value)
+        substitutions += Substitution(location, value)
     }
 
     val substitutedText = applySubstitutions(sqlText, substitutions.toList)

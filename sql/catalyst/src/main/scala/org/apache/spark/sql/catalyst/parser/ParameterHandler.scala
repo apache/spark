@@ -49,14 +49,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * // result: "SELECT 42"
  * }}}
  *
- * @example Optional context:
- * {{{
- * val handler = new ParameterHandler()
- * val context = Some(NamedParameterContext(Map("param1" -> Literal(42))))
- * val result = handler.substituteParametersIfNeeded("SELECT :param1", context)
- * // result: "SELECT 42"
- * }}}
- *
  * @see [[SubstituteParamsParser]] for the underlying parameter substitution logic
  */
 class ParameterHandler {
@@ -232,7 +224,7 @@ class ParameterHandler {
         })
     } else {
       // No parameters in query - return as-is.
-      performSubstitution(sqlText)
+      sqlText
     }
   }
 

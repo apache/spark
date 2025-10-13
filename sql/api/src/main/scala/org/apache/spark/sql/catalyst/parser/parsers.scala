@@ -69,8 +69,6 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
     // Use shared parser configuration to ensure consistency.
     AbstractParser.configureParser(parser, command, tokenStream, conf)
 
-    // https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
-    // Save a great deal of time on correct inputs by using a two-stage parsing strategy.
     try {
       AbstractParser.executeWithTwoStageStrategy(parser, tokenStream, toResult)
     } catch {

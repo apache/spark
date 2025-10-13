@@ -139,21 +139,14 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         visitNamedParameterLiteral(ctx)
       case ctx: PosParameterLiteralContext =>
         visitPosParameterLiteral(ctx)
-      case ctx: ParameterStringValueContext =>
-        // Handle parameter markers in string contexts
-        visit(ctx.parameterMarker())
-      case ctx: ParameterIntegerValueContext =>
-        // Handle parameter markers in integer contexts
-        visit(ctx.parameterMarker())
       case ctx: NamedParameterMarkerRuleContext =>
         visitNamedParameterMarkerRule(ctx)
       case ctx: PositionalParameterMarkerRuleContext =>
         visitPositionalParameterMarkerRule(ctx)
-      case ctx: StringLiteralInContextContext =>
-        // For string literals in context, continue traversing to find any nested parameters
-        visitChildren(ctx)
       case ruleNode: RuleNode =>
-        // Continue traversing children for rule nodes
+        // Continue traversing children for rule nodes (this handles ParameterStringValueContext,
+        // ParameterIntegerValueContext, StringLiteralInContextContext, and other rule nodes
+        // automatically)
         visitChildren(ruleNode)
       case _ =>
         // For other types (like terminal nodes), don't traverse children
@@ -190,24 +183,6 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     // but we need to handle them in the traversal
     null
   }
-}
-
-/**
- * Data class to hold information about extracted parameters. This is defined here to make it
- * available to the AST builder.
- */
-case class ParameterInfo(namedParameters: Set[String], positionalParameters: List[Int]) {
-
-  def isEmpty: Boolean = namedParameters.isEmpty && positionalParameters.isEmpty
-  def nonEmpty: Boolean = !isEmpty
-  def totalCount: Int = namedParameters.size + positionalParameters.size
-
-  def merge(other: ParameterInfo): ParameterInfo = {
-    ParameterInfo(
-      namedParameters ++ other.namedParameters,
-      positionalParameters ++ other.positionalParameters)
-  }
-
 }
 
 /**

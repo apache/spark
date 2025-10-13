@@ -19,7 +19,11 @@ package org.apache.spark.sql.catalyst.parser
 /**
  * Case class representing a text substitution.
  */
-case class Substitution(start: Int, end: Int, replacement: String)
+case class Substitution(location: ParameterLocation, replacement: String) {
+  // Convenience methods to access location fields directly
+  def start: Int = location.start
+  def end: Int = location.end
+}
 
 /**
  * Represents a range mapping from substituted positions to original positions. This is used for
@@ -43,8 +47,7 @@ case class PositionRange(
 /**
  * Maps positions between original SQL text and substituted SQL text using sparse ranges.
  *
- * This implementation uses O(k) space and O(log k) lookup time where k = number of substitutions,
- * instead of the previous O(n) space where n = SQL text length.
+ * This implementation uses O(k) space and O(log k) lookup time where k = number of substitutions.
  *
  * @param originalText
  *   The original SQL text with parameter markers
@@ -53,10 +56,10 @@ case class PositionRange(
  * @param substitutions
  *   List of substitutions that were applied
  */
-class PositionMapper(
-    val originalText: String,
-    val substitutedText: String,
-    val substitutions: List[Substitution]) {
+case class PositionMapper(
+    originalText: String,
+    substitutedText: String,
+    substitutions: List[Substitution]) {
 
   // Build sparse position ranges for efficient lookup
   private val positionRanges = buildPositionRanges()
@@ -109,6 +112,13 @@ class PositionMapper(
 
     val sortedSubstitutions = substitutions.sortBy(_.start)
 
+    // Assert that substitutions don't overlap
+    sortedSubstitutions.zip(sortedSubstitutions.tail).foreach { case (current, next) =>
+      assert(current.end <= next.start,
+        s"Overlapping substitutions detected: [${current.start}, ${current.end}) overlaps with " +
+        s"[${next.start}, ${next.end}). This indicates a bug in parameter substitution logic.")
+    }
+
     // Use scanLeft for functional accumulation of position state
     case class PositionState(originalPos: Int, substitutedPos: Int, ranges: List[PositionRange])
 
@@ -147,25 +157,6 @@ class PositionMapper(
 object PositionMapper {
 
   /**
-   * Create a PositionMapper from substitution information.
-   *
-   * @param originalText
-   *   The original SQL text
-   * @param substitutedText
-   *   The substituted SQL text
-   * @param substitutions
-   *   The substitutions that were applied
-   * @return
-   *   A PositionMapper instance
-   */
-  def apply(
-      originalText: String,
-      substitutedText: String,
-      substitutions: List[Substitution]): PositionMapper = {
-    new PositionMapper(originalText, substitutedText, substitutions)
-  }
-
-  /**
    * Create an identity PositionMapper for when no substitutions occurred. This is used as an
    * optimization when no parameter markers are present.
    *
@@ -175,6 +166,6 @@ object PositionMapper {
    *   A PositionMapper that maps positions to themselves
    */
   def identity(text: String): PositionMapper = {
-    new PositionMapper(text, text, List.empty)
+    PositionMapper(text, text, List.empty)
   }
 }
