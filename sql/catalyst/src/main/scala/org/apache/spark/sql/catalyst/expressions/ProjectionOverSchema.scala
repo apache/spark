@@ -76,6 +76,21 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
               s"unmatched child schema for GetStructField: ${projSchema.toString}"
             )
         }
+      case GetStructField(child, ordinal, nameOpt) =>
+        getProjection(child).map(p => (p, p.dataType)).map {
+          case (projection, projSchema: StructType) =>
+            // Look up the field name from the original schema using ordinal
+            val originalFieldName = nameOpt.getOrElse {
+              child.dataType.asInstanceOf[StructType](ordinal).name
+            }
+            // Find the new ordinal in the pruned schema
+            GetStructField(projection, projSchema.fieldIndex(originalFieldName),
+              Some(originalFieldName))
+          case (_, projSchema) =>
+            throw new IllegalStateException(
+              s"unmatched child schema for GetStructField: ${projSchema.toString}"
+            )
+        }
       case ElementAt(left, right, defaultValueOutOfBound, failOnError) if right.foldable =>
         getProjection(left).map(p => ElementAt(p, right, defaultValueOutOfBound, failOnError))
       case _ =>

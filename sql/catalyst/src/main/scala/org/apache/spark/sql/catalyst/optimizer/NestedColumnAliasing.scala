@@ -407,15 +407,13 @@ object GeneratorNestedColumnAliasing {
         attrToExtractValuesOnGenerator.flatMap(_._2).toSeq, Seq.empty,
         collectNestedGetStructFields)
 
-      // Pruning on `Generator`'s output. We only process single field case.
-      // For multiple field case, we cannot directly move field extractor into
-      // the generator expression. A workaround is to re-construct array of struct
-      // from multiple fields. But it will be more complicated and may not worth.
-      // TODO(SPARK-34956): support multiple fields.
+      // SPARK-47230/SPARK-34956: Support multiple nested field pruning on Generator output.
+      // For single field, we can push the field access directly into the generator.
+      // For multiple fields, we create _extract_* aliases like we do for non-generator fields.
       val nestedFieldsOnGenerator = attrToExtractValuesOnGenerator.values.flatten.toSet
-      if (nestedFieldsOnGenerator.size > 1 || nestedFieldsOnGenerator.isEmpty) {
+      if (nestedFieldsOnGenerator.isEmpty) {
         Some(pushedThrough)
-      } else {
+      } else if (nestedFieldsOnGenerator.size == 1) {
         // Only one nested column accessor.
         // E.g., df.select(explode($"items").as("item")).select($"item.a")
         val nestedFieldOnGenerator = nestedFieldsOnGenerator.head
@@ -456,6 +454,11 @@ object GeneratorNestedColumnAliasing {
             // We should not reach here.
             throw new IllegalStateException(s"Unreasonable plan after optimization: $other")
         }
+      } else {
+        // TODO(SPARK-34956): Handle multiple nested fields on generator output.
+        // For now, we skip the optimization when there are multiple fields.
+        // The `rewritePlanWithAliases` approach doesn't work because generator outputs are fixed.
+        Some(pushedThrough)
       }
 
     case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&

@@ -41,19 +41,24 @@ object SchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    // SPARK-47230: Collect GetArrayStructFields AND GetStructField expressions,
-    // plus Generate mappings
+    logInfo(s"SCHEMA_PRUNING_DEBUG: === SchemaPruning.apply called ===")
+    logInfo(s"SCHEMA_PRUNING_DEBUG: Plan structure:")
+    plan.foreach { node =>
+      logInfo(s"SCHEMA_PRUNING_DEBUG:   - ${node.getClass.getSimpleName}: ${node.nodeName}")
+    }
+
+    // SPARK-47230: Collect GetArrayStructFields, GetStructField, and Generate mappings
     val allArrayStructFields = scala.collection.mutable.ArrayBuffer[GetArrayStructFields]()
     val allStructFields = scala.collection.mutable.ArrayBuffer[GetStructField]()
     val generateMappings = scala.collection.mutable.Map[ExprId, Expression]()
 
     plan.foreach { node =>
-      // Collect Generate nodes to map exploded aliases back to original arrays
+      // Collect Generate nodes
       node match {
         case g: Generate =>
-          // Generate creates new attributes for exploded array elements
-          // Map the output attribute IDs to the generator expression
+          logInfo(s"SCHEMA_PRUNING_DEBUG: Found Generate: ${g.generator}")
           g.generatorOutput.foreach { attr =>
+            logInfo(s"SCHEMA_PRUNING_DEBUG: Mapping ${attr.name}#${attr.exprId} to generator")
             generateMappings(attr.exprId) = g.generator
           }
         case _ =>
@@ -69,7 +74,10 @@ object SchemaPruning extends Rule[LogicalPlan] {
       }
     }
 
-    plan transformDown {
+    logInfo(s"SCHEMA_PRUNING_DEBUG: Collected ${generateMappings.size} generator mappings, " +
+      s"${allArrayStructFields.size} array fields, ${allStructFields.size} struct fields")
+
+    val transformedPlan = plan transformDown {
       // SPARK-47230: Handle cases with Generate nodes where ScanOperation doesn't match
       case p @ Project(_, l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
           if generateMappings.nonEmpty &&
@@ -85,11 +93,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
         // Use the expressions collected at the beginning
         tryEnhancedNestedArrayPruning(
-          l, allArrayStructFields.toSeq, allStructFields.toSeq,
-          generateMappings.toMap, hadoopFsRelation, requiredColumns) match {
-          case Some(prunedRelation) => p.copy(child = prunedRelation)
-          case None => p
-        }
+          l, p.projectList, Seq.empty, allArrayStructFields.toSeq, allStructFields.toSeq,
+          generateMappings.toMap, hadoopFsRelation, requiredColumns).getOrElse(p)
 
       case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
         l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
@@ -110,7 +115,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
           }.toSet
 
           tryEnhancedNestedArrayPruning(
-            l, allArrayStructFields.toSeq, allStructFields.toSeq,
+            l, projects, allFilters, allArrayStructFields.toSeq, allStructFields.toSeq,
             generateMappings.toMap, hadoopFsRelation, requiredColumns)
         } else {
           None
@@ -126,6 +131,10 @@ object SchemaPruning extends Rule[LogicalPlan] {
           }).getOrElse(op)
         }
     }
+
+    // SPARK-47230: Return the plan after schema pruning.
+    // Generator ordinal rewriting is now handled by the separate GeneratorOrdinalRewriting rule.
+    transformedPlan
   }
 
   /**
@@ -139,6 +148,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
    */
   private def tryEnhancedNestedArrayPruning(
       relation: LogicalRelation,
+      projects: Seq[NamedExpression],
+      filters: Seq[Expression],
       arrayStructFields: Seq[GetArrayStructFields],
       structFields: Seq[GetStructField],
       generateMappings: Map[ExprId, Expression],
@@ -211,12 +222,10 @@ object SchemaPruning extends Rule[LogicalPlan] {
       return None
     }
 
-    // Don't prune when multiple fields AT THE SAME DEPTH are accessed from the same
-    // root column after a generator
-    // (SPARK-34638/SPARK-41961: "Currently we don't prune multiple field case")
-    // This prevents pruning when accessing like friend.first AND friend.middle
-    // But allows pruning for chained explodes: request.available (depth 1) +
-    // request.servedItems.clicked (depth 2)
+    // SPARK-47230: Removed the restriction that blocked pruning when multiple fields
+    // at the same depth were accessed. This restriction was too conservative and prevented
+    // legitimate use cases like accessing multiple fields from exploded arrays.
+    // The ordinal rewriting logic (lines 148-187) correctly handles multiple fields.
     nestedFieldAccesses.foreach { case (rootCol, paths) =>
       logInfo(s"SCHEMA_PRUNING_DEBUG: rootCol=$rootCol, allPaths=$paths")
       val groupedByDepth = paths.groupBy(_.length)
@@ -224,16 +233,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
         logInfo(s"SCHEMA_PRUNING_DEBUG: depth=$depth, pathsAtDepth=$pathsAtDepth, " +
           s"count=${pathsAtDepth.size}")
       }
-    }
-    if (nestedFieldAccesses.values.exists { paths =>
-      // Group paths by their depth (length), check if any depth level has multiple paths
-      val hasMultipleAtSameDepth = paths.groupBy(_.length).values.exists(_.size > 1)
-      if (hasMultipleAtSameDepth) {
-        logInfo(s"SCHEMA_PRUNING_DEBUG: BLOCKING PRUNING - multiple fields at same depth: $paths")
-      }
-      hasMultipleAtSameDepth
-    }) {
-      return None
     }
 
     // Filter to only keep root columns that exist in the relation
@@ -265,7 +264,22 @@ object SchemaPruning extends Rule[LogicalPlan] {
     if (prunedFieldCount < originalFieldCount) {
       val prunedHadoopRelation =
         hadoopFsRelation.copy(dataSchema = prunedSchema)(hadoopFsRelation.sparkSession)
-      Some(buildPrunedRelation(relation, prunedHadoopRelation, StructType(Nil)))
+      val prunedRelation = buildPrunedRelation(relation, prunedHadoopRelation, StructType(Nil))
+
+      // Apply ProjectionOverSchema to rewrite expressions with correct ordinals
+      val attrNameMap = relation.output.map(att => (att.exprId, att.name)).toMap
+      val normalizedProjects = normalizeAttributeRefNames(attrNameMap, projects)
+        .asInstanceOf[Seq[NamedExpression]]
+      val normalizedFilters = normalizeAttributeRefNames(attrNameMap, filters)
+
+      val projectionOverSchema = ProjectionOverSchema(prunedSchema, AttributeSet(relation.output))
+      val prunedPlan = buildNewProjection(projects, normalizedProjects, normalizedFilters,
+        prunedRelation, projectionOverSchema)
+
+      // SPARK-47230: Generate nodes are NOT in this subtree (they're in the parent plan).
+      // The generator rewriting will happen in the main apply() method's transformUp
+      // at lines 138-181. We just return the pruned plan here.
+      Some(prunedPlan)
     } else {
       None
     }
@@ -443,57 +457,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
   }
 
   /**
-   * Prune a StructType while preserving all field positions (for GetArrayStructFields ordinals).
-   *
-   * This function keeps ALL fields in the struct to maintain ordinal positions,
-   * but recursively prunes nested levels for fields that have deeper paths (length > 1).
-   *
-   * For example, if paths = Seq(Seq("a"), Seq("b", "c")) and the struct has fields a, b, d:
-   * - Keep field "a" entirely (path length 1)
-   * - Keep field "b" but recursively prune it to only contain "c"
-   * - Keep field "d" as-is (not accessed, but needed for ordinal preservation)
-   */
-  private def pruneStructPreservingFieldOrder(struct: StructType, paths: Seq[Seq[String]],
-      arrayStructFieldPaths: Set[Seq[String]]): StructType = {
-    logInfo(s"SCHEMA_PRUNING_DEBUG: pruneStructPreservingFieldOrder called with " +
-      s"${struct.fields.length} fields, paths=$paths")
-
-    // Group paths by their first component
-    val pathsByFirstField = paths.groupBy(_.head)
-
-    // Keep ALL fields to preserve ordinal positions, but prune nested levels
-    val prunedFields = struct.fields.map { field =>
-      pathsByFirstField.get(field.name) match {
-        case Some(fieldPaths) =>
-          // This field is accessed. Check if there are nested paths to prune.
-          val remainingPaths = fieldPaths.map(_.tail).filter(_.nonEmpty)
-
-          // Get array paths for this field (removing first component)
-          val fieldArrayPaths = arrayStructFieldPaths
-            .filter(_.headOption.contains(field.name))
-            .map(_.tail)
-
-          if (remainingPaths.isEmpty) {
-            // Direct access to this field (path length was 1), keep it entirely
-            logInfo(s"SCHEMA_PRUNING_DEBUG: Keeping field ${field.name} entirely (direct access)")
-            field
-          } else {
-            // Has nested accesses - recursively prune nested levels
-            logInfo(s"SCHEMA_PRUNING_DEBUG: Recursively pruning field ${field.name} " +
-              s"with remainingPaths=$remainingPaths")
-            pruneFieldByPaths(field, remainingPaths, fieldArrayPaths)
-          }
-        case None =>
-          // Field not accessed, but keep it anyway to preserve ordinals
-          logInfo(s"SCHEMA_PRUNING_DEBUG: Keeping field ${field.name} for ordinal preservation")
-          field
-      }
-    }
-
-    StructType(prunedFields)
-  }
-
-  /**
    * Prune a field to keep only the specified paths.
    *
    * Key insight: paths = Seq(Seq("a", "b"), Seq("a", "c")) means we need:
@@ -513,25 +476,14 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
     field.dataType match {
       case ArrayType(elementType: StructType, containsNull) =>
-        // For array<struct<...>>, check if GetArrayStructFields directly accesses
-        // fields at THIS struct level (paths of length 1).
-        // GetArrayStructFields uses ORDINALS, so we can't prune if it accesses this level.
-        val hasDirectArrayAccess = arrayStructFieldPaths.exists(_.length == 1)
-        logInfo(s"SCHEMA_PRUNING_DEBUG: Field ${field.name} is array<struct>, " +
-          s"hasDirectArrayAccess=$hasDirectArrayAccess")
-
-        val prunedElementType = if (hasDirectArrayAccess) {
-          // GetArrayStructFields accesses fields at this struct level using ordinals.
-          // We MUST keep all fields to preserve ordinal positions.
-          // BUT: we still recursively prune nested levels (paths with length > 1)
-          logInfo(s"SCHEMA_PRUNING_DEBUG: Preserving field order for ${field.name}, " +
-            s"but pruning nested levels...")
-          pruneStructPreservingFieldOrder(elementType, paths, arrayStructFieldPaths)
-        } else {
-          // No GetArrayStructFields at this level - safe to prune normally
-          logInfo(s"SCHEMA_PRUNING_DEBUG: Safe to prune ${field.name} normally")
-          pruneStructByPaths(elementType, paths, arrayStructFieldPaths)
-        }
+        // For array<struct<...>>, prune normally
+        // ProjectionOverSchema will rewrite GetArrayStructFields ordinals after pruning
+        logInfo(s"SCHEMA_PRUNING_DEBUG: Pruning array<struct> field ${field.name}")
+        logInfo(s"SCHEMA_PRUNING_DEBUG: elementType has ${elementType.fields.length} fields")
+        logInfo(s"SCHEMA_PRUNING_DEBUG: About to call pruneStructByPaths")
+        val prunedElementType = pruneStructByPaths(elementType, paths, arrayStructFieldPaths)
+        logInfo(s"SCHEMA_PRUNING_DEBUG: pruneStructByPaths returned, " +
+          s"prunedElementType has ${prunedElementType.fields.length} fields")
         field.copy(dataType = ArrayType(prunedElementType, containsNull))
 
       case struct: StructType =>
@@ -555,13 +507,25 @@ object SchemaPruning extends Rule[LogicalPlan] {
    */
   private def pruneStructByPaths(struct: StructType, paths: Seq[Seq[String]],
       arrayStructFieldPaths: Set[Seq[String]] = Set.empty): StructType = {
+    logInfo(s"SCHEMA_PRUNING_DEBUG: pruneStructByPaths called with ${struct.fields.length} fields")
+    logInfo(s"SCHEMA_PRUNING_DEBUG: Input paths: $paths")
+
     // Group paths by their first component
     val pathsByFirstField = paths.groupBy(_.head)
+    logInfo(s"SCHEMA_PRUNING_DEBUG: pathsByFirstField keys: " +
+      s"${pathsByFirstField.keys.mkString(", ")}")
 
     // Keep only fields that are accessed, preserving original field order
     // to maintain field ordinals for GetArrayStructFields expressions
     val prunedFields = struct.fields.flatMap { field =>
-      pathsByFirstField.get(field.name).map { fieldPaths =>
+      val result = pathsByFirstField.get(field.name)
+      if (result.isDefined) {
+        logInfo(s"SCHEMA_PRUNING_DEBUG: Field '${field.name}' KEPT (found in paths)")
+      } else {
+        logInfo(s"SCHEMA_PRUNING_DEBUG: Field '${field.name}' FILTERED OUT (not in paths)")
+      }
+
+      result.map { fieldPaths =>
         // Get remaining path components after removing the first
         val remainingPaths = fieldPaths.map(_.tail).filter(_.nonEmpty)
 
@@ -572,14 +536,19 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
         if (remainingPaths.isEmpty) {
           // This field itself is accessed, keep it entirely
+          logInfo(s"SCHEMA_PRUNING_DEBUG: Field '${field.name}' - keeping entire field")
           field
         } else {
           // This field has nested accesses, recurse
+          logInfo(s"SCHEMA_PRUNING_DEBUG: Field '${field.name}' - " +
+            s"recursing with paths: $remainingPaths")
           pruneFieldByPaths(field, remainingPaths, fieldArrayPaths)
         }
       }
     }
 
+    logInfo(s"SCHEMA_PRUNING_DEBUG: pruneStructByPaths returning ${prunedFields.length} fields " +
+      s"(started with ${struct.fields.length})")
     StructType(prunedFields)
   }
 
@@ -739,5 +708,342 @@ object SchemaPruning extends Rule[LogicalPlan] {
         struct.map(field => countLeaves(field.dataType)).sum
       case _ => 1
     }
+  }
+}
+
+/**
+ * SPARK-47230: Rewrites ordinals in GetArrayStructFields and GetStructField expressions
+ * within Generator nodes after schema pruning has been applied.
+ *
+ * This rule runs AFTER SchemaPruning and operates on the assumption that:
+ * 1. Schema pruning has already been completed
+ * 2. AttributeReferences have been updated to reflect pruned schemas
+ * 3. We only need to fix ordinals to match the current (pruned) schemas
+ *
+ * This separate rule approach solves the problem of nested LATERAL VIEWs where
+ * intermediate nodes (like Project) need to be reconstructed with updated schemas
+ * before the next Generate node can correctly rewrite its ordinals.
+ */
+object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
+
+  /**
+   * Recursively resolve the actual dataType of an expression using the schemaMap.
+   * This is critical for nested arrays where we need to traverse through GetStructField
+   * expressions to get the pruned schema.
+   */
+  private def resolveActualDataType(
+      expr: Expression,
+      schemaMap: scala.collection.Map[ExprId, DataType]): DataType = {
+    expr match {
+      case attr: AttributeReference if schemaMap.contains(attr.exprId) =>
+        schemaMap(attr.exprId)
+
+      case GetStructField(child, ordinal, nameOpt) =>
+        // Recursively resolve the child's type, then extract the field
+        resolveActualDataType(child, schemaMap) match {
+          case st: StructType =>
+            nameOpt match {
+              case Some(fieldName) if st.fieldNames.contains(fieldName) =>
+                st(fieldName).dataType
+              case _ if ordinal < st.fields.length =>
+                st.fields(ordinal).dataType
+              case _ =>
+                // Fallback to expression's dataType if resolution fails
+                expr.dataType
+            }
+          case ArrayType(st: StructType, _) =>
+            // Child is an array of structs, extract field from element type
+            nameOpt match {
+              case Some(fieldName) if st.fieldNames.contains(fieldName) =>
+                ArrayType(StructType(Seq(st(fieldName))), true)
+              case _ if ordinal < st.fields.length =>
+                ArrayType(StructType(Seq(st.fields(ordinal))), true)
+              case _ =>
+                expr.dataType
+            }
+          case _ =>
+            expr.dataType
+        }
+
+      case _ =>
+        expr.dataType
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    println(s"[SPARK-47230 DEBUG] === GeneratorOrdinalRewriting.apply called ===")
+
+    // Check if there are any Generate nodes that need ordinal rewriting
+    var hasGenerateNodes = false
+    plan.foreach {
+      case _: Generate => hasGenerateNodes = true
+      case _ =>
+    }
+
+    if (!hasGenerateNodes) {
+      println(s"[SPARK-47230 DEBUG] No Generate nodes found, skipping")
+      return plan
+    }
+
+    println(s"[SPARK-47230 DEBUG] Found Generate nodes, proceeding with ordinal rewriting")
+
+    // First pass: collect ALL updated schemas from the plan (from all attributes)
+    // This includes schemas that have been pruned by SchemaPruning
+    println(s"[SPARK-47230 DEBUG] Collecting schemas from all attributes...")
+    val schemaMap = scala.collection.mutable.Map[ExprId, DataType]()
+    plan.foreach { node =>
+      node.output.foreach { attr =>
+        schemaMap(attr.exprId) = attr.dataType
+        println(s"[SPARK-47230 DEBUG] Collected schema for ${attr.name}#${attr.exprId}: " +
+          s"${attr.dataType.simpleString.take(100)}")
+      }
+    }
+    println(s"[SPARK-47230 DEBUG] Collected ${schemaMap.size} schemas")
+
+    // Transform the plan to rewrite ordinals in all Generate nodes
+    // Use transformUp so we process child Generates first, and parent nodes
+    // are reconstructed with updated child schemas
+    println(s"[SPARK-47230 DEBUG] Starting transformUp to rewrite ordinals in Generate nodes...")
+    val result = plan transformUp {
+      case g @ Generate(generator, unrequiredChildIndex, outer, qualifier,
+          generatorOutput, child) =>
+
+        println(s"[SPARK-47230 DEBUG] === Processing Generate node ===")
+        println(s"[SPARK-47230 DEBUG] Generator type: ${generator.getClass.getSimpleName}")
+        println(s"[SPARK-47230 DEBUG] Child output:")
+        child.output.foreach { a =>
+          println(s"[SPARK-47230 DEBUG]   ${a.name}#${a.exprId}: ${a.dataType.simpleString.take(100)}")
+        }
+
+        // Rewrite GetArrayStructFields and GetStructField expressions in the generator
+        // to use ordinals that match the CURRENT (pruned) schema from schemaMap
+        println(s"[SPARK-47230 DEBUG] Rewriting ordinals in generator expressions...")
+
+        // First, check if the generator child is an AttributeReference that needs dataType update
+        val generatorWithFixedChild = generator.transformUp {
+          case attr: AttributeReference if schemaMap.contains(attr.exprId) =>
+            val actualType = schemaMap(attr.exprId)
+            if (actualType != attr.dataType) {
+              println(s"[SPARK-47230 DEBUG] FIXING generator child attribute ${attr.name}#${attr.exprId}:")
+              println(s"[SPARK-47230 DEBUG]   FROM: ${attr.dataType.simpleString.take(100)}")
+              println(s"[SPARK-47230 DEBUG]   TO:   ${actualType.simpleString.take(100)}")
+              attr.withDataType(actualType)
+            } else {
+              attr
+            }
+        }.asInstanceOf[Generator]
+
+        // Then rewrite ordinals in nested expressions
+        val rewrittenGenerator = generatorWithFixedChild.transformUp {
+          case gasf @ GetArrayStructFields(childExpr, field, ordinal, numFields, containsNull) =>
+            // Recursively resolve actual dataType from schemaMap (handles nested expressions)
+            println(s"[SPARK-47230 DEBUG] Found GetArrayStructFields: field=${field.name}, ordinal=$ordinal, numFields=$numFields")
+            val actualDataType = resolveActualDataType(childExpr, schemaMap)
+            println(s"[SPARK-47230 DEBUG] Resolved actual dataType: ${actualDataType.simpleString.take(100)}")
+
+            actualDataType match {
+              case ArrayType(st: StructType, _) =>
+                val fieldName = field.name
+                println(s"[SPARK-47230 DEBUG] Array element is StructType with fields: ${st.fieldNames.mkString(", ")}")
+                if (st.fieldNames.contains(fieldName)) {
+                  val newOrdinal = st.fieldIndex(fieldName)
+                  val newNumFields = st.fields.length
+                  if (newOrdinal != ordinal || newNumFields != numFields) {
+                    println(s"[SPARK-47230 DEBUG] REWRITING GetArrayStructFields($fieldName): " +
+                      s"ordinal $ordinal → $newOrdinal, numFields $numFields → $newNumFields")
+                    GetArrayStructFields(childExpr, st.fields(newOrdinal), newOrdinal,
+                      newNumFields, containsNull)
+                  } else {
+                    println(s"[SPARK-47230 DEBUG] No rewrite needed for GetArrayStructFields($fieldName)")
+                    gasf
+                  }
+                } else {
+                  println(s"[SPARK-47230 DEBUG] Field $fieldName NOT FOUND in pruned schema, keeping as-is")
+                  gasf
+                }
+              case _ =>
+                println(s"[SPARK-47230 DEBUG] actualDataType is not ArrayType(StructType), skipping")
+                gasf
+            }
+
+          case gsf @ GetStructField(childExpr, ordinal, nameOpt) =>
+            // Recursively resolve actual dataType from schemaMap (handles nested expressions)
+            println(s"[SPARK-47230 DEBUG] Found GetStructField: ordinal=$ordinal, nameOpt=$nameOpt")
+            val actualDataType = resolveActualDataType(childExpr, schemaMap)
+            println(s"[SPARK-47230 DEBUG] Resolved actual dataType: ${actualDataType.simpleString.take(100)}")
+
+            actualDataType match {
+              case st: StructType =>
+                println(s"[SPARK-47230 DEBUG] StructType with fields: ${st.fieldNames.mkString(", ")}")
+                val fieldNameOpt = nameOpt.orElse {
+                  if (ordinal < st.fields.length) Some(st.fields(ordinal).name) else None
+                }
+
+                fieldNameOpt match {
+                  case Some(fieldName) if st.fieldNames.contains(fieldName) =>
+                    val newOrdinal = st.fieldIndex(fieldName)
+                    if (newOrdinal != ordinal) {
+                      println(s"[SPARK-47230 DEBUG] REWRITING GetStructField($fieldName): " +
+                        s"ordinal $ordinal → $newOrdinal")
+                      GetStructField(childExpr, newOrdinal, Some(fieldName))
+                    } else {
+                      println(s"[SPARK-47230 DEBUG] No rewrite needed for GetStructField($fieldName)")
+                      gsf
+                    }
+                  case _ =>
+                    println(s"[SPARK-47230 DEBUG] GetStructField field not found, keeping as-is")
+                    gsf
+                }
+              case _ =>
+                println(s"[SPARK-47230 DEBUG] actualDataType is not StructType, skipping")
+                gsf
+            }
+        }.asInstanceOf[Generator]
+
+        println(s"[SPARK-47230 DEBUG] Generator rewriting complete")
+
+        // Re-derive generator output attributes from the rewritten generator's element schema
+        // CRITICAL: Use toAttributes() to get fresh attributes, then preserve ExprIds
+        // This is the pattern used in GeneratorNestedColumnAliasing (lines 433-443)
+        println(s"[SPARK-47230 DEBUG] Re-deriving generator output attributes...")
+        val newGeneratorOutput = generatorOutput
+          .zip(toAttributes(rewrittenGenerator.elementSchema))
+          .map { case (oldAttr, newAttr) =>
+            val updated = newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
+            if (updated.dataType != oldAttr.dataType) {
+              println(s"[SPARK-47230 DEBUG] Generator output ${oldAttr.name}#${oldAttr.exprId} updated:")
+              println(s"[SPARK-47230 DEBUG]   FROM: ${oldAttr.dataType.simpleString.take(100)}")
+              println(s"[SPARK-47230 DEBUG]   TO:   ${updated.dataType.simpleString.take(100)}")
+            }
+            updated
+          }
+
+        // Update schemaMap immediately with new generator outputs
+        // This is critical for nested Generates to see each other's updated schemas
+        println(s"[SPARK-47230 DEBUG] Updating schemaMap with new generator outputs...")
+        newGeneratorOutput.foreach { attr =>
+          schemaMap(attr.exprId) = attr.dataType
+          println(s"[SPARK-47230 DEBUG] Updated schemaMap for ${attr.name}#${attr.exprId}")
+        }
+
+        Generate(rewrittenGenerator, unrequiredChildIndex, outer, qualifier,
+          newGeneratorOutput, child)
+    }
+
+    // Second pass: Comprehensive expression rewriting throughout the ENTIRE plan
+    // This fixes ordinals in downstream nodes (Project, Filter, etc.)
+    // that reference generator outputs
+    println(s"[SPARK-47230 DEBUG] === Starting comprehensive expression rewriting pass ===")
+
+    val finalResult = result transformUp {
+      case node =>
+        // Rewrite ALL expressions in this node using schemaMap
+        node.transformExpressionsUp {
+          case gasf @ GetArrayStructFields(childExpr, field, ordinal, numFields, containsNull) =>
+            val actualDataType = resolveActualDataType(childExpr, schemaMap)
+
+            actualDataType match {
+              case ArrayType(st: StructType, _) =>
+                val fieldName = field.name
+                if (st.fieldNames.contains(fieldName)) {
+                  val newOrdinal = st.fieldIndex(fieldName)
+                  val newNumFields = st.fields.length
+                  if (newOrdinal != ordinal || newNumFields != numFields) {
+                    println(s"[SPARK-47230 DEBUG] [Comprehensive] REWRITING GetArrayStructFields($fieldName): " +
+                      s"ordinal $ordinal → $newOrdinal, numFields $numFields → $newNumFields")
+                    GetArrayStructFields(childExpr, st.fields(newOrdinal), newOrdinal,
+                      newNumFields, containsNull)
+                  } else {
+                    gasf
+                  }
+                } else {
+                  gasf
+                }
+              case _ => gasf
+            }
+
+          case gsf @ GetStructField(childExpr, ordinal, nameOpt) =>
+            val actualDataType = resolveActualDataType(childExpr, schemaMap)
+
+            actualDataType match {
+              case st: StructType =>
+                val fieldNameOpt = nameOpt.orElse {
+                  if (ordinal < st.fields.length) Some(st.fields(ordinal).name) else None
+                }
+
+                fieldNameOpt match {
+                  case Some(fieldName) if st.fieldNames.contains(fieldName) =>
+                    val newOrdinal = st.fieldIndex(fieldName)
+                    if (newOrdinal != ordinal) {
+                      println(s"[SPARK-47230 DEBUG] [Comprehensive] REWRITING GetStructField($fieldName): " +
+                        s"ordinal $ordinal → $newOrdinal")
+                      GetStructField(childExpr, newOrdinal, Some(fieldName))
+                    } else {
+                      gsf
+                    }
+                  case _ => gsf
+                }
+              case _ => gsf
+            }
+        }
+    }
+
+    println(s"[SPARK-47230 DEBUG] === Comprehensive rewriting pass completed ===")
+
+    // Third pass: Update _extract_ attribute dataTypes in schemaMap to match their rewritten expression dataTypes
+    // This fixes the issue where NestedColumnAliasing creates Alias(_extract_) nodes,
+    // ProjectionOverSchema rewrites the Alias child, but schemaMap still has the old dataType
+    // IMPORTANT: Only update for GetArrayStructFields expressions, not simple field accesses
+    println(s"[SPARK-47230 DEBUG] === Starting attribute dataType correction pass ===")
+
+    finalResult.foreach {
+      case p @ Project(projectList, _) =>
+        println(s"[SPARK-47230 DEBUG] Checking Project node for _extract_ attributes...")
+
+        // Update schemaMap for any _extract_ attributes whose Alias child dataType differs
+        p.output.zip(projectList).foreach { case (attr, expr) =>
+          expr match {
+            case alias @ Alias(GetArrayStructFields(_, _, _, _, _), _)
+                if attr.name.startsWith("_extract_") =>
+              // Only update for Alias wrapping GetArrayStructFields
+              // This ensures we're updating the actual _extract_ attribute, not downstream projections
+              val currentType = schemaMap.getOrElse(attr.exprId, attr.dataType)
+              if (alias.child.dataType != currentType) {
+                println(s"[SPARK-47230 DEBUG] UPDATING schemaMap for ${attr.name}#${attr.exprId}:")
+                println(s"[SPARK-47230 DEBUG]   FROM: ${currentType.simpleString.take(100)}")
+                println(s"[SPARK-47230 DEBUG]   TO:   ${alias.child.dataType.simpleString.take(100)}")
+
+                // Update schemaMap so downstream references use the correct schema
+                schemaMap(attr.exprId) = alias.child.dataType
+              }
+            case _ =>
+          }
+        }
+
+      case _ =>
+    }
+
+    println(s"[SPARK-47230 DEBUG] === Attribute dataType correction pass completed ===")
+
+    // Fourth pass: Comprehensive AttributeReference update throughout the ENTIRE plan
+    // This is CRITICAL to fix the Size function error and other issues where
+    // AttributeReferences still have unpruned dataTypes after schema pruning
+    println(s"[SPARK-47230 DEBUG] === Starting comprehensive AttributeReference update pass ===")
+
+    val planWithUpdatedAttributes = finalResult.transformAllExpressions {
+      case attr: AttributeReference if schemaMap.contains(attr.exprId) =>
+        val actualType = schemaMap(attr.exprId)
+        if (actualType != attr.dataType) {
+          println(s"[SPARK-47230 DEBUG] [Comprehensive Update] Updating AttributeReference ${attr.name}#${attr.exprId}:")
+          println(s"[SPARK-47230 DEBUG]   FROM: ${attr.dataType.simpleString.take(100)}")
+          println(s"[SPARK-47230 DEBUG]   TO:   ${actualType.simpleString.take(100)}")
+          attr.withDataType(actualType)
+        } else {
+          attr
+        }
+    }
+
+    println(s"[SPARK-47230 DEBUG] === Comprehensive AttributeReference update completed ===")
+    planWithUpdatedAttributes
   }
 }

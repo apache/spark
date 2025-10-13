@@ -63,7 +63,40 @@ case class GenerateExec(
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
+  override def output: Seq[Attribute] = requiredChildOutput ++ correctedGeneratorOutput
+
+  /**
+   * SPARK-47230: Create corrected generator output attributes with data types from the
+   * bound generator's element schema. This ensures projections use the correct ordinals
+   * after schema pruning.
+   */
+  private lazy val correctedGeneratorOutput: Seq[Attribute] = {
+    println(s"[SPARK-47230 DEBUG] ========== OUTPUT CORRECTION ==========")
+    println(s"[SPARK-47230 DEBUG] Original generator output:")
+    generatorOutput.foreach { attr =>
+      println(s"[SPARK-47230 DEBUG]   ${attr.name}: ${attr.dataType}")
+    }
+
+    println(s"[SPARK-47230 DEBUG] Bound generator element schema:")
+    boundGenerator.elementSchema.fields.foreach { field =>
+      println(s"[SPARK-47230 DEBUG]   ${field.name}: ${field.dataType}")
+    }
+
+    val elementFields = boundGenerator.elementSchema.fields
+    val corrected = generatorOutput.zip(elementFields).map { case (attr, field) =>
+      // Create a new attribute with the correct data type from the generator's schema
+      println(s"[SPARK-47230 DEBUG] Correcting ${attr.name}: ${attr.dataType} -> ${field.dataType}")
+      attr.withDataType(field.dataType)
+    }
+
+    println(s"[SPARK-47230 DEBUG] Corrected generator output:")
+    corrected.foreach { attr =>
+      println(s"[SPARK-47230 DEBUG]   ${attr.name}: ${attr.dataType}")
+    }
+    println(s"[SPARK-47230 DEBUG] ==========================================")
+
+    corrected
+  }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -72,11 +105,50 @@ case class GenerateExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  lazy val boundGenerator: Generator = BindReferences.bindReference(generator, child.output)
+  lazy val boundGenerator: Generator = {
+    println(s"[SPARK-47230 DEBUG] ========== GENERATOR BINDING ==========")
+    println(s"[SPARK-47230 DEBUG] STEP 1: Original generator from logical plan")
+    println(s"[SPARK-47230 DEBUG]   Type: ${generator.getClass.getSimpleName}")
+    println(s"[SPARK-47230 DEBUG]   Children: ${generator.children.mkString(", ")}")
+    println(s"[SPARK-47230 DEBUG]   Element schema:")
+    generator.elementSchema.fields.foreach { field =>
+      println(s"[SPARK-47230 DEBUG]     ${field.name}: ${field.dataType}")
+    }
+
+    println(s"[SPARK-47230 DEBUG] STEP 2: Binding references to child.output")
+    val bound = BindReferences.bindReference(generator, child.output)
+    println(s"[SPARK-47230 DEBUG]   Bound generator children: ${bound.children.mkString(", ")}")
+    println(s"[SPARK-47230 DEBUG]   Bound element schema:")
+    bound.elementSchema.fields.foreach { field =>
+      println(s"[SPARK-47230 DEBUG]     ${field.name}: ${field.dataType}")
+    }
+
+    println(s"[SPARK-47230 DEBUG] ========== FINAL BOUND GENERATOR ==========")
+    println(s"[SPARK-47230 DEBUG]   Final generator children: ${bound.children.mkString(", ")}")
+    println(s"[SPARK-47230 DEBUG]   Final element schema:")
+    bound.elementSchema.fields.foreach { field =>
+      println(s"[SPARK-47230 DEBUG]     ${field.name}: ${field.dataType}")
+    }
+    println(s"[SPARK-47230 DEBUG] =============================================")
+
+    bound
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     val numOutputRows = longMetric("numOutputRows")
+
+    if (supportCodegen) {
+      println(s"[SPARK-47230 DEBUG] ========== CODE GENERATION PATH ==========")
+      println(s"[SPARK-47230 DEBUG] Generator supports code generation: $supportCodegen")
+      println(s"[SPARK-47230 DEBUG] NOTE: Error likely occurs in generated code")
+      println(s"[SPARK-47230 DEBUG] ==========================================")
+    } else {
+      println(s"[SPARK-47230 DEBUG] ========== INTERPRETED PATH ==========")
+      println(s"[SPARK-47230 DEBUG] Using interpreted execution")
+      println(s"[SPARK-47230 DEBUG] ======================================")
+    }
+
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       boundGenerator.foreach {
         case n: Nondeterministic => n.initialize(index)
@@ -119,6 +191,15 @@ case class GenerateExec(
       }
 
       // Convert the rows to unsafe rows.
+      // DEBUG: Print output schemas
+      if (index == 0) {  // Only print once per executor
+        println(s"[SPARK-47230 DEBUG] ========== PROJECTION CREATION ==========")
+        println(s"[SPARK-47230 DEBUG] Creating UnsafeProjection with output:")
+        output.foreach { attr =>
+          println(s"[SPARK-47230 DEBUG]   ${attr.name}: ${attr.dataType}")
+        }
+        println(s"[SPARK-47230 DEBUG] ============================================")
+      }
       val proj = UnsafeProjection.create(output, output)
       proj.initialize(index)
       rows.map { r =>

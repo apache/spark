@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  spark-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spark-dev-sandbox
+    volumes:
+      - /Users/igor.b/workspace/spark:/workspace/spark
+      - /tmp:/tmp
+      - spark-claude-config:/root/.claude
+    environment:
+      - JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+      - SPARK_HOME=/workspace/spark
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    working_dir: /workspace/spark
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+volumes:
+  spark-claude-config:
