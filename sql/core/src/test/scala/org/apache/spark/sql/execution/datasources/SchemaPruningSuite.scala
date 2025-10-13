@@ -369,11 +369,11 @@ abstract class SchemaPruningSuite
     checkScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
-    // Currently we don't prune multiple field case.
+    // SPARK-47230: Now we DO prune multiple field case!
     val query2 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select("friend.first", "friend.middle")
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
     checkAnswer(query2, Row("Susan", "Z.") :: Nil)
 
     val query3 = spark.table("contacts")
@@ -404,10 +404,10 @@ abstract class SchemaPruningSuite
     checkScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
-    // Currently we don't prune multiple field case.
+    // SPARK-47230: Now we DO prune multiple field case!
     val query2 = sql(
       "select friend.first, friend.middle from contacts, lateral explode(friends) t(friend)")
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
     checkAnswer(query2, Row("Susan", "Z.") :: Nil)
 
     val query3 = sql(

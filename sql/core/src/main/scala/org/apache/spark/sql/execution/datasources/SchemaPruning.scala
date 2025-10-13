@@ -58,11 +58,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       // Collect Generate nodes
       node match {
         case g: Generate =>
-          println(s"[PRUNING] Found Generate: ${g.generator.getClass.getSimpleName}")
-          println(s"[PRUNING]   Generator child: ${g.generator.children.headOption.getOrElse("none")}")
-          println(s"[PRUNING]   Generator output count: ${g.generatorOutput.size}")
           g.generatorOutput.foreach { attr =>
-            println(s"[PRUNING]   Mapping output ${attr.name}#${attr.exprId} -> ${g.generator.getClass.getSimpleName}")
             generateMappings(attr.exprId) = g.generator
           }
         case p: Project =>
@@ -70,7 +66,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
           p.output.zip(p.projectList).foreach { case (attr, namedExpr) =>
             namedExpr match {
               case Alias(child, name) if name.startsWith("_extract_") =>
-                println(s"[PRUNING] Found _extract_ alias: ${attr.name}#${attr.exprId} -> $child")
                 extractAliases(attr.exprId) = child
               case _ =>
             }
@@ -83,20 +78,13 @@ object SchemaPruning extends Rule[LogicalPlan] {
         expr.foreach {
           case gasf: GetArrayStructFields =>
             allArrayStructFields += gasf
-            println(s"[PRUNING] Collected GetArrayStructFields: ${gasf.field.name}")
           case gsf: GetStructField =>
             allStructFields += gsf
-            println(s"[PRUNING] Collected GetStructField: ${gsf.name.getOrElse("unnamed")}")
           case _ =>
         }
       }
     }
 
-    println(s"[PRUNING] === SUMMARY ===")
-    println(s"[PRUNING] Generator mappings: ${generateMappings.size}")
-    println(s"[PRUNING] _extract_ aliases: ${extractAliases.size}")
-    println(s"[PRUNING] GetArrayStructFields: ${allArrayStructFields.size}")
-    println(s"[PRUNING] GetStructField: ${allStructFields.size}")
 
     val transformedPlan = plan transformDown {
       // SPARK-47230: Handle cases with Generate nodes where ScanOperation doesn't match
@@ -115,7 +103,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
         // Use the expressions collected at the beginning
         tryEnhancedNestedArrayPruning(
           l, p.projectList, Seq.empty, allArrayStructFields.toSeq, allStructFields.toSeq,
-          generateMappings.toMap, extractAliases.toMap, hadoopFsRelation, requiredColumns).getOrElse(p)
+          generateMappings.toMap, extractAliases.toMap, hadoopFsRelation, requiredColumns
+        ).getOrElse(p)
 
       case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
         l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
@@ -196,15 +185,11 @@ object SchemaPruning extends Rule[LogicalPlan] {
     val relationExprIds = relation.output.map(_.exprId).toSet
 
     // Process GetArrayStructFields
-    println(s"[PRUNING] === Processing ${arrayStructFields.size} GetArrayStructFields ===")
     arrayStructFields.foreach { gasf =>
-      println(s"[PRUNING] Tracing GetArrayStructFields: ${gasf.field.name}")
       val (rootAndPath, usedGenerate) = traceToRootColumnThroughGenerates(
         gasf, generateMappings, extractAliases, relationExprIds)
-      println(s"[PRUNING]   Result: rootAndPath=$rootAndPath, usedGenerate=$usedGenerate")
       if (usedGenerate) tracedThroughGenerate = true
       rootAndPath.foreach { case (rootCol, path) =>
-        println(s"[PRUNING]   Adding path to $rootCol: $path")
         val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
         nestedFieldAccesses(rootCol) = existingPaths + path
         // Track this as an array struct field path
@@ -373,20 +358,16 @@ object SchemaPruning extends Rule[LogicalPlan] {
       relationExprIds: Set[ExprId]): (Option[(String, Seq[String])], Boolean) = {
     expr match {
       case attr: AttributeReference =>
-        println(s"[TRACE] AttributeReference: ${attr.name}#${attr.exprId}")
         // Check if this attribute is from a Generate node
         generateMappings.get(attr.exprId) match {
           case Some(gen: UnaryExpression) =>
             // This attribute comes from a unary generator (explode, posexplode, etc.)
             // Extract the child and trace through it
-            println(s"[TRACE]   Found in mappings as ${gen.getClass.getSimpleName}, child: ${gen.child}")
             val (result, _) = traceArrayAccessThroughGenerates(
               gen.child, generateMappings, extractAliases, relationExprIds)
-            println(s"[TRACE]   Traced result: $result")
             (result, true)
           case Some(other) =>
             // Other generator types without a single child - mark as used Generate
-            println(s"[TRACE]   Found in mappings as ${other.getClass.getSimpleName} (non-unary)")
             val (result, _) = traceArrayAccessThroughGenerates(
               other, generateMappings, extractAliases, relationExprIds)
             (result, true)
@@ -396,15 +377,12 @@ object SchemaPruning extends Rule[LogicalPlan] {
               case Some(aliasChild) =>
                 // SPARK-47230: This is an _extract_ attribute created by NestedColumnAliasing
                 // Trace through the alias child expression
-                println(s"[TRACE]   Found _extract_ alias, child: $aliasChild")
                 val (result, usedGen) = traceArrayAccessThroughGenerates(
                   aliasChild, generateMappings, extractAliases, relationExprIds)
-                println(s"[TRACE]   _extract_ traced result: $result")
                 (result, usedGen)
               case None =>
                 // Not from a Generate node or _extract_ alias - this is a regular attribute
                 val isRelation = relationExprIds.contains(attr.exprId)
-                println(s"[TRACE]   NOT in mappings or extract aliases, isRelation=$isRelation")
                 if (isRelation) {
                   (Some((attr.name, Seq.empty)), false)
                 } else {
@@ -414,27 +392,22 @@ object SchemaPruning extends Rule[LogicalPlan] {
         }
 
       case GetStructField(child, _, nameOpt) =>
-        println(s"[TRACE] GetStructField: ${nameOpt.getOrElse("unnamed")}, child=$child")
         val (childResult, usedGen) = traceArrayAccessThroughGenerates(
           child, generateMappings, extractAliases, relationExprIds)
         val result = childResult.flatMap { case (rootCol, path) =>
           nameOpt.map(fieldName => (rootCol, path :+ fieldName))
         }
-        println(s"[TRACE]   GetStructField result: $result")
         (result, usedGen)
 
       case GetArrayItem(child, _, _) =>
-        println(s"[TRACE] GetArrayItem, child=$child")
         traceArrayAccessThroughGenerates(child, generateMappings, extractAliases, relationExprIds)
 
       case GetArrayStructFields(child, field, _, _, _) =>
-        println(s"[TRACE] GetArrayStructFields: ${field.name}, child=$child")
         val (childResult, usedGen) = traceArrayAccessThroughGenerates(
           child, generateMappings, extractAliases, relationExprIds)
         val result = childResult.map { case (rootCol, path) =>
           (rootCol, path :+ field.name)
         }
-        println(s"[TRACE]   GetArrayStructFields result: $result")
         (result, usedGen)
 
       case _ => (None, false)
@@ -824,7 +797,6 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    println(s"[SPARK-47230 DEBUG] === GeneratorOrdinalRewriting.apply called ===")
 
     // Check if there are any Generate nodes that need ordinal rewriting
     var hasGenerateNodes = false
@@ -834,52 +806,34 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
     }
 
     if (!hasGenerateNodes) {
-      println(s"[SPARK-47230 DEBUG] No Generate nodes found, skipping")
       return plan
     }
 
-    println(s"[SPARK-47230 DEBUG] Found Generate nodes, proceeding with ordinal rewriting")
 
     // First pass: collect ALL updated schemas from the plan (from all attributes)
     // This includes schemas that have been pruned by SchemaPruning
-    println(s"[SPARK-47230 DEBUG] Collecting schemas from all attributes...")
     val schemaMap = scala.collection.mutable.Map[ExprId, DataType]()
     plan.foreach { node =>
       node.output.foreach { attr =>
         schemaMap(attr.exprId) = attr.dataType
-        println(s"[SPARK-47230 DEBUG] Collected schema for ${attr.name}#${attr.exprId}: " +
-          s"${attr.dataType.simpleString.take(100)}")
       }
     }
-    println(s"[SPARK-47230 DEBUG] Collected ${schemaMap.size} schemas")
 
     // Transform the plan to rewrite ordinals in all Generate nodes
     // Use transformUp so we process child Generates first, and parent nodes
     // are reconstructed with updated child schemas
-    println(s"[SPARK-47230 DEBUG] Starting transformUp to rewrite ordinals in Generate nodes...")
     val result = plan transformUp {
       case g @ Generate(generator, unrequiredChildIndex, outer, qualifier,
           generatorOutput, child) =>
 
-        println(s"[SPARK-47230 DEBUG] === Processing Generate node ===")
-        println(s"[SPARK-47230 DEBUG] Generator type: ${generator.getClass.getSimpleName}")
-        println(s"[SPARK-47230 DEBUG] Child output:")
-        child.output.foreach { a =>
-          println(s"[SPARK-47230 DEBUG]   ${a.name}#${a.exprId}: ${a.dataType.simpleString.take(100)}")
-        }
-
         // Rewrite GetArrayStructFields and GetStructField expressions in the generator
         // to use ordinals that match the CURRENT (pruned) schema from schemaMap
-        println(s"[SPARK-47230 DEBUG] Rewriting ordinals in generator expressions...")
 
         // First, check if the generator child is an AttributeReference that needs dataType update
         val generatorWithFixedChild = generator.transformUp {
           case attr: AttributeReference if schemaMap.contains(attr.exprId) =>
             val actualType = schemaMap(attr.exprId)
             if (actualType != attr.dataType) {
-              println(s"[SPARK-47230 DEBUG] FIXING generator child attribute ${attr.name}#${attr.exprId}:")
-              println(s"[SPARK-47230 DEBUG]   FROM: ${attr.dataType.simpleString.take(100)}")
-              println(s"[SPARK-47230 DEBUG]   TO:   ${actualType.simpleString.take(100)}")
               attr.withDataType(actualType)
             } else {
               attr
@@ -890,44 +844,33 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
         val rewrittenGenerator = generatorWithFixedChild.transformUp {
           case gasf @ GetArrayStructFields(childExpr, field, ordinal, numFields, containsNull) =>
             // Recursively resolve actual dataType from schemaMap (handles nested expressions)
-            println(s"[SPARK-47230 DEBUG] Found GetArrayStructFields: field=${field.name}, ordinal=$ordinal, numFields=$numFields")
             val actualDataType = resolveActualDataType(childExpr, schemaMap)
-            println(s"[SPARK-47230 DEBUG] Resolved actual dataType: ${actualDataType.simpleString.take(100)}")
 
             actualDataType match {
               case ArrayType(st: StructType, _) =>
                 val fieldName = field.name
-                println(s"[SPARK-47230 DEBUG] Array element is StructType with fields: ${st.fieldNames.mkString(", ")}")
                 if (st.fieldNames.contains(fieldName)) {
                   val newOrdinal = st.fieldIndex(fieldName)
                   val newNumFields = st.fields.length
                   if (newOrdinal != ordinal || newNumFields != numFields) {
-                    println(s"[SPARK-47230 DEBUG] REWRITING GetArrayStructFields($fieldName): " +
-                      s"ordinal $ordinal → $newOrdinal, numFields $numFields → $newNumFields")
                     GetArrayStructFields(childExpr, st.fields(newOrdinal), newOrdinal,
                       newNumFields, containsNull)
                   } else {
-                    println(s"[SPARK-47230 DEBUG] No rewrite needed for GetArrayStructFields($fieldName)")
                     gasf
                   }
                 } else {
-                  println(s"[SPARK-47230 DEBUG] Field $fieldName NOT FOUND in pruned schema, keeping as-is")
                   gasf
                 }
               case _ =>
-                println(s"[SPARK-47230 DEBUG] actualDataType is not ArrayType(StructType), skipping")
                 gasf
             }
 
           case gsf @ GetStructField(childExpr, ordinal, nameOpt) =>
             // Recursively resolve actual dataType from schemaMap (handles nested expressions)
-            println(s"[SPARK-47230 DEBUG] Found GetStructField: ordinal=$ordinal, nameOpt=$nameOpt")
             val actualDataType = resolveActualDataType(childExpr, schemaMap)
-            println(s"[SPARK-47230 DEBUG] Resolved actual dataType: ${actualDataType.simpleString.take(100)}")
 
             actualDataType match {
               case st: StructType =>
-                println(s"[SPARK-47230 DEBUG] StructType with fields: ${st.fieldNames.mkString(", ")}")
                 val fieldNameOpt = nameOpt.orElse {
                   if (ordinal < st.fields.length) Some(st.fields(ordinal).name) else None
                 }
@@ -936,47 +879,35 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
                   case Some(fieldName) if st.fieldNames.contains(fieldName) =>
                     val newOrdinal = st.fieldIndex(fieldName)
                     if (newOrdinal != ordinal) {
-                      println(s"[SPARK-47230 DEBUG] REWRITING GetStructField($fieldName): " +
-                        s"ordinal $ordinal → $newOrdinal")
                       GetStructField(childExpr, newOrdinal, Some(fieldName))
                     } else {
-                      println(s"[SPARK-47230 DEBUG] No rewrite needed for GetStructField($fieldName)")
                       gsf
                     }
                   case _ =>
-                    println(s"[SPARK-47230 DEBUG] GetStructField field not found, keeping as-is")
                     gsf
                 }
               case _ =>
-                println(s"[SPARK-47230 DEBUG] actualDataType is not StructType, skipping")
                 gsf
             }
         }.asInstanceOf[Generator]
 
-        println(s"[SPARK-47230 DEBUG] Generator rewriting complete")
 
         // Re-derive generator output attributes from the rewritten generator's element schema
         // CRITICAL: Use toAttributes() to get fresh attributes, then preserve ExprIds
         // This is the pattern used in GeneratorNestedColumnAliasing (lines 433-443)
-        println(s"[SPARK-47230 DEBUG] Re-deriving generator output attributes...")
         val newGeneratorOutput = generatorOutput
           .zip(toAttributes(rewrittenGenerator.elementSchema))
           .map { case (oldAttr, newAttr) =>
             val updated = newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
             if (updated.dataType != oldAttr.dataType) {
-              println(s"[SPARK-47230 DEBUG] Generator output ${oldAttr.name}#${oldAttr.exprId} updated:")
-              println(s"[SPARK-47230 DEBUG]   FROM: ${oldAttr.dataType.simpleString.take(100)}")
-              println(s"[SPARK-47230 DEBUG]   TO:   ${updated.dataType.simpleString.take(100)}")
             }
             updated
           }
 
         // Update schemaMap immediately with new generator outputs
         // This is critical for nested Generates to see each other's updated schemas
-        println(s"[SPARK-47230 DEBUG] Updating schemaMap with new generator outputs...")
         newGeneratorOutput.foreach { attr =>
           schemaMap(attr.exprId) = attr.dataType
-          println(s"[SPARK-47230 DEBUG] Updated schemaMap for ${attr.name}#${attr.exprId}")
         }
 
         Generate(rewrittenGenerator, unrequiredChildIndex, outer, qualifier,
@@ -986,7 +917,6 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
     // Second pass: Comprehensive expression rewriting throughout the ENTIRE plan
     // This fixes ordinals in downstream nodes (Project, Filter, etc.)
     // that reference generator outputs
-    println(s"[SPARK-47230 DEBUG] === Starting comprehensive expression rewriting pass ===")
 
     val finalResult = result transformUp {
       case node =>
@@ -1002,8 +932,6 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
                   val newOrdinal = st.fieldIndex(fieldName)
                   val newNumFields = st.fields.length
                   if (newOrdinal != ordinal || newNumFields != numFields) {
-                    println(s"[SPARK-47230 DEBUG] [Comprehensive] REWRITING GetArrayStructFields($fieldName): " +
-                      s"ordinal $ordinal → $newOrdinal, numFields $numFields → $newNumFields")
                     GetArrayStructFields(childExpr, st.fields(newOrdinal), newOrdinal,
                       newNumFields, containsNull)
                   } else {
@@ -1028,8 +956,6 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
                   case Some(fieldName) if st.fieldNames.contains(fieldName) =>
                     val newOrdinal = st.fieldIndex(fieldName)
                     if (newOrdinal != ordinal) {
-                      println(s"[SPARK-47230 DEBUG] [Comprehensive] REWRITING GetStructField($fieldName): " +
-                        s"ordinal $ordinal → $newOrdinal")
                       GetStructField(childExpr, newOrdinal, Some(fieldName))
                     } else {
                       gsf
@@ -1041,17 +967,14 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
         }
     }
 
-    println(s"[SPARK-47230 DEBUG] === Comprehensive rewriting pass completed ===")
 
-    // Third pass: Update _extract_ attribute dataTypes in schemaMap to match their rewritten expression dataTypes
+    // Third pass: Update _extract_ attribute dataTypes in schemaMap to match rewritten dataTypes
     // This fixes the issue where NestedColumnAliasing creates Alias(_extract_) nodes,
-    // ProjectionOverSchema rewrites the Alias child, but schemaMap still has the old dataType
+    // ProjectionOverSchema rewrites Alias child, but schemaMap still has the old dataType
     // IMPORTANT: Only update for GetArrayStructFields expressions, not simple field accesses
-    println(s"[SPARK-47230 DEBUG] === Starting attribute dataType correction pass ===")
 
     finalResult.foreach {
       case p @ Project(projectList, _) =>
-        println(s"[SPARK-47230 DEBUG] Checking Project node for _extract_ attributes...")
 
         // Update schemaMap for any _extract_ attributes whose Alias child dataType differs
         p.output.zip(projectList).foreach { case (attr, expr) =>
@@ -1059,12 +982,9 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
             case alias @ Alias(GetArrayStructFields(_, _, _, _, _), _)
                 if attr.name.startsWith("_extract_") =>
               // Only update for Alias wrapping GetArrayStructFields
-              // This ensures we're updating the actual _extract_ attribute, not downstream projections
+              // Ensures we update the actual _extract_ attribute, not downstream projections
               val currentType = schemaMap.getOrElse(attr.exprId, attr.dataType)
               if (alias.child.dataType != currentType) {
-                println(s"[SPARK-47230 DEBUG] UPDATING schemaMap for ${attr.name}#${attr.exprId}:")
-                println(s"[SPARK-47230 DEBUG]   FROM: ${currentType.simpleString.take(100)}")
-                println(s"[SPARK-47230 DEBUG]   TO:   ${alias.child.dataType.simpleString.take(100)}")
 
                 // Update schemaMap so downstream references use the correct schema
                 schemaMap(attr.exprId) = alias.child.dataType
@@ -1076,27 +996,21 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
       case _ =>
     }
 
-    println(s"[SPARK-47230 DEBUG] === Attribute dataType correction pass completed ===")
 
     // Fourth pass: Comprehensive AttributeReference update throughout the ENTIRE plan
     // This is CRITICAL to fix the Size function error and other issues where
     // AttributeReferences still have unpruned dataTypes after schema pruning
-    println(s"[SPARK-47230 DEBUG] === Starting comprehensive AttributeReference update pass ===")
 
     val planWithUpdatedAttributes = finalResult.transformAllExpressions {
       case attr: AttributeReference if schemaMap.contains(attr.exprId) =>
         val actualType = schemaMap(attr.exprId)
         if (actualType != attr.dataType) {
-          println(s"[SPARK-47230 DEBUG] [Comprehensive Update] Updating AttributeReference ${attr.name}#${attr.exprId}:")
-          println(s"[SPARK-47230 DEBUG]   FROM: ${attr.dataType.simpleString.take(100)}")
-          println(s"[SPARK-47230 DEBUG]   TO:   ${actualType.simpleString.take(100)}")
           attr.withDataType(actualType)
         } else {
           attr
         }
     }
 
-    println(s"[SPARK-47230 DEBUG] === Comprehensive AttributeReference update completed ===")
     planWithUpdatedAttributes
   }
 }

@@ -59,7 +59,9 @@ object ExtractValue {
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
+        // SPARK-47230: Keep the original field name from schema (not user-provided name)
+        // to ensure case-insensitive lookups work correctly during schema pruning
+        GetArrayStructFields(child, fields(ordinal),
           ordinal, fields.length, containsNull || fields(ordinal).nullable)
 
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
@@ -206,8 +208,8 @@ case class GetArrayStructFields(
         .asInstanceOf[StructType]
       val schemaRef = ctx.addReferenceObj("elementSchema", elementSchema,
         classOf[StructType].getName)
-      val fieldName = field.name
-      val fieldNameRef = ctx.addReferenceObj("fieldName", fieldName, classOf[String].getName)
+      // field.name contains the resolved field name from the schema (case-preserved)
+      val fieldNameRef = ctx.addReferenceObj("fieldName", field.name, classOf[String].getName)
 
       val nullSafeEval = if (field.nullable) {
         s"""
