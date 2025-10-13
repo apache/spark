@@ -174,15 +174,13 @@ class ParameterHandler {
         name -> convertToSql(convertToExpression(value))
     }.toMap
 
-    // Validate ALL_PARAMETERS_MUST_BE_NAMED before substitution.
-    if (namedParams.nonEmpty) {
-      validateAllParametersNamed(args, paramNames)
-    }
+    // Record whether all parameters in USING clause are named (no positional parameters)
+    val allParametersAreNamed = !paramNames.exists(_.isEmpty)
 
-    // Let the substitutor detect mixed parameters during substitution.
-    // For EXECUTE IMMEDIATE, we don't know what to expect, so we pass Unknown.
+    // Do the substitution - it will check the flag internally if it encounters named params
     val (substitutedSql, _, _) = substitutor.substitute(
-      sqlText, namedParams, positionalParams, ParameterExpectation.Unknown)
+      sqlText, namedParams, positionalParams, ParameterExpectation.Unknown,
+      allParametersAreNamed, args, paramNames)
 
     substitutedSql
   }

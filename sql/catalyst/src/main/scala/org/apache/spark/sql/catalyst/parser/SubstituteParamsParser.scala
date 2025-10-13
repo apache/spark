@@ -20,6 +20,7 @@ import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -52,7 +53,10 @@ class SubstituteParamsParser extends Logging {
       sqlText: String,
       namedParams: Map[String, String] = Map.empty,
       positionalParams: List[String] = List.empty,
-      expectationType: ParameterExpectation.Value = ParameterExpectation.Unknown):
+      expectationType: ParameterExpectation.Value = ParameterExpectation.Unknown,
+      allParametersAreNamed: Boolean = true,
+      originalArgs: Seq[Any] = Seq.empty,
+      originalParamNames: Seq[String] = Seq.empty):
       (String, Int, PositionMapper) = {
 
     // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
@@ -90,6 +94,16 @@ class SubstituteParamsParser extends Logging {
     }
     if (expectationType == ParameterExpectation.Unknown && hasNamed && hasPositional) {
       throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+
+    // If SQL uses named parameters but not all USING params are named, validate
+    if (hasNamed && !hasPositional && !allParametersAreNamed && originalArgs.nonEmpty) {
+      val unnamedExprs = originalParamNames.zip(originalArgs).collect {
+        case ("", arg) => Literal(arg) // Empty strings are unnamed.
+      }.toList
+      if (unnamedExprs.nonEmpty) {
+        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
+      }
     }
 
     // Substitute parameters in the original text.

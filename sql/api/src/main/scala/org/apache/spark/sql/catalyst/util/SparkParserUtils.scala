@@ -200,8 +200,13 @@ trait SparkParserUtils {
       CurrentOrigin.set(position(ctx.getStart))
     } else {
       // Use the standard position method with the provided SQL text
-      CurrentOrigin.set(positionAndText(ctx.getStart, ctx.getStop, text.get,
-        current.objectType, current.objectName))
+      CurrentOrigin.set(
+        positionAndText(
+          ctx.getStart,
+          ctx.getStop,
+          text.get,
+          current.objectType,
+          current.objectName))
     }
     try {
       f
