@@ -25,7 +25,6 @@ import org.apache.datasketches.theta.CompactSketch
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
-
 object ThetaSketchUtils {
   /*
    * Bounds copied from DataSketches' ThetaUtil. These define the valid range for lgNomEntries,

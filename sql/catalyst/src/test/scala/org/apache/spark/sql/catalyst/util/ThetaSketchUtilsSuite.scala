@@ -33,6 +33,33 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("parseFamily: accepts valid family names") {
+    // Test valid family names (case insensitive)
+    val validFamilies = Seq(
+      ("QUICKSELECT", ThetaSketchUtils.FAMILY_QUICKSELECT),
+      ("quickselect", ThetaSketchUtils.FAMILY_QUICKSELECT),
+      ("QuickSelect", ThetaSketchUtils.FAMILY_QUICKSELECT),
+      ("ALPHA", ThetaSketchUtils.FAMILY_ALPHA),
+      ("alpha", ThetaSketchUtils.FAMILY_ALPHA),
+      ("Alpha", ThetaSketchUtils.FAMILY_ALPHA)
+    )
+
+    validFamilies.foreach { case (input, expectedFamily) =>
+      val result = ThetaSketchUtils.parseFamily(input, "test_function")
+      assert(result.toString == expectedFamily)
+    }
+
+
+    val invalidFamilyName = "invalid"
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ThetaSketchUtils.parseFamily(invalidFamilyName, "test_function")
+      },
+      condition = "THETA_INVALID_FAMILY",
+      parameters = Map("function" -> "`test_function`",
+        "value" -> "'invalid'",
+        "validFamilies" -> "`QUICKSELECT`, `ALPHA`")    )
+  }
 
   test("checkLgNomLongs: throws exception for values below minimum") {
     val invalidValues = Seq(ThetaSketchUtils.MIN_LG_NOM_LONGS - 1, 0, -5)
