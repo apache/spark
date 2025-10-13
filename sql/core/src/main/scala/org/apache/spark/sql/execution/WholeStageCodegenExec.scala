@@ -971,7 +971,10 @@ case class CollapseCodegenStages(
         // The whole-stage-codegen framework is row-based. If a plan supports columnar execution,
         // it can't support whole-stage-codegen at the same time.
         assert(!plan.supportsColumnar)
-        WholeStageCodegenExec(insertInputAdapter(plan))(codegenStageCounter.incrementAndGet())
+        val newId = codegenStageCounter.incrementAndGet()
+        val newPlan = WholeStageCodegenExec(insertInputAdapter(plan))(newId)
+        plan.logicalLink.foreach(newPlan.setLogicalLink)
+        newPlan
       case other =>
         other.withNewChildren(other.children.map(insertWholeStageCodegen))
     }

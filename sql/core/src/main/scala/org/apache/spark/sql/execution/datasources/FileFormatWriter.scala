@@ -138,10 +138,6 @@ object FileFormatWriter extends Logging {
       statsTrackers = statsTrackers
     )
 
-    // We should first sort by dynamic partition columns, then bucket id, and finally sorting
-    // columns.
-    val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
-        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
 
     // SPARK-40588: when planned writing is disabled and AQE is enabled,
@@ -157,6 +153,23 @@ object FileFormatWriter extends Logging {
     val actualOrdering = writeFilesOpt.map(_.child)
       .getOrElse(materializeAdaptiveSparkPlan(plan))
       .outputOrdering
+
+    val requiredOrdering = {
+      // We should first sort by dynamic partition columns, then bucket id, and finally sorting
+      // columns.
+      val sortCols = partitionColumns.drop(numStaticPartitionCols) ++
+        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
+      val ordering = sortCols.map(SortOrder(_, Ascending))
+      plan.logicalLink match {
+        case Some(WriteFiles(query, _, _, _, _, _)) =>
+          V1WritesUtils.eliminateFoldableOrdering(ordering, query).outputOrdering
+        case Some(query) =>
+          V1WritesUtils.eliminateFoldableOrdering(ordering, query).outputOrdering
+        case _ =>
+          ordering
+      }
+    }
+
     val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
 
     SQLExecution.checkSQLExecutionId(sparkSession)
@@ -201,7 +214,7 @@ object FileFormatWriter extends Logging {
       description: WriteJobDescription,
       committer: FileCommitProtocol,
       outputSpec: OutputSpec,
-      requiredOrdering: Seq[Expression],
+      requiredOrdering: Seq[SortOrder],
       partitionColumns: Seq[Attribute],
       sortColumns: Seq[Attribute],
       orderingMatched: Boolean): Set[String] = {
@@ -327,13 +340,12 @@ object FileFormatWriter extends Logging {
 
   private def createSortPlan(
       plan: SparkPlan,
-      requiredOrdering: Seq[Expression],
+      requiredOrdering: Seq[SortOrder],
       outputSpec: OutputSpec): SortExec = {
     // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
     // the physical plan may have different attribute ids due to optimizer removing some
     // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
-    val orderingExpr = bindReferences(
-      requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
+    val orderingExpr = bindReferences(requiredOrdering, outputSpec.outputColumns)
     SortExec(
       orderingExpr,
       global = false,

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
+import org.apache.spark.sql.catalyst.optimizer.{EliminateSorts, FoldablePropagation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -97,12 +98,17 @@ object V1Writes extends Rule[LogicalPlan] {
     assert(empty2NullPlan.output.length == query.output.length)
     val attrMap = AttributeMap(query.output.zip(empty2NullPlan.output))
 
-    // Rewrite the attribute references in the required ordering to use the new output.
-    val requiredOrdering = write.requiredOrdering.map(_.transform {
-      case a: Attribute => attrMap.getOrElse(a, a)
-    }.asInstanceOf[SortOrder])
-    val outputOrdering = empty2NullPlan.outputOrdering
-    val orderingMatched = isOrderingMatched(requiredOrdering.map(_.child), outputOrdering)
+    // Rewrite the attribute references in the required ordering to use the new output,
+    // then eliminate foldable ordering.
+    val requiredOrdering = {
+      val ordering = write.requiredOrdering.map(_.transform {
+        case a: Attribute => attrMap.getOrElse(a, a)
+      }.asInstanceOf[SortOrder])
+      eliminateFoldableOrdering(ordering, empty2NullPlan).outputOrdering
+    }
+    val outputOrdering = eliminateFoldableOrdering(
+      empty2NullPlan.outputOrdering, empty2NullPlan).outputOrdering
+    val orderingMatched = isOrderingMatched(requiredOrdering, outputOrdering)
     if (orderingMatched) {
       empty2NullPlan
     } else {
@@ -199,15 +205,18 @@ object V1WritesUtils {
     expressions.exists(_.exists(_.isInstanceOf[Empty2Null]))
   }
 
+  def eliminateFoldableOrdering(ordering: Seq[SortOrder], query: LogicalPlan): LogicalPlan =
+    EliminateSorts(FoldablePropagation(Sort(ordering, global = false, query)))
+
   def isOrderingMatched(
-      requiredOrdering: Seq[Expression],
+      requiredOrdering: Seq[SortOrder],
       outputOrdering: Seq[SortOrder]): Boolean = {
     if (requiredOrdering.length > outputOrdering.length) {
       false
     } else {
       requiredOrdering.zip(outputOrdering).forall {
         case (requiredOrder, outputOrder) =>
-          outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
+          outputOrder.satisfies(requiredOrder)
       }
     }
   }

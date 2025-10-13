@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SortOrder}
 import org.apache.spark.sql.execution.datasources.V1WriteCommandSuiteBase
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -121,6 +122,37 @@ class V1WriteHiveCommandSuite
           // No dynamic partition so no sort is needed.
           executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
             sql("INSERT INTO t PARTITION (k='0') SELECT i, j FROM t0 WHERE k = '0'")
+          }
+        }
+      }
+    }
+  }
+
+  test("v1 write to hive table with sort by literal column preserve custom order") {
+    withCovnertMetastore { _ =>
+      withPlannedWrite { enabled =>
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTable("t") {
+            sql(
+              """
+                |CREATE TABLE t(i INT, j INT, k STRING) STORED AS PARQUET
+                |PARTITIONED BY (k)
+                |""".stripMargin)
+            executeAndCheckOrderingAndCustomValidate(
+              hasLogicalSort = true, orderingMatched = true) {
+              sql(
+                """
+                  |INSERT OVERWRITE t
+                  |SELECT i, j, '0' as k FROM t0 SORT BY k, i
+                  |""".stripMargin)
+            } { optimizedPlan =>
+              assert {
+                optimizedPlan.outputOrdering.exists {
+                  case SortOrder(attr: AttributeReference, _, _, _) => attr.name == "i"
+                  case _ => false
+                }
+              }
+            }
           }
         }
       }
