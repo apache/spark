@@ -47,19 +47,33 @@ object SchemaPruning extends Rule[LogicalPlan] {
       logInfo(s"SCHEMA_PRUNING_DEBUG:   - ${node.getClass.getSimpleName}: ${node.nodeName}")
     }
 
-    // SPARK-47230: Collect GetArrayStructFields, GetStructField, and Generate mappings
+    // SPARK-47230: Collect GetArrayStructFields, GetStructField, Generate mappings,
+    // and _extract_ alias mappings
     val allArrayStructFields = scala.collection.mutable.ArrayBuffer[GetArrayStructFields]()
     val allStructFields = scala.collection.mutable.ArrayBuffer[GetStructField]()
     val generateMappings = scala.collection.mutable.Map[ExprId, Expression]()
+    val extractAliases = scala.collection.mutable.Map[ExprId, Expression]()
 
     plan.foreach { node =>
       // Collect Generate nodes
       node match {
         case g: Generate =>
-          logInfo(s"SCHEMA_PRUNING_DEBUG: Found Generate: ${g.generator}")
+          println(s"[PRUNING] Found Generate: ${g.generator.getClass.getSimpleName}")
+          println(s"[PRUNING]   Generator child: ${g.generator.children.headOption.getOrElse("none")}")
+          println(s"[PRUNING]   Generator output count: ${g.generatorOutput.size}")
           g.generatorOutput.foreach { attr =>
-            logInfo(s"SCHEMA_PRUNING_DEBUG: Mapping ${attr.name}#${attr.exprId} to generator")
+            println(s"[PRUNING]   Mapping output ${attr.name}#${attr.exprId} -> ${g.generator.getClass.getSimpleName}")
             generateMappings(attr.exprId) = g.generator
+          }
+        case p: Project =>
+          // Collect _extract_ aliases created by NestedColumnAliasing
+          p.output.zip(p.projectList).foreach { case (attr, namedExpr) =>
+            namedExpr match {
+              case Alias(child, name) if name.startsWith("_extract_") =>
+                println(s"[PRUNING] Found _extract_ alias: ${attr.name}#${attr.exprId} -> $child")
+                extractAliases(attr.exprId) = child
+              case _ =>
+            }
           }
         case _ =>
       }
@@ -67,15 +81,22 @@ object SchemaPruning extends Rule[LogicalPlan] {
       // Collect GetArrayStructFields and GetStructField
       node.expressions.foreach { expr =>
         expr.foreach {
-          case gasf: GetArrayStructFields => allArrayStructFields += gasf
-          case gsf: GetStructField => allStructFields += gsf
+          case gasf: GetArrayStructFields =>
+            allArrayStructFields += gasf
+            println(s"[PRUNING] Collected GetArrayStructFields: ${gasf.field.name}")
+          case gsf: GetStructField =>
+            allStructFields += gsf
+            println(s"[PRUNING] Collected GetStructField: ${gsf.name.getOrElse("unnamed")}")
           case _ =>
         }
       }
     }
 
-    logInfo(s"SCHEMA_PRUNING_DEBUG: Collected ${generateMappings.size} generator mappings, " +
-      s"${allArrayStructFields.size} array fields, ${allStructFields.size} struct fields")
+    println(s"[PRUNING] === SUMMARY ===")
+    println(s"[PRUNING] Generator mappings: ${generateMappings.size}")
+    println(s"[PRUNING] _extract_ aliases: ${extractAliases.size}")
+    println(s"[PRUNING] GetArrayStructFields: ${allArrayStructFields.size}")
+    println(s"[PRUNING] GetStructField: ${allStructFields.size}")
 
     val transformedPlan = plan transformDown {
       // SPARK-47230: Handle cases with Generate nodes where ScanOperation doesn't match
@@ -94,7 +115,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
         // Use the expressions collected at the beginning
         tryEnhancedNestedArrayPruning(
           l, p.projectList, Seq.empty, allArrayStructFields.toSeq, allStructFields.toSeq,
-          generateMappings.toMap, hadoopFsRelation, requiredColumns).getOrElse(p)
+          generateMappings.toMap, extractAliases.toMap, hadoopFsRelation, requiredColumns).getOrElse(p)
 
       case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
         l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
@@ -116,7 +137,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
           tryEnhancedNestedArrayPruning(
             l, projects, allFilters, allArrayStructFields.toSeq, allStructFields.toSeq,
-            generateMappings.toMap, hadoopFsRelation, requiredColumns)
+            generateMappings.toMap, extractAliases.toMap, hadoopFsRelation, requiredColumns)
         } else {
           None
         }
@@ -153,6 +174,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       arrayStructFields: Seq[GetArrayStructFields],
       structFields: Seq[GetStructField],
       generateMappings: Map[ExprId, Expression],
+      extractAliases: Map[ExprId, Expression],
       hadoopFsRelation: HadoopFsRelation,
       requiredColumns: Set[String]): Option[LogicalPlan] = {
 
@@ -174,12 +196,15 @@ object SchemaPruning extends Rule[LogicalPlan] {
     val relationExprIds = relation.output.map(_.exprId).toSet
 
     // Process GetArrayStructFields
+    println(s"[PRUNING] === Processing ${arrayStructFields.size} GetArrayStructFields ===")
     arrayStructFields.foreach { gasf =>
+      println(s"[PRUNING] Tracing GetArrayStructFields: ${gasf.field.name}")
       val (rootAndPath, usedGenerate) = traceToRootColumnThroughGenerates(
-        gasf, generateMappings, relationExprIds)
+        gasf, generateMappings, extractAliases, relationExprIds)
+      println(s"[PRUNING]   Result: rootAndPath=$rootAndPath, usedGenerate=$usedGenerate")
       if (usedGenerate) tracedThroughGenerate = true
       rootAndPath.foreach { case (rootCol, path) =>
-        logInfo(s"SCHEMA_PRUNING_DEBUG: GetArrayStructFields path=$path")
+        println(s"[PRUNING]   Adding path to $rootCol: $path")
         val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
         nestedFieldAccesses(rootCol) = existingPaths + path
         // Track this as an array struct field path
@@ -194,7 +219,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
     // don't also add request.servedItems from GetStructField)
     structFields.foreach { gsf =>
       val (rootAndPath, usedGenerate) = traceStructFieldThroughGenerates(
-        gsf, generateMappings, relationExprIds)
+        gsf, generateMappings, extractAliases, relationExprIds)
       if (usedGenerate) tracedThroughGenerate = true
       rootAndPath.foreach { case (rootCol, path) =>
         // Check if this path is a prefix of any GetArrayStructFields path
@@ -292,11 +317,12 @@ object SchemaPruning extends Rule[LogicalPlan] {
   private def traceToRootColumnThroughGenerates(
       expr: Expression,
       generateMappings: Map[ExprId, Expression],
+      extractAliases: Map[ExprId, Expression],
       relationExprIds: Set[ExprId]): (Option[(String, Seq[String])], Boolean) = {
     expr match {
       case GetArrayStructFields(child, field, _, _, _) =>
         val (result, usedGen) = traceArrayAccessThroughGenerates(
-          child, generateMappings, relationExprIds)
+          child, generateMappings, extractAliases, relationExprIds)
         (result.map { case (rootCol, path) => (rootCol, path :+ field.name) }, usedGen)
       case _ => (None, false)
     }
@@ -309,11 +335,12 @@ object SchemaPruning extends Rule[LogicalPlan] {
   private def traceStructFieldThroughGenerates(
       expr: Expression,
       generateMappings: Map[ExprId, Expression],
+      extractAliases: Map[ExprId, Expression],
       relationExprIds: Set[ExprId]): (Option[(String, Seq[String])], Boolean) = {
     expr match {
       case GetStructField(child, _, Some(fieldName)) =>
         val (result, usedGen) = traceArrayAccessThroughGenerates(
-          child, generateMappings, relationExprIds)
+          child, generateMappings, extractAliases, relationExprIds)
         (result.map { case (rootCol, path) => (rootCol, path :+ fieldName) }, usedGen)
       case _ => (None, false)
     }
@@ -342,47 +369,73 @@ object SchemaPruning extends Rule[LogicalPlan] {
   private def traceArrayAccessThroughGenerates(
       expr: Expression,
       generateMappings: Map[ExprId, Expression],
+      extractAliases: Map[ExprId, Expression],
       relationExprIds: Set[ExprId]): (Option[(String, Seq[String])], Boolean) = {
     expr match {
       case attr: AttributeReference =>
+        println(s"[TRACE] AttributeReference: ${attr.name}#${attr.exprId}")
         // Check if this attribute is from a Generate node
         generateMappings.get(attr.exprId) match {
           case Some(gen: UnaryExpression) =>
             // This attribute comes from a unary generator (explode, posexplode, etc.)
             // Extract the child and trace through it
+            println(s"[TRACE]   Found in mappings as ${gen.getClass.getSimpleName}, child: ${gen.child}")
             val (result, _) = traceArrayAccessThroughGenerates(
-              gen.child, generateMappings, relationExprIds)
+              gen.child, generateMappings, extractAliases, relationExprIds)
+            println(s"[TRACE]   Traced result: $result")
             (result, true)
           case Some(other) =>
             // Other generator types without a single child - mark as used Generate
+            println(s"[TRACE]   Found in mappings as ${other.getClass.getSimpleName} (non-unary)")
             val (result, _) = traceArrayAccessThroughGenerates(
-              other, generateMappings, relationExprIds)
+              other, generateMappings, extractAliases, relationExprIds)
             (result, true)
           case None =>
-            // Not from a Generate node - this is a regular attribute
-            if (relationExprIds.contains(attr.exprId)) {
-              (Some((attr.name, Seq.empty)), false)
-            } else {
-              (None, false)
+            // Not from a Generate node - check if it's an _extract_ alias
+            extractAliases.get(attr.exprId) match {
+              case Some(aliasChild) =>
+                // SPARK-47230: This is an _extract_ attribute created by NestedColumnAliasing
+                // Trace through the alias child expression
+                println(s"[TRACE]   Found _extract_ alias, child: $aliasChild")
+                val (result, usedGen) = traceArrayAccessThroughGenerates(
+                  aliasChild, generateMappings, extractAliases, relationExprIds)
+                println(s"[TRACE]   _extract_ traced result: $result")
+                (result, usedGen)
+              case None =>
+                // Not from a Generate node or _extract_ alias - this is a regular attribute
+                val isRelation = relationExprIds.contains(attr.exprId)
+                println(s"[TRACE]   NOT in mappings or extract aliases, isRelation=$isRelation")
+                if (isRelation) {
+                  (Some((attr.name, Seq.empty)), false)
+                } else {
+                  (None, false)
+                }
             }
         }
 
       case GetStructField(child, _, nameOpt) =>
+        println(s"[TRACE] GetStructField: ${nameOpt.getOrElse("unnamed")}, child=$child")
         val (childResult, usedGen) = traceArrayAccessThroughGenerates(
-          child, generateMappings, relationExprIds)
-        (childResult.flatMap { case (rootCol, path) =>
+          child, generateMappings, extractAliases, relationExprIds)
+        val result = childResult.flatMap { case (rootCol, path) =>
           nameOpt.map(fieldName => (rootCol, path :+ fieldName))
-        }, usedGen)
+        }
+        println(s"[TRACE]   GetStructField result: $result")
+        (result, usedGen)
 
       case GetArrayItem(child, _, _) =>
-        traceArrayAccessThroughGenerates(child, generateMappings, relationExprIds)
+        println(s"[TRACE] GetArrayItem, child=$child")
+        traceArrayAccessThroughGenerates(child, generateMappings, extractAliases, relationExprIds)
 
       case GetArrayStructFields(child, field, _, _, _) =>
+        println(s"[TRACE] GetArrayStructFields: ${field.name}, child=$child")
         val (childResult, usedGen) = traceArrayAccessThroughGenerates(
-          child, generateMappings, relationExprIds)
-        (childResult.map { case (rootCol, path) =>
+          child, generateMappings, extractAliases, relationExprIds)
+        val result = childResult.map { case (rootCol, path) =>
           (rootCol, path :+ field.name)
-        }, usedGen)
+        }
+        println(s"[TRACE]   GetArrayStructFields result: $result")
+        (result, usedGen)
 
       case _ => (None, false)
     }
