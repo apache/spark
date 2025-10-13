@@ -469,6 +469,9 @@ class Column(ParentColumn):
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
 
+    def transform(self, f: Any) -> ParentColumn:
+        return f(self)
+
     def outer(self) -> ParentColumn:
         return Column(self._expr)
 

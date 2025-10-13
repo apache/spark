@@ -612,6 +612,9 @@ class Column(ParentColumn):
         jc = self._jc.over(window._jspec)
         return Column(jc)
 
+    def transform(self, f: Callable[[ParentColumn], ParentColumn]) -> ParentColumn:
+        return f(self)
+
     def outer(self) -> ParentColumn:
         jc = self._jc.outer()
         return Column(jc)

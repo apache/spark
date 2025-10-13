@@ -21,6 +21,7 @@ import sys
 from typing import (
     overload,
     Any,
+    Callable,
     TYPE_CHECKING,
     Union,
 )
@@ -1535,6 +1536,56 @@ class Column(TableValuedFunctionArgument):
         |  5|  Bob|   1|  5|
         |  2|Alice|   1|  2|
         +---+-----+----+---+
+        """
+        ...
+
+    @dispatch_col_method
+    def transform(self, f: Callable[["Column"], "Column"]) -> "Column":
+        """
+        Applies a transformation function to this column.
+
+        This method allows you to apply a function that takes a Column and returns a Column,
+        enabling method chaining and functional transformations.
+
+        .. versionadded:: 4.1.0
+
+        Parameters
+        ----------
+        f : callable
+            A function that takes a :class:`Column` and returns a :class:`Column`.
+
+        Returns
+        -------
+        :class:`Column`
+            The result of applying the function to this column.
+
+        Examples
+        --------
+        Example 1: Chain built-in functions
+
+        >>> from pyspark.sql.functions import trim, upper
+        >>> df = spark.createDataFrame([("  hello  ",), ("  world  ",)], ["text"])
+        >>> df.select(df.text.transform(trim).transform(upper)).show()
+        +-----------+
+        |upper(text)|
+        +-----------+
+        |      HELLO|
+        |      WORLD|
+        +-----------+
+
+        Example 2: Use lambda functions
+
+        >>> df = spark.createDataFrame([(10,), (20,), (30,)], ["value"])
+        >>> df.select(
+        ...     df.value.transform(lambda c: c + 5).transform(lambda c: c * 2).transform(lambda c: c - 10)
+        ... ).show()
+        +-----+
+        |value|
+        +-----+
+        |   20|
+        |   40|
+        |   60|
+        +-----+
         """
         ...
 
