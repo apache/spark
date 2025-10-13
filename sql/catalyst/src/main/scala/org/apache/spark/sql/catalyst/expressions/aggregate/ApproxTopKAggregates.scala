@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.nio.ByteBuffer
+
 import org.apache.datasketches.common._
 import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
 import org.apache.datasketches.memory.Memory
@@ -672,20 +674,25 @@ case class ApproxTopKCombine(
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
     val sketchBytes = buffer.getSketch.toByteArray(
       ApproxTopK.genSketchSerDe(buffer.getItemDataType))
-    val maxItemsTrackedByte = buffer.getMaxItemsTracked.toByte
+    val maxItemsTracked = buffer.getMaxItemsTracked
     val itemDataTypeBytes = ApproxTopK.dataTypeToBytes(buffer.getItemDataType)
-    val byteArray = new Array[Byte](sketchBytes.length + 4)
-    byteArray(0) = maxItemsTrackedByte
-    System.arraycopy(itemDataTypeBytes, 0, byteArray, 1, itemDataTypeBytes.length)
-    System.arraycopy(sketchBytes, 0, byteArray, 4, sketchBytes.length)
+    // byteArray = maxItemsTracked (4 bytes) + itemDataType (3 bytes) + sketchBytes
+    val byteArray = new Array[Byte](sketchBytes.length + 7)
+    val byteBuffer = ByteBuffer.wrap(byteArray)
+    byteBuffer.putInt(maxItemsTracked)
+    byteBuffer.put(itemDataTypeBytes)
+    byteBuffer.put(sketchBytes)
     byteArray
   }
 
   override def deserialize(buffer: Array[Byte]): CombineInternal[Any] = {
-    val maxItemsTracked = buffer(0).toInt
-    val itemDataTypeBytes = buffer.slice(1, 4)
+    val byteBuffer = ByteBuffer.wrap(buffer)
+    val maxItemsTracked = byteBuffer.getInt()
+    val itemDataTypeBytes = new Array[Byte](3)
+    byteBuffer.get(itemDataTypeBytes)
     val actualItemDataType = ApproxTopK.bytesToDataType(itemDataTypeBytes)
-    val sketchBytes = buffer.slice(4, buffer.length)
+    val sketchBytes = new Array[Byte](buffer.length - 7)
+    byteBuffer.get(sketchBytes)
     val sketch = ItemsSketch.getInstance(
       Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(actualItemDataType))
     new CombineInternal[Any](sketch, actualItemDataType, maxItemsTracked)
