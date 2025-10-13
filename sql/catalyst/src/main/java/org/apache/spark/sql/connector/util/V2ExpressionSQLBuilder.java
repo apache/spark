@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.util;
 
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -288,7 +287,7 @@ public class V2ExpressionSQLBuilder {
   protected String visitAggregateFunction(
       String funcName, boolean isDistinct, Expression[] inputs) {
     // CountStar has no children but should return with a star
-    if (funcName.equals("COUNT") && Arrays.equals(inputs, Expression.EMPTY_EXPRESSION)) {
+    if (funcName.equals("COUNT") && inputs.length == 0) {
       return visitAggregateFunction(funcName, isDistinct, new String[]{"*"});
     }
     return visitAggregateFunction(funcName, isDistinct, expressionsToStringArray(inputs));
