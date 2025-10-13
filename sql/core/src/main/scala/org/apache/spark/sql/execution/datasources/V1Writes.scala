@@ -202,7 +202,7 @@ object V1WritesUtils {
     expressions.exists(_.exists(_.isInstanceOf[Empty2Null]))
   }
 
-  // SPARK-53738: the required ordering inferred from table schema (partition, bucketing, etc.)
+  // SPARK-53738: the required ordering inferred from table spec (partition, bucketing, etc.)
   // may contain foldable sort ordering expressions, which causes the optimized query's output
   // ordering mismatch, here we calculate the required ordering more accurately, by creating a
   // fake Sort node with the input query, then remove the foldable sort ordering expressions.
