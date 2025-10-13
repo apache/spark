@@ -1031,7 +1031,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.LocalRelation(output, data, _, stream) =>
         LocalTableScanExec(output, data, stream) :: Nil
       case logical.EmptyRelation(l) => EmptyRelationExec(l) :: Nil
-      case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
+      case CommandResult(output, _, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       // We should match the combination of limit and offset first, to get the optimal physical
       // plan, instead of planning limit and offset separately.
       case LimitAndOffset(limit, offset, child) =>

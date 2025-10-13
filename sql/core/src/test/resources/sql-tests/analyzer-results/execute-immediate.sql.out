@@ -48,14 +48,14 @@ SetVariable [variablereference(system.session.sql_string=CAST(NULL AS STRING))]
 -- !query
 EXECUTE IMMEDIATE 'SET spark.sql.ansi.enabled=true'
 -- !query analysis
-CommandResult [key#x, value#x], Execute SetCommand, [[spark.sql.ansi.enabled,true]]
+CommandResult [key#x, value#x], SetCommand (spark.sql.ansi.enabled,Some(true)), Execute SetCommand, [[spark.sql.ansi.enabled,true]]
    +- SetCommand (spark.sql.ansi.enabled,Some(true))
 
 
 -- !query
 EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName
 -- !query analysis
-CommandResult Execute CreateViewCommand
+CommandResult CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, UNSUPPORTED, true, Execute CreateViewCommand
    +- CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, UNSUPPORTED, true
          +- Project [id#x, name#x]
             +- SubqueryAlias tbl_view
@@ -85,7 +85,7 @@ Project [id#x, name#x]
 -- !query
 EXECUTE IMMEDIATE 'REFRESH TABLE IDENTIFIER(:tblName)' USING 'x' as tblName
 -- !query analysis
-CommandResult Execute RefreshTableCommand
+CommandResult RefreshTableCommand `spark_catalog`.`default`.`x`, Execute RefreshTableCommand
    +- RefreshTableCommand `spark_catalog`.`default`.`x`
 
 
@@ -206,7 +206,7 @@ Project [id#x, name#x, data#x]
 -- !query
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES(?)' USING 1
 -- !query analysis
-CommandResult Execute InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
+CommandResult InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id], Execute InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
    +- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
       +- Project [col1#x AS id#x]
          +- LocalRelation [col1#x]
@@ -311,7 +311,7 @@ Project [id#x, name#x, data#x, name7 AS p#x]
 -- !query
 EXECUTE IMMEDIATE 'SET VAR sql_string = ?' USING 'SELECT id from tbl_view where name = :first'
 -- !query analysis
-CommandResult SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
+CommandResult SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')], SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
    +- SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
       +- Project [SELECT id from tbl_view where name = :first AS sql_string#x]
          +- OneRowRelation

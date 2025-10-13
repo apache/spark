@@ -879,6 +879,7 @@ case class MergeIntoTable(
   lazy val rewritable: Boolean = {
     EliminateSubqueryAliases(targetTable) match {
       case DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _) => true
+      case ResolvedHint(DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _), _) => true
       case _ => false
     }
   }
