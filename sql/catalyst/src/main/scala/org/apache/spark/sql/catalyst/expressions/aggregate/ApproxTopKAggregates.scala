@@ -510,6 +510,13 @@ case class ApproxTopKAccumulate(
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_accumulate")
 }
 
+/**
+ * In internal class used as the aggregation buffer for ApproxTopKCombine.
+ *
+ * @param sketch          the ItemsSketch instance
+ * @param itemDataType    the data type of items in the sketch
+ * @param maxItemsTracked the maximum number of items tracked in the sketch
+ */
 class CombineInternal[T](
     sketch: ItemsSketch[T],
     var itemDataType: DataType,
@@ -518,17 +525,78 @@ class CombineInternal[T](
 
   def getItemDataType: DataType = itemDataType
 
-  def setItemDataType(dataType: DataType): Unit = {
-    if (this.itemDataType == null) {
-      this.itemDataType = dataType
-    } else if (this.itemDataType != dataType) {
-      throw QueryExecutionErrors.approxTopKSketchTypeNotMatch(this.itemDataType, dataType)
+  def getMaxItemsTracked: Int = maxItemsTracked
+
+  def updateMaxItemsTracked(combineSizeSpecified: Boolean, newMaxItemsTracked: Int): Unit = {
+    if (!combineSizeSpecified) {
+      // check size
+      if (this.maxItemsTracked == ApproxTopK.VOID_MAX_ITEMS_TRACKED) {
+        // If buffer's maxItemsTracked VOID_MAX_ITEMS_TRACKED, it means the buffer is a placeholder
+        // sketch that has not beed updated by any input sketch yet.
+        // So we can set it to the input sketch's max items tracked.
+        this.maxItemsTracked = newMaxItemsTracked
+      } else {
+        if (this.maxItemsTracked != newMaxItemsTracked) {
+          // If buffer's maxItemsTracked is not VOID_MAX_ITEMS_TRACKED, it means the buffer has been
+          // updated by some input sketch. So if buffer and input sketch have different
+          // maxItemsTracked values, it means at least two of the input sketches have different
+          // maxItemsTracked values. In this case, we should throw an error.
+          throw QueryExecutionErrors.approxTopKSketchSizeNotMatch(
+            this.maxItemsTracked, newMaxItemsTracked)
+        }
+      }
     }
   }
 
-  def getMaxItemsTracked: Int = maxItemsTracked
+  def updateItemDataType(inputItemDataType: DataType): Unit = {
+    // When the buffer's dataType hasn't been set, set it to the input sketch's item data type
+    // When input sketch's item data type is null, buffer's item data type will remain null
+    if (this.itemDataType == null) {
+      this.itemDataType = inputItemDataType
+    } else {
+      // When the buffer's dataType has been set, throw an error
+      // if the input sketch's item data type is not null the two data types don't match
+      if (inputItemDataType != null && this.itemDataType != inputItemDataType) {
+        throw QueryExecutionErrors.approxTopKSketchTypeNotMatch(
+          this.itemDataType, inputItemDataType)
+      }
+    }
+  }
 
-  def setMaxItemsTracked(maxItemsTracked: Int): Unit = this.maxItemsTracked = maxItemsTracked
+  /**
+   * Serialize the CombineInternal instance to a byte array.
+   * Serialization format: maxItemsTracked (4 bytes) + itemDataType (3 bytes) + sketchBytes
+   */
+  def serialize(): Array[Byte] = {
+    val sketchBytes = sketch.toByteArray(
+      ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]])
+    val itemDataTypeBytes = ApproxTopK.dataTypeToBytes(itemDataType)
+    val byteArray = new Array[Byte](sketchBytes.length + 7)
+    val byteBuffer = ByteBuffer.wrap(byteArray)
+    byteBuffer.putInt(maxItemsTracked)
+    byteBuffer.put(itemDataTypeBytes)
+    byteBuffer.put(sketchBytes)
+    byteArray
+  }
+}
+
+object CombineInternal {
+  /**
+   * Deserialize a byte array to a CombineInternal instance.
+   * Serialization format: maxItemsTracked (4 bytes) + itemDataType (3 bytes) + sketchBytes
+   */
+  def deserialize(buffer: Array[Byte]): CombineInternal[Any] = {
+    val byteBuffer = ByteBuffer.wrap(buffer)
+    val maxItemsTracked = byteBuffer.getInt
+    val itemDataTypeBytes = new Array[Byte](3)
+    byteBuffer.get(itemDataTypeBytes)
+    val itemDataType = ApproxTopK.bytesToDataType(itemDataTypeBytes)
+    val sketchBytes = new Array[Byte](buffer.length - 7)
+    byteBuffer.get(sketchBytes)
+    val sketch = ItemsSketch.getInstance(
+      Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
+    new CombineInternal[Any](sketch, itemDataType, maxItemsTracked)
+  }
 }
 
 /**
@@ -543,7 +611,7 @@ class CombineInternal[T](
 @ExpressionDescription(
   usage = """
     _FUNC_(state, maxItemsTracked) - Combines multiple sketches into a single sketch.
-      `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000. If maxItemsTracked is not specified, it defaults to 10000.
+      `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000. If maxItemsTracked is specified, it will be set for the combined sketch. If maxItemsTracked is not specified, the input sketches must have the same maxItemsTracked value, otherwise an error will be thrown. The output sketch will use the same value from the input sketches.
   """,
   examples = """
     Examples:
@@ -570,8 +638,19 @@ case class ApproxTopKCombine(
 
   def this(child: Expression, maxItemsTracked: Int) = this(child, Literal(maxItemsTracked))
 
+  // If maxItemsTracked is not specified, set it to VOID_MAX_ITEMS_TRACKED.
+  // This indicates that there is no explicit maxItemsTracked input from the function call.
+  // Hence, function needs to check the input sketches' maxItemsTracked values during merge.
   def this(child: Expression) = this(child, Literal(ApproxTopK.VOID_MAX_ITEMS_TRACKED), 0, 0)
 
+  // The item data type extracted from the second field of the state struct.
+  // It is named "unchecked" because it may be inaccurate when input sketches have different
+  // item data types. For example, if one sketch has int type null and another has string type
+  // null, the union of the two sketches will have bigint type null.
+  // The accurate item data type will be tracked in the aggregation buffer during update/merge.
+  // It is okay to use uncheckedItemDataType to create the output data type of this function,
+  // because if the input sketches have different item data types, an error will be thrown
+  // during update/merge. Otherwise, the uncheckedItemDataType is accurate.
   private lazy val uncheckedItemDataType: DataType =
     state.dataType.asInstanceOf[StructType](1).dataType
   private lazy val maxItemsTrackedVal: Int = maxItemsTracked.eval().asInstanceOf[Int]
@@ -602,6 +681,11 @@ case class ApproxTopKCombine(
 
   override def dataType: DataType = ApproxTopK.getSketchStateDataType(uncheckedItemDataType)
 
+  /**
+   * If maxItemsTracked is specified in function call, use it for the output sketch.
+   * Otherwise, create a placeholder sketch with VOID_MAX_ITEMS_TRACKED. The actual value will be
+   * decided during the first update.
+   */
   override def createAggregationBuffer(): CombineInternal[Any] = {
     if (combineSizeSpecified) {
       val maxMapSize = ApproxTopK.calMaxMapSize(maxItemsTrackedVal)
@@ -610,6 +694,8 @@ case class ApproxTopKCombine(
         null,
         maxItemsTrackedVal)
     } else {
+      // If maxItemsTracked is not specified, create a placeholder sketch with a small size.
+      // The actual maxItemsTracked will be set during the first update.
       new CombineInternal[Any](
         new ItemsSketch[Any](ApproxTopK.SKETCH_SIZE_PLACEHOLDER),
         null,
@@ -617,48 +703,34 @@ case class ApproxTopKCombine(
     }
   }
 
+  /**
+   * Update the aggregation buffer with an input sketch. The input has the same schema as the
+   * ApproxTopKAccumulate output, i.e., sketchBytes + null + maxItemsTracked + typeCode.
+   */
   override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
     val inputState = state.eval(input).asInstanceOf[InternalRow]
     val inputSketchBytes = inputState.getBinary(0)
     val inputMaxItemsTracked = inputState.getInt(2)
     val typeCode = inputState.getBinary(3)
-    val actualItemDataType = ApproxTopK.bytesToDataType(typeCode)
-    buffer.setItemDataType(actualItemDataType)
+    val inputItemDataType = ApproxTopK.bytesToDataType(typeCode)
+    // update maxItemsTracked (throw error if not match)
+    buffer.updateMaxItemsTracked(combineSizeSpecified, inputMaxItemsTracked)
+    // update itemDataType (throw error if not match)
+    buffer.updateItemDataType(inputItemDataType)
+    // update sketch
     val inputSketch = ItemsSketch.getInstance(
       Memory.wrap(inputSketchBytes), ApproxTopK.genSketchSerDe(buffer.getItemDataType))
     buffer.getSketch.merge(inputSketch)
-    if (!combineSizeSpecified) {
-      buffer.setMaxItemsTracked(inputMaxItemsTracked)
-    }
     buffer
   }
 
   override def merge(buffer: CombineInternal[Any], input: CombineInternal[Any])
   : CombineInternal[Any] = {
-    if (!combineSizeSpecified) {
-      // check size
-      if (buffer.getMaxItemsTracked == ApproxTopK.VOID_MAX_ITEMS_TRACKED) {
-        // If buffer is a placeholder sketch, set it to the input sketch's max items tracked
-        buffer.setMaxItemsTracked(input.getMaxItemsTracked)
-      }
-      if (buffer.getMaxItemsTracked != input.getMaxItemsTracked) {
-        throw QueryExecutionErrors.approxTopKSketchSizeNotMatch(
-          buffer.getMaxItemsTracked,
-          input.getMaxItemsTracked
-        )
-      }
-    }
-    // check item data type
-    if (buffer.getItemDataType != null && input.getItemDataType != null &&
-      buffer.getItemDataType != input.getItemDataType) {
-      throw QueryExecutionErrors.approxTopKSketchTypeNotMatch(
-        buffer.getItemDataType,
-        input.getItemDataType
-      )
-    } else if (buffer.getItemDataType == null) {
-      // If buffer is a placeholder sketch, set it to the input sketch's item data type
-      buffer.setItemDataType(input.getItemDataType)
-    }
+    // update maxItemsTracked (throw error if not match)
+    buffer.updateMaxItemsTracked(combineSizeSpecified, input.getMaxItemsTracked)
+    // update itemDataType (throw error if not match)
+    buffer.updateItemDataType(input.getItemDataType)
+    // update sketch
     buffer.getSketch.merge(input.getSketch)
     buffer
   }
@@ -672,30 +744,11 @@ case class ApproxTopKCombine(
   }
 
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
-    val sketchBytes = buffer.getSketch.toByteArray(
-      ApproxTopK.genSketchSerDe(buffer.getItemDataType))
-    val maxItemsTracked = buffer.getMaxItemsTracked
-    val itemDataTypeBytes = ApproxTopK.dataTypeToBytes(buffer.getItemDataType)
-    // byteArray = maxItemsTracked (4 bytes) + itemDataType (3 bytes) + sketchBytes
-    val byteArray = new Array[Byte](sketchBytes.length + 7)
-    val byteBuffer = ByteBuffer.wrap(byteArray)
-    byteBuffer.putInt(maxItemsTracked)
-    byteBuffer.put(itemDataTypeBytes)
-    byteBuffer.put(sketchBytes)
-    byteArray
+    buffer.serialize()
   }
 
   override def deserialize(buffer: Array[Byte]): CombineInternal[Any] = {
-    val byteBuffer = ByteBuffer.wrap(buffer)
-    val maxItemsTracked = byteBuffer.getInt()
-    val itemDataTypeBytes = new Array[Byte](3)
-    byteBuffer.get(itemDataTypeBytes)
-    val actualItemDataType = ApproxTopK.bytesToDataType(itemDataTypeBytes)
-    val sketchBytes = new Array[Byte](buffer.length - 7)
-    byteBuffer.get(sketchBytes)
-    val sketch = ItemsSketch.getInstance(
-      Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(actualItemDataType))
-    new CombineInternal[Any](sketch, actualItemDataType, maxItemsTracked)
+    CombineInternal.deserialize(buffer)
   }
 
   override protected def withNewChildrenInternal(
