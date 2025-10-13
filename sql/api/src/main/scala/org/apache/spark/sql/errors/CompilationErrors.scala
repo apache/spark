@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SqlApiConf
 
