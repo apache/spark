@@ -134,8 +134,9 @@ private[connect] object PipelinesHandler extends Logging {
       .when(cmd.hasDefaultCatalog)(cmd.getDefaultCatalog)
       .getOrElse {
         val currentCatalog = sessionHolder.session.catalog.currentCatalog()
-        logInfo("No default catalog was supplied. " +
-          s"Falling back to the current catalog: $currentCatalog.")
+        logInfo(
+          "No default catalog was supplied. " +
+            s"Falling back to the current catalog: $currentCatalog.")
         currentCatalog
       }
 
@@ -143,8 +144,9 @@ private[connect] object PipelinesHandler extends Logging {
       .when(cmd.hasDefaultDatabase)(cmd.getDefaultDatabase)
       .getOrElse {
         val currentDatabase = sessionHolder.session.catalog.currentDatabase
-        logInfo("No default database was supplied. " +
-          s"Falling back to the current database: $currentDatabase.")
+        logInfo(
+          "No default database was supplied. " +
+            s"Falling back to the current database: $currentDatabase.")
         currentDatabase
       }
 

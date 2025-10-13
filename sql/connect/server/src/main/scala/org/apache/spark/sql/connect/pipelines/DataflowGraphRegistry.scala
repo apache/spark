@@ -32,7 +32,9 @@ class DataflowGraphRegistry {
 
   private val dataflowGraphs = new ConcurrentHashMap[String, GraphRegistrationContext]()
 
-  /** Registers a GraphRegistrationContext and generates a unique id to associate with the graph */
+  /**
+   * Registers a GraphRegistrationContext and generates a unique id to associate with the graph
+   */
   def createDataflowGraph(
       defaultCatalog: String,
       defaultDatabase: String,
