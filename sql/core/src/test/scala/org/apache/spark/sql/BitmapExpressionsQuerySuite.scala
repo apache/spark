@@ -272,7 +272,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
     withTable(table) {
       // Create test data with overlapping bit positions
       spark.sql(s"""
-           | CREATE TABLE $table (group_id INT, bit_pos LONG) USING DELTA
+           | CREATE TABLE $table (group_id INT, bit_pos LONG)
            | """.stripMargin)
       spark.sql(s"""
            | INSERT INTO $table VALUES
