@@ -30,7 +30,11 @@ private[spark] trait CommandLineUtils extends CommandLineLoggingUtils {
 
 private[spark] trait CommandLineLoggingUtils {
   // Exposed for testing
-  private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
+  private[spark] var exitFn: (Int, Option[Throwable]) => Unit =
+    (exitCode: Int, cause: Option[Throwable]) => {
+      cause.foreach(_.printStackTrace(printStream))
+      System.exit(exitCode)
+    }
 
   private[spark] var printStream: PrintStream = System.err
 
@@ -41,6 +45,6 @@ private[spark] trait CommandLineLoggingUtils {
   private[spark] def printErrorAndExit(str: String): Unit = {
     printMessage("Error: " + str)
     printMessage("Run with --help for usage help or --verbose for debug output")
-    exitFn(1)
+    exitFn(1, None)
   }
 }

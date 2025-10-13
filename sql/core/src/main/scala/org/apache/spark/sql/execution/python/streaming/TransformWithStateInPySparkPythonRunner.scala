@@ -66,32 +66,51 @@ class TransformWithStateInPySparkPythonRunner(
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
+  private var currentDataIterator: Iterator[InternalRow] = _
+
+  // Grouping multiple keys into one arrow batch
   override protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[InType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new BaseStreamingArrowWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch
+      )
     }
 
-    if (inputIterator.hasNext) {
-      val startData = dataOut.size()
-      val next = inputIterator.next()
-      val dataIter = next._2
+    // If we don't have data left for the current group, move to the next group.
+    if (currentDataIterator == null && inputIterator.hasNext) {
+      val (_, dataIter) = inputIterator.next()
+      currentDataIterator = dataIter
+    }
 
-      while (dataIter.hasNext) {
-        val dataRow = dataIter.next()
-        pandasWriter.writeRow(dataRow)
+    val startData = dataOut.size()
+    val hasInput = if (currentDataIterator != null) {
+      var isCurrentBatchFull = false
+      // Stop writing when the current arrowBatch is finalized/full. If we have rows left
+      while (currentDataIterator.hasNext && !isCurrentBatchFull) {
+        val dataRow = currentDataIterator.next()
+        isCurrentBatchFull = pandasWriter.writeRow(dataRow)
       }
-      pandasWriter.finalizeCurrentArrowBatch()
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
+
+      if (!currentDataIterator.hasNext) {
+        currentDataIterator = null
+      }
+
       true
     } else {
+      pandasWriter.finalizeCurrentArrowBatch()
       super[PythonArrowInput].close()
       false
     }
+    val deltaData = dataOut.size() - startData
+    pythonMetrics("pythonDataSent") += deltaData
+    hasInput
   }
 }
 
@@ -131,7 +150,12 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[GroupedInType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new BaseStreamingArrowWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch
+      )
     }
 
     if (inputIterator.hasNext) {
@@ -186,9 +210,11 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
+  protected val arrowMaxBytesPerBatch = sqlConf.arrowMaxBytesPerBatch
 
   override protected val workerConf: Map[String, String] = initialWorkerConf +
-    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
+    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString) +
+    (SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
   // constructor.

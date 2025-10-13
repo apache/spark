@@ -241,6 +241,16 @@ object SQLConf {
     }
   }
 
+  val PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX =
+    buildConf("spark.sql.analyzer.preferColumnOverLcaInArrayIndex")
+    .internal()
+    .doc(
+      "When true, prefer the column from the underlying relation over the lateral column alias " +
+      "reference with the same name (see SPARK-53734)."
+    )
+    .booleanConf
+    .createWithDefault(true)
+
   val DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT =
     buildConf("spark.sql.analyzer.dontDeduplicateExpressionIfExprIdInOutput")
     .internal()
@@ -886,6 +896,14 @@ object SQLConf {
         "task attempts of the same partition produce different output data or not (same set of " +
         "keyValue pairs). In case the output data has changed across retries, Spark will need to " +
         "retry all tasks of the consumer stages to avoid correctness issues.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED =
+    buildConf("spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch")
+      .doc("Whether to retry all tasks of a consumer stage when we detect checksum mismatches " +
+        "with its producer stages.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -2645,6 +2663,16 @@ object SQLConf {
     .version("4.0.0")
     .doubleConf
     .createWithDefault(0.3)
+
+  val MAX_VERSIONS_TO_DELETE_PER_MAINTENANCE =
+    buildConf("spark.sql.streaming.stateStore.maxVersionsToDeletePerMaintenance")
+    .internal()
+    .doc("The maximum number of versions to delete per maintenance operation. By default, " +
+      "this value is set to -1, which means no limit. Note that, currently this is only " +
+      "supported for the RocksDB state store provider.")
+    .version("4.1.0")
+    .intConf
+    .createWithDefault(-1)
 
   val MAX_BATCHES_TO_RETAIN_IN_MEMORY = buildConf("spark.sql.streaming.maxBatchesToRetainInMemory")
     .internal()
@@ -6651,6 +6679,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def shuffleOrderIndependentChecksumEnabled: Boolean =
     getConf(SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)
 
+  def shuffleChecksumMismatchFullRetryEnabled: Boolean =
+    getConf(SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED)
+
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
@@ -6671,6 +6702,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
+
+  def maxVersionsToDeletePerMaintenance: Int = getConf(MAX_VERSIONS_TO_DELETE_PER_MAINTENANCE)
 
   def ratioExtraSpaceAllowedInCheckpoint: Double = getConf(RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT)
 

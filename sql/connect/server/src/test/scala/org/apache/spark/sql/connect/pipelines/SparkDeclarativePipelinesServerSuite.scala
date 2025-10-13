@@ -19,9 +19,11 @@ package org.apache.spark.sql.connect.pipelines
 
 import java.util.UUID
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{DatasetType, Expression, PipelineCommand, Relation, UnresolvedTableValuedFunction}
-import org.apache.spark.connect.proto.PipelineCommand.{DefineDataset, DefineFlow}
+import org.apache.spark.connect.proto.{Expression, OutputType, PipelineCommand, PipelineCommandResult, Relation, UnresolvedTableValuedFunction}
+import org.apache.spark.connect.proto.PipelineCommand.{DefineFlow, DefineOutput}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 
@@ -56,12 +58,12 @@ class SparkDeclarativePipelinesServerSuite
           buildPlanFromPipelineCommand(
             PipelineCommand
               .newBuilder()
-              .setDefineDataset(
-                DefineDataset
+              .setDefineOutput(
+                DefineOutput
                   .newBuilder()
                   .setDataflowGraphId("random-graph-id-that-dne")
-                  .setDatasetName("mv")
-                  .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+                  .setOutputName("mv")
+                  .setOutputType(OutputType.MATERIALIZED_VIEW))
               .build()))
       }
     }
@@ -77,12 +79,12 @@ class SparkDeclarativePipelinesServerSuite
         buildPlanFromPipelineCommand(
           PipelineCommand
             .newBuilder()
-            .setDefineDataset(
-              DefineDataset
+            .setDefineOutput(
+              DefineOutput
                 .newBuilder()
                 .setDataflowGraphId(graphId)
-                .setDatasetName("mv")
-                .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+                .setOutputName("mv")
+                .setOutputType(OutputType.MATERIALIZED_VIEW))
             .build()))
 
       sendPlan(
@@ -95,19 +97,23 @@ class SparkDeclarativePipelinesServerSuite
                 .setDataflowGraphId(graphId)
                 .setFlowName("mv")
                 .setTargetDatasetName("mv")
-                .setRelation(
-                  Relation
+                .setRelationFlowDetails(
+                  DefineFlow.WriteRelationFlowDetails
                     .newBuilder()
-                    .setUnresolvedTableValuedFunction(
-                      UnresolvedTableValuedFunction
+                    .setRelation(
+                      Relation
                         .newBuilder()
-                        .setFunctionName("range")
-                        .addArguments(Expression
+                        .setUnresolvedTableValuedFunction(UnresolvedTableValuedFunction
                           .newBuilder()
-                          .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                          .setFunctionName("range")
+                          .addArguments(Expression
+                            .newBuilder()
+                            .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                            .build())
                           .build())
                         .build())
-                    .build()))
+                    .build())
+                .build())
             .build()))
       registerGraphElementsFromSql(
         graphId = graphId,
@@ -152,19 +158,19 @@ class SparkDeclarativePipelinesServerSuite
       val pipeline = new TestPipelineDefinition(graphId) {
         createTable(
           name = "tableA",
-          datasetType = DatasetType.MATERIALIZED_VIEW,
+          outputType = OutputType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM RANGE(5)"))
         createView(name = "viewB", sql = "SELECT * FROM tableA")
         createTable(
           name = "tableC",
-          datasetType = DatasetType.TABLE,
+          outputType = OutputType.TABLE,
           sql = Some("SELECT * FROM tableA, viewB"))
       }
 
       val definition =
         getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
 
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
       val graph = definition.toDataflowGraph
         .resolve()
 
@@ -198,19 +204,19 @@ class SparkDeclarativePipelinesServerSuite
       val pipeline = new TestPipelineDefinition(graphId) {
         createTable(
           name = "tableA",
-          datasetType = DatasetType.MATERIALIZED_VIEW,
+          outputType = OutputType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "tableB",
-          datasetType = DatasetType.TABLE,
+          outputType = OutputType.TABLE,
           sql = Some("SELECT * FROM STREAM tableA"))
         createTable(
           name = "tableC",
-          datasetType = DatasetType.MATERIALIZED_VIEW,
+          outputType = OutputType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM tableB"))
       }
 
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
       startPipelineAndWaitForCompletion(graphId)
       // Check that each table has the correct data.
       assert(spark.table("spark_catalog.default.tableA").count() == 5)
@@ -229,20 +235,20 @@ class SparkDeclarativePipelinesServerSuite
       val pipeline = new TestPipelineDefinition(graphId) {
         createTable(
           name = "curr.tableA",
-          datasetType = proto.DatasetType.MATERIALIZED_VIEW,
+          outputType = proto.OutputType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "curr.tableB",
-          datasetType = proto.DatasetType.TABLE,
+          outputType = proto.OutputType.TABLE,
           sql = Some("SELECT * FROM STREAM curr.tableA"))
         createView(name = "viewC", sql = "SELECT * FROM curr.tableB")
         createTable(
           name = "other.tableD",
-          datasetType = proto.DatasetType.MATERIALIZED_VIEW,
+          outputType = proto.OutputType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM viewC"))
       }
 
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
       startPipelineAndWaitForCompletion(graphId)
 
       // Check that each table has the correct data.
@@ -262,12 +268,12 @@ class SparkDeclarativePipelinesServerSuite
         buildPlanFromPipelineCommand(
           PipelineCommand
             .newBuilder()
-            .setDefineDataset(
-              DefineDataset
+            .setDefineOutput(
+              DefineOutput
                 .newBuilder()
                 .setDataflowGraphId(graphId1)
-                .setDatasetName("session1_table")
-                .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+                .setOutputName("session1_table")
+                .setOutputType(OutputType.MATERIALIZED_VIEW))
             .build()))
 
       // Verify the graph exists in the default session
@@ -303,12 +309,12 @@ class SparkDeclarativePipelinesServerSuite
         buildPlanFromPipelineCommand(
           PipelineCommand
             .newBuilder()
-            .setDefineDataset(
-              DefineDataset
+            .setDefineOutput(
+              DefineOutput
                 .newBuilder()
                 .setDataflowGraphId(graphId2)
-                .setDatasetName("session2_table")
-                .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+                .setOutputName("session2_table")
+                .setOutputType(OutputType.MATERIALIZED_VIEW))
             .build())).toBuilder
         .setUserContext(proto.UserContext
           .newBuilder()
@@ -370,12 +376,12 @@ class SparkDeclarativePipelinesServerSuite
         buildPlanFromPipelineCommand(
           PipelineCommand
             .newBuilder()
-            .setDefineDataset(
-              DefineDataset
+            .setDefineOutput(
+              DefineOutput
                 .newBuilder()
                 .setDataflowGraphId(graphId)
-                .setDatasetName("test_table")
-                .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+                .setOutputName("test_table")
+                .setOutputType(OutputType.MATERIALIZED_VIEW))
             .build())).toBuilder
         .setUserContext(proto.UserContext
           .newBuilder()
@@ -419,24 +425,24 @@ class SparkDeclarativePipelinesServerSuite
         buildPlanFromPipelineCommand(
           PipelineCommand
             .newBuilder()
-            .setDefineDataset(
-              DefineDataset
+            .setDefineOutput(
+              DefineOutput
                 .newBuilder()
                 .setDataflowGraphId(graphId1)
-                .setDatasetName("graph1_table")
-                .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+                .setOutputName("graph1_table")
+                .setOutputType(OutputType.MATERIALIZED_VIEW))
             .build()))
 
       sendPlan(
         buildPlanFromPipelineCommand(
           PipelineCommand
             .newBuilder()
-            .setDefineDataset(
-              DefineDataset
+            .setDefineOutput(
+              DefineOutput
                 .newBuilder()
                 .setDataflowGraphId(graphId2)
-                .setDatasetName("graph2_table")
-                .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+                .setOutputName("graph2_table")
+                .setOutputType(OutputType.MATERIALIZED_VIEW))
             .build()))
 
       // Verify both graphs exist in the session
@@ -458,12 +464,12 @@ class SparkDeclarativePipelinesServerSuite
         buildPlanFromPipelineCommand(
           PipelineCommand
             .newBuilder()
-            .setDefineDataset(
-              DefineDataset
+            .setDefineOutput(
+              DefineOutput
                 .newBuilder()
                 .setDataflowGraphId(graphId)
-                .setDatasetName("test_table")
-                .setDatasetType(DatasetType.MATERIALIZED_VIEW))
+                .setOutputName("test_table")
+                .setOutputType(OutputType.MATERIALIZED_VIEW))
             .build()))
 
       // Verify the graph exists
@@ -484,6 +490,316 @@ class SparkDeclarativePipelinesServerSuite
       // Verify the graph is removed
       val graphsAfter = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
       assert(graphsAfter.isEmpty, "Graph should be removed after drop")
+    }
+  }
+
+  private case class DefineOutputTestCase(
+      name: String,
+      datasetType: OutputType,
+      datasetName: String,
+      defaultCatalog: String = "",
+      defaultDatabase: String = "",
+      expectedResolvedDatasetName: String,
+      expectedResolvedCatalog: String,
+      expectedResolvedNamespace: Seq[String])
+
+  private val defineDatasetDefaultTests = Seq(
+    DefineOutputTestCase(
+      name = "TEMPORARY_VIEW",
+      datasetType = OutputType.TEMPORARY_VIEW,
+      datasetName = "tv",
+      expectedResolvedDatasetName = "tv",
+      expectedResolvedCatalog = "",
+      expectedResolvedNamespace = Seq.empty),
+    DefineOutputTestCase(
+      name = "TABLE",
+      datasetType = OutputType.TABLE,
+      datasetName = "`tb`",
+      expectedResolvedDatasetName = "tb",
+      expectedResolvedCatalog = "spark_catalog",
+      expectedResolvedNamespace = Seq("default")),
+    DefineOutputTestCase(
+      name = "MV",
+      datasetType = OutputType.MATERIALIZED_VIEW,
+      datasetName = "mv",
+      expectedResolvedDatasetName = "mv",
+      expectedResolvedCatalog = "spark_catalog",
+      expectedResolvedNamespace = Seq("default"))).map(tc => tc.name -> tc).toMap
+
+  private val defineDatasetCustomTests = Seq(
+    DefineOutputTestCase(
+      name = "TEMPORARY_VIEW",
+      datasetType = OutputType.TEMPORARY_VIEW,
+      datasetName = "tv",
+      defaultCatalog = "custom_catalog",
+      defaultDatabase = "custom_db",
+      expectedResolvedDatasetName = "tv",
+      expectedResolvedCatalog = "",
+      expectedResolvedNamespace = Seq.empty),
+    DefineOutputTestCase(
+      name = "TABLE",
+      datasetType = OutputType.TABLE,
+      datasetName = "`tb`",
+      defaultCatalog = "`my_catalog`",
+      defaultDatabase = "`my_db`",
+      expectedResolvedDatasetName = "tb",
+      expectedResolvedCatalog = "`my_catalog`",
+      expectedResolvedNamespace = Seq("`my_db`")),
+    DefineOutputTestCase(
+      name = "MV",
+      datasetType = OutputType.MATERIALIZED_VIEW,
+      datasetName = "mv",
+      defaultCatalog = "another_catalog",
+      defaultDatabase = "another_db",
+      expectedResolvedDatasetName = "mv",
+      expectedResolvedCatalog = "another_catalog",
+      expectedResolvedNamespace = Seq("another_db")))
+    .map(tc => tc.name -> tc)
+    .toMap
+
+  namedGridTest("DefineOutput returns resolved data name for default catalog/schema")(
+    defineDatasetDefaultTests) { testCase =>
+    withRawBlockingStub { implicit stub =>
+      // Build and send the CreateDataflowGraph command with default catalog/db
+      val graphId = createDataflowGraph
+      assert(Option(graphId).isDefined)
+
+      val defineDataset = DefineOutput
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setOutputName(testCase.datasetName)
+        .setOutputType(testCase.datasetType)
+      val pipelineCmd = PipelineCommand
+        .newBuilder()
+        .setDefineOutput(defineDataset)
+        .build()
+      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
+
+      assert(res !== PipelineCommandResult.getDefaultInstance)
+      assert(res.hasDefineOutputResult)
+      val graphResult = res.getDefineOutputResult
+      val identifier = graphResult.getResolvedIdentifier
+
+      assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
+      assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
+      assert(identifier.getTableName == testCase.expectedResolvedDatasetName)
+    }
+  }
+
+  namedGridTest("DefineOutput returns resolved data name for custom catalog/schema")(
+    defineDatasetCustomTests) { testCase =>
+    withRawBlockingStub { implicit stub =>
+      // Build and send the CreateDataflowGraph command with custom catalog/db
+      val graphId = sendPlan(
+        buildCreateDataflowGraphPlan(
+          proto.PipelineCommand.CreateDataflowGraph
+            .newBuilder()
+            .setDefaultCatalog(testCase.defaultCatalog)
+            .setDefaultDatabase(testCase.defaultDatabase)
+            .build())).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
+
+      assert(graphId.nonEmpty)
+
+      // Build DefineOutput with the created graphId and dataset info
+      val defineDataset = DefineOutput
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setOutputName(testCase.datasetName)
+        .setOutputType(testCase.datasetType)
+      val pipelineCmd = PipelineCommand
+        .newBuilder()
+        .setDefineOutput(defineDataset)
+        .build()
+
+      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
+      assert(res !== PipelineCommandResult.getDefaultInstance)
+      assert(res.hasDefineOutputResult)
+      val graphResult = res.getDefineOutputResult
+      val identifier = graphResult.getResolvedIdentifier
+
+      assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
+      assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
+      assert(identifier.getTableName == testCase.expectedResolvedDatasetName)
+    }
+  }
+
+  private case class DefineFlowTestCase(
+      name: String,
+      datasetType: OutputType,
+      flowName: String,
+      defaultCatalog: String,
+      defaultDatabase: String,
+      expectedResolvedFlowName: String,
+      expectedResolvedCatalog: String,
+      expectedResolvedNamespace: Seq[String])
+
+  private val defineFlowDefaultTests = Seq(
+    DefineFlowTestCase(
+      name = "MV",
+      datasetType = OutputType.MATERIALIZED_VIEW,
+      flowName = "`mv`",
+      defaultCatalog = "`spark_catalog`",
+      defaultDatabase = "`default`",
+      expectedResolvedFlowName = "mv",
+      expectedResolvedCatalog = "spark_catalog",
+      expectedResolvedNamespace = Seq("default")),
+    DefineFlowTestCase(
+      name = "TV",
+      datasetType = OutputType.TEMPORARY_VIEW,
+      flowName = "tv",
+      defaultCatalog = "spark_catalog",
+      defaultDatabase = "default",
+      expectedResolvedFlowName = "tv",
+      expectedResolvedCatalog = "",
+      expectedResolvedNamespace = Seq.empty)).map(tc => tc.name -> tc).toMap
+
+  private val defineFlowCustomTests = Seq(
+    DefineFlowTestCase(
+      name = "MV custom",
+      datasetType = OutputType.MATERIALIZED_VIEW,
+      flowName = "mv",
+      defaultCatalog = "custom_catalog",
+      defaultDatabase = "custom_db",
+      expectedResolvedFlowName = "mv",
+      expectedResolvedCatalog = "custom_catalog",
+      expectedResolvedNamespace = Seq("custom_db")),
+    DefineFlowTestCase(
+      name = "TV custom",
+      datasetType = OutputType.TEMPORARY_VIEW,
+      flowName = "tv",
+      defaultCatalog = "custom_catalog",
+      defaultDatabase = "custom_db",
+      expectedResolvedFlowName = "tv",
+      expectedResolvedCatalog = "",
+      expectedResolvedNamespace = Seq.empty)).map(tc => tc.name -> tc).toMap
+
+  namedGridTest("DefineFlow returns resolved data name for default catalog/schema")(
+    defineFlowDefaultTests) { testCase =>
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      assert(graphId.nonEmpty)
+
+      // If the dataset type is TEMPORARY_VIEW, define the dataset explicitly first
+      if (testCase.datasetType == OutputType.TEMPORARY_VIEW) {
+        val defineDataset = DefineOutput
+          .newBuilder()
+          .setDataflowGraphId(graphId)
+          .setOutputName(testCase.flowName)
+          .setOutputType(OutputType.TEMPORARY_VIEW)
+
+        val defineDatasetCmd = PipelineCommand
+          .newBuilder()
+          .setDefineOutput(defineDataset)
+          .build()
+
+        val datasetRes =
+          sendPlan(buildPlanFromPipelineCommand(defineDatasetCmd)).getPipelineCommandResult
+        assert(datasetRes.hasDefineOutputResult)
+      }
+
+      val defineFlow = DefineFlow
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setFlowName(testCase.flowName)
+        .setTargetDatasetName(testCase.flowName)
+        .setRelationFlowDetails(
+          DefineFlow.WriteRelationFlowDetails
+            .newBuilder()
+            .setRelation(
+              Relation
+                .newBuilder()
+                .setUnresolvedTableValuedFunction(
+                  UnresolvedTableValuedFunction
+                    .newBuilder()
+                    .setFunctionName("range")
+                    .addArguments(Expression
+                      .newBuilder()
+                      .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                      .build())
+                    .build())
+                .build())
+            .build())
+        .build()
+      val pipelineCmd = PipelineCommand
+        .newBuilder()
+        .setDefineFlow(defineFlow)
+        .build()
+      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
+      assert(res.hasDefineFlowResult)
+      val graphResult = res.getDefineFlowResult
+      val identifier = graphResult.getResolvedIdentifier
+
+      assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
+      assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
+      assert(identifier.getTableName == testCase.expectedResolvedFlowName)
+    }
+  }
+
+  namedGridTest("DefineFlow returns resolved data name for custom catalog/schema")(
+    defineFlowCustomTests) { testCase =>
+    withRawBlockingStub { implicit stub =>
+      val graphId = sendPlan(
+        buildCreateDataflowGraphPlan(
+          proto.PipelineCommand.CreateDataflowGraph
+            .newBuilder()
+            .setDefaultCatalog(testCase.defaultCatalog)
+            .setDefaultDatabase(testCase.defaultDatabase)
+            .build())).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
+      assert(graphId.nonEmpty)
+
+      // If the dataset type is TEMPORARY_VIEW, define the dataset explicitly first
+      if (testCase.datasetType == OutputType.TEMPORARY_VIEW) {
+        val defineDataset = DefineOutput
+          .newBuilder()
+          .setDataflowGraphId(graphId)
+          .setOutputName(testCase.flowName)
+          .setOutputType(OutputType.TEMPORARY_VIEW)
+
+        val defineDatasetCmd = PipelineCommand
+          .newBuilder()
+          .setDefineOutput(defineDataset)
+          .build()
+
+        val datasetRes =
+          sendPlan(buildPlanFromPipelineCommand(defineDatasetCmd)).getPipelineCommandResult
+        assert(datasetRes.hasDefineOutputResult)
+      }
+
+      val defineFlow = DefineFlow
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setFlowName(testCase.flowName)
+        .setTargetDatasetName(testCase.flowName)
+        .setRelationFlowDetails(
+          DefineFlow.WriteRelationFlowDetails
+            .newBuilder()
+            .setRelation(
+              Relation
+                .newBuilder()
+                .setUnresolvedTableValuedFunction(
+                  UnresolvedTableValuedFunction
+                    .newBuilder()
+                    .setFunctionName("range")
+                    .addArguments(Expression
+                      .newBuilder()
+                      .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                      .build())
+                    .build())
+                .build())
+            .build())
+        .build()
+      val pipelineCmd = PipelineCommand
+        .newBuilder()
+        .setDefineFlow(defineFlow)
+        .build()
+      val res = sendPlan(buildPlanFromPipelineCommand(pipelineCmd)).getPipelineCommandResult
+      assert(res.hasDefineFlowResult)
+      val graphResult = res.getDefineFlowResult
+      val identifier = graphResult.getResolvedIdentifier
+
+      assert(identifier.getCatalogName == testCase.expectedResolvedCatalog)
+      assert(identifier.getNamespaceList.asScala == testCase.expectedResolvedNamespace)
+      assert(identifier.getTableName == testCase.expectedResolvedFlowName)
     }
   }
 }

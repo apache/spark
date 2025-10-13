@@ -96,8 +96,8 @@ def _create_py_udf(
     # Arrow and Pickle have different type coercion rules, so a UDF might have a different result
     # with/without Arrow optimization. That's the main reason the Arrow optimization for Python
     # UDFs is disabled by default.
-    is_arrow_enabled = False
 
+    is_arrow_enabled = False
     if useArrow is None:
         from pyspark.sql import SparkSession
 
@@ -122,10 +122,24 @@ def _create_py_udf(
                 RuntimeWarning,
             )
 
-    eval_type: int = PythonEvalType.SQL_BATCHED_UDF
+    eval_type: Optional[int] = None
+    if useArrow is None:
+        # If the user doesn't explicitly set useArrow
+        from pyspark.sql.pandas.typehints import infer_eval_type_for_udf
 
-    if is_arrow_enabled:
-        eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
+        try:
+            # Try to infer the eval type from type hints
+            eval_type = infer_eval_type_for_udf(f)
+        except Exception:
+            warnings.warn("Cannot infer the eval type from type hints. ", UserWarning)
+
+    if eval_type is None:
+        if is_arrow_enabled:
+            # Arrow optimized Python UDF
+            eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
+        else:
+            # Fallback to Regular Python UDF
+            eval_type = PythonEvalType.SQL_BATCHED_UDF
 
     return _create_udf(f, returnType, eval_type)
 

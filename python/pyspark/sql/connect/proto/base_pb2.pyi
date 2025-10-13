@@ -1637,6 +1637,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ML_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     PIPELINE_EVENT_RESULT_FIELD_NUMBER: builtins.int
     PIPELINE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    PIPELINE_QUERY_FUNCTION_EXECUTION_SIGNAL_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1712,6 +1713,13 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult:
         """Pipeline command response"""
     @property
+    def pipeline_query_function_execution_signal(
+        self,
+    ) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal:
+        """A signal from the server to the client to execute the query function for a flow, and to
+        register its result with the server.
+        """
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1758,6 +1766,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         | None = ...,
         pipeline_command_result: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommandResult
         | None = ...,
+        pipeline_query_function_execution_signal: pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1787,6 +1797,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"pipeline_command_result",
             "pipeline_event_result",
             b"pipeline_event_result",
+            "pipeline_query_function_execution_signal",
+            b"pipeline_query_function_execution_signal",
             "response_type",
             b"response_type",
             "result_complete",
@@ -1832,6 +1844,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"pipeline_command_result",
             "pipeline_event_result",
             b"pipeline_event_result",
+            "pipeline_query_function_execution_signal",
+            b"pipeline_query_function_execution_signal",
             "response_id",
             b"response_id",
             "response_type",
@@ -1874,6 +1888,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "ml_command_result",
             "pipeline_event_result",
             "pipeline_command_result",
+            "pipeline_query_function_execution_signal",
             "extension",
         ]
         | None
@@ -3732,6 +3747,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         MESSAGE_PARAMETERS_FIELD_NUMBER: builtins.int
         QUERY_CONTEXTS_FIELD_NUMBER: builtins.int
         SQL_STATE_FIELD_NUMBER: builtins.int
+        BREAKING_CHANGE_INFO_FIELD_NUMBER: builtins.int
         error_class: builtins.str
         """Succinct, human-readable, unique, and consistent representation of the error category."""
         @property
@@ -3750,6 +3766,9 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         """Portable error identifier across SQL engines
         If null, error class or SQLSTATE is not set.
         """
+        @property
+        def breaking_change_info(self) -> global___FetchErrorDetailsResponse.BreakingChangeInfo:
+            """Additional information if the error was caused by a breaking change."""
         def __init__(
             self,
             *,
@@ -3760,14 +3779,20 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             ]
             | None = ...,
             sql_state: builtins.str | None = ...,
+            breaking_change_info: global___FetchErrorDetailsResponse.BreakingChangeInfo
+            | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "_breaking_change_info",
+                b"_breaking_change_info",
                 "_error_class",
                 b"_error_class",
                 "_sql_state",
                 b"_sql_state",
+                "breaking_change_info",
+                b"breaking_change_info",
                 "error_class",
                 b"error_class",
                 "sql_state",
@@ -3777,10 +3802,14 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_breaking_change_info",
+                b"_breaking_change_info",
                 "_error_class",
                 b"_error_class",
                 "_sql_state",
                 b"_sql_state",
+                "breaking_change_info",
+                b"breaking_change_info",
                 "error_class",
                 b"error_class",
                 "message_parameters",
@@ -3793,12 +3822,107 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         ) -> None: ...
         @typing.overload
         def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_breaking_change_info", b"_breaking_change_info"
+            ],
+        ) -> typing_extensions.Literal["breaking_change_info"] | None: ...
+        @typing.overload
+        def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
         ) -> typing_extensions.Literal["error_class"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_sql_state", b"_sql_state"]
         ) -> typing_extensions.Literal["sql_state"] | None: ...
+
+    class BreakingChangeInfo(google.protobuf.message.Message):
+        """BreakingChangeInfo defines the schema for breaking change information."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MIGRATION_MESSAGE_FIELD_NUMBER: builtins.int
+        MITIGATION_CONFIG_FIELD_NUMBER: builtins.int
+        NEEDS_AUDIT_FIELD_NUMBER: builtins.int
+        @property
+        def migration_message(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """A message explaining how the user can migrate their job to work
+            with the breaking change.
+            """
+        @property
+        def mitigation_config(self) -> global___FetchErrorDetailsResponse.MitigationConfig:
+            """A spark config flag that can be used to mitigate the breaking change."""
+        needs_audit: builtins.bool
+        """If true, the breaking change should be inspected manually.
+        If false, the spark job should be retried by setting the mitigationConfig.
+        """
+        def __init__(
+            self,
+            *,
+            migration_message: collections.abc.Iterable[builtins.str] | None = ...,
+            mitigation_config: global___FetchErrorDetailsResponse.MitigationConfig | None = ...,
+            needs_audit: builtins.bool | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_mitigation_config",
+                b"_mitigation_config",
+                "_needs_audit",
+                b"_needs_audit",
+                "mitigation_config",
+                b"mitigation_config",
+                "needs_audit",
+                b"needs_audit",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_mitigation_config",
+                b"_mitigation_config",
+                "_needs_audit",
+                b"_needs_audit",
+                "migration_message",
+                b"migration_message",
+                "mitigation_config",
+                b"mitigation_config",
+                "needs_audit",
+                b"needs_audit",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_mitigation_config", b"_mitigation_config"],
+        ) -> typing_extensions.Literal["mitigation_config"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_needs_audit", b"_needs_audit"]
+        ) -> typing_extensions.Literal["needs_audit"] | None: ...
+
+    class MitigationConfig(google.protobuf.message.Message):
+        """MitigationConfig defines a spark config flag that can be used to mitigate a breaking change."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        """The spark config key."""
+        value: builtins.str
+        """The spark config value that mitigates the breaking change."""
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""

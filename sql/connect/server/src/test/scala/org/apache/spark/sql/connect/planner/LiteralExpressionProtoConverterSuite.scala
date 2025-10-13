@@ -53,7 +53,11 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     }
   }
 
+  // The goal of this test is to check that converting a Scala value -> Proto -> Catalyst value
+  // is equivalent to converting a Scala value directly to a Catalyst value.
   Seq[(Any, DataType)](
+    (Array[String](null, "a", null), ArrayType(StringType)),
+    (Map[String, String]("a" -> null, "b" -> null), MapType(StringType, StringType)),
     (
       (1, "string", true),
       StructType(
@@ -120,7 +124,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
       Seq(1, 2, 3),
       Some(ArrayType(IntegerType, containsNull = false)),
       ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
-    assert(!literalProto.getArray.hasDataType)
+    assert(!literalProto.hasDataType)
     assert(literalProto.getArray.getElementsList.size == 3)
     assert(literalProto.getArray.getElementType.hasInteger)
 
@@ -143,7 +147,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
       Map[String, Int]("a" -> 1, "b" -> 2),
       Some(MapType(StringType, IntegerType, valueContainsNull = false)),
       ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
-    assert(!literalProto.getMap.hasDataType)
+    assert(!literalProto.hasDataType)
     assert(literalProto.getMap.getKeysList.size == 2)
     assert(literalProto.getMap.getValuesList.size == 2)
     assert(literalProto.getMap.getKeyType.hasString)
@@ -176,7 +180,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
             StructField("a", IntegerType, nullable = true),
             StructField("b", StringType, nullable = false)))),
       ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
-    assert(!structProto.getStruct.hasDataTypeStruct)
+    assert(!structProto.hasDataType)
     assert(structProto.getStruct.getElementsList.size == 2)
     val structTypeProto = structProto.getStruct.getStructType.getStruct
     assert(structTypeProto.getFieldsList.size == 2)
@@ -185,8 +189,8 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     assert(structTypeProto.getFieldsList.get(1).getName == "b")
     assert(structTypeProto.getFieldsList.get(1).getDataType.hasString)
 
-    val result = LiteralValueProtoConverter.toScalaStruct(structProto.getStruct)
-    val resultType = LiteralValueProtoConverter.getProtoStructType(structProto.getStruct)
+    val result = LiteralValueProtoConverter.toScalaValue(structProto)
+    val resultType = LiteralValueProtoConverter.getProtoDataType(structProto)
 
     // Verify the result is a GenericRowWithSchema with correct values
     assert(result.isInstanceOf[GenericRowWithSchema])
@@ -196,105 +200,15 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     assert(row.get(1) == "test")
 
     // Verify the returned struct type matches the original
-    assert(resultType.getFieldsCount == 2)
-    assert(resultType.getFields(0).getName == "a")
-    assert(resultType.getFields(0).getDataType.hasInteger)
-    assert(resultType.getFields(0).getNullable)
-    assert(resultType.getFields(1).getName == "b")
-    assert(resultType.getFields(1).getDataType.hasString)
-    assert(!resultType.getFields(1).getNullable)
-  }
-
-  test("data types of struct fields are not set for inferable types") {
-    val literalProto = toLiteralProto(
-      (1, 2.0, true, (1, 2)),
-      StructType(
-        Seq(
-          StructField("a", IntegerType),
-          StructField("b", DoubleType),
-          StructField("c", BooleanType),
-          StructField(
-            "d",
-            StructType(Seq(StructField("e", IntegerType), StructField("f", IntegerType)))))))
-    assert(!literalProto.getStruct.getDataTypeStruct.getFieldsList.get(0).hasDataType)
-    assert(!literalProto.getStruct.getDataTypeStruct.getFieldsList.get(1).hasDataType)
-    assert(!literalProto.getStruct.getDataTypeStruct.getFieldsList.get(2).hasDataType)
-    assert(!literalProto.getStruct.getDataTypeStruct.getFieldsList.get(3).hasDataType)
-  }
-
-  test("data types of struct fields are set for non-inferable types") {
-    val literalProto = toLiteralProto(
-      ("string", Decimal(1)),
-      StructType(Seq(StructField("a", StringType), StructField("b", DecimalType(10, 2)))))
-    assert(literalProto.getStruct.getDataTypeStruct.getFieldsList.get(0).hasDataType)
-    assert(literalProto.getStruct.getDataTypeStruct.getFieldsList.get(1).hasDataType)
-  }
-
-  test("nullable and metadata fields are set for struct literal proto") {
-    val literalProto = toLiteralProto(
-      ("string", Decimal(1)),
-      StructType(Seq(
-        StructField("a", StringType, nullable = true, Metadata.fromJson("""{"key": "value"}""")),
-        StructField("b", DecimalType(10, 2), nullable = false))))
-    val structFields = literalProto.getStruct.getDataTypeStruct.getFieldsList
-    assert(structFields.get(0).getNullable)
-    assert(structFields.get(0).hasMetadata)
-    assert(structFields.get(0).getMetadata == """{"key":"value"}""")
-    assert(!structFields.get(1).getNullable)
-    assert(!structFields.get(1).hasMetadata)
-
-    val structTypeProto = LiteralValueProtoConverter.getProtoStructType(literalProto.getStruct)
-    assert(structTypeProto.getFieldsList.get(0).getNullable)
-    assert(structTypeProto.getFieldsList.get(0).hasMetadata)
-    assert(structTypeProto.getFieldsList.get(0).getMetadata == """{"key":"value"}""")
-    assert(!structTypeProto.getFieldsList.get(1).getNullable)
-    assert(!structTypeProto.getFieldsList.get(1).hasMetadata)
-  }
-
-  test("element type of array literal is set for an empty array") {
-    val literalProto =
-      toLiteralProto(Array[Int](), ArrayType(IntegerType))
-    assert(literalProto.getArray.getDataType.hasElementType)
-  }
-
-  test("element type of array literal is set for a non-empty array with non-inferable type") {
-    val literalProto = toLiteralProto(Array[String]("1", "2", "3"), ArrayType(StringType))
-    assert(literalProto.getArray.getDataType.hasElementType)
-  }
-
-  test("element type of array literal is not set for a non-empty array with inferable type") {
-    val literalProto =
-      toLiteralProto(Array(1, 2, 3), ArrayType(IntegerType))
-    assert(!literalProto.getArray.getDataType.hasElementType)
-  }
-
-  test("key and value type of map literal are set for an empty map") {
-    val literalProto = toLiteralProto(Map[Int, Int](), MapType(IntegerType, IntegerType))
-    assert(literalProto.getMap.getDataType.hasKeyType)
-    assert(literalProto.getMap.getDataType.hasValueType)
-  }
-
-  test("key type of map literal is set for a non-empty map with non-inferable key type") {
-    val literalProto = toLiteralProto(
-      Map[String, Int]("1" -> 1, "2" -> 2, "3" -> 3),
-      MapType(StringType, IntegerType))
-    assert(literalProto.getMap.getDataType.hasKeyType)
-    assert(!literalProto.getMap.getDataType.hasValueType)
-  }
-
-  test("value type of map literal is set for a non-empty map with non-inferable value type") {
-    val literalProto = toLiteralProto(
-      Map[Int, String](1 -> "1", 2 -> "2", 3 -> "3"),
-      MapType(IntegerType, StringType))
-    assert(!literalProto.getMap.getDataType.hasKeyType)
-    assert(literalProto.getMap.getDataType.hasValueType)
-  }
-
-  test("key and value type of map literal are not set for a non-empty map with inferable types") {
-    val literalProto =
-      toLiteralProto(Map(1 -> 2, 3 -> 4, 5 -> 6), MapType(IntegerType, IntegerType))
-    assert(!literalProto.getMap.getDataType.hasKeyType)
-    assert(!literalProto.getMap.getDataType.hasValueType)
+    assert(resultType.getKindCase == proto.DataType.KindCase.STRUCT)
+    val structType = resultType.getStruct
+    assert(structType.getFieldsCount == 2)
+    assert(structType.getFields(0).getName == "a")
+    assert(structType.getFields(0).getDataType.hasInteger)
+    assert(structType.getFields(0).getNullable)
+    assert(structType.getFields(1).getName == "b")
+    assert(structType.getFields(1).getDataType.hasString)
+    assert(!structType.getFields(1).getNullable)
   }
 
   test("an invalid array literal") {

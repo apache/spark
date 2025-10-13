@@ -407,6 +407,10 @@ message ExecutePlanResponse {
     // Pipeline command response
     PipelineCommandResult pipeline_command_result = 22;
 
+    // A signal from the server to the client to execute the query function for a flow, and to
+    // register its result with the server.
+    PipelineQueryFunctionExecutionSignal pipeline_query_function_execution_signal = 23;
+
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
   }
@@ -1095,6 +1099,32 @@ message FetchErrorDetailsResponse {
     // Portable error identifier across SQL engines
     // If null, error class or SQLSTATE is not set.
     optional string sql_state = 4;
+
+    // Additional information if the error was caused by a breaking change.
+    optional BreakingChangeInfo breaking_change_info = 5;
+  }
+
+  // BreakingChangeInfo defines the schema for breaking change information.
+  message BreakingChangeInfo {
+    // A message explaining how the user can migrate their job to work
+    // with the breaking change.
+    repeated string migration_message = 1;
+
+    // A spark config flag that can be used to mitigate the breaking change.
+    optional MitigationConfig mitigation_config = 2;
+
+    // If true, the breaking change should be inspected manually.
+    // If false, the spark job should be retried by setting the mitigationConfig.
+    optional bool needs_audit = 3;
+  }
+
+  // MitigationConfig defines a spark config flag that can be used to mitigate a breaking change.
+  message MitigationConfig {
+    // The spark config key.
+    string key = 1;
+
+    // The spark config value that mitigates the breaking change.
+    string value = 2;
   }
 
   // Error defines the schema for the representing exception.

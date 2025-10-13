@@ -530,6 +530,9 @@ object FunctionRegistry {
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
     expression[ApproxTopK]("approx_top_k"),
+    expression[ThetaSketchAgg]("theta_sketch_agg"),
+    expression[ThetaUnionAgg]("theta_union_agg"),
+    expression[ThetaIntersectionAgg]("theta_intersection_agg"),
     expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
 
     // string functions
@@ -679,7 +682,7 @@ object FunctionRegistry {
     expression[MakeTime]("make_time"),
     expression[TimeTrunc]("time_trunc"),
     expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
-    expression[TryMakeTimestamp]("try_make_timestamp"),
+    expressionBuilder("try_make_timestamp", TryMakeTimestampExpressionBuilder),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
@@ -791,6 +794,10 @@ object FunctionRegistry {
     expression[EqualNull]("equal_null"),
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
+    expression[ThetaSketchEstimate]("theta_sketch_estimate"),
+    expression[ThetaUnion]("theta_union"),
+    expression[ThetaDifference]("theta_difference"),
+    expression[ThetaIntersection]("theta_intersection"),
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
 
     // grouping sets

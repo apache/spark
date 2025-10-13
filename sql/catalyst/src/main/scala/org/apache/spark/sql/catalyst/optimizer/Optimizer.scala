@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -358,6 +359,15 @@ abstract class Optimizer(catalogManager: CatalogManager)
         case other => other
       }
     }
+
+    private def optimizeSubquery(s: SubqueryExpression): SubqueryExpression = {
+      val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
+      // At this point we have an optimized subquery plan that we are going to attach
+      // to this subquery expression. Here we can safely remove any top level sort
+      // in the plan as tuples produced by a subquery are un-ordered.
+      s.withNewPlan(removeTopLevelSort(newPlan))
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
       _.containsPattern(PLAN_EXPRESSION), ruleId) {
       // Do not optimize DPP subquery, as it was created from optimized plan and we should not
@@ -412,12 +422,23 @@ abstract class Optimizer(catalogManager: CatalogManager)
         s.withNewPlan(
           if (needTopLevelProject) newPlan else newPlan.child
         )
+      case s: Exists =>
+        // For an EXISTS join, the subquery might be written as "SELECT * FROM ...".
+        // If we optimize the subquery directly, column pruning may not be applied
+        // effectively. To address this, we add an extra Project node that selects
+        // only the columns referenced in the EXISTS join condition.
+        // This ensures that column pruning can be performed correctly
+        // during subquery optimization.
+        val selectedRefrences =
+          s.plan.output.filter(s.joinCond.flatMap(_.references).contains)
+        val newPlan = if (selectedRefrences.nonEmpty) {
+          s.withNewPlan(Project(selectedRefrences, s.plan))
+        } else {
+          s
+        }
+        optimizeSubquery(newPlan)
       case s: SubqueryExpression =>
-        val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
-        // At this point we have an optimized subquery plan that we are going to attach
-        // to this subquery expression. Here we can safely remove any top level sort
-        // in the plan as tuples produced by a subquery are un-ordered.
-        s.withNewPlan(removeTopLevelSort(newPlan))
+        optimizeSubquery(s)
     }
   }
 
@@ -599,11 +620,28 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if (a.metadata == attr.metadata) &&
-        name == attr.name &&
-        !excludeList.contains(attr) &&
-        !excludeList.contains(a) =>
-      attr
+      if !excludeList.contains(attr) &&
+          !excludeList.contains(a) &&
+          name == attr.name =>
+
+      val metadata = a.metadata
+      var attrMetadata = attr.metadata
+      if (metadata == attrMetadata) {
+        // The alias is truly redundant, remove it.
+        attr
+      } else if (attr.metadata.contains(AUTO_GENERATED_ALIAS)) {
+        attrMetadata = attr.metadata.withKeyRemoved(AUTO_GENERATED_ALIAS)
+        if (metadata == attrMetadata) {
+          // The AUTO_GENERATED_ALIAS is not propagating to a view, so it is ok to remove it.
+          // With that key removed, the alias is now redundant, remove it.
+          attr.withMetadata(metadata)
+        } else {
+          a
+        }
+      } else {
+        a
+      }
+
     case a => a
   }
 

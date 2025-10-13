@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
-from pyspark.pipelines.dataset import Dataset
+from pyspark.pipelines.output import Output
 from pyspark.pipelines.flow import Flow
 from pyspark.pipelines.graph_element_registry import GraphElementRegistry
 
@@ -32,12 +32,12 @@ class SqlFile:
 
 class LocalGraphElementRegistry(GraphElementRegistry):
     def __init__(self) -> None:
-        self._datasets: List[Dataset] = []
+        self._outputs: List[Output] = []
         self._flows: List[Flow] = []
         self._sql_files: List[SqlFile] = []
 
-    def register_dataset(self, dataset: Dataset) -> None:
-        self._datasets.append(dataset)
+    def register_output(self, output: Output) -> None:
+        self._outputs.append(output)
 
     def register_flow(self, flow: Flow) -> None:
         self._flows.append(flow)
@@ -46,8 +46,8 @@ class LocalGraphElementRegistry(GraphElementRegistry):
         self._sql_files.append(SqlFile(sql_text, file_path))
 
     @property
-    def datasets(self) -> Sequence[Dataset]:
-        return self._datasets
+    def outputs(self) -> Sequence[Output]:
+        return self._outputs
 
     @property
     def flows(self) -> Sequence[Flow]:

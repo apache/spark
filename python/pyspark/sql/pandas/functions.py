@@ -700,6 +700,7 @@ def vectorized_udf(
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         None,
     ]:  # None means it should infer the type from type hints.
@@ -759,6 +760,16 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             UserWarning,
         )
     elif evalType in [
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+    ]:
+        warnings.warn(
+            "It is preferred to specify type hints for "
+            "arrow UDF instead of specifying arrow UDF type.",
+            UserWarning,
+        )
+    elif evalType in [
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
@@ -769,6 +780,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
     ]:
@@ -870,8 +882,16 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.functions
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.column.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.pandas.functions.pandas_udf.__doc__
+
+    if not have_pyarrow:
+        del pyspark.sql.pandas.functions.arrow_udf.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.sql.pandas.functions tests")

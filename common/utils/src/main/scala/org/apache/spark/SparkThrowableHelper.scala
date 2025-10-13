@@ -73,6 +73,14 @@ private[spark] object SparkThrowableHelper {
     errorReader.getMessageParameters(errorClass)
   }
 
+  def getBreakingChangeInfo(errorClass: String): Option[BreakingChangeInfo] = {
+    if (errorClass == null) {
+      None
+    } else {
+      errorReader.getBreakingChangeInfo(errorClass)
+    }
+  }
+
   def isInternalError(errorClass: String): Boolean = {
     errorClass != null && errorClass.startsWith("INTERNAL_ERROR")
   }
@@ -99,6 +107,19 @@ private[spark] object SparkThrowableHelper {
           g.writeStringField("errorClass", errorClass)
           if (format == STANDARD) {
             g.writeStringField("messageTemplate", errorReader.getMessageTemplate(errorClass))
+            errorReader.getBreakingChangeInfo(errorClass).foreach { breakingChangeInfo =>
+              g.writeObjectFieldStart("breakingChangeInfo")
+              g.writeStringField("migrationMessage",
+                  breakingChangeInfo.migrationMessage.mkString("\n"))
+              breakingChangeInfo.mitigationConfig.foreach { mitigationConfig =>
+                g.writeObjectFieldStart("mitigationConfig")
+                g.writeStringField("key", mitigationConfig.key)
+                g.writeStringField("value", mitigationConfig.value)
+                g.writeEndObject()
+              }
+              g.writeBooleanField("needsAudit", breakingChangeInfo.needsAudit)
+              g.writeEndObject()
+            }
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)

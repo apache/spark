@@ -330,6 +330,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>2.0.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.numCompactThreads</td>
+    <td>25% of available cores</td>
+    <td>
+      Number of threads that will be used by history server to compact event logs.
+    </td>
+    <td>4.1.0</td>
+  </tr>
+  <tr>
     <td>spark.history.store.maxDiskUsage</td>
     <td>10g</td>
     <td>

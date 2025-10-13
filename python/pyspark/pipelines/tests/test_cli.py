@@ -60,7 +60,8 @@ class CLIUtilityTests(unittest.TestCase):
                     },
                     "libraries": [
                         {"glob": {"include": "test_include"}}
-                    ]
+                    ],
+                    "storage": "storage_path",
                 }
                 """
             )
@@ -72,6 +73,7 @@ class CLIUtilityTests(unittest.TestCase):
             assert spec.configuration == {"key1": "value1", "key2": "value2"}
             assert len(spec.libraries) == 1
             assert spec.libraries[0].include == "test_include"
+            assert spec.storage == "storage_path"
 
     def test_load_pipeline_spec_name_is_required(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
@@ -86,7 +88,8 @@ class CLIUtilityTests(unittest.TestCase):
                     },
                     "libraries": [
                         {"glob": {"include": "test_include"}}
-                    ]
+                    ],
+                    "storage": "storage_path",
                 }
                 """
             )
@@ -112,7 +115,8 @@ class CLIUtilityTests(unittest.TestCase):
                     },
                     "libraries": [
                         {"glob": {"include": "test_include"}}
-                    ]
+                    ],
+                    "storage": "storage_path",
                 }
                 """
             )
@@ -150,21 +154,38 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_unpack_empty_pipeline_spec(self):
         empty_spec = PipelineSpec(
-            name="test_pipeline", catalog=None, database=None, configuration={}, libraries=[]
+            name="test_pipeline",
+            storage="storage_path",
+            catalog=None,
+            database=None,
+            configuration={},
+            libraries=[],
         )
-        self.assertEqual(unpack_pipeline_spec({"name": "test_pipeline"}), empty_spec)
+        self.assertEqual(
+            unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path"}), empty_spec
+        )
 
     def test_unpack_pipeline_spec_bad_configuration(self):
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"name": "test_pipeline", "configuration": "not_a_dict"})
+            unpack_pipeline_spec(
+                {"name": "test_pipeline", "storage": "storage_path", "configuration": "not_a_dict"}
+            )
         self.assertIn("should be a dict", str(context.exception))
 
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"name": "test_pipeline", "configuration": {"key": {}}})
+            unpack_pipeline_spec(
+                {"name": "test_pipeline", "storage": "storage_path", "configuration": {"key": {}}}
+            )
         self.assertIn("key", str(context.exception))
 
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"name": "test_pipeline", "configuration": {1: "something"}})
+            unpack_pipeline_spec(
+                {
+                    "name": "test_pipeline",
+                    "storage": "storage_path",
+                    "configuration": {1: "something"},
+                }
+            )
         self.assertIn("int", str(context.exception))
 
     def test_find_pipeline_spec_in_current_directory(self):
@@ -239,8 +260,9 @@ class CLIUtilityTests(unittest.TestCase):
             name="test_pipeline",
             catalog=None,
             database=None,
+            storage="storage_path",
             configuration={},
-            libraries=[LibrariesGlob(include="subdir1/*")],
+            libraries=[LibrariesGlob(include="subdir1/**")],
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             outer_dir = Path(temp_dir)
@@ -273,17 +295,18 @@ class CLIUtilityTests(unittest.TestCase):
 
             registry = LocalGraphElementRegistry()
             register_definitions(outer_dir / "pipeline.yaml", registry, spec)
-            self.assertEqual(len(registry.datasets), 1)
-            self.assertEqual(registry.datasets[0].name, "mv1")
+            self.assertEqual(len(registry.outputs), 1)
+            self.assertEqual(registry.outputs[0].name, "mv1")
 
     def test_register_definitions_file_raises_error(self):
         """Errors raised while executing definitions code should make it to the outer context."""
         spec = PipelineSpec(
             name="test_pipeline",
+            storage="storage_path",
             catalog=None,
             database=None,
             configuration={},
-            libraries=[LibrariesGlob(include="*")],
+            libraries=[LibrariesGlob(include="./**")],
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             outer_dir = Path(temp_dir)
@@ -298,10 +321,11 @@ class CLIUtilityTests(unittest.TestCase):
     def test_register_definitions_unsupported_file_extension_matches_glob(self):
         spec = PipelineSpec(
             name="test_pipeline",
+            storage="storage_path",
             catalog=None,
             database=None,
             configuration={},
-            libraries=[LibrariesGlob(include="*")],
+            libraries=[LibrariesGlob(include="./**")],
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             outer_dir = Path(temp_dir)
@@ -352,6 +376,7 @@ class CLIUtilityTests(unittest.TestCase):
                     registry,
                     PipelineSpec(
                         name="test_pipeline",
+                        storage="storage_path",
                         catalog=None,
                         database=None,
                         configuration={},
@@ -450,6 +475,71 @@ class CLIUtilityTests(unittest.TestCase):
 
         result = parse_table_list("table1, table2 , table3")
         self.assertEqual(result, ["table1", "table2", "table3"])
+
+    def test_valid_glob_patterns(self):
+        """Test that valid glob patterns are accepted."""
+        from pyspark.pipelines.cli import validate_patch_glob_pattern
+
+        cases = {
+            # Simple file paths
+            "src/main.py": "src/main.py",
+            "data/file.sql": "data/file.sql",
+            # Folder paths ending with /** (normalized)
+            "src/**": "src/**/*",
+            "transformations/**": "transformations/**/*",
+            "notebooks/production/**": "notebooks/production/**/*",
+        }
+
+        for pattern, expected in cases.items():
+            with self.subTest(pattern=pattern):
+                self.assertEqual(validate_patch_glob_pattern(pattern), expected)
+
+    def test_invalid_glob_patterns(self):
+        """Test that invalid glob patterns are rejected."""
+        from pyspark.pipelines.cli import validate_patch_glob_pattern
+
+        invalid_patterns = [
+            "transformations/**/*.py",
+            "src/**/utils/*.py",
+            "*/main.py",
+            "src/*/test/*.py",
+            "**/*.py",
+            "data/*/file.sql",
+        ]
+
+        for pattern in invalid_patterns:
+            with self.subTest(pattern=pattern):
+                with self.assertRaises(PySparkException) as context:
+                    validate_patch_glob_pattern(pattern)
+                self.assertEqual(
+                    context.exception.getCondition(), "PIPELINE_SPEC_INVALID_GLOB_PATTERN"
+                )
+                self.assertEqual(
+                    context.exception.getMessageParameters(), {"glob_pattern": pattern}
+                )
+
+    def test_pipeline_spec_with_invalid_glob_pattern(self):
+        """Test that pipeline spec with invalid glob pattern is rejected."""
+        with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
+            tmpfile.write(
+                """
+                {
+                    "name": "test_pipeline",
+                    "storage": "storage_path",
+                    "libraries": [
+                        {"glob": {"include": "transformations/**/*.py"}}
+                    ]
+                }
+                """
+            )
+            tmpfile.flush()
+            with self.assertRaises(PySparkException) as context:
+                load_pipeline_spec(Path(tmpfile.name))
+            self.assertEqual(context.exception.getCondition(), "PIPELINE_SPEC_INVALID_GLOB_PATTERN")
+            self.assertEqual(
+                context.exception.getMessageParameters(),
+                {"glob_pattern": "transformations/**/*.py"},
+            )
 
 
 if __name__ == "__main__":
