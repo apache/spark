@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.time.Duration
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -135,7 +136,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     uninterruptibleThreadRunner.runUninterruptibly {
       assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
       // Poll to get the latest assigned partitions
-      consumer.poll(0)
+      consumer.poll(Duration.ofMillis(500))
       val partitions = consumer.assignment()
       consumer.pause(partitions)
       partitions.asScala.toSet
@@ -579,7 +580,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
 
     withRetriesWithoutInterrupt {
       // Poll to get the latest assigned partitions
-      consumer.poll(0)
+      consumer.poll(Duration.ofMillis(500))
       val partitions = consumer.assignment()
 
       if (!fetchingEarliestOffset) {

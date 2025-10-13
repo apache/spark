@@ -19,6 +19,7 @@ package org.apache.spark.streaming.kafka010
 
 import java.io.File
 import java.lang.{Long => JLong}
+import java.time.Duration
 import java.util.{Arrays, HashMap => JHashMap, Map => JMap, UUID}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -255,7 +256,7 @@ class DirectKafkaStreamSuite
         preferredHosts,
         ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
         new DefaultPerPartitionConfig(sparkConf))
-      s.consumer().poll(0)
+      s.consumer().poll(Duration.ofMillis(500))
       assert(
         s.consumer().position(topicPartition) >= offsetBeforeStart,
         "Start offset not from latest"
@@ -311,7 +312,7 @@ class DirectKafkaStreamSuite
           kafkaParams.asScala,
           Map(topicPartition -> 11L)),
         new DefaultPerPartitionConfig(sparkConf))
-      s.consumer().poll(0)
+      s.consumer().poll(Duration.ZERO)
       assert(
         s.consumer().position(topicPartition) >= offsetBeforeStart,
         "Start offset not from latest"
@@ -473,7 +474,7 @@ class DirectKafkaStreamSuite
     ssc.stop()
     val consumer = new KafkaConsumer[String, String](kafkaParams)
     consumer.subscribe(Arrays.asList(topic))
-    consumer.poll(0)
+    consumer.poll(Duration.ofMillis(500))
     committed.asScala.foreach {
       case (k, v) =>
         // commits are async, not exactly once

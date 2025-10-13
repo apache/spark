@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
+import java.time.Duration
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
@@ -170,7 +171,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   private def paranoidPoll(c: Consumer[K, V]): Unit = {
     // don't actually want to consume any messages, so pause all partitions
     c.pause(c.assignment())
-    val msgs = c.poll(0)
+    val msgs = c.poll(Duration.ZERO)
     if (!msgs.isEmpty) {
       // position should be minimum offset per topicpartition
       msgs.asScala.foldLeft(Map[TopicPartition, Long]()) { (acc, m) =>
@@ -178,7 +179,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
         val off = acc.get(tp).map(o => Math.min(o, m.offset)).getOrElse(m.offset)
         acc + (tp -> off)
       }.foreach { case (tp, off) =>
-          logInfo(log"poll(0) returned messages, seeking ${MDC(TOPIC_PARTITION, tp)} to " +
+          logInfo(log"poll(ZERO) returned messages, seeking ${MDC(TOPIC_PARTITION, tp)} to " +
             log"${MDC(OFFSET, off)} to compensate")
           c.seek(tp, off)
       }
