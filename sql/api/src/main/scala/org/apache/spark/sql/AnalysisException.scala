@@ -44,6 +44,25 @@ class AnalysisException protected (
     with Serializable
     with WithOrigin {
 
+  def this(
+      message: String,
+      line: Option[Int],
+      startPosition: Option[Int],
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String],
+      context: Array[QueryContext]) =
+    this(
+      message,
+      line,
+      startPosition,
+      cause,
+      errorClass,
+      messageParameters,
+      context,
+      None,
+      None)
+
   def this(errorClass: String, messageParameters: Map[String, String], cause: Option[Throwable]) =
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
@@ -127,6 +146,25 @@ class AnalysisException protected (
       messageParameters = messageParameters,
       context = origin.getQueryContext,
       cause = cause)
+
+  def copy(
+      message: String,
+      line: Option[Int],
+      startPosition: Option[Int],
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String],
+      context: Array[QueryContext]): AnalysisException =
+    new AnalysisException(
+      message,
+      line,
+      startPosition,
+      cause,
+      errorClass,
+      messageParameters,
+      context,
+      this.sqlState,
+      this.messageTemplate)
 
   def copy(
       message: String = this.message,
