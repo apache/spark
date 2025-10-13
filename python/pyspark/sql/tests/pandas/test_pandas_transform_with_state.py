@@ -1603,6 +1603,7 @@ class TransformWithStateInPandasTestsMixin:
 
     def test_transform_with_state_in_pandas_large_values(self):
         """Test large state values (512KB) to validate readFully fix for SPARK-53870"""
+
         def check_results(batch_df, batch_id):
             batch_df.collect()
             target_size_bytes = 512 * 1024
@@ -2418,6 +2419,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
 class PandasLargeValueStatefulProcessor(StatefulProcessor):
     """Test processor for large state values (512KB) to validate readFully fix"""
+
     def init(self, handle: StatefulProcessorHandle):
         value_state_schema = StructType([StructField("value", StringType(), True)])
         self.value_state = handle.getValueState("valueState", value_state_schema)
