@@ -27,6 +27,7 @@ from pyspark.pipelines.output import (
     MaterializedView,
     StreamingTable,
     TemporaryView,
+    Sink,
 )
 from pyspark.sql.types import StructType
 
@@ -447,3 +448,45 @@ def create_streaming_table(
         format=format,
     )
     get_active_graph_element_registry().register_output(table)
+
+
+def create_sink(
+    name: str,
+    format: str,
+    options: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    Creates a sink that can be targeted by streaming flows, providing a generic destination \
+    for flows to send data external to the pipeline.
+
+    :param name: The name of the sink.
+    :param format: The format of the sink, e.g. "parquet".
+    :param options: A dict where the keys are the property names and the values are the \
+        property values. These properties will be set on the sink.
+    """
+    if type(name) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+        )
+    if type(format) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "format", "arg_type": type(format).__name__},
+        )
+    if options is not None and not isinstance(options, dict):
+        raise PySparkTypeError(
+            errorClass="NOT_DICT",
+            messageParameters={
+                "arg_name": "options",
+                "arg_type": type(options).__name__,
+            },
+        )
+    sink = Sink(
+        name=name,
+        format=format,
+        options=options or {},
+        source_code_location=get_caller_source_code_location(stacklevel=1),
+        comment=None,
+    )
+    get_active_graph_element_registry().register_output(sink)

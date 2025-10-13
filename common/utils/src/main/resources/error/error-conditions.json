@@ -4783,14 +4783,14 @@
       "A duplicate identifier was found for elements registered in the pipeline's dataflow graph."
     ],
     "subClass" : {
-      "DATASET" : {
-        "message" : [
-          "Attempted to register a <datasetType1> with identifier <datasetName>, but a <datasetType2> has already been registered with that identifier. Please ensure all datasets created within this pipeline have unique identifiers."
-        ]
-      },
       "FLOW" : {
         "message" : [
           "Flow <flowName> was found in multiple datasets: <datasetNames>"
+        ]
+      },
+      "OUTPUT" : {
+        "message" : [
+          "Attempted to register a <outputType1> with identifier <outputName>, but a <outputType2> has already been registered with that identifier. Please ensure all outputs created within this pipeline have unique identifiers."
         ]
       }
     },
