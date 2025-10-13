@@ -848,6 +848,7 @@ object FunctionRegistry {
     expression[BitwiseGet]("getbit", true),
 
     // bitmap functions and aggregates
+    expression[BitmapAndAgg]("bitmap_and_agg"),
     expression[BitmapBucketNumber]("bitmap_bucket_number"),
     expression[BitmapBitPosition]("bitmap_bit_position"),
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
