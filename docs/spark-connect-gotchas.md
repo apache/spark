@@ -22,7 +22,7 @@ The comparison highlights key differences between Spark Connect and Spark Classi
 
 For an overview of Spark Connect, see [Spark Connect Overview](spark-connect-overview.html).
 
-# Query Execution: Both lazy
+# Query Execution: Both Lazy
 
 ## Spark Classic
 
@@ -43,7 +43,7 @@ Both Spark Classic and Spark Connect follow the same lazy execution model for qu
 | Actions: `df.collect()`, `df.show()`, etc                                             | Eager execution | Eager execution |
 | SQL commands: <br/> `spark.sql("insert …")`, <br/> `spark.sql("create …")`, <br/> etc | Eager execution | Eager execution |
 
-# Schema Analysis: Eager vs. lazy
+# Schema Analysis: Eager vs. Lazy
 
 ## Spark Classic
 
@@ -68,11 +68,11 @@ Unlike query execution, Spark Classic and Spark Connect differ in when schema an
 | Actions: `df.collect()`, `df.show()`, etc                                 | Eager         | Eager                                                                      |
 | Dependent session state: UDFs, temporary views, configs, etc              | Eager         | **Lazy** <br/> **Evaluated during the execution**                          |
 
-# Common Gotchas (with mitigations)
+# Common Gotchas (with Mitigations)
 
 If not careful about the difference between lazy vs. eager analysis, there are some gotchas you can run into.
 
-## 1. Overwriting temp views
+## 1. Reusing temporary view names
 
 ```python
 def create_temp_view_and_create_dataframe(x):
@@ -142,7 +142,7 @@ root {
 }
 ```
 
-## 2. UDF closure over external variables
+## 2. UDFs with mutable external variables
 
 ```python
 from pyspark.sql.functions import udf
@@ -205,7 +205,7 @@ df.show()
 
 By wrapping the UDF definition inside another function (`make_extract_value_udf`), we create a new scope where the current value of j is passed in as an argument. This ensures each generated UDF has its own copy of the field, bound at the time the UDF is created.
 
-## 3. Error handling
+## 3. Delayed error detection
 
 Error handling during transformations:
 
@@ -234,7 +234,7 @@ except Exception as e:
   print(f"Error: {repr(e)}")
 ```
 
-## 4. Triggering too many analysis of new DataFrames
+## 4. Excessive schema access on new DataFrames
 
 The following is an anti-pattern:
 
