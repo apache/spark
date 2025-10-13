@@ -106,10 +106,7 @@ object V1Writes extends Rule[LogicalPlan] {
       }.asInstanceOf[SortOrder])
       eliminateFoldableOrdering(ordering, empty2NullPlan).outputOrdering
     }
-    val outputOrdering = eliminateFoldableOrdering(
-      empty2NullPlan.outputOrdering, empty2NullPlan).outputOrdering
-    val orderingMatched = isOrderingMatched(requiredOrdering, outputOrdering)
-    if (orderingMatched) {
+    if (isOrderingMatched(requiredOrdering.map(_.child), empty2NullPlan.outputOrdering)) {
       empty2NullPlan
     } else {
       Sort(requiredOrdering, global = false, empty2NullPlan)
@@ -205,18 +202,24 @@ object V1WritesUtils {
     expressions.exists(_.exists(_.isInstanceOf[Empty2Null]))
   }
 
+  // SPARK-53738: the required ordering inferred from table schema (partition, bucketing, etc.)
+  // may contain foldable sort ordering expressions, which causes the optimized query's output
+  // ordering mismatch, here we calculate the required ordering more accurately, by creating a
+  // fake Sort node with the input query, then remove the foldable sort ordering expressions.
   def eliminateFoldableOrdering(ordering: Seq[SortOrder], query: LogicalPlan): LogicalPlan =
     EliminateSorts(FoldablePropagation(Sort(ordering, global = false, query)))
 
+  // The comparison ignores SortDirection and NullOrdering since it doesn't matter
+  // for writing cases.
   def isOrderingMatched(
-      requiredOrdering: Seq[SortOrder],
+      requiredOrdering: Seq[Expression],
       outputOrdering: Seq[SortOrder]): Boolean = {
     if (requiredOrdering.length > outputOrdering.length) {
       false
     } else {
       requiredOrdering.zip(outputOrdering).forall {
         case (requiredOrder, outputOrder) =>
-          outputOrder.satisfies(requiredOrder)
+          outputOrder.satisfies(outputOrder.copy(child = requiredOrder))
       }
     }
   }

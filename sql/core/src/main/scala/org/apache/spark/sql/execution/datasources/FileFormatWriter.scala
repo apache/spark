@@ -157,14 +157,15 @@ object FileFormatWriter extends Logging {
     val requiredOrdering = {
       // We should first sort by dynamic partition columns, then bucket id, and finally sorting
       // columns.
-      val sortCols = partitionColumns.drop(numStaticPartitionCols) ++
+      val ordering = partitionColumns.drop(numStaticPartitionCols) ++
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
-      val ordering = sortCols.map(SortOrder(_, Ascending))
       plan.logicalLink match {
         case Some(WriteFiles(query, _, _, _, _, _)) =>
-          V1WritesUtils.eliminateFoldableOrdering(ordering, query).outputOrdering
+          V1WritesUtils.eliminateFoldableOrdering(
+            ordering.map(SortOrder(_, Ascending)), query).outputOrdering.map(_.child)
         case Some(query) =>
-          V1WritesUtils.eliminateFoldableOrdering(ordering, query).outputOrdering
+          V1WritesUtils.eliminateFoldableOrdering(
+            ordering.map(SortOrder(_, Ascending)), query).outputOrdering.map(_.child)
         case _ =>
           ordering
       }
@@ -214,7 +215,7 @@ object FileFormatWriter extends Logging {
       description: WriteJobDescription,
       committer: FileCommitProtocol,
       outputSpec: OutputSpec,
-      requiredOrdering: Seq[SortOrder],
+      requiredOrdering: Seq[Expression],
       partitionColumns: Seq[Attribute],
       sortColumns: Seq[Attribute],
       orderingMatched: Boolean): Set[String] = {
@@ -340,12 +341,13 @@ object FileFormatWriter extends Logging {
 
   private def createSortPlan(
       plan: SparkPlan,
-      requiredOrdering: Seq[SortOrder],
+      requiredOrdering: Seq[Expression],
       outputSpec: OutputSpec): SortExec = {
     // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
     // the physical plan may have different attribute ids due to optimizer removing some
     // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
-    val orderingExpr = bindReferences(requiredOrdering, outputSpec.outputColumns)
+    val orderingExpr = bindReferences(
+      requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
     SortExec(
       orderingExpr,
       global = false,
