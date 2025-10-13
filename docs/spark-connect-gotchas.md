@@ -20,6 +20,10 @@ license: |
 
 The comparison highlights key differences between Spark Connect and Spark Classic in terms of execution and analysis behavior. While both utilize lazy execution for transformations, Spark Connect emphasizes deferred schema analysis, introducing unique considerations like temporary view handling and UDF evaluation. The guide outlines common gotchas and provides strategies for mitigation.
 
+**When does this matter?** These differences are particularly important when migrating existing code from Spark Classic to Spark Connect, or when writing code that needs to work with both modes. Understanding these distinctions helps avoid unexpected behavior and performance issues.
+
+**Note:** The examples in this guide use Python, but the same principles apply to Scala and Java.
+
 For an overview of Spark Connect, see [Spark Connect Overview](spark-connect-overview.html).
 
 # Query Execution: Both Lazy
@@ -36,7 +40,7 @@ Spark Connect follows a similar lazy evaluation model. Transformations are const
 
 Both Spark Classic and Spark Connect follow the same lazy execution model for query execution.
 
-| Code                                                                                  | Spark Classic   | Spark Connect   |
+| Aspect                                                                                | Spark Classic   | Spark Connect   |
 |:--------------------------------------------------------------------------------------|:----------------|:----------------|
 | Transformations: `df.filter(...)`, `df.select(...)`, `df.limit(...)`, etc             | Lazy execution  | Lazy execution  |
 | SQL queries: <br/> `spark.sql("select …")`                                            | Lazy execution  | Lazy execution  |
@@ -53,7 +57,7 @@ For example, executing `spark.sql("select 1 as a, 2 as b").filter("c > 1")` will
 
 ## Spark Connect
 
-Spark Connect differs from Classic's eager analysis because the client constructs unresolved proto plans during transformation. When accessing a schema or executing an action, the client sends the unresolved plans to the server. The server then performs the schema analysis and execution. This design defers schema analysis.
+Spark Connect differs from Classic's eager analysis because the client constructs unresolved proto plans during transformation. When accessing a schema or executing an action, the client sends the unresolved plans to the server via RPC (remote procedure call). The server then performs the schema analysis and execution. This design defers schema analysis.
 
 For example, `spark.sql("select 1 as a, 2 as b").filter("c > 1")` will not throw any error because the unresolved plan is client-side only, but on `df.columns` or `df.show()` an error will be thrown because the unresolved plan is sent to the server for analysis.
 
@@ -61,7 +65,7 @@ For example, `spark.sql("select 1 as a, 2 as b").filter("c > 1")` will not throw
 
 Unlike query execution, Spark Classic and Spark Connect differ in when schema analysis occurs.
 
-| Code                                                                      | Spark Classic | Spark Connect                                                              |
+| Aspect                                                                    | Spark Classic | Spark Connect                                                              |
 |:--------------------------------------------------------------------------|:--------------|:---------------------------------------------------------------------------|
 | Transformations: `df.filter(...)`, `df.select(...)`, `df.limit(...)`, etc | Eager         | **Lazy**                                                                   |
 | Schema access: `df.columns`, `df.schema`, `df.isStreaming`, etc           | Eager         | **Eager** <br/> **Triggers an analysis RPC request, unlike Spark Classic** |
@@ -88,7 +92,7 @@ assert len(df10.collect()) == 10  # <-- User expects the df still references the
 assert len(df100.collect()) == 100
 ```
 
-In Spark Connect, the unresolved proto plan for the df in the above code looks like this. It refers to the temporary view purely by name ("tempview"). As a result, if the temp view is later replaced, the data in df will also change.
+In Spark Connect, the DataFrame stores only a reference to the temporary view by name. The internal representation (proto plan) for the DataFrame in the above code looks like this:
 
 ```
 # The proto plan of spark.sql("SELECT * FROM tempview")
@@ -108,11 +112,13 @@ root {
 }
 ```
 
+As a result, if the temp view is later replaced, the data in the DataFrame will also change because it looks up the view by name at execution time.
+
 This behavior differs from Spark Classic, where due to eager analysis, the logical plan of the temp view is embedded into the df's plan at the time of creation. Therefore, any subsequent replacement of the temp view does not affect the original df.
 
 In Spark Connect, users should be more cautious when reusing temporary view names, as replacing an existing temp view will affect all previously created DataFrames that reference it by name.
 
-**Mitigation**:
+### Mitigation
 
 As a mitigation, you can consider creating unique temporary view names, for example by including a UUID in the view name. This approach helps avoid affecting any existing DataFrames that reference a previously registered temp view, ensuring isolation and consistency.
 
@@ -181,7 +187,7 @@ df.show() # It shows 2 for both 'column_1' and 'column_2'
 
 This is the same issue as above. It happens because Python closures capture variables by reference, not by value, and UDF serialization and registration is deferred when there is an action on the DataFrame. So both UDFs end up using the last value of j — in this case 'column_2'.
 
-**Mitigation:**
+### Mitigation
 
 If you do need to modify the value of external variables that a UDF depends on, you can use a function factory (closure with early binding). Specifically, you can wrap the UDF creation in a helper function to correctly capture the value of a dependent variable at each loop iteration.
 
@@ -210,6 +216,8 @@ By wrapping the UDF definition inside another function (`make_extract_value_udf`
 Error handling during transformations:
 
 ```python
+df = spark.createDataFrame([("Alice", 25), ("Bob", 30)], ["name", "age"])
+
 try:
   df = df.select("name", "age")
   df = df.withColumn(
@@ -222,7 +230,7 @@ except Exception as e:
 
 The above error handling is useful in Spark Classic because it performs eager analysis, which allows exceptions to be thrown promptly. However, in Spark Connect, this code does not pose any issue, as it only constructs a local unresolved proto plan without triggering any analysis.
 
-**Mitigation**:
+### Mitigation
 
 If your code relies on the analysis exception and wants to catch it, you can trigger eager analysis with `df.columns`, `df.schema`, `df.collect()`, etc.
 
@@ -259,9 +267,9 @@ While building the DataFrame step by step, each time a new DataFrame is generate
 
 Performance can be improved if users avoid large numbers of Analyze requests by avoiding excessive usage of calls triggering eager analysis (e.g. `df.columns`, `df.schema`, etc)
 
-**Mitigation**:
+### Mitigation
 
-If your code is tricky to avoid the above anti-pattern and have to frequently check columns of new DataFrames, you can maintain a set to keep track of these column names yourself to avoid analysis requests thereby improving performance.
+If your code cannot avoid the above anti-pattern and must frequently check columns of new DataFrames, you can maintain a set to keep track of these column names yourself to avoid analysis requests thereby improving performance.
 
 ```python
 df = spark.range(10)
@@ -289,7 +297,7 @@ print(struct_column_fields)
 
 However, this code snippet can lead to poor performance when there are many columns, as it creates and analyzes a large number of new DataFrames—each call to `df.select(column_schema.name + ".*")` generates a new DataFrame, and `columns` triggers analysis on it.
 
-**Mitigation:**
+### Mitigation
 
 Creating a DataFrame to retrieve the fields of a `StructType` column, as shown in the code above, is unnecessary. You can obtain this information directly from the DataFrame's schema.
 
@@ -305,3 +313,15 @@ print(struct_column_fields)
 ```
 
 This approach can be significantly faster when dealing with a large number of columns because it avoids the creation and analysis of numerous DataFrames.
+
+# Summary
+
+| Aspect                | Spark Classic | Spark Connect |
+|:----------------------|:--------------|:--------------|
+| **Query execution**   | Lazy          | Lazy          |
+| **Schema analysis**   | Eager         | Lazy          |
+| **Schema access**     | Local         | Triggers RPC  |
+| **Temporary views**   | Plan embedded | Name lookup   |
+| **UDF serialization** | At creation   | At execution  |
+
+The key difference is that Spark Connect defers analysis and name resolution to execution time.
