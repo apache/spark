@@ -114,9 +114,10 @@ case class PositionMapper(
 
     // Assert that substitutions don't overlap
     sortedSubstitutions.zip(sortedSubstitutions.tail).foreach { case (current, next) =>
-      assert(current.end <= next.start,
+      assert(
+        current.end <= next.start,
         s"Overlapping substitutions detected: [${current.start}, ${current.end}) overlaps with " +
-        s"[${next.start}, ${next.end}). This indicates a bug in parameter substitution logic.")
+          s"[${next.start}, ${next.end}). This indicates a bug in parameter substitution logic.")
     }
 
     // Use scanLeft for functional accumulation of position state

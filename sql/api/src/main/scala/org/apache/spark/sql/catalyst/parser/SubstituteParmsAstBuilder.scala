@@ -54,6 +54,28 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
+   * Extract both parameter location information and detection flags from a parse context.
+   */
+  def extractParameterInfo(ctx: ParseTree): (ParameterLocationInfo, Boolean, Boolean) = {
+    // Clear previous state
+    namedParams.clear()
+    positionalParams.clear()
+    namedParamLocations.clear()
+    positionalParamLocations.clear()
+
+    // Visit the context to collect parameters and their locations
+    visit(ctx)
+
+    val locations = ParameterLocationInfo(
+      namedParamLocations.view.mapValues(_.toList).toMap,
+      positionalParamLocations.toList)
+    val hasPositionalParams = positionalParamLocations.nonEmpty
+    val hasNamedParams = namedParamLocations.nonEmpty
+
+    (locations, hasPositionalParams, hasNamedParams)
+  }
+
+  /**
    * Collect information about a named parameter in a literal context. Note: The return value is
    * not used; this method operates via side effects.
    */

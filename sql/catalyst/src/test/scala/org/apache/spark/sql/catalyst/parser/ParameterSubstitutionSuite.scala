@@ -54,17 +54,22 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     assert(result2.contains("SELECT 42"))
   }
 
-  test("ParameterHandler - parameter detection") {
+  test("ParameterHandler - mixed parameter detection during substitution") {
     val handler = new ParameterHandler()
 
-    val (hasPos1, hasNamed1) = handler.detectParameters("SELECT :param1")
-    assert(!hasPos1 && hasNamed1)
+    // Test that named parameters work
+    val result1 = handler.substituteParameters("SELECT :param1",
+      NamedParameterContext(Map("param1" -> Literal("value"))))
+    assert(result1.contains("'value'"))
 
-    val (hasPos2, hasNamed2) = handler.detectParameters("SELECT ?")
-    assert(hasPos2 && !hasNamed2)
+    // Test that positional parameters work
+    val result2 = handler.substituteParameters("SELECT ?",
+      PositionalParameterContext(List(Literal(42))))
+    assert(result2.contains("42"))
 
-    val (hasPos3, hasNamed3) = handler.detectParameters("SELECT 1")
-    assert(!hasPos3 && !hasNamed3)
+    // Test that no parameters works
+    val result3 = handler.substituteParameters("SELECT 1", NamedParameterContext(Map.empty))
+    assert(result3 == "SELECT 1")
   }
 
   test("ParameterHandler - named parameters direct") {
@@ -171,8 +176,10 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
   test("Error handling - mixed parameters validation") {
     val handler = new ParameterHandler()
 
+    // Mixed parameters should be detected during substitution itself
     intercept[Exception] {
-      handler.validateParameterConsistency("SELECT :named, ?")
+      handler.substituteParameters("SELECT :named, ?",
+        NamedParameterContext(Map("named" -> Literal("value"))))
     }
   }
 

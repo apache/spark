@@ -21,8 +21,15 @@ import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * Parameter expectation types.
+ */
+object ParameterExpectation extends Enumeration {
+  val Named, Positional, Unknown = Value
+}
 
 /**
  * A parameter substitution parser that replaces parameter markers in SQL text with their values.
@@ -44,7 +51,9 @@ class SubstituteParamsParser extends Logging {
   def substitute(
       sqlText: String,
       namedParams: Map[String, String] = Map.empty,
-      positionalParams: List[String] = List.empty): (String, Int, PositionMapper) = {
+      positionalParams: List[String] = List.empty,
+      expectationType: ParameterExpectation.Value = ParameterExpectation.Unknown):
+      (String, Int, PositionMapper) = {
 
     // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
     if (!sqlText.contains("?") && !sqlText.contains(":")) {
@@ -68,6 +77,21 @@ class SubstituteParamsParser extends Logging {
       _.compoundOrSingleStatement())
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
+    // Simple mixed parameter detection based on expectation type
+    val hasNamed = parameterLocations.namedParameterLocations.nonEmpty
+    val hasPositional = parameterLocations.positionalParameterLocations.nonEmpty
+
+    // Check for mixed parameters based on expectation
+    if (expectationType == ParameterExpectation.Positional && hasNamed) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+    if (expectationType == ParameterExpectation.Named && hasPositional) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+    if (expectationType == ParameterExpectation.Unknown && hasNamed && hasPositional) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+
     // Substitute parameters in the original text.
     val (substitutedSql, appliedSubstitutions) = substituteAtLocations(sqlText, parameterLocations,
       namedParams, positionalParams)
@@ -77,42 +101,6 @@ class SubstituteParamsParser extends Logging {
     val positionMapper = PositionMapper(sqlText, substitutedSql, appliedSubstitutions)
 
     (substitutedSql, consumedPositionalParams, positionMapper)
-  }
-
-  /**
-   * Detects parameter markers in SQL text without performing substitution.
-   * Always uses compoundOrSingleStatement parsing which can handle all SQL constructs.
-   *
-   * @param sqlText The original SQL text to analyze
-   * @return A tuple of (hasPositionalParameters, hasNamedParameters)
-   */
-  def detectParameters(sqlText: String): (Boolean, Boolean) = {
-    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
-    if (!sqlText.contains("?") && !sqlText.contains(":")) {
-      return (false, false)
-    }
-
-    val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
-    lexer.removeErrorListeners()
-    lexer.addErrorListener(ParseErrorListener)
-
-    val tokenStream = new CommonTokenStream(lexer)
-    val parser = new SqlBaseParser(tokenStream)
-
-    // Use shared parser configuration to ensure consistency with main parser.
-    AbstractParser.configureParser(parser, sqlText, tokenStream, SQLConf.get)
-
-    val astBuilder = new SubstituteParmsAstBuilder()
-
-    // Use shared two-stage parsing strategy for consistent error handling.
-    val ctx = AbstractParser.executeWithTwoStageStrategy(parser, tokenStream,
-      _.compoundOrSingleStatement())
-    val parameterLocations = astBuilder.extractParameterLocations(ctx)
-
-    val hasPositionalParams = parameterLocations.positionalParameterLocations.nonEmpty
-    val hasNamedParams = parameterLocations.namedParameterLocations.nonEmpty
-
-    (hasPositionalParams, hasNamedParams)
   }
 
   /**

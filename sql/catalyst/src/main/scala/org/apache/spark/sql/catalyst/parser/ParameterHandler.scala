@@ -16,10 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import scala.util.{Failure, Success, Try}
-
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.SubstituteParamsParser
 import org.apache.spark.sql.catalyst.trees.ParameterSubstitutionInfo
 import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -52,6 +50,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * @see [[SubstituteParamsParser]] for the underlying parameter substitution logic
  */
 class ParameterHandler {
+
+  private val substitutor = new SubstituteParamsParser()
 
   // Compiled regex pattern for efficient parameter marker detection.
   private val parameterMarkerPattern = java.util.regex.Pattern.compile("[?:]")
@@ -193,39 +193,30 @@ class ParameterHandler {
       sqlText: String,
       args: Seq[Any],
       paramNames: Seq[String]): String = {
-    // Detect which parameter types are actually used in the query.
-    val (hasPositional, hasNamed) = detectParameters(sqlText)
 
-    // Validate that the query doesn't mix parameter types.
-    if (hasPositional && hasNamed) {
-      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    // Quick check: if no parameter markers, return early.
+    if (!sqlText.contains("?") && !sqlText.contains(":")) {
+      return sqlText
     }
 
-    // Validate ALL_PARAMETERS_MUST_BE_NAMED: if query uses named parameters,
-    // all USING expressions must have names.
-    if (hasNamed && !hasPositional) {
+    // Prepare parameters for both types.
+    val positionalParams = args.map(convertToExpression).map(convertToSql).toList
+    val namedParams = paramNames.zip(args).collect {
+      case (name, value) if name.nonEmpty =>
+        name -> convertToSql(convertToExpression(value))
+    }.toMap
+
+    // Validate ALL_PARAMETERS_MUST_BE_NAMED before substitution.
+    if (namedParams.nonEmpty) {
       validateAllParametersNamed(args, paramNames)
     }
 
-    if (hasPositional && !hasNamed) {
-      // Query uses only positional parameters.
-      val positionalParams = args.map(convertToExpression)
-      performSubstitution(sqlText,
-        positionalParams = positionalParams.map(convertToSql).toList)
-    } else if (hasNamed && !hasPositional) {
-      // Query uses only named parameters.
-      val namedParams = paramNames.zip(args).collect {
-        case (name, value) if name.nonEmpty =>
-          name -> convertToExpression(value)
-      }.toMap
-      performSubstitution(sqlText,
-        namedParams = namedParams.map { case (name, expr) =>
-          (name, convertToSql(expr))
-        })
-    } else {
-      // No parameters in query - return as-is.
-      sqlText
-    }
+    // Let the substitutor detect mixed parameters during substitution.
+    // For EXECUTE IMMEDIATE, we don't know what to expect, so we pass Unknown.
+    val (substitutedSql, _, _) = substitutor.substitute(
+      sqlText, namedParams, positionalParams, ParameterExpectation.Unknown)
+
+    substitutedSql
   }
 
   /**
@@ -256,7 +247,11 @@ class ParameterHandler {
       sqlText: String,
       paramMap: Map[String, Expression]): String = {
     if (paramMap.isEmpty) return sqlText
-    substituteParameters(sqlText, NamedParameterContext(paramMap))
+
+    val namedParams = paramMap.map { case (name, expr) => (name, convertToSql(expr)) }
+    val (substitutedSql, _, _) = substitutor.substitute(
+      sqlText, namedParams, List.empty, ParameterExpectation.Named)
+    substitutedSql
   }
 
   /**
@@ -271,49 +266,13 @@ class ParameterHandler {
       sqlText: String,
       paramList: Seq[Expression]): String = {
     if (paramList.isEmpty) return sqlText
-    substituteParameters(sqlText, PositionalParameterContext(paramList))
+
+    val positionalParams = paramList.map(convertToSql).toList
+    val (substitutedSql, _, _) = substitutor.substitute(
+      sqlText, Map.empty, positionalParams, ParameterExpectation.Positional)
+    substitutedSql
   }
 
 
 
-  /**
-   * Check if SQL text contains parameter markers.
-   * Always uses compoundOrSingleStatement parsing which can handle all SQL constructs.
-   *
-   * @param sqlText The SQL text to check
-   * @return Tuple of (hasPositional, hasNamed) parameters
-   */
-  def detectParameters(
-      sqlText: String): (Boolean, Boolean) = {
-
-    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely.
-    if (!parameterMarkerPattern.matcher(sqlText).find()) {
-      return (false, false)
-    }
-
-    val substitutor = new SubstituteParamsParser()
-    Try(substitutor.detectParameters(sqlText)) match {
-      case Success(result) => result
-      case Failure(_: ParseException) => (false, false)
-      case Failure(ex) =>
-        // Re-throw unexpected exceptions for better debugging.
-        throw new RuntimeException(
-          s"Unexpected error during parameter detection: ${ex.getMessage}", ex)
-    }
-  }
-
-  /**
-   * Validate that parameter types are consistent (not mixed).
-   *
-   * @param sqlText The SQL text to validate
-   * @throws QueryCompilationErrors.invalidQueryMixedQueryParameters if mixed parameters found
-   */
-  def validateParameterConsistency(
-      sqlText: String): Unit = {
-
-    val (hasPositional, hasNamed) = detectParameters(sqlText)
-    if (hasPositional && hasNamed) {
-      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
-    }
-  }
 }
