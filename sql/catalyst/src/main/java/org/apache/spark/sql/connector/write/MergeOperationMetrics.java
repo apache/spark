@@ -20,112 +20,50 @@ package org.apache.spark.sql.connector.write;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Implementation of {@link OperationMetrics} that provides merge operation metrics.
+ * Interface that provides merge operation metrics.
  *
  * @since 4.1.0
  */
 @Evolving
-public class MergeOperationMetrics implements OperationMetrics {
-  
-  private final long numTargetRowsCopied;
-  private final long numTargetRowsDeleted;
-  private final long numTargetRowsUpdated;
-  private final long numTargetRowsInserted;
-  private final long numTargetRowsMatchedUpdated;
-  private final long numTargetRowsMatchedDeleted;
-  private final long numTargetRowsNotMatchedBySourceUpdated;
-  private final long numTargetRowsNotMatchedBySourceDeleted;
+public interface MergeOperationMetrics extends OperationMetrics {
 
   /**
-   * Constructs a MergeMetrics instance with the specified metric values.
-   *
-   * @param numTargetRowsCopied number of target rows copied unmodified because
-   *                            they did not match any action.
-   * @param numTargetRowsDeleted number of target rows deleted.
-   * @param numTargetRowsUpdated number of target rows updated.
-   * @param numTargetRowsInserted number of target rows inserted.
-   * @param numTargetRowsMatchedUpdated number of target rows updated by a matched clause.
-   * @param numTargetRowsMatchedDeleted number of target rows deleted by a matched clause.
-   * @param numTargetRowsNotMatchedBySourceUpdated number of target rows updated by a not
-   *                                               matched by source clause.
-   * @param numTargetRowsNotMatchedBySourceDeleted number of target rows deleted by a not matched
-   *                                               by source clause.
+   * Returns the number of target rows copied unmodified because they did not match any action.
    */
-  public MergeOperationMetrics(
-      long numTargetRowsCopied,
-      long numTargetRowsDeleted,
-      long numTargetRowsUpdated,
-      long numTargetRowsInserted,
-      long numTargetRowsMatchedUpdated,
-      long numTargetRowsMatchedDeleted,
-      long numTargetRowsNotMatchedBySourceUpdated,
-      long numTargetRowsNotMatchedBySourceDeleted) {
-    this.numTargetRowsCopied = numTargetRowsCopied;
-    this.numTargetRowsDeleted = numTargetRowsDeleted;
-    this.numTargetRowsUpdated = numTargetRowsUpdated;
-    this.numTargetRowsInserted = numTargetRowsInserted;
-    this.numTargetRowsMatchedUpdated = numTargetRowsMatchedUpdated;
-    this.numTargetRowsMatchedDeleted = numTargetRowsMatchedDeleted;
-    this.numTargetRowsNotMatchedBySourceUpdated = numTargetRowsNotMatchedBySourceUpdated;
-    this.numTargetRowsNotMatchedBySourceDeleted = numTargetRowsNotMatchedBySourceDeleted;
-  }
+  long numTargetRowsCopied();
 
   /**
-   * Returns the number of target rows copied unmodified because they did not match any action,
-   * or -1 if not available.
+   * Returns the number of target rows deleted.
    */
-  public long getNumTargetRowsCopied() {
-    return numTargetRowsCopied;
-  }
+  long numTargetRowsDeleted();
 
   /**
-   * Returns the number of target rows deleted, or -1 if not available.
+   * Returns the number of target rows updated.
    */
-  public long getNumTargetRowsDeleted() {
-    return numTargetRowsDeleted;
-  }
+  long numTargetRowsUpdated();
 
   /**
-   * Returns the number of target rows updated, or -1 if not available.
+   * Returns the number of target rows inserted.
    */
-  public long getNumTargetRowsUpdated() {
-    return numTargetRowsUpdated;
-  }
+  long numTargetRowsInserted();
 
   /**
-   * Returns the number of target rows inserted, or -1 if not available.
+   * Returns the number of target rows updated by a matched clause.
    */
-  public long getNumTargetRowsInserted() {
-    return numTargetRowsInserted;
-  }
+  long numTargetRowsMatchedUpdated();
 
   /**
-   * Returns the number of target rows updated by a matched clause, or -1 if not available.
+   * Returns the number of target rows deleted by a matched clause
    */
-  public long getNumTargetRowsMatchedUpdated() {
-    return numTargetRowsMatchedUpdated;
-  }
+  long numTargetRowsMatchedDeleted();
 
   /**
-   * Returns the number of target rows deleted by a matched clause, or -1 if not available.
+   * Returns the number of target rows updated by a not matched by source clause.
    */
-  public long getNumTargetRowsMatchedDeleted() {
-    return numTargetRowsMatchedDeleted;
-  }
+  long numTargetRowsNotMatchedBySourceUpdated();
 
   /**
-   * Returns the number of target rows updated by a not matched by source clause,
-   * or -1 if not available.
+   * Returns the number of target rows deleted by a not matched by source clause.
    */
-  public long getNumTargetRowsNotMatchedBySourceUpdated() {
-    return numTargetRowsNotMatchedBySourceUpdated;
-  }
-
-  /**
-   * Returns the number of target rows deleted by a not matched by source clause,
-   * or -1 if not available.
-   */
-  public long getNumTargetRowsNotMatchedBySourceDeleted() {
-    return numTargetRowsNotMatchedBySourceDeleted;
-  }
+  long numTargetRowsNotMatchedBySourceDeleted();
 }

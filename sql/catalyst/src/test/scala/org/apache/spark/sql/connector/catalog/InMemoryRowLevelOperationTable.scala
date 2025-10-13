@@ -118,21 +118,21 @@ class InMemoryRowLevelOperationTable(
       metrics match {
         case mergeMetrics: MergeOperationMetrics =>
           commitProperties += "merge.numTargetRowsCopied" ->
-            mergeMetrics.getNumTargetRowsCopied.toString
+            mergeMetrics.numTargetRowsCopied.toString
           commitProperties += "merge.numTargetRowsDeleted" ->
-            mergeMetrics.getNumTargetRowsDeleted.toString
+            mergeMetrics.numTargetRowsDeleted.toString
           commitProperties += "merge.numTargetRowsUpdated" ->
-            mergeMetrics.getNumTargetRowsUpdated.toString
+            mergeMetrics.numTargetRowsUpdated.toString
           commitProperties += "merge.numTargetRowsInserted" ->
-            mergeMetrics.getNumTargetRowsInserted.toString
+            mergeMetrics.numTargetRowsInserted.toString
           commitProperties += "merge.numTargetRowsMatchedUpdated" ->
-            mergeMetrics.getNumTargetRowsMatchedUpdated.toString
+            mergeMetrics.numTargetRowsMatchedUpdated.toString
           commitProperties += "merge.numTargetRowsMatchedDeleted" ->
-            mergeMetrics.getNumTargetRowsMatchedDeleted.toString
+            mergeMetrics.numTargetRowsMatchedDeleted.toString
           commitProperties += "merge.numTargetRowsNotMatchedBySourceUpdated" ->
-            mergeMetrics.getNumTargetRowsNotMatchedBySourceUpdated.toString
+            mergeMetrics.numTargetRowsNotMatchedBySourceUpdated.toString
           commitProperties += "merge.numTargetRowsNotMatchedBySourceDeleted" ->
-            mergeMetrics.getNumTargetRowsNotMatchedBySourceDeleted.toString
+            mergeMetrics.numTargetRowsNotMatchedBySourceDeleted.toString
         case _ =>
           // Handle other metrics types if needed in the future
       }

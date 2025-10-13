@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeOperationMetrics, OperationMetrics, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeOperationMetricsImpl, OperationMetrics, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -454,7 +454,10 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
 
       val operationMetrics = getOperationMetrics(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      batchWrite.commit(messages, operationMetrics.orNull)
+      operationMetrics match {
+        case Some(m) => batchWrite.commit(messages, m)
+        case None => batchWrite.commit(messages)
+      }
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
@@ -480,7 +483,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   private def getOperationMetrics(query: SparkPlan): Option[OperationMetrics] = {
     collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
       val metrics = n.metrics
-      new MergeOperationMetrics(
+      MergeOperationMetricsImpl(
         metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
         metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
         metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),

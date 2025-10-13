@@ -105,7 +105,7 @@ public interface BatchWrite {
    *                 {@link DataWriter#commit()}.
    * @param operationMetrics operation metrics collected from the query producing write.
    *                Currently supported metrics are provided through implementations of
-   *                {@link OperationMetrics}. Null if no metrics are provided.
+   *                {@link OperationMetrics}.
    */
   default void commit(WriterCommitMessage[] messages, OperationMetrics operationMetrics) {
     commit(messages);
