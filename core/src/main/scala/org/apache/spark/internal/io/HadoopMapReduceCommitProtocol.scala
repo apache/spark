@@ -347,7 +347,7 @@ private[spark] object HadoopMapReduceCommitProtocol {
       poolLock.synchronized {
         if (fileRenamePool == null) {
           // Use cached pool with an upper bound; idle threads time out
-          fileRenamePool = ThreadUtils.newDaemonFixedThreadPool("file-rename", numThreads)
+          fileRenamePool = ThreadUtils.newDeamonCachedThreadPool("file-rename", numThreads)
         }
       }
     }
