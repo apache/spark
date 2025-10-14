@@ -250,8 +250,10 @@ trait SparkParserUtils {
       stopIndex = mappedStopIndex,
       sqlText = originalSqlText,
       objectType = objectType,
-      objectName = objectName,
-      positionMapper = currentOrigin.positionMapper)
+      objectName = objectName)
+    // NOTE: We intentionally do NOT store positionMapper in the result Origin
+    // This prevents contamination of TreeNode objects while still allowing
+    // position mapping during error creation
   }
 
   /** Get the command which created the token. */

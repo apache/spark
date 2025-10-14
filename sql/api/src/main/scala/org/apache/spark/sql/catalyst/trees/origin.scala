@@ -43,7 +43,26 @@ case class Origin(
   lazy val context: QueryContext = if (stackTrace.isDefined) {
     DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)
   } else {
-    SQLQueryContext(line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
+    // Apply position mapping from CurrentOrigin if available
+    val currentOrigin = CurrentOrigin.get
+    val (mappedStartIndex, mappedStopIndex, originalSqlText) =
+      currentOrigin.positionMapper match {
+        case Some(mapper) =>
+          val mappedStart = startIndex.map(mapper.mapToOriginal)
+          val mappedStop = stopIndex.map(mapper.mapToOriginal)
+          (mappedStart, mappedStop, Some(mapper.originalText))
+        case None =>
+          (startIndex, stopIndex, sqlText)
+      }
+
+    SQLQueryContext(
+      line,
+      startPosition,
+      mappedStartIndex,
+      mappedStopIndex,
+      originalSqlText,
+      objectType,
+      objectName)
   }
 
   def getQueryContext: Array[QueryContext] = {
