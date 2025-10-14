@@ -525,7 +525,7 @@ class Column(ParentColumn):
 
         sc = get_active_spark_context()
         if len(alias) == 1:
-            if metadata:
+            if metadata is not None:
                 assert sc._jvm is not None
                 jmeta = getattr(sc._jvm, "org.apache.spark.sql.types.Metadata").fromJson(
                     json.dumps(metadata)

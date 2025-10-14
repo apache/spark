@@ -250,6 +250,21 @@ class ColumnTestsMixin:
         ).withColumn("square_value", mapping_expr[sf.col("key")])
         self.assertEqual(df.count(), 3)
 
+    def test_alias_metadata(self):
+        df = self.spark.createDataFrame([("",)], ["a"])
+        df = df.withMetadata("a", {"foo": "bar"})
+        self.assertEqual(df.schema["a"].metadata, {"foo": "bar"})
+
+        # SPARK-51426: Ensure setting metadata to '{]' clears it
+        df = df.select([sf.col("a").alias("a", metadata={})])
+        self.assertEqual(df.schema["a"].metadata, {})
+
+        df = df.withMetadata("a", {"baz": "burr"})
+        self.assertEqual(df.schema["a"].metadata, {"baz": "burr"})
+
+        df = df.withMetadata("a", {})
+        self.assertEqual(df.schema["a"].metadata, {})
+
     def test_alias_negative(self):
         with self.assertRaises(PySparkValueError) as pe:
             self.spark.range(1).id.alias("a", "b", metadata={})
