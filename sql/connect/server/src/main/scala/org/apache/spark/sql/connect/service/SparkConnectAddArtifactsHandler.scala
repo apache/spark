@@ -142,6 +142,23 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   }
 
   protected def cleanUpStagedArtifacts(): Unit = {
+    // Close all staged artifacts to release file handles and stream resources
+    stagedArtifacts.foreach { artifact =>
+      try {
+        artifact.close()
+      } catch {
+        case NonFatal(_) => // Ignore errors during cleanup
+      }
+    }
+    // Close the chunked artifact if it's still active
+    if (chunkedArtifact != null) {
+      try {
+        chunkedArtifact.close()
+      } catch {
+        case NonFatal(_) => // Ignore errors during cleanup
+      }
+      chunkedArtifact = null
+    }
     Utils.deleteRecursively(stagingDir.toFile)
     stagedArtifacts.clear()
   }
@@ -262,11 +279,25 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
     def close(): Unit = {
       if (artifactSummary == null) {
-        checksumOut.close()
+        // Close streams defensively: even if outer stream close fails, try inner streams.
+        // Normally checksumOut.close() cascades to inner streams, but if it throws an
+        // exception, we still attempt to close the inner streams to prevent resource leaks.
+        var closeException: Throwable = null
+        try {
+          checksumOut.close()
+        } catch {
+          case NonFatal(e) =>
+            closeException = e
+            // Try to close inner streams directly as fallback
+            try countingOut.close() catch { case NonFatal(_) => }
+            try fileOut.close() catch { case NonFatal(_) => }
+        }
         artifactSummary = builder
           .setName(name)
           .setIsCrcSuccessful(getCrcStatus.getOrElse(false))
           .build()
+        // Re-throw the close exception after building summary
+        if (closeException != null) throw closeException
       }
     }
 
