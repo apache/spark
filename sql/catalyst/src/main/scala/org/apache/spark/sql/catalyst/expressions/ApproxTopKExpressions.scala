@@ -66,8 +66,8 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
   def this(child: Expression) = this(child, Literal(ApproxTopK.DEFAULT_K))
 
   private lazy val itemDataType: DataType = {
-    // itemDataType is the type of the second field of the output of ACCUMULATE or COMBINE
-    state.dataType.asInstanceOf[StructType](1).dataType
+    // itemDataType is the type of the third field of the output of ACCUMULATE or COMBINE
+    state.dataType.asInstanceOf[StructType](2).dataType
   }
 
   override def left: Expression = state
@@ -101,7 +101,7 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     val stateEval = left.eval(input)
     val kEval = right.eval(input)
     val dataSketchBytes = stateEval.asInstanceOf[InternalRow].getBinary(0)
-    val maxItemsTrackedVal = stateEval.asInstanceOf[InternalRow].getInt(2)
+    val maxItemsTrackedVal = stateEval.asInstanceOf[InternalRow].getInt(1)
     val kVal = kEval.asInstanceOf[Int]
     ApproxTopK.checkK(kVal)
     ApproxTopK.checkMaxItemsTracked(maxItemsTrackedVal, kVal)

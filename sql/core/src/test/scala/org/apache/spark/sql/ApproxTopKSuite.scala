@@ -504,12 +504,12 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "tableOrdinalNumber" -> "second",
           "columnOrdinalNumber" -> "first",
-          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 + ", " +
-            "maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\""),
+          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, maxItemsTracked: INT NOT NULL, " +
+            "itemDataType: " + type1 + ", itemDataTypeDDL: STRING NOT NULL>\""),
           "operator" -> "UNION",
           "hint" -> "",
-          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type2 + ", " +
-            "maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\"")
+          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, maxItemsTracked: INT NOT NULL, " +
+            "itemDataType: " + type2 + ", itemDataTypeDDL: STRING NOT NULL>\"")
         ),
         queryContext = Array(
           ExpectedContext(
@@ -540,12 +540,12 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "tableOrdinalNumber" -> "second",
           "columnOrdinalNumber" -> "first",
-          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 +
-            ", maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\""),
+          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, maxItemsTracked: INT NOT NULL, " +
+            "itemDataType: " + type1 + ", itemDataTypeDDL: STRING NOT NULL>\""),
           "operator" -> "UNION",
           "hint" -> "",
-          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: BOOLEAN, " +
-            "maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\"")
+          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, maxItemsTracked: INT NOT NULL, " +
+            "itemDataType: BOOLEAN, itemDataTypeDDL: STRING NOT NULL>\"")
         ),
         queryContext = Array(
           ExpectedContext(
@@ -576,12 +576,12 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "tableOrdinalNumber" -> "second",
           "columnOrdinalNumber" -> "first",
-          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 +
-            ", maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\""),
+          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, maxItemsTracked: INT NOT NULL, " +
+            "itemDataType: " + type1 + ", itemDataTypeDDL: STRING NOT NULL>\""),
           "operator" -> "UNION",
           "hint" -> "",
-          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: BOOLEAN, " +
-            "maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\"")
+          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, maxItemsTracked: INT NOT NULL, " +
+            "itemDataType: BOOLEAN, itemDataTypeDDL: STRING NOT NULL>\"")
         ),
         queryContext = Array(
           ExpectedContext(

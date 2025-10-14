@@ -322,8 +322,8 @@ object ApproxTopK {
   def getSketchStateDataType(itemDataType: DataType): StructType =
     StructType(
       StructField("sketch", BinaryType, nullable = false) ::
-        StructField("itemDataType", itemDataType) ::
         StructField("maxItemsTracked", IntegerType, nullable = false) ::
+        StructField("itemDataType", itemDataType) ::
         StructField("itemDataTypeDDL", StringType, nullable = false) :: Nil)
 
   def dataTypeToDDL(dataType: DataType): String = {
@@ -339,7 +339,7 @@ object ApproxTopK {
     if (stateStructType.length != 4) {
       return TypeCheckFailure("State must be a struct with 4 fields. " +
         "Expected struct: " +
-        "struct<sketch:binary,itemDataType:any,maxItemsTracked:int,itemDataTypeDDL:string>. " +
+        "struct<sketch:binary,maxItemsTracked:int,itemDataType:any,itemDataTypeDDL:string>. " +
         "Got: " + state.dataType.simpleString)
     }
 
@@ -350,11 +350,11 @@ object ApproxTopK {
     if (fieldType1 != BinaryType) {
       TypeCheckFailure("State struct must have the first field to be binary. " +
         "Got: " + fieldType1.simpleString)
-    } else if (!ApproxTopK.isDataTypeSupported(fieldType2)) {
-      TypeCheckFailure("State struct must have the second field to be a supported data type. " +
+    } else if (fieldType2 != IntegerType) {
+      TypeCheckFailure("State struct must have the second field to be int. " +
         "Got: " + fieldType2.simpleString)
-    } else if (fieldType3 != IntegerType) {
-      TypeCheckFailure("State struct must have the third field to be int. " +
+    } else if (!ApproxTopK.isDataTypeSupported(fieldType3)) {
+      TypeCheckFailure("State struct must have the third field to be a supported data type. " +
         "Got: " + fieldType3.simpleString)
     } else if (fieldType4 != StringType) {
       TypeCheckFailure("State struct must have the fourth field to be string. " +
@@ -371,8 +371,8 @@ object ApproxTopK {
  * or to estimate the top K items, via ApproxTopKEstimate.
  *
  * The output of this function is a struct containing the sketch in binary format,
- * a null object indicating the type of items in the sketch,
  * the maximum number of items tracked by the sketch,
+ * a null object indicating the type of items in the sketch,
  * and a DDL string representing the data type of items in the sketch.
  * The null object is used in approx_top_k_estimate,
  * while the DDL is used in approx_top_k_combine.
@@ -458,7 +458,11 @@ case class ApproxTopKAccumulate(
   override def eval(buffer: ItemsSketch[Any]): Any = {
     val sketchBytes = serialize(buffer)
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(itemDataType)
-    InternalRow.apply(sketchBytes, null, maxItemsTrackedVal, UTF8String.fromString(itemDataTypeDDL))
+    InternalRow.apply(
+      sketchBytes,
+      maxItemsTrackedVal,
+      null,
+      UTF8String.fromString(itemDataTypeDDL))
   }
 
   override def serialize(buffer: ItemsSketch[Any]): Array[Byte] =
@@ -633,7 +637,7 @@ case class ApproxTopKCombine(
   // Hence, function needs to check the input sketches' maxItemsTracked values during merge.
   def this(child: Expression) = this(child, Literal(ApproxTopK.VOID_MAX_ITEMS_TRACKED), 0, 0)
 
-  // The item data type extracted from the second field of the state struct.
+  // The item data type extracted from the third field of the state struct.
   // It is named "unchecked" because it may be inaccurate when input sketches have different
   // item data types. For example, if one sketch has int type null and another has string type
   // null, the union of the two sketches will have bigint type null.
@@ -642,7 +646,7 @@ case class ApproxTopKCombine(
   // because if the input sketches have different item data types, an error will be thrown
   // during update/merge. Otherwise, the uncheckedItemDataType is accurate.
   private lazy val uncheckedItemDataType: DataType =
-    state.dataType.asInstanceOf[StructType](1).dataType
+    state.dataType.asInstanceOf[StructType](2).dataType
   private lazy val maxItemsTrackedVal: Int = maxItemsTracked.eval().asInstanceOf[Int]
   private lazy val combineSizeSpecified: Boolean =
     maxItemsTrackedVal != ApproxTopK.VOID_MAX_ITEMS_TRACKED
@@ -697,12 +701,12 @@ case class ApproxTopKCombine(
 
   /**
    * Update the aggregation buffer with an input sketch. The input has the same schema as the
-   * ApproxTopKAccumulate output, i.e., sketchBytes + null + maxItemsTracked + DDL.
+   * ApproxTopKAccumulate output, i.e., sketchBytes + maxItemsTracked + null + DDL.
    */
   override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
     val inputState = state.eval(input).asInstanceOf[InternalRow]
     val inputSketchBytes = inputState.getBinary(0)
-    val inputMaxItemsTracked = inputState.getInt(2)
+    val inputMaxItemsTracked = inputState.getInt(1)
     val inputItemDataTypeDDL = inputState.getUTF8String(3).toString
     val inputItemDataType = ApproxTopK.DDLToDataType(inputItemDataTypeDDL)
     // update maxItemsTracked (throw error if not match)
@@ -732,7 +736,11 @@ case class ApproxTopKCombine(
       buffer.getSketch.toByteArray(ApproxTopK.genSketchSerDe(buffer.getItemDataType))
     val maxItemsTracked = buffer.getMaxItemsTracked
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(buffer.getItemDataType)
-    InternalRow.apply(sketchBytes, null, maxItemsTracked, UTF8String.fromString(itemDataTypeDDL))
+    InternalRow.apply(
+      sketchBytes,
+      maxItemsTracked,
+      null,
+      UTF8String.fromString(itemDataTypeDDL))
   }
 
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
