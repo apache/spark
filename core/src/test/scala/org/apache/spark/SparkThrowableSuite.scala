@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import scala.jdk.CollectionConverters._
 import scala.util.Properties.lineSeparator
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
@@ -610,5 +611,86 @@ class SparkThrowableSuite extends SparkFunSuite {
           "remove unused message parameters.")
       )
     )
+  }
+
+  test("getMessage uses custom getDefaultMessageTemplate from SparkThrowable") {
+    import ErrorMessageFormat._
+
+    // Create a custom throwable that overrides getDefaultMessageTemplate.
+    class CustomTemplatedThrowable extends Throwable with SparkThrowable {
+      override def getCondition: String = "DIVIDE_BY_ZERO"
+      override def getErrorClass: String = "DIVIDE_BY_ZERO"
+      override def getMessage: String = "Custom message"
+      override def getMessageParameters: java.util.Map[String, String] =
+        Map("config" -> "TEST_CONFIG").asJava
+      override def getDefaultMessageTemplate: String = "Custom template: Division by <config>"
+    }
+
+    val customThrowable = new CustomTemplatedThrowable
+
+    // Test STANDARD format uses the custom template.
+    val standardResult = SparkThrowableHelper.getMessage(customThrowable, STANDARD)
+    assert(standardResult.contains("Custom template: Division by <config>"))
+
+    // Test that it doesn't contain the default template from JSON.
+    assert(!standardResult.contains("Use `try_divide` to tolerate divisor being 0"))
+  }
+
+  test("getMessage falls back to JSON template when getDefaultMessageTemplate not overridden") {
+    import ErrorMessageFormat._
+
+    // Create a throwable that uses default getDefaultMessageTemplate implementation.
+    class ReadFromJSONThrowable extends Throwable with SparkThrowable {
+      override def getCondition: String = "DIVIDE_BY_ZERO"
+      override def getErrorClass: String = "DIVIDE_BY_ZERO"
+      override def getMessage: String = "Random message"
+      override def getMessageParameters: java.util.Map[String, String] =
+        Map("config" -> "TEST_CONFIG").asJava
+    }
+
+    val readFromJSONThrowable = new ReadFromJSONThrowable
+
+    // Test STANDARD format reads messageTemplate from JSON file.
+    val readFromJSONResult = SparkThrowableHelper.getMessage(readFromJSONThrowable, STANDARD)
+    assert(readFromJSONResult
+      .contains("\"messageTemplate\" : \"Division by zero. Use `try_divide` to tolerate divisor " +
+        "being 0 and return NULL instead. If necessary set <config> to \\\"false\\\" " +
+        "to bypass this error.\""))
+  }
+
+  test("getMessage writes null messageTemplate for non-existing error condition") {
+    import ErrorMessageFormat._
+
+    // Create a throwable with non-existing error condition.
+    class NonExistingConditionThrowable extends Throwable with SparkThrowable {
+      override def getCondition: String = "NON_EXISTING_ERROR_CONDITION"
+      override def getErrorClass: String = "NON_EXISTING_ERROR_CONDITION"
+      override def getMessage: String = "Non-existing error message"
+      override def getMessageParameters: java.util.Map[String, String] =
+        Map("param" -> "value").asJava
+    }
+
+    val nonExistingThrowable = new NonExistingConditionThrowable
+
+    // Test STANDARD format writes null messageTemplate when condition doesn't exist in JSON.
+    val standardResult = SparkThrowableHelper.getMessage(nonExistingThrowable, STANDARD)
+    assert(standardResult.contains("\"messageTemplate\" : null"))
+
+    // Verify it still contains the error class and other fields.
+    assert(standardResult.contains("\"errorClass\" : \"NON_EXISTING_ERROR_CONDITION\""))
+    assert(standardResult.contains("\"messageParameters\""))
+  }
+
+  test("getMessage with custom sqlState and messageTemplate") {
+    val errorClass = "TEST_CUSTOM_TEMPLATE"
+    val sqlState = "42S01"
+    val messageTemplate = "Custom error: <param1> occurred with <param2>"
+    val messageParameters = Map("param1" -> "something", "param2" -> "somewhere")
+
+    val result = getMessage(errorClass, sqlState, messageTemplate, messageParameters)
+
+    // Verify the message is formatted correctly.
+    assert(result == "[TEST_CUSTOM_TEMPLATE] Custom error: " +
+      "something occurred with somewhere SQLSTATE: 42S01")
   }
 }

@@ -255,6 +255,14 @@ class CompositeOutputProcessorFactory(StatefulProcessorFactory):
         return RowCompositeOutputProcessor()
 
 
+class LargeValueStatefulProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasLargeValueStatefulProcessor()
+
+    def row(self):
+        return RowLargeValueStatefulProcessor()
+
+
 # StatefulProcessor implementations
 
 
@@ -2035,6 +2043,90 @@ class RowCompositeOutputProcessor(StatefulProcessor):
             mapOfPrimitive=map_of_primitive,
             listOfComposite=list_of_composite,
             mapOfComposite=map_of_composite,
+        )
+
+    def close(self) -> None:
+        pass
+
+
+class PandasLargeValueStatefulProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle):
+        # Test all three state types with large values
+        value_state_schema = StructType([StructField("value", StringType(), True)])
+        self.value_state = handle.getValueState("valueState", value_state_schema)
+
+        list_state_schema = StructType([StructField("value", StringType(), True)])
+        self.list_state = handle.getListState("listState", list_state_schema)
+
+        self.map_state = handle.getMapState("mapState", "key string", "value string")
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        # Create a large string (512 KB)
+        target_size_bytes = 512 * 1024
+        large_string = "a" * target_size_bytes
+
+        # Test ValueState with large string
+        self.value_state.update((large_string,))
+        value_retrieved = self.value_state.get()[0]
+
+        # Test ListState with large strings
+        self.list_state.put([(large_string,), (large_string + "b",), (large_string + "c",)])
+        list_retrieved = list(self.list_state.get())
+        list_elements = ",".join([elem[0] for elem in list_retrieved])
+
+        # Test MapState with large strings
+        map_key = ("large_string_key",)
+        self.map_state.updateValue(map_key, (large_string,))
+        map_retrieved = f"{map_key[0]}:{self.map_state.getValue(map_key)[0]}"
+
+        yield pd.DataFrame(
+            {
+                "id": key,
+                "valueStateResult": [value_retrieved],
+                "listStateResult": [list_elements],
+                "mapStateResult": [map_retrieved],
+            }
+        )
+
+    def close(self) -> None:
+        pass
+
+
+class RowLargeValueStatefulProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle):
+        # Test all three state types with large values
+        value_state_schema = StructType([StructField("value", StringType(), True)])
+        self.value_state = handle.getValueState("valueState", value_state_schema)
+
+        list_state_schema = StructType([StructField("value", StringType(), True)])
+        self.list_state = handle.getListState("listState", list_state_schema)
+
+        self.map_state = handle.getMapState("mapState", "key string", "value string")
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        # Create a large string (512 KB)
+        target_size_bytes = 512 * 1024
+        large_string = "a" * target_size_bytes
+
+        # Test ValueState with large string
+        self.value_state.update((large_string,))
+        value_retrieved = self.value_state.get()[0]
+
+        # Test ListState with large strings
+        self.list_state.put([(large_string,), (large_string + "b",), (large_string + "c",)])
+        list_retrieved = list(self.list_state.get())
+        list_elements = ",".join([elem[0] for elem in list_retrieved])
+
+        # Test MapState with large strings
+        map_key = ("large_string_key",)
+        self.map_state.updateValue(map_key, (large_string,))
+        map_retrieved = f"{map_key[0]}:{self.map_state.getValue(map_key)[0]}"
+
+        yield Row(
+            id=key[0],
+            valueStateResult=value_retrieved,
+            listStateResult=list_elements,
+            mapStateResult=map_retrieved,
         )
 
     def close(self) -> None:

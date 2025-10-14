@@ -6,12 +6,12 @@ OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Byte Array compareTo:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-2-7 byte                                            252            259           4        260.0           3.8       1.0X
-8-16 byte                                           412            438          34        159.0           6.3       0.6X
-16-32 byte                                          413            414           1        158.7           6.3       0.6X
-512-1024 byte                                       554            556           2        118.2           8.5       0.5X
-512 byte slow                                      1635           1704          64         40.1          25.0       0.2X
-2-7 byte                                            296            297           2        221.7           4.5       0.9X
+2-7 byte                                            252            259           4        259.7           3.9       1.0X
+8-16 byte                                           400            418          22        164.0           6.1       0.6X
+16-32 byte                                          404            405           2        162.3           6.2       0.6X
+512-1024 byte                                       543            545           1        120.8           8.3       0.5X
+512 byte slow                                      1533           1546          11         42.7          23.4       0.2X
+2-7 byte                                            315            316           0        208.0           4.8       0.8X
 
 
 ================================================================================================
@@ -22,6 +22,6 @@ OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Byte Array equals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Byte Array equals                                   810            814           4        197.6           5.1       1.0X
+Byte Array equals                                   801            810           9        199.8           5.0       1.0X
 
 

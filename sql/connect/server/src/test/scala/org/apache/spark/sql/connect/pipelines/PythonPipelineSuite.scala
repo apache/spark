@@ -289,6 +289,36 @@ class PythonPipelineSuite
         graphIdentifier("supplement")))
   }
 
+  test("external sink") {
+    val graph = buildGraph("""
+        |dp.create_sink(
+        |  "myKafkaSink",
+        |  format = "kafka",
+        |  options = {"kafka.bootstrap.servers": "host1:port1,host2:port2"}
+        |)
+        |
+        |@dp.append_flow(
+        |  target = "myKafkaSink"
+        |)
+        |def mySinkFlow():
+        |  return spark.readStream.format("rate").load()
+        |""".stripMargin)
+
+    assert(graph.sinks.map(_.identifier) == Seq(TableIdentifier("myKafkaSink")))
+
+    // ensure format and options are properly set
+    graph.sinks.filter(_.identifier == TableIdentifier("myKafkaSink")).foreach { sink =>
+      assert(sink.format == "kafka")
+      assert(sink.options.get("kafka.bootstrap.servers").contains("host1:port1,host2:port2"))
+    }
+
+    // ensure the flow is properly linked to the sink
+    assert(
+      graph
+        .flowsTo(TableIdentifier("myKafkaSink"))
+        .map(_.identifier) == Seq(TableIdentifier("mySinkFlow")))
+  }
+
   test("referencing internal datasets") {
     val graph = buildGraph("""
       |@dp.materialized_view
@@ -400,7 +430,7 @@ class PythonPipelineSuite
            |  return spark.range(1)
            |""".stripMargin)
     }
-    assert(ex.getCondition == "PIPELINE_DUPLICATE_IDENTIFIERS.DATASET")
+    assert(ex.getCondition == "PIPELINE_DUPLICATE_IDENTIFIERS.OUTPUT")
   }
 
   test("create datasets with fully/partially qualified names") {

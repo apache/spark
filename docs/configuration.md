@@ -1918,7 +1918,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.lzf.parallel.enabled</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     When true, LZF compression will use multiple threads to compress data in parallel.
   </td>

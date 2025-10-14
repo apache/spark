@@ -208,7 +208,7 @@ class TransformWithStateInPySparkStateServer(
   private def parseProtoMessage(): StateRequest = {
     val messageLen = inputStream.readInt()
     val messageBytes = new Array[Byte](messageLen)
-    inputStream.read(messageBytes)
+    inputStream.readFully(messageBytes)
     StateRequest.parseFrom(ByteString.copyFrom(messageBytes))
   }
 
