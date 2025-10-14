@@ -55,11 +55,16 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
   class TestAddArtifactsHandler(
       responseObserver: StreamObserver[AddArtifactsResponse],
-      throwIfArtifactExists: Boolean = false)
+      throwIfArtifactExists: Boolean = false,
+      skipCleanUp: Boolean = true)
       extends SparkConnectAddArtifactsHandler(responseObserver) {
 
-    // Stop the staged artifacts from being automatically deleted
-    override protected def cleanUpStagedArtifacts(): Unit = {}
+    // Control whether to skip cleanup for test inspection
+    override protected def cleanUpStagedArtifacts(): Unit = {
+      if (!skipCleanUp) {
+        super.cleanUpStagedArtifacts()
+      }
+    }
 
     private val finalArtifacts = mutable.Buffer.empty[String]
     private val artifactChecksums: mutable.Map[String, Long] = mutable.Map.empty
@@ -83,6 +88,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     def getFinalArtifacts: Seq[String] = finalArtifacts.toSeq
     def stagingDirectory: Path = this.stagingDir
     def forceCleanUp(): Unit = super.cleanUpStagedArtifacts()
+    def getStagedArtifactsSize: Int = stagedArtifacts.size
   }
 
   protected val inputFilePath: Path = commonResourcePath.resolve("artifact-tests")
@@ -505,6 +511,67 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
       assert(e.getMessage.contains("ARTIFACT_ALREADY_EXISTS"))
       assert(info.getMetadataMap().get("messageParameters").contains(name1))
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("stagedArtifacts buffer is cleared on successful completion") {
+    val promise = Promise[AddArtifactsResponse]()
+    val handler = new TestAddArtifactsHandler(
+      new DummyStreamObserver(promise),
+      throwIfArtifactExists = false,
+      skipCleanUp = false)
+    try {
+      val name = "classes/smallClassFile.class"
+      val artifactPath = inputFilePath.resolve("smallClassFile.class")
+      assume(artifactPath.toFile.exists)
+      addSingleChunkArtifact(handler, name, artifactPath)
+
+      // Verify artifacts are staged
+      assert(handler.getStagedArtifactsSize == 1)
+
+      handler.onCompleted()
+      val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
+      assert(response.getArtifactsCount == 1)
+
+      // Verify buffer is cleared after completion
+      assert(handler.getStagedArtifactsSize == 0)
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("stagedArtifacts buffer is cleared on error") {
+    val errorPromise = Promise[Throwable]()
+    val errorObserver = new StreamObserver[AddArtifactsResponse] {
+      override def onNext(v: AddArtifactsResponse): Unit = {}
+      override def onError(throwable: Throwable): Unit = errorPromise.success(throwable)
+      override def onCompleted(): Unit = {}
+    }
+
+    val handler = new TestAddArtifactsHandler(
+      errorObserver,
+      throwIfArtifactExists = false,
+      skipCleanUp = false)
+    try {
+      val name = "classes/smallClassFile.class"
+      val artifactPath = inputFilePath.resolve("smallClassFile.class")
+      assume(artifactPath.toFile.exists)
+      addSingleChunkArtifact(handler, name, artifactPath)
+
+      // Verify artifacts are staged
+      assert(handler.getStagedArtifactsSize == 1)
+
+      val error = new RuntimeException("Test error")
+      handler.onError(error)
+
+      // Verify the error was propagated
+      val receivedError = ThreadUtils.awaitResult(errorPromise.future, 5.seconds)
+      assert(receivedError.getMessage == "Test error")
+
+      // Verify buffer is cleared after error
+      assert(handler.getStagedArtifactsSize == 0)
     } finally {
       handler.forceCleanUp()
     }

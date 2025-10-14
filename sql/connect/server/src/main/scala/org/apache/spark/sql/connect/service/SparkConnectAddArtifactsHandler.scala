@@ -141,7 +141,10 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     summaries
   }
 
-  protected def cleanUpStagedArtifacts(): Unit = Utils.deleteRecursively(stagingDir.toFile)
+  protected def cleanUpStagedArtifacts(): Unit = {
+    Utils.deleteRecursively(stagingDir.toFile)
+    stagedArtifacts.clear()
+  }
 
   override def onCompleted(): Unit = {
     try {
