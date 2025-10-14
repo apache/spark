@@ -801,6 +801,7 @@ class GroupedAggPandasUDFTestsMixin:
 
         @pandas_udf("long", PandasUDFType.GROUPED_AGG)
         def pandas_max(v):
+            assert len(v) == 10000000 / 2, len(v)
             return v.max()
 
         expected = (df.groupby("key").agg(sf.max("v").alias("res")).sort("key")).collect()
