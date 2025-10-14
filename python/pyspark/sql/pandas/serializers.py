@@ -1143,7 +1143,8 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
         return "GroupArrowUDFSerializer"
 
 
-class AggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
+# Serializer for SQL_GROUPED_AGG_ARROW_UDF and SQL_WINDOW_AGG_ARROW_UDF
+class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
     def __init__(
         self,
         timezone,
@@ -1183,7 +1184,7 @@ class AggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
                 )
 
     def __repr__(self):
-        return "AggArrowUDFSerializer"
+        return "ArrowStreamAggArrowUDFSerializer"
 
 
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
