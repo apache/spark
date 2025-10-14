@@ -48,8 +48,6 @@ class ExecutorPodsAllocator(
 
   protected val EXECUTOR_ID_COUNTER = new AtomicInteger(0)
 
-  protected val MAXIMUM = conf.get(KUBERNETES_ALLOCATION_MAXIMUM)
-
   protected val PVC_COUNTER = new AtomicInteger(0)
 
   protected val maxPVCs = if (Utils.isDynamicAllocationEnabled(conf)) {
@@ -430,8 +428,8 @@ class ExecutorPodsAllocator(
         return
       }
       val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
-      if (newExecutorId >= MAXIMUM) {
-        throw new SparkException(s"Exceed the pod creation limit: $MAXIMUM")
+      if (newExecutorId >= podAllocationMaximum) {
+        throw new SparkException(s"Exceed the pod creation limit: $podAllocationMaximum")
       }
       val executorConf = KubernetesConf.createExecutorConf(
         conf,
