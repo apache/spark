@@ -225,14 +225,33 @@ trait SparkParserUtils {
       objectName: Option[String]): Origin = {
     val startOpt = Option(startToken)
     val stopOpt = Option(stopToken)
+
+    // Get the current origin to check for position mapper
+    val currentOrigin = CurrentOrigin.get
+
+    // Map positions back to original SQL if position mapper is available
+    val (mappedStartIndex, mappedStopIndex, originalSqlText) =
+      currentOrigin.positionMapper match {
+        case Some(mapper) =>
+          val substitutedStartIndex = startOpt.map(_.getStartIndex)
+          val substitutedStopIndex = stopOpt.map(_.getStopIndex)
+          val mappedStart = substitutedStartIndex.map(mapper.mapToOriginal)
+          val mappedStop = substitutedStopIndex.map(mapper.mapToOriginal)
+          (mappedStart, mappedStop, Some(mapper.originalText))
+        case None =>
+          // No position mapper - use positions as-is
+          (startOpt.map(_.getStartIndex), stopOpt.map(_.getStopIndex), Some(sqlText))
+      }
+
     Origin(
       line = startOpt.map(_.getLine),
       startPosition = startOpt.map(_.getCharPositionInLine),
-      startIndex = startOpt.map(_.getStartIndex),
-      stopIndex = stopOpt.map(_.getStopIndex),
-      sqlText = Some(sqlText),
+      startIndex = mappedStartIndex,
+      stopIndex = mappedStopIndex,
+      sqlText = originalSqlText,
       objectType = objectType,
-      objectName = objectName)
+      objectName = objectName,
+      positionMapper = currentOrigin.positionMapper)
   }
 
   /** Get the command which created the token. */

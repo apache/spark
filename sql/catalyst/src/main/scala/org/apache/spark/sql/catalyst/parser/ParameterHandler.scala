@@ -18,13 +18,14 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.SubstituteParamsParser
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Handler for parameter substitution across different Spark SQL contexts.
  *
- * This class consolidates the common parameter handling logic used by SparkSqlParser,
+ * This object consolidates the common parameter handling logic used by SparkSqlParser,
  * SparkConnectPlanner, and ExecuteImmediate. It provides a single, consistent API
  * for all parameter substitution operations in Spark SQL.
  *
@@ -40,15 +41,14 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *
  * @example Basic usage:
  * {{{
- * val handler = new ParameterHandler()
  * val context = NamedParameterContext(Map("param1" -> Literal(42)))
- * val result = handler.substituteParameters("SELECT :param1", context)
+ * val result = ParameterHandler.substituteParameters("SELECT :param1", context)
  * // result: "SELECT 42"
  * }}}
  *
  * @see [[SubstituteParamsParser]] for the underlying parameter substitution logic
  */
-class ParameterHandler {
+object ParameterHandler {
 
   private val substitutor = new SubstituteParamsParser()
 
@@ -76,6 +76,10 @@ class ParameterHandler {
     val substitutor = new SubstituteParamsParser()
     val (substituted, _, positionMapper) = substitutor.substitute(sqlText,
       namedParams = namedParams, positionalParams = positionalParams)
+
+    // Store the position mapper in CurrentOrigin for error position mapping
+    val currentOrigin = CurrentOrigin.get
+    CurrentOrigin.set(currentOrigin.copy(positionMapper = Some(positionMapper)))
 
     substituted
   }
@@ -178,9 +182,13 @@ class ParameterHandler {
     val allParametersAreNamed = !paramNames.exists(_.isEmpty)
 
     // Do the substitution - it will check the flag internally if it encounters named params
-    val (substitutedSql, _, _) = substitutor.substitute(
+    val (substitutedSql, _, positionMapper) = substitutor.substitute(
       sqlText, namedParams, positionalParams, ParameterExpectation.Unknown,
       allParametersAreNamed, args, paramNames)
+
+    // Store the position mapper in CurrentOrigin for error position mapping
+    val currentOrigin = CurrentOrigin.get
+    CurrentOrigin.set(currentOrigin.copy(positionMapper = Some(positionMapper)))
 
     substitutedSql
   }
@@ -215,8 +223,13 @@ class ParameterHandler {
     if (paramMap.isEmpty) return sqlText
 
     val namedParams = paramMap.map { case (name, expr) => (name, convertToSql(expr)) }
-    val (substitutedSql, _, _) = substitutor.substitute(
+    val (substitutedSql, _, positionMapper) = substitutor.substitute(
       sqlText, namedParams, List.empty, ParameterExpectation.Named)
+
+    // Store the position mapper in CurrentOrigin for error position mapping
+    val currentOrigin = CurrentOrigin.get
+    CurrentOrigin.set(currentOrigin.copy(positionMapper = Some(positionMapper)))
+
     substitutedSql
   }
 
@@ -234,8 +247,13 @@ class ParameterHandler {
     if (paramList.isEmpty) return sqlText
 
     val positionalParams = paramList.map(convertToSql).toList
-    val (substitutedSql, _, _) = substitutor.substitute(
+    val (substitutedSql, _, positionMapper) = substitutor.substitute(
       sqlText, Map.empty, positionalParams, ParameterExpectation.Positional)
+
+    // Store the position mapper in CurrentOrigin for error position mapping
+    val currentOrigin = CurrentOrigin.get
+    CurrentOrigin.set(currentOrigin.copy(positionMapper = Some(positionMapper)))
+
     substitutedSql
   }
 

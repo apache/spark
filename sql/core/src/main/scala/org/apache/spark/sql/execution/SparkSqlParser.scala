@@ -53,7 +53,6 @@ class SparkSqlParser extends AbstractSqlParser {
   val astBuilder = new SparkSqlAstBuilder()
 
   private val substitutor = new VariableSubstitution()
-  private[execution] val parameterHandler = new ParameterHandler()
 
   /**
    * Parse SQL with explicit parameter context, avoiding thread-local usage.
@@ -164,7 +163,7 @@ class SparkSqlParser extends AbstractSqlParser {
       // In legacy mode, return original command without substitution.
       command
     } else {
-      parameterHandler.substituteParameters(command, context)
+      ParameterHandler.substituteParameters(command, context)
     }
   }
 

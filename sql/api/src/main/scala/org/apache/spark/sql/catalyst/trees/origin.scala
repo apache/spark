@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.regex.Pattern
 
 import org.apache.spark.QueryContext
+import org.apache.spark.sql.catalyst.parser.PositionMapper
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.ArrayImplicits._
 
@@ -36,7 +37,8 @@ case class Origin(
     objectType: Option[String] = None,
     objectName: Option[String] = None,
     stackTrace: Option[Array[StackTraceElement]] = None,
-    pysparkErrorContext: Option[(String, String)] = None) {
+    pysparkErrorContext: Option[(String, String)] = None,
+    positionMapper: Option[PositionMapper] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
     DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)

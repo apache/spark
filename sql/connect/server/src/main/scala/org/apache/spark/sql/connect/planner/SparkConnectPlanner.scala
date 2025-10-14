@@ -106,7 +106,6 @@ class SparkConnectPlanner(
   import sessionHolder.session.toRichColumn
 
   private[connect] def parser = session.sessionState.sqlParser
-  private val parameterHandler = new ParameterHandler()
 
   private[connect] def userId: String = sessionHolder.userId
 
@@ -340,19 +339,19 @@ class SparkConnectPlanner(
     if (!namedArguments.isEmpty) {
       // Use named arguments (expressions)
       val paramMap = namedArguments.asScala.toMap.transform((_, v) => transformExpression(v))
-      parameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
+      ParameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
     } else if (!posArguments.isEmpty) {
       // Use positional arguments (expressions)
       val paramList = posArguments.asScala.map(transformExpression).toSeq
-      parameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
+      ParameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
     } else if (!args.isEmpty) {
       // Use named arguments (literals)
       val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
-      parameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
+      ParameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
     } else if (!posArgs.isEmpty) {
       // Use positional arguments (literals)
       val paramList = posArgs.asScala.map(transformLiteral).toSeq
-      parameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
+      ParameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
     } else {
       // No parameters to substitute
       sql.getQuery
