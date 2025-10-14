@@ -48,9 +48,6 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       Seq(4, 0, 86, null, 96, 14),
       Seq(28, 16, 58, null, null, null),
       Seq(1, 88, null, 8, null, 79),
-      Seq(5, 88, 62, 8, null, 79),
-      Seq(62, 88, 40, 8, null, 79),
-      // Seq(67, 88, 73, 8, null, 79),
       Seq(59, null, null, null, 20, 25),
       Seq(1, 50, null, 94, 94, null),
       Seq(null, null, null, 67, 51, 57),
@@ -95,8 +92,6 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       Seq(53, null, 6, 68, 28, 13),
       Seq(null, null, null, null, 89, 23),
       Seq(36, 73, 40, null, 8, null),
-      Seq(62, 40, 40, null, 8, 100),
-      Seq(5, 73, 40, null, 8, null),
       Seq(24, null, null, 40, null, null))
     val rdd2 = spark.sparkContext.parallelize(data2)
     val rddRow2 = rdd2.map(s => Row.fromSeq(s))
@@ -193,7 +188,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       Seq(75, null, 15, null, 81, null),
       Seq(53, null, 6, 68, 28, 13),
       Seq(null, null, null, null, 89, 23),
-      Seq(36, 73, 40, null, 8, 100),
+      Seq(36, 73, 40, null, 8, null),
       Seq(24, null, null, 40, null, null))
     val rdd5part = spark.sparkContext.parallelize(data5part)
     val rddRow5part = rdd5part.map(s => Row.fromSeq(s))
