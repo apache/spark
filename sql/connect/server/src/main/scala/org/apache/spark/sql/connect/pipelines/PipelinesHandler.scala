@@ -290,13 +290,11 @@ private[connect] object PipelinesHandler extends Logging {
     val rawDestinationIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session)
     val isFlowWriteToView =
-      graphElementRegistry
-        .getViews
+      graphElementRegistry.getViews
         .filter(_.isInstanceOf[TemporaryView])
         .exists(_.identifier == rawDestinationIdentifier)
     val isFlowWriteToSink =
-      graphElementRegistry
-        .getSinks
+      graphElementRegistry.getSinks
         .filter(_.isInstanceOf[Sink])
         .exists(_.identifier == rawDestinationIdentifier)
     // If the flow is created implicitly as part of defining a view or that it writes to a sink,
