@@ -22,8 +22,6 @@ The comparison highlights key differences between Spark Connect and Spark Classi
 
 **When does this matter?** These differences are particularly important when migrating existing code from Spark Classic to Spark Connect, or when writing code that needs to work with both modes. Understanding these distinctions helps avoid unexpected behavior and performance issues.
 
-**Note:** The examples in this guide use Python, but the same principles apply to Scala and Java.
-
 For an overview of Spark Connect, see [Spark Connect Overview](spark-connect-overview.html).
 
 # Query Execution: Both Lazy
@@ -80,33 +78,32 @@ If not careful about the difference between lazy vs. eager analysis, there are s
 
 ```python
 def create_temp_view_and_create_dataframe(x):
-  spark.range(x).createOrReplaceTempView("tempview")
-  return spark.sql("SELECT * FROM tempview")
-  # return spark.table("tempview")  # Or this, it is similar to the above SQL
+  spark.range(x).createOrReplaceTempView("temp_view")
+  return spark.table("temp_view")
 
 df10 = create_temp_view_and_create_dataframe(10)
 assert len(df10.collect()) == 10
 
 df100 = create_temp_view_and_create_dataframe(100)
-assert len(df10.collect()) == 10  # <-- User expects the df still references the old tempview, but in SparkConnect, it is not.
+assert len(df10.collect()) == 10  # <-- User expects the df still references the old temp_view, but in SparkConnect, it is not.
 assert len(df100.collect()) == 100
 ```
 
 In Spark Connect, the DataFrame stores only a reference to the temporary view by name. The internal representation (proto plan) for the DataFrame in the above code looks like this:
 
 ```
-# The proto plan of spark.sql("SELECT * FROM tempview")
+# The proto plan of spark.table("SELECT * FROM temp_view")
 root {
   sql {
-    query: "SELECT * FROM tempview"
+    query: "SELECT * FROM temp_view"
   }
 }
 
-# The proto plan of spark.table("tempview")
+# The proto plan of spark.table("temp_view")
 root {
   read {
     named_table {
-      unparsed_identifier: "tempview"
+      unparsed_identifier: "temp_view"
     }
   }
 }
@@ -125,10 +122,9 @@ Create unique temporary view names, for example by including a UUID in the view 
 ```python
 import uuid
 def create_temp_view_and_create_dataframe(x):
-  tempview_name = f"`tempview_{uuid.uuid4()}`"  # Use a random name to avoid conflicts.
-  spark.range(x).createOrReplaceTempView(tempview_name)
-  return spark.sql("SELECT * FROM " + tempview_name)
-  # return spark.table(tempview_name)  # Or this.
+  temp_view_name = f"`temp_view_{uuid.uuid4()}`"  # Use a random name to avoid conflicts.
+  spark.range(x).createOrReplaceTempView(temp_view_name)
+  return spark.table(temp_view_name)
 
 df10 = create_temp_view_and_create_dataframe(10)
 assert len(df10.collect()) == 10
@@ -143,9 +139,27 @@ In this way, the proto plan of the df will reference the unique temp view:
 ```
 root {
   sql {
-    query: "SELECT * FROM `tempview_3b851121-e2f8-4763-9168-8a0e886b6203`"
+    query: "SELECT * FROM `temp_view_3b851121-e2f8-4763-9168-8a0e886b6203`"
   }
 }
+```
+
+**Scala example:**
+
+```scala
+import java.util.UUID
+
+def createTempViewAndDataFrame(x: Int) = {
+  val tempViewName = s"temp_view_${UUID.randomUUID().toString.replaceAll("-", "")}"
+  spark.range(x).createOrReplaceTempView(tempViewName)
+  spark.table(tempViewName)
+}
+
+val df10 = createTempViewAndDataFrame(10)
+assert(df10.collect().length == 10)
+
+val df100 = createTempViewAndDataFrame(100)
+assert(df10.collect().length == 10) // Works as expected
 ```
 
 ## 2. UDFs with mutable external variables
@@ -211,6 +225,18 @@ df.show()
 
 By wrapping the UDF definition inside another function (`make_extract_value_udf`), we create a new scope where the current value of j is passed in as an argument. This ensures each generated UDF has its own copy of the field, bound at the time the UDF is created.
 
+**Scala example:**
+
+```scala
+def makeUDF(value: Int) = udf(() => value)
+
+var x = 123
+val fooUDF = makeUDF(x)  // Captures the current value
+x = 456
+val df = spark.range(1).select(fooUDF())
+df.show() // prints 123
+```
+
 ## 3. Delayed error detection
 
 Error handling during transformations:
@@ -240,6 +266,24 @@ try:
   df.columns # <-- This will trigger eager analysis
 except Exception as e:
   print(f"Error: {repr(e)}")
+```
+
+**Scala example:**
+
+```scala
+import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.functions._
+
+val df = spark.createDataFrame(Seq(("Alice", 25), ("Bob", 30))).toDF("name", "age")
+
+try {
+  val df2 = df.select("name", "age")
+    .withColumn("age_group", when(col("age") < 18, "minor").otherwise("adult"))
+    .filter(col("age_with_typo") > 6)
+  df2.columns // Trigger eager analysis to catch the error
+} catch {
+  case e: SparkThrowable => println(s"Error: ${e.getMessage}")
+}
 ```
 
 ## 4. Excessive schema access on new DataFrames
@@ -282,11 +326,48 @@ for i in range(200):
 df.show()
 ```
 
+**Scala example:**
+
+```scala
+import org.apache.spark.sql.functions._
+
+var df = spark.range(10).toDF
+val columns = scala.collection.mutable.Set(df.columns: _*)
+for (i <- 0 until 200) {
+  val newColumnName = i.toString
+  if (!columns.contains(newColumnName)) {
+    df = df.withColumn(newColumnName, col("id") + i)
+    columns.add(newColumnName)
+  }
+}
+df.show()
+```
+
 Another similar case is creating a large number of unnecessary intermediate DataFrames and analyzing them. In the following case, the goal is to extract the field names from each column of a struct type.
 
 ```python
-from pyspark.sql.types import StructType
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
+# Create a DataFrame with nested StructTypes
+data = [
+    (1, ("Alice", 25), ("New York", "USA")),
+    (2, ("Bob", 30), ("Berlin", "Germany")),
+    (3, ("Charlie", 35), ("Paris", "France")),
+]
+schema = StructType([
+    StructField("id", IntegerType(), True),
+    StructField("person", StructType([
+        StructField("name", StringType(), True),
+        StructField("age", IntegerType(), True)
+    ])),
+    StructField("address", StructType([
+        StructField("city", StringType(), True),
+        StructField("country", StringType(), True)
+    ]))
+])
+df = spark.createDataFrame(data, schema)
+
+# Extract field names from each struct-type column
 struct_column_fields = {
     column_schema.name: df.select(column_schema.name + ".*").columns
     for column_schema in df.schema
@@ -304,12 +385,28 @@ Obtain `StructType` field information directly from the DataFrame's schema inste
 ```python
 from pyspark.sql.types import StructType
 
+df = ...
 struct_column_fields = {
     column_schema.name: [f.name for f in column_schema.dataType.fields]
     for column_schema in df.schema
     if isinstance(column_schema.dataType, StructType)
 }
 print(struct_column_fields)
+```
+
+**Scala example:**
+
+```scala
+import org.apache.spark.sql.types.StructType
+
+df = ...
+val structColumnFields = df.schema.fields
+  .filter(_.dataType.isInstanceOf[StructType])
+  .map { field =>
+    field.name -> field.dataType.asInstanceOf[StructType].fields.map(_.name)
+  }
+  .toMap
+println(structColumnFields)
 ```
 
 This approach is significantly faster when dealing with a large number of columns because it avoids creating and analyzing numerous DataFrames.
