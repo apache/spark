@@ -390,7 +390,7 @@ def main() -> None:
     # "init" subcommand
     init_parser = subparsers.add_parser(
         "init",
-        help="Generate a sample pipeline project, including a spec file and example transformations.",
+        help="Generate a sample pipeline project, with a spec file and example transformations.",
     )
     init_parser.add_argument(
         "--name",
