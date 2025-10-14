@@ -289,17 +289,23 @@ private[connect] object PipelinesHandler extends Logging {
 
     val rawDestinationIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session)
-    val isFlowWriteToView = graphElementRegistry
-      .getSinks
-      .filter(_.isInstanceOf[Sink])
-      .exists(_.identifier == rawDestinationIdentifier)
+    val isFlowWriteToView =
+      graphElementRegistry
+        .getViews
+        .filter(_.isInstanceOf[TemporaryView])
+        .exists(_.identifier == rawDestinationIdentifier)
+    val isFlowWriteToSink =
+      graphElementRegistry
+        .getSinks
+        .filter(_.isInstanceOf[Sink])
+        .exists(_.identifier == rawDestinationIdentifier)
     // If the flow is created implicitly as part of defining a view or that it writes to a sink,
     // then we do not qualify the flow identifier and the flow destination. This is because
     // views and sinks are not permitted to have multipart
     val isImplicitFlowForTempView = isImplicitFlow && isFlowWriteToView
     val Seq(flowIdentifier, destinationIdentifier) =
       Seq(rawFlowIdentifier, rawDestinationIdentifier).map { rawIdentifier =>
-        if (isImplicitFlowForTempView || flowWritesToSink) {
+        if (isImplicitFlowForTempView || isFlowWriteToSink) {
           rawIdentifier
         } else {
           GraphIdentifierManager

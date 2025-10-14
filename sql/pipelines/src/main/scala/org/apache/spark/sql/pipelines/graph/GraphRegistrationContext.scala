@@ -50,8 +50,8 @@ class GraphRegistrationContext(
     sinks += sinkDef
   }
 
-  def getViews(): Seq[View] = {
-    return views.toSeq
+  def getViews: Seq[View] = {
+    views.toSeq
   }
 
   def getSinks: Seq[Sink] = sinks.toSeq

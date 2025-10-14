@@ -302,7 +302,7 @@ class TestGraphRegistrationContext(
     val rawDestinationIdentifier =
       GraphIdentifierManager.parseTableIdentifier(destinationName, spark)
 
-    val flowWritesToView = getViews()
+    val flowWritesToView = getViews
         .filter(_.isInstanceOf[TemporaryView])
         .exists(_.identifier == rawDestinationIdentifier)
     val flowWritesToSink = getSinks
