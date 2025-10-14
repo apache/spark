@@ -942,7 +942,10 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  /** Unregister shuffle data */
+  /**
+   * Unregister shuffle metadata. This currently should only be called through
+   * `ContextCleaner` when the shuffle is considered no longer referenced anywhere.
+   */
   def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
