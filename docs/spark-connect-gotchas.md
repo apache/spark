@@ -160,6 +160,7 @@ assert(df10.collect().length == 10)
 
 val df100 = createTempViewAndDataFrame(100)
 assert(df10.collect().length == 10) // Works as expected
+assert(df100.collect().length == 100)
 ```
 
 ## 2. UDFs with mutable external variables
@@ -174,10 +175,9 @@ def foo():
   return x
 
 
-df = spark.createDataFrame([(1,)], ["dummy"])
-df = df.select(foo())
+df = spark.range(1).select(foo())
 x = 456
-df.show() # prints 456
+df.show() # Prints 456
 ```
 
 In this example, the df displays 456 instead of 123. This is because, in Spark Connect, Python UDFs are lazy—their serialization and registration are deferred until execution time. That means the UDF is only serialized and uploaded to the Spark cluster for execution when df.show() is called.
@@ -206,24 +206,22 @@ This is the same issue as above. It happens because Python closures capture vari
 If you need to modify the value of external variables that a UDF depends on, use a function factory (closure with early binding) to correctly capture variable values. Specifically, wrap the UDF creation in a helper function to capture the value of a dependent variable at each loop iteration.
 
 ```python
-from pyspark.sql.functions import udf, col
-import json
+from pyspark.sql.functions import udf
 
-df = spark.createDataFrame([{"values": '{"column_1": 1, "column_2": 2}'}], ["values"])
+def make_udf(value):
+  def foo():
+    return value
+  return udf(foo)
 
-def make_extract_value_udf(field):
-    def extract_value(val):
-        return json.loads(val).get(field)
-    return udf(extract_value)
 
-for j in ['column_1', 'column_2']:
-    extract_value_udf = make_extract_value_udf(j)
-    df = df.withColumn(j, extract_value_udf(col('values')))
-
+x = 123
+foo_udf = make_udf(x)
+x = 456
+df = spark.range(1).select(foo_udf())
 df.show()
 ```
 
-By wrapping the UDF definition inside another function (`make_extract_value_udf`), we create a new scope where the current value of j is passed in as an argument. This ensures each generated UDF has its own copy of the field, bound at the time the UDF is created.
+By wrapping the UDF definition inside another function (`make_udf`), we create a new scope where the current value of `x` is passed in as an argument. This ensures each generated UDF has its own copy of the field, bound at the time the UDF is created.
 
 **Scala example:**
 
