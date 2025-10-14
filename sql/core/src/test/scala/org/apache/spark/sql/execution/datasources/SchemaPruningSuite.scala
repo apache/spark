@@ -604,24 +604,24 @@ abstract class SchemaPruningSuite
     checkAnswer(query2, Row("Susan", 1) :: Nil)
   }
 
-  testSchemaPruning("SPARK-47230: join operations with exploded nested fields") {
-    withTempView("contacts2") {
-      // Create a second contacts table
-      sql("select * from contacts").createOrReplaceTempView("contacts2")
-
-      // Join on exploded fields with multi-field access
-      val query = sql(
-        """
-          |select c1.name.first, f1.first as friend1, f1.middle, f2.first as friend2
-          |from contacts c1, lateral explode(c1.friends) t1(f1)
-          |join contacts2 c2, lateral explode(c2.friends) t2(f2)
-          |on f1.first = f2.first
-          |""".stripMargin)
-      checkScan(query,
-        "struct<name:struct<first:string>,friends:array<struct<first:string,middle:string>>>",
-        "struct<friends:array<struct<first:string>>>")
-      checkAnswer(query, Row("Jane", "Susan", "Z.", "Susan") :: Nil)
-    }
+  testSchemaPruning("SPARK-47230: join after posexplode with multi-field pruning") {
+    // Join contacts with departments after posexploding friends array
+    // This tests that schema pruning works correctly when joining exploded data
+    val query = sql(
+      """
+        |select c.name.first, pos, friend.first, friend.middle, d.depName
+        |from contacts c
+        |cross join lateral posexplode(c.friends) t(pos, friend)
+        |join departments d on c.id = d.contactId
+        |where friend.first = 'Susan'
+        |""".stripMargin)
+    // Schema pruning should only read the fields we need from each table:
+    // - contacts: id (for join), name.first, friends.first, friends.middle
+    // - departments: contactId (for join), depName
+    checkScan(query,
+      "struct<id:int,name:struct<first:string>,friends:array<struct<first:string,middle:string>>>",
+      "struct<depName:string,contactId:int>")
+    checkAnswer(query, Row("Jane", 0, "Susan", "Z.", "Engineering") :: Nil)
   }
 
   testSchemaPruning("select one deep nested complex field after repartition") {

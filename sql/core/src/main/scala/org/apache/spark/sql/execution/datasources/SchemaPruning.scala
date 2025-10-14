@@ -47,6 +47,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
     val allStructFields = scala.collection.mutable.ArrayBuffer[GetStructField]()
     val generateMappings = scala.collection.mutable.Map[ExprId, Expression]()
     val extractAliases = scala.collection.mutable.Map[ExprId, Expression]()
+    // Track columns that need full struct preservation (when entire struct is selected)
+    val columnsNeedingFullPreservation = scala.collection.mutable.Set[String]()
 
     plan.foreach { node =>
       // Collect Generate nodes
@@ -55,6 +57,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
           g.generatorOutput.foreach { attr =>
             generateMappings(attr.exprId) = g.generator
           }
+
         case p: Project =>
           // Collect _extract_ aliases created by NestedColumnAliasing
           p.output.zip(p.projectList).foreach { case (attr, namedExpr) =>
@@ -81,6 +84,138 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
 
     val transformedPlan = plan transformDown {
+      // SPARK-47230: Handle Project over Generate pattern to detect full struct selection
+      case p @ Project(projectList, g @ Generate(generator, _, _, _, generatorOutput, _)) =>
+        // scalastyle:off println
+        println("DEBUG: Found Project over Generate pattern")
+        println(s"DEBUG: Project list size: ${projectList.size}")
+        println(s"DEBUG: Generator output size: ${generatorOutput.size}")
+        println(s"DEBUG: Generator: ${generator.getClass.getSimpleName}")
+        // scalastyle:on println
+
+        // Check if any generator output attributes are selected directly (not via GetStructField)
+        val generatorOutputIds = generatorOutput.map(_.exprId).toSet
+        // scalastyle:off println
+        println(s"DEBUG: Generator output IDs: ${generatorOutputIds.mkString(", ")}")
+        // scalastyle:on println
+
+        projectList.foreach {
+          case attr: AttributeReference if generatorOutputIds.contains(attr.exprId) =>
+            // scalastyle:off println
+            println(s"DEBUG: Found direct AttributeReference to generator output: " +
+              s"${attr.name} (exprId: ${attr.exprId}, dataType: ${attr.dataType})")
+            // scalastyle:on println
+
+            // This is a direct selection of generator output (e.g., SELECT friend)
+            // IMPORTANT: Only trigger full struct preservation if this is a STRUCT attribute
+            // For PosExplode, the first output is position (IntegerType), second is the struct
+            // We should only preserve full struct for the struct output, not the position
+            attr.dataType match {
+              case _: StructType =>
+                // scalastyle:off println
+                println(s"DEBUG: Attribute is StructType, triggering full preservation")
+                // scalastyle:on println
+
+                // Trace back to find the root column
+                generator match {
+                  case e: Explode =>
+                    // scalastyle:off println
+                    println(s"DEBUG: Tracing Explode child: ${e.child}")
+                    // scalastyle:on println
+                    traceArrayAccess(e.child).foreach { case (rootCol, _) =>
+                      // scalastyle:off println
+                      println(s"DEBUG: Adding to columnsNeedingFullPreservation: $rootCol")
+                      // scalastyle:on println
+                      columnsNeedingFullPreservation += rootCol
+                    }
+                  case pe: PosExplode =>
+                    // scalastyle:off println
+                    println(s"DEBUG: Tracing PosExplode child: ${pe.child}")
+                    // scalastyle:on println
+                    traceArrayAccess(pe.child).foreach { case (rootCol, _) =>
+                      // scalastyle:off println
+                      println(s"DEBUG: Adding to columnsNeedingFullPreservation: $rootCol")
+                      // scalastyle:on println
+                      columnsNeedingFullPreservation += rootCol
+                    }
+                  case _ =>
+                    // scalastyle:off println
+                    println(s"DEBUG: Generator is neither Explode nor PosExplode")
+                    // scalastyle:on println
+                }
+              case _ =>
+                // scalastyle:off println
+                println(s"DEBUG: Attribute is NOT StructType (${attr.dataType}), " +
+                  s"skipping full preservation")
+                // scalastyle:on println
+            }
+
+          case Alias(attr: AttributeReference, _) if generatorOutputIds.contains(attr.exprId) =>
+            // scalastyle:off println
+            println(s"DEBUG: Found Alias wrapping AttributeReference to generator output: " +
+              s"${attr.name} (exprId: ${attr.exprId}, dataType: ${attr.dataType})")
+            // scalastyle:on println
+
+            // This is a direct selection of generator output wrapped in Alias
+            // (e.g., SELECT friend AS friend in LATERAL EXPLODE syntax)
+            // IMPORTANT: Only trigger full struct preservation if this is a STRUCT attribute
+            // For PosExplode, the first output is position (IntegerType), second is the struct
+            // We should only preserve full struct for the struct output, not the position
+            attr.dataType match {
+              case _: StructType =>
+                // scalastyle:off println
+                println(s"DEBUG: Attribute is StructType, triggering full preservation")
+                // scalastyle:on println
+
+                // Trace back to find the root column
+                generator match {
+                  case e: Explode =>
+                    // scalastyle:off println
+                    println(s"DEBUG: Tracing Explode child: ${e.child}")
+                    // scalastyle:on println
+                    traceArrayAccess(e.child).foreach { case (rootCol, _) =>
+                      // scalastyle:off println
+                      println(s"DEBUG: Adding to columnsNeedingFullPreservation: $rootCol")
+                      // scalastyle:on println
+                      columnsNeedingFullPreservation += rootCol
+                    }
+                  case pe: PosExplode =>
+                    // scalastyle:off println
+                    println(s"DEBUG: Tracing PosExplode child: ${pe.child}")
+                    // scalastyle:on println
+                    traceArrayAccess(pe.child).foreach { case (rootCol, _) =>
+                      // scalastyle:off println
+                      println(s"DEBUG: Adding to columnsNeedingFullPreservation: $rootCol")
+                      // scalastyle:on println
+                      columnsNeedingFullPreservation += rootCol
+                    }
+                  case _ =>
+                    // scalastyle:off println
+                    println(s"DEBUG: Generator is neither Explode nor PosExplode")
+                    // scalastyle:on println
+                }
+              case _ =>
+                // scalastyle:off println
+                println(s"DEBUG: Attribute is NOT StructType (${attr.dataType}), " +
+                  s"skipping full preservation")
+                // scalastyle:on println
+            }
+
+          case other =>
+            // scalastyle:off println
+            println(s"DEBUG: Project item not a direct AttributeReference: " +
+              s"${other.getClass.getSimpleName}")
+            // scalastyle:on println
+        }
+
+        // scalastyle:off println
+        println(s"DEBUG: columnsNeedingFullPreservation: " +
+          s"${columnsNeedingFullPreservation.mkString(", ")}")
+        // scalastyle:on println
+
+        // Continue with normal processing
+        p
+
       // SPARK-47230: Handle cases with Generate nodes where ScanOperation doesn't match
       case p @ Project(_, l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
           if generateMappings.nonEmpty &&
@@ -97,7 +232,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
         // Use the expressions collected at the beginning
         tryEnhancedNestedArrayPruning(
           l, p.projectList, Seq.empty, allArrayStructFields.toSeq, allStructFields.toSeq,
-          generateMappings.toMap, extractAliases.toMap, hadoopFsRelation, requiredColumns
+          generateMappings.toMap, extractAliases.toMap, hadoopFsRelation, requiredColumns,
+          columnsNeedingFullPreservation.toSet
         ).getOrElse(p)
 
       case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
@@ -120,7 +256,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
           tryEnhancedNestedArrayPruning(
             l, projects, allFilters, allArrayStructFields.toSeq, allStructFields.toSeq,
-            generateMappings.toMap, extractAliases.toMap, hadoopFsRelation, requiredColumns)
+            generateMappings.toMap, extractAliases.toMap, hadoopFsRelation, requiredColumns,
+            columnsNeedingFullPreservation.toSet)
         } else {
           None
         }
@@ -149,6 +286,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
    *
    * @param requiredColumns Top-level columns that must be preserved even if they have no
    *                        nested field accesses (e.g., columns used in GROUP BY)
+   * @param columnsNeedingFullPreservation Columns where the entire struct is selected directly
    */
   private def tryEnhancedNestedArrayPruning(
       relation: LogicalRelation,
@@ -159,7 +297,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
       generateMappings: Map[ExprId, Expression],
       extractAliases: Map[ExprId, Expression],
       hadoopFsRelation: HadoopFsRelation,
-      requiredColumns: Set[String]): Option[LogicalPlan] = {
+      requiredColumns: Set[String],
+      columnsNeedingFullPreservation: Set[String]): Option[LogicalPlan] = {
 
     if (arrayStructFields.isEmpty && structFields.isEmpty) {
       return None
@@ -213,30 +352,11 @@ object SchemaPruning extends Rule[LogicalPlan] {
       }
     }
 
-    // SPARK-47230: Check if any generator output attributes are directly referenced
-    // (without field extraction). If so, skip pruning for those columns.
-    val directGeneratorReferences = scala.collection.mutable.Set[String]()
-    (projects ++ filters).foreach { expr =>
-      expr.foreach {
-        case attr: AttributeReference if generateMappings.contains(attr.exprId) =>
-          // This is a generator output attribute being directly referenced
-          // Trace back to find the root column
-          generateMappings.get(attr.exprId) match {
-            case Some(gen: UnaryExpression) =>
-              val (rootAndPath, _) = traceArrayAccessThroughGenerates(
-                gen.child, generateMappings, extractAliases, relationExprIds)
-              rootAndPath.foreach { case (rootCol, _) =>
-                directGeneratorReferences += rootCol
-              }
-            case _ =>
-          }
-        case _ =>
-      }
-    }
-
-    // Remove columns from nestedFieldAccesses if they have direct generator references
-    directGeneratorReferences.foreach { rootCol =>
-      nestedFieldAccesses.remove(rootCol)
+    // SPARK-47230: Add columns needing full preservation (where entire struct was selected)
+    // to the nestedFieldAccesses map with an empty path to signal full preservation
+    columnsNeedingFullPreservation.foreach { rootCol =>
+      val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
+      nestedFieldAccesses(rootCol) = existingPaths + Seq.empty[String]
     }
 
     // SPARK-47230: Only apply enhanced pruning if we actually traced through Generate nodes
@@ -519,31 +639,41 @@ object SchemaPruning extends Rule[LogicalPlan] {
    * For paths like Seq(Seq("a"), Seq("b", "c")):
    * - Keep field "a" entirely
    * - Keep field "b", but recursively prune it to only contain "c"
+   *
+   * SPARK-47230: Uses case-insensitive field matching when configured.
    */
   private def pruneStructByPaths(struct: StructType, paths: Seq[Seq[String]],
       arrayStructFieldPaths: Set[Seq[String]] = Set.empty): StructType = {
-    // Group paths by their first component
-    val pathsByFirstField = paths.groupBy(_.head)
+    // Group paths by their first component using case-insensitive matching
+    val resolver = conf.resolver
 
     // Keep only fields that are accessed, preserving original field order
     // to maintain field ordinals for GetArrayStructFields expressions
     val prunedFields = struct.fields.flatMap { field =>
-      pathsByFirstField.get(field.name).map { fieldPaths =>
+      // Find all paths that start with this field (case-insensitive)
+      val matchingPaths = paths.filter(path =>
+        path.nonEmpty && resolver(field.name, path.head))
+
+      if (matchingPaths.nonEmpty) {
         // Get remaining path components after removing the first
-        val remainingPaths = fieldPaths.map(_.tail).filter(_.nonEmpty)
+        val remainingPaths = matchingPaths.map(_.tail).filter(_.nonEmpty)
 
         // Get array paths for this field (removing first component)
+        // Use case-insensitive matching here too
         val fieldArrayPaths = arrayStructFieldPaths
-          .filter(_.headOption.contains(field.name))
+          .filter(p => p.nonEmpty && resolver(field.name, p.head))
           .map(_.tail)
 
         if (remainingPaths.isEmpty) {
           // This field itself is accessed, keep it entirely
-          field
+          Some(field)
         } else {
           // This field has nested accesses, recurse
-          pruneFieldByPaths(field, remainingPaths, fieldArrayPaths)
+          Some(pruneFieldByPaths(field, remainingPaths, fieldArrayPaths))
         }
+      } else {
+        // This field is not accessed
+        None
       }
     }
 
@@ -725,9 +855,22 @@ object SchemaPruning extends Rule[LogicalPlan] {
 object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
 
   /**
+   * Find field ordinal using case-insensitive or case-sensitive lookup
+   * depending on the session configuration.
+   */
+  private def findFieldOrdinal(struct: StructType, fieldName: String): Option[Int] = {
+    val resolver = conf.resolver
+    struct.fields.indexWhere(f => resolver(f.name, fieldName)) match {
+      case -1 => None
+      case ordinal => Some(ordinal)
+    }
+  }
+
+  /**
    * Recursively resolve the actual dataType of an expression using the schemaMap.
    * This is critical for nested arrays where we need to traverse through GetStructField
    * expressions to get the pruned schema.
+   * Uses case-insensitive field resolution when configured.
    */
   private def resolveActualDataType(
       expr: Expression,
@@ -741,8 +884,12 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
         resolveActualDataType(child, schemaMap) match {
           case st: StructType =>
             nameOpt match {
-              case Some(fieldName) if st.fieldNames.contains(fieldName) =>
-                st(fieldName).dataType
+              case Some(fieldName) =>
+                findFieldOrdinal(st, fieldName) match {
+                  case Some(idx) => st.fields(idx).dataType
+                  case None if ordinal < st.fields.length => st.fields(ordinal).dataType
+                  case _ => expr.dataType
+                }
               case _ if ordinal < st.fields.length =>
                 st.fields(ordinal).dataType
               case _ =>
@@ -752,8 +899,13 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
           case ArrayType(st: StructType, _) =>
             // Child is an array of structs, extract field from element type
             nameOpt match {
-              case Some(fieldName) if st.fieldNames.contains(fieldName) =>
-                ArrayType(StructType(Seq(st(fieldName))), true)
+              case Some(fieldName) =>
+                findFieldOrdinal(st, fieldName) match {
+                  case Some(idx) => ArrayType(StructType(Seq(st.fields(idx))), true)
+                  case None if ordinal < st.fields.length =>
+                    ArrayType(StructType(Seq(st.fields(ordinal))), true)
+                  case _ => expr.dataType
+                }
               case _ if ordinal < st.fields.length =>
                 ArrayType(StructType(Seq(st.fields(ordinal))), true)
               case _ =>
@@ -821,17 +973,18 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
             actualDataType match {
               case ArrayType(st: StructType, _) =>
                 val fieldName = field.name
-                if (st.fieldNames.contains(fieldName)) {
-                  val newOrdinal = st.fieldIndex(fieldName)
-                  val newNumFields = st.fields.length
-                  if (newOrdinal != ordinal || newNumFields != numFields) {
-                    GetArrayStructFields(childExpr, st.fields(newOrdinal), newOrdinal,
-                      newNumFields, containsNull)
-                  } else {
+                // Use case-insensitive field lookup
+                findFieldOrdinal(st, fieldName) match {
+                  case Some(newOrdinal) =>
+                    val newNumFields = st.fields.length
+                    if (newOrdinal != ordinal || newNumFields != numFields) {
+                      GetArrayStructFields(childExpr, st.fields(newOrdinal), newOrdinal,
+                        newNumFields, containsNull)
+                    } else {
+                      gasf
+                    }
+                  case None =>
                     gasf
-                  }
-                } else {
-                  gasf
                 }
               case _ =>
                 gasf
@@ -848,12 +1001,18 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
                 }
 
                 fieldNameOpt match {
-                  case Some(fieldName) if st.fieldNames.contains(fieldName) =>
-                    val newOrdinal = st.fieldIndex(fieldName)
-                    if (newOrdinal != ordinal) {
-                      GetStructField(childExpr, newOrdinal, Some(fieldName))
-                    } else {
-                      gsf
+                  case Some(fieldName) =>
+                    // Use case-insensitive field lookup
+                    findFieldOrdinal(st, fieldName) match {
+                      case Some(newOrdinal) =>
+                        if (newOrdinal != ordinal) {
+                          // Use the actual field name from the schema (case-preserved)
+                          GetStructField(childExpr, newOrdinal, Some(st.fields(newOrdinal).name))
+                        } else {
+                          gsf
+                        }
+                      case None =>
+                        gsf
                     }
                   case _ =>
                     gsf
@@ -900,17 +1059,18 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
             actualDataType match {
               case ArrayType(st: StructType, _) =>
                 val fieldName = field.name
-                if (st.fieldNames.contains(fieldName)) {
-                  val newOrdinal = st.fieldIndex(fieldName)
-                  val newNumFields = st.fields.length
-                  if (newOrdinal != ordinal || newNumFields != numFields) {
-                    GetArrayStructFields(childExpr, st.fields(newOrdinal), newOrdinal,
-                      newNumFields, containsNull)
-                  } else {
+                // Use case-insensitive field lookup
+                findFieldOrdinal(st, fieldName) match {
+                  case Some(newOrdinal) =>
+                    val newNumFields = st.fields.length
+                    if (newOrdinal != ordinal || newNumFields != numFields) {
+                      GetArrayStructFields(childExpr, st.fields(newOrdinal), newOrdinal,
+                        newNumFields, containsNull)
+                    } else {
+                      gasf
+                    }
+                  case None =>
                     gasf
-                  }
-                } else {
-                  gasf
                 }
               case _ => gasf
             }
@@ -925,12 +1085,18 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
                 }
 
                 fieldNameOpt match {
-                  case Some(fieldName) if st.fieldNames.contains(fieldName) =>
-                    val newOrdinal = st.fieldIndex(fieldName)
-                    if (newOrdinal != ordinal) {
-                      GetStructField(childExpr, newOrdinal, Some(fieldName))
-                    } else {
-                      gsf
+                  case Some(fieldName) =>
+                    // Use case-insensitive field lookup
+                    findFieldOrdinal(st, fieldName) match {
+                      case Some(newOrdinal) =>
+                        if (newOrdinal != ordinal) {
+                          // Use the actual field name from the schema (case-preserved)
+                          GetStructField(childExpr, newOrdinal, Some(st.fields(newOrdinal).name))
+                        } else {
+                          gsf
+                        }
+                      case None =>
+                        gsf
                     }
                   case _ => gsf
                 }
