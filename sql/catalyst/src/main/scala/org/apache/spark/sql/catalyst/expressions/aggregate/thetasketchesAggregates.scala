@@ -112,8 +112,10 @@ case class ThetaSketchAgg(
     lgNomEntriesInput
   }
 
-  private lazy val family: Family =
-    ThetaSketchUtils.parseFamily(third.eval().asInstanceOf[UTF8String].toString, prettyName)
+  private lazy val family: Family = {
+    val familyName = third.eval().asInstanceOf[UTF8String]
+    ThetaSketchUtils.parseFamily(familyName.toString, prettyName)
+  }
 
   // Constructors
   def this(child: Expression) = {
