@@ -876,7 +876,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-4</version>
+        <version>1.5.7-5</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1318,7 +1318,7 @@
       <dependency>
         <groupId>com.github.docker-java</groupId>
         <artifactId>docker-java</artifactId>
-        <version>3.4.0</version>
+        <version>3.6.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1338,7 +1338,7 @@
       <dependency>
         <groupId>com.github.docker-java</groupId>
         <artifactId>docker-java-transport-zerodep</artifactId>
-        <version>3.4.0</version>
+        <version>3.6.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>

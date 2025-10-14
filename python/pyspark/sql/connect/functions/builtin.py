@@ -4626,6 +4626,13 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
 bitmap_or_agg.__doc__ = pysparkfuncs.bitmap_or_agg.__doc__
 
 
+def bitmap_and_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_and_agg", col)
+
+
+bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
+
+
 # Call Functions
 
 

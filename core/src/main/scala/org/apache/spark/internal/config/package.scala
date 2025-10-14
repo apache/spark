@@ -2137,7 +2137,7 @@ package object config {
       .doc("When true, LZF compression will use multiple threads to compress data in parallel.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val IO_WARNING_LARGEFILETHRESHOLD =
     ConfigBuilder("spark.io.warning.largeFileThreshold")

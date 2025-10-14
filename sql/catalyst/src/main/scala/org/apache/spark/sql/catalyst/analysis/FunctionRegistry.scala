@@ -853,6 +853,7 @@ object FunctionRegistry {
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
     expression[BitmapCount]("bitmap_count"),
     expression[BitmapOrAgg]("bitmap_or_agg"),
+    expression[BitmapAndAgg]("bitmap_and_agg"),
 
     // json
     expression[StructsToJson]("to_json"),

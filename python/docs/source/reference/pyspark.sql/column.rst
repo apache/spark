@@ -58,6 +58,7 @@ Column
     Column.rlike
     Column.startswith
     Column.substr
+    Column.transform
     Column.try_cast
     Column.when
     Column.withField

@@ -74,3 +74,12 @@ class TemporaryView(Output):
     referenced by flows within the dataflow graph, but are not visible outside of the graph."""
 
     pass
+
+
+@dataclass(frozen=True)
+class Sink(Output):
+    """Definition of an external sink in a pipeline dataflow graph. An external sink's
+    contents are written to an external system rather than managed by the pipeline itself."""
+
+    format: str
+    options: Mapping[str, str]

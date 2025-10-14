@@ -2507,6 +2507,29 @@
     ],
     "sqlState" : "22P03"
   },
+  "INVALID_CLONE_SESSION_REQUEST" : {
+    "message" : [
+      "Invalid session clone request."
+    ],
+    "subClass" : {
+      "TARGET_SESSION_ID_ALREADY_CLOSED" : {
+        "message" : [
+          "Cannot clone session to target session ID <targetSessionId> because a session with this ID was previously closed."
+        ]
+      },
+      "TARGET_SESSION_ID_ALREADY_EXISTS" : {
+        "message" : [
+          "Cannot clone session to target session ID <targetSessionId> because a session with this ID already exists."
+        ]
+      },
+      "TARGET_SESSION_ID_FORMAT" : {
+        "message" : [
+          "Target session ID <targetSessionId> for clone operation must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'."
+        ]
+      }
+    },
+    "sqlState" : "42K04"
+  },
   "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
       "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
@@ -4760,14 +4783,14 @@
       "A duplicate identifier was found for elements registered in the pipeline's dataflow graph."
     ],
     "subClass" : {
-      "DATASET" : {
-        "message" : [
-          "Attempted to register a <datasetType1> with identifier <datasetName>, but a <datasetType2> has already been registered with that identifier. Please ensure all datasets created within this pipeline have unique identifiers."
-        ]
-      },
       "FLOW" : {
         "message" : [
           "Flow <flowName> was found in multiple datasets: <datasetNames>"
+        ]
+      },
+      "OUTPUT" : {
+        "message" : [
+          "Attempted to register a <outputType1> with identifier <outputName>, but a <outputType2> has already been registered with that identifier. Please ensure all outputs created within this pipeline have unique identifiers."
         ]
       }
     },

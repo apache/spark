@@ -32,7 +32,7 @@ import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -235,6 +235,27 @@ private[connect] object PipelinesHandler extends Logging {
             properties = Map.empty,
             sqlText = None))
         viewIdentifier
+      case proto.OutputType.SINK =>
+        val dataflowGraphId = output.getDataflowGraphId
+        val graphElementRegistry =
+          sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+        val identifier = GraphIdentifierManager
+          .parseTableIdentifier(name = output.getOutputName, spark = sessionHolder.session)
+        val sinkDetails = output.getSinkDetails
+        graphElementRegistry.registerSink(
+          SinkImpl(
+            identifier = identifier,
+            format = sinkDetails.getFormat,
+            options = sinkDetails.getOptionsMap.asScala.toMap,
+            origin = QueryOrigin(
+              filePath = Option.when(output.getSourceCodeLocation.hasFileName)(
+                output.getSourceCodeLocation.getFileName),
+              line = Option.when(output.getSourceCodeLocation.hasLineNumber)(
+                output.getSourceCodeLocation.getLineNumber),
+              objectType = Option(QueryOriginType.Sink.toString),
+              objectName = Option(identifier.unquotedString),
+              language = Option(Python()))))
+        identifier
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
     }
@@ -269,14 +290,17 @@ private[connect] object PipelinesHandler extends Logging {
         .getViews()
         .filter(_.isInstanceOf[TemporaryView])
         .exists(_.identifier == rawDestinationIdentifier)
-
-    // If the flow is created implicitly as part of defining a view, then we do not
-    // qualify the flow identifier and the flow destination. This is because views are
-    // not permitted to have multipart
-    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
+    val flowWritesToSink =
+      graphElementRegistry.getSinks
+        .filter(_.isInstanceOf[Sink])
+        .exists(_.identifier == rawDestinationIdentifier)
+    // If the flow is created implicitly as part of defining a view or that it writes to a sink,
+    // then we do not qualify the flow identifier and the flow destination. This is because
+    // views and sinks are not permitted to have multipart
+    val isImplicitFlowForTempView = (isImplicitFlow && flowWritesToView)
     val Seq(flowIdentifier, destinationIdentifier) =
       Seq(rawFlowIdentifier, rawDestinationIdentifier).map { rawIdentifier =>
-        if (isImplicitFlowForTempView) {
+        if (isImplicitFlowForTempView || flowWritesToSink) {
           rawIdentifier
         } else {
           GraphIdentifierManager

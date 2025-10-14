@@ -350,6 +350,7 @@ __all__ = [  # noqa: F405
     "bit_and",
     "bit_or",
     "bit_xor",
+    "bitmap_and_agg",
     "bitmap_construct_agg",
     "bitmap_or_agg",
     "bool_and",
