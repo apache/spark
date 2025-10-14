@@ -218,7 +218,7 @@ x = 123
 foo_udf = make_udf(x)
 x = 456
 df = spark.range(1).select(foo_udf())
-df.show()
+df.show() // Prints 123 as expected
 ```
 
 By wrapping the UDF definition inside another function (`make_udf`), we create a new scope where the current value of `x` is passed in as an argument. This ensures each generated UDF has its own copy of the field, bound at the time the UDF is created.
@@ -232,7 +232,7 @@ var x = 123
 val fooUDF = makeUDF(x)  // Captures the current value
 x = 456
 val df = spark.range(1).select(fooUDF())
-df.show() // prints 123
+df.show() // Prints 123 as expected
 ```
 
 ## 3. Delayed error detection
