@@ -186,6 +186,38 @@ class ArtifactManager(
   }
 
   /**
+   * Batch check which artifacts are already cached on the server. Returns a Set of hashes that
+   * are already cached.
+   */
+  private[client] def getCachedArtifacts(hashes: Seq[String]): Set[String] = {
+    if (hashes.isEmpty) {
+      return Set.empty
+    }
+
+    val artifactNames = hashes.map(hash => s"${Artifact.CACHE_PREFIX}/$hash")
+    val request = proto.ArtifactStatusesRequest
+      .newBuilder()
+      .setUserContext(clientConfig.userContext)
+      .setClientType(clientConfig.userAgent)
+      .setSessionId(sessionId)
+      .addAllNames(artifactNames.asJava)
+      .build()
+
+    val response = bstub.artifactStatus(request)
+    if (SparkStringUtils.isNotEmpty(response.getSessionId) &&
+      response.getSessionId != sessionId) {
+      throw new IllegalStateException(
+        s"Session ID mismatch: $sessionId != ${response.getSessionId}")
+    }
+
+    val statuses = response.getStatusesMap
+    hashes.filter { hash =>
+      val artifactName = s"${Artifact.CACHE_PREFIX}/$hash"
+      statuses.containsKey(artifactName) && statuses.get(artifactName).getExists
+    }.toSet
+  }
+
+  /**
    * Cache the give blob at the session.
    */
   def cacheArtifact(blob: Array[Byte]): String = {
@@ -194,6 +226,38 @@ class ArtifactManager(
       addArtifacts(newCacheArtifact(hash, new Artifact.InMemory(blob)) :: Nil)
     }
     hash
+  }
+
+  /**
+   * Cache the given blobs at the session.
+   *
+   * This method batches artifact status checks and uploads to minimize RPC overhead. Returns the
+   * list of hashes corresponding to the input blobs.
+   */
+  def cacheArtifacts(blobs: Array[Array[Byte]]): Seq[String] = {
+    // Compute hashes for all blobs upfront
+    val hashes = blobs.map(sha256Hex)
+    val uniqueHashes = hashes.distinct
+
+    // Batch check which artifacts are already cached
+    val cachedHashes = getCachedArtifacts(uniqueHashes)
+
+    // Collect unique artifacts that need to be uploaded
+    val seenHashes = scala.collection.mutable.Set[String]()
+    val uniqueBlobsToUpload = scala.collection.mutable.ListBuffer[Artifact]()
+    for ((blob, hash) <- blobs.zip(hashes)) {
+      if (!cachedHashes.contains(hash) && !seenHashes.contains(hash)) {
+        uniqueBlobsToUpload += newCacheArtifact(hash, new Artifact.InMemory(blob))
+        seenHashes.add(hash)
+      }
+    }
+
+    // Batch upload all missing artifacts in a single RPC call
+    if (uniqueBlobsToUpload.nonEmpty) {
+      addArtifacts(uniqueBlobsToUpload.toList)
+    }
+
+    hashes.toSeq
   }
 
   /**

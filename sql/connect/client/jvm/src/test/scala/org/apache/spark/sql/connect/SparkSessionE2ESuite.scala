@@ -450,4 +450,17 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
       Map("one" -> "1", "two" -> "2"))
     assert(df.as(StringEncoder).collect().toSet == Set("one", "two"))
   }
+
+  test("dataframes with cached local relations succeed") {
+    val thresholdBytes = spark.conf.get("spark.sql.session.localRelationCacheThreshold").toInt
+    val count = 32
+    val suffix = "abcdef"
+    val str = scala.util.Random.alphanumeric.take(thresholdBytes).mkString + suffix
+    val data = Seq.tabulate(count)(i => (i, str))
+    for (_ <- 0 until 2) {
+      val df = spark.createDataFrame(data)
+      assert(df.count() === count)
+      assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
+    }
+  }
 }
