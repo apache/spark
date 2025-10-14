@@ -33,7 +33,7 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
   /**
    * Spatial Reference Identifier (SRID) value of the geometry type.
    */
-  val srid: Int = toSrid(crs)
+  val srid: Int = GeometryType.toSrid(crs)
 
   /**
    * The default size of a value of the GeometryType is 2048 bytes, which can store roughly 120 2D
@@ -129,25 +129,6 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
     // If the SRID is not mixed, we can only accept the same SRID.
     isMixedSrid || gt.srid == srid
   }
-
-  /**
-   * Converts a CRS string to its corresponding SRID integer value.
-   */
-  private[types] def toSrid(crs: String): Int = {
-    // The special value "SRID:ANY" is used to represent mixed SRID values.
-    if (crs.equalsIgnoreCase(GeometryType.MIXED_CRS)) {
-      return GeometryType.MIXED_SRID
-    }
-    // For all other CRS values, we need to look up the corresponding SRID.
-    val srid = SpatialReferenceSystemMapper.get().getSrid(crs)
-    if (srid == null) {
-      // If the CRS value is not recognized, we throw an exception.
-      throw new SparkIllegalArgumentException(
-        errorClass = "ST_INVALID_CRS_VALUE",
-        messageParameters = Map("crs" -> crs))
-    }
-    srid
-  }
 }
 
 @Experimental
@@ -199,4 +180,23 @@ object GeometryType extends SpatialType {
     other.isInstanceOf[GeometryType]
 
   override private[sql] def simpleString: String = "geometry"
+
+  /**
+   * Converts a CRS string to its corresponding SRID integer value.
+   */
+  private[types] def toSrid(crs: String): Int = {
+    // The special value "SRID:ANY" is used to represent mixed SRID values.
+    if (crs.equalsIgnoreCase(GeometryType.MIXED_CRS)) {
+      return GeometryType.MIXED_SRID
+    }
+    // For all other CRS values, we need to look up the corresponding SRID.
+    val srid = SpatialReferenceSystemMapper.get().getSrid(crs)
+    if (srid == null) {
+      // If the CRS value is not recognized, we throw an exception.
+      throw new SparkIllegalArgumentException(
+        errorClass = "ST_INVALID_CRS_VALUE",
+        messageParameters = Map("crs" -> crs))
+    }
+    srid
+  }
 }
