@@ -604,43 +604,45 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-52798: combine more than 2 sketches with specified size") {
     sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2) AS tab(expr);")
       .createOrReplaceTempView("accumulation1")
 
     sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4) AS tab(expr);")
       .createOrReplaceTempView("accumulation2")
 
     sql(s"SELECT approx_top_k_accumulate(expr, 20) as acc " +
-      "FROM VALUES (2), (2), (3), (3), (4), (4), (5), (5) AS tab(expr);")
+      "FROM VALUES (2), (2), (3), (3), (3), (4), (5) AS tab(expr);")
       .createOrReplaceTempView("accumulation3")
 
-    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2 " +
-      "UNION ALL SELECT acc FROM accumulation3")
+    sql("SELECT acc from accumulation1 UNION ALL " +
+      "SELECT acc FROM accumulation2 UNION ALL " +
+      "SELECT acc FROM accumulation3")
       .createOrReplaceTempView("unioned")
 
     sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned")
       .createOrReplaceTempView("combined")
 
     val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    checkAnswer(est, Row(Seq(Row(2, 6), Row(3, 5), Row(1, 4), Row(4, 4), Row(0, 3))))
+    checkAnswer(est, Row(Seq(Row(2, 6), Row(3, 5), Row(1, 4), Row(0, 3), Row(4, 2))))
   }
 
   test("SPARK-52798: combine more than 2 sketches without specified size") {
     sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2) AS tab(expr);")
       .createOrReplaceTempView("accumulation1")
 
-    sql(s"SELECT approx_top_k_accumulate(expr, 20) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+    sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4) AS tab(expr);")
       .createOrReplaceTempView("accumulation2")
 
-    sql(s"SELECT approx_top_k_accumulate(expr, 30) as acc " +
-      "FROM VALUES (2), (2), (3), (3), (4), (4), (5), (5) AS tab(expr);")
+    sql(s"SELECT approx_top_k_accumulate(expr, 20) as acc " +
+      "FROM VALUES (2), (2), (3), (3), (3), (4), (5) AS tab(expr);")
       .createOrReplaceTempView("accumulation3")
 
-    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2 " +
-      "UNION ALL SELECT acc FROM accumulation3")
+    sql("SELECT acc from accumulation1 UNION ALL " +
+      "SELECT acc FROM accumulation2 UNION ALL " +
+      "SELECT acc FROM accumulation3")
       .createOrReplaceTempView("unioned")
 
     checkError(
