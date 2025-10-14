@@ -505,11 +505,11 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
           "tableOrdinalNumber" -> "second",
           "columnOrdinalNumber" -> "first",
           "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 + ", " +
-            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\""),
+            "maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\""),
           "operator" -> "UNION",
           "hint" -> "",
           "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type2 + ", " +
-            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\"")
+            "maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\"")
         ),
         queryContext = Array(
           ExpectedContext(
@@ -541,11 +541,11 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
           "tableOrdinalNumber" -> "second",
           "columnOrdinalNumber" -> "first",
           "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 +
-            ", maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\""),
+            ", maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\""),
           "operator" -> "UNION",
           "hint" -> "",
           "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: BOOLEAN, " +
-            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\"")
+            "maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\"")
         ),
         queryContext = Array(
           ExpectedContext(
@@ -577,11 +577,11 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
           "tableOrdinalNumber" -> "second",
           "columnOrdinalNumber" -> "first",
           "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 +
-            ", maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\""),
+            ", maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\""),
           "operator" -> "UNION",
           "hint" -> "",
           "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: BOOLEAN, " +
-            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\"")
+            "maxItemsTracked: INT NOT NULL, itemDataTypeDDL: STRING NOT NULL>\"")
         ),
         queryContext = Array(
           ExpectedContext(
@@ -599,6 +599,56 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       },
       condition = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
       parameters = Map("type1" -> toSQLType(StringType), "type2" -> toSQLType(BooleanType))
+    )
+  }
+
+  test("SPARK-52798: combine more than 2 sketches with specified size") {
+    sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+      .createOrReplaceTempView("accumulation1")
+
+    sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+      .createOrReplaceTempView("accumulation2")
+
+    sql(s"SELECT approx_top_k_accumulate(expr, 20) as acc " +
+      "FROM VALUES (2), (2), (3), (3), (4), (4), (5), (5) AS tab(expr);")
+      .createOrReplaceTempView("accumulation3")
+
+    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2 " +
+      "UNION ALL SELECT acc FROM accumulation3")
+      .createOrReplaceTempView("unioned")
+
+    sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned")
+      .createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    checkAnswer(est, Row(Seq(Row(2, 6), Row(3, 5), Row(1, 4), Row(4, 4), Row(0, 3))))
+  }
+
+  test("SPARK-52798: combine more than 2 sketches without specified size") {
+    sql(s"SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+      .createOrReplaceTempView("accumulation1")
+
+    sql(s"SELECT approx_top_k_accumulate(expr, 20) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+      .createOrReplaceTempView("accumulation2")
+
+    sql(s"SELECT approx_top_k_accumulate(expr, 30) as acc " +
+      "FROM VALUES (2), (2), (3), (3), (4), (4), (5), (5) AS tab(expr);")
+      .createOrReplaceTempView("accumulation3")
+
+    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2 " +
+      "UNION ALL SELECT acc FROM accumulation3")
+      .createOrReplaceTempView("unioned")
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_combine(acc) as com FROM unioned").collect()
+      },
+      condition = "APPROX_TOP_K_SKETCH_SIZE_NOT_MATCH",
+      parameters = Map("size1" -> "10", "size2" -> "20")
     )
   }
 }

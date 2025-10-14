@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 import org.apache.datasketches.common._
 import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
@@ -323,40 +324,14 @@ object ApproxTopK {
       StructField("sketch", BinaryType, nullable = false) ::
         StructField("itemDataType", itemDataType) ::
         StructField("maxItemsTracked", IntegerType, nullable = false) ::
-        StructField("typeCode", BinaryType, nullable = false) :: Nil)
+        StructField("itemDataTypeDDL", StringType, nullable = false) :: Nil)
 
-  def dataTypeToBytes(dataType: DataType): Array[Byte] = {
-    dataType match {
-      case _: BooleanType => Array(0, 0, 0)
-      case _: ByteType => Array(1, 0, 0)
-      case _: ShortType => Array(2, 0, 0)
-      case _: IntegerType => Array(3, 0, 0)
-      case _: LongType => Array(4, 0, 0)
-      case _: FloatType => Array(5, 0, 0)
-      case _: DoubleType => Array(6, 0, 0)
-      case _: DateType => Array(7, 0, 0)
-      case _: TimestampType => Array(8, 0, 0)
-      case _: TimestampNTZType => Array(9, 0, 0)
-      case _: StringType => Array(10, 0, 0)
-      case dt: DecimalType => Array(11, dt.precision.toByte, dt.scale.toByte)
-    }
+  def dataTypeToDDL(dataType: DataType): String = {
+    StructField("item", dataType, nullable = false).toDDL
   }
 
-  def bytesToDataType(bytes: Array[Byte]): DataType = {
-    bytes(0) match {
-      case 0 => BooleanType
-      case 1 => ByteType
-      case 2 => ShortType
-      case 3 => IntegerType
-      case 4 => LongType
-      case 5 => FloatType
-      case 6 => DoubleType
-      case 7 => DateType
-      case 8 => TimestampType
-      case 9 => TimestampNTZType
-      case 10 => StringType
-      case 11 => DecimalType(bytes(1).toInt, bytes(2).toInt)
-    }
+  def DDLToDataType(ddl: String): DataType = {
+    StructType.fromDDL(ddl).fields.head.dataType
   }
 
   def checkStateFieldAndType(state: Expression): TypeCheckResult = {
@@ -364,7 +339,7 @@ object ApproxTopK {
     if (stateStructType.length != 4) {
       return TypeCheckFailure("State must be a struct with 4 fields. " +
         "Expected struct: " +
-        "struct<sketch:binary,itemDataType:any,maxItemsTracked:int,typeCode:binary>. " +
+        "struct<sketch:binary,itemDataType:any,maxItemsTracked:int,itemDataTypeDDL:string>. " +
         "Got: " + state.dataType.simpleString)
     }
 
@@ -381,8 +356,8 @@ object ApproxTopK {
     } else if (fieldType3 != IntegerType) {
       TypeCheckFailure("State struct must have the third field to be int. " +
         "Got: " + fieldType3.simpleString)
-    } else if (fieldType4 != BinaryType) {
-      TypeCheckFailure("State struct must have the fourth field to be binary. " +
+    } else if (fieldType4 != StringType) {
+      TypeCheckFailure("State struct must have the fourth field to be string. " +
         "Got: " + fieldType4.simpleString)
     } else {
       TypeCheckSuccess
@@ -398,10 +373,9 @@ object ApproxTopK {
  * The output of this function is a struct containing the sketch in binary format,
  * a null object indicating the type of items in the sketch,
  * the maximum number of items tracked by the sketch,
- * and a binary typeCode encoding the data type of the items in the sketch.
- *
+ * and a DDL string representing the data type of items in the sketch.
  * The null object is used in approx_top_k_estimate,
- * while the typeCode is used in approx_top_k_combine.
+ * while the DDL is used in approx_top_k_combine.
  *
  * @param expr                   the child expression to accumulate items from
  * @param maxItemsTracked        the maximum number of items to track in the sketch
@@ -483,8 +457,8 @@ case class ApproxTopKAccumulate(
 
   override def eval(buffer: ItemsSketch[Any]): Any = {
     val sketchBytes = serialize(buffer)
-    val typeCode = ApproxTopK.dataTypeToBytes(itemDataType)
-    InternalRow.apply(sketchBytes, null, maxItemsTrackedVal, typeCode)
+    val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(itemDataType)
+    InternalRow.apply(sketchBytes, null, maxItemsTrackedVal, UTF8String.fromString(itemDataTypeDDL))
   }
 
   override def serialize(buffer: ItemsSketch[Any]): Array[Byte] =
@@ -565,16 +539,23 @@ class CombineInternal[T](
 
   /**
    * Serialize the CombineInternal instance to a byte array.
-   * Serialization format: maxItemsTracked (4 bytes) + itemDataType (3 bytes) + sketchBytes
+   * Serialization format:
+   *     maxItemsTracked (4 bytes int) +
+   *     itemDataTypeDDL length n in byte  (4 bytes int) +
+   *     itemDataTypeDDL (n bytes) +
+   *     sketchBytes
    */
   def serialize(): Array[Byte] = {
     val sketchBytes = sketch.toByteArray(
       ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]])
-    val itemDataTypeBytes = ApproxTopK.dataTypeToBytes(itemDataType)
-    val byteArray = new Array[Byte](sketchBytes.length + 7)
+    val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(itemDataType)
+    val ddlBytes: Array[Byte] = itemDataTypeDDL.getBytes(StandardCharsets.UTF_8)
+    val byteArray = new Array[Byte](sketchBytes.length + 4 + 4 + ddlBytes.length)
+
     val byteBuffer = ByteBuffer.wrap(byteArray)
     byteBuffer.putInt(maxItemsTracked)
-    byteBuffer.put(itemDataTypeBytes)
+    byteBuffer.putInt(ddlBytes.length)
+    byteBuffer.put(ddlBytes)
     byteBuffer.put(sketchBytes)
     byteArray
   }
@@ -583,15 +564,24 @@ class CombineInternal[T](
 object CombineInternal {
   /**
    * Deserialize a byte array to a CombineInternal instance.
-   * Serialization format: maxItemsTracked (4 bytes) + itemDataType (3 bytes) + sketchBytes
+   * Serialization format:
+   *     maxItemsTracked (4 bytes int) +
+   *     itemDataTypeDDL length n in byte  (4 bytes int) +
+   *     itemDataTypeDDL (n bytes) +
+   *     sketchBytes
    */
   def deserialize(buffer: Array[Byte]): CombineInternal[Any] = {
     val byteBuffer = ByteBuffer.wrap(buffer)
+    // read maxItemsTracked
     val maxItemsTracked = byteBuffer.getInt
-    val itemDataTypeBytes = new Array[Byte](3)
-    byteBuffer.get(itemDataTypeBytes)
-    val itemDataType = ApproxTopK.bytesToDataType(itemDataTypeBytes)
-    val sketchBytes = new Array[Byte](buffer.length - 7)
+    // read itemDataTypeDDL
+    val ddlLength = byteBuffer.getInt
+    val ddlBytes = new Array[Byte](ddlLength)
+    byteBuffer.get(ddlBytes)
+    val itemDataTypeDDL = new String(ddlBytes, StandardCharsets.UTF_8)
+    val itemDataType = ApproxTopK.DDLToDataType(itemDataTypeDDL)
+    // read sketchBytes
+    val sketchBytes = new Array[Byte](buffer.length - 4 - 4 - ddlLength)
     byteBuffer.get(sketchBytes)
     val sketch = ItemsSketch.getInstance(
       Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
@@ -697,8 +687,9 @@ case class ApproxTopKCombine(
       // If maxItemsTracked is not specified, create a sketch with the maximum allowed size.
       // No need to worry about memory waste, as the sketch always grows from a small init size.
       // The actual maxItemsTracked will be checked during the updates.
+      val maxMapSize = ApproxTopK.calMaxMapSize(ApproxTopK.MAX_ITEMS_TRACKED_LIMIT)
       new CombineInternal[Any](
-        new ItemsSketch[Any](ApproxTopK.MAX_ITEMS_TRACKED_LIMIT),
+        new ItemsSketch[Any](maxMapSize),
         null,
         ApproxTopK.VOID_MAX_ITEMS_TRACKED)
     }
@@ -706,14 +697,14 @@ case class ApproxTopKCombine(
 
   /**
    * Update the aggregation buffer with an input sketch. The input has the same schema as the
-   * ApproxTopKAccumulate output, i.e., sketchBytes + null + maxItemsTracked + typeCode.
+   * ApproxTopKAccumulate output, i.e., sketchBytes + null + maxItemsTracked + DDL.
    */
   override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
     val inputState = state.eval(input).asInstanceOf[InternalRow]
     val inputSketchBytes = inputState.getBinary(0)
     val inputMaxItemsTracked = inputState.getInt(2)
-    val typeCode = inputState.getBinary(3)
-    val inputItemDataType = ApproxTopK.bytesToDataType(typeCode)
+    val inputItemDataTypeDDL = inputState.getUTF8String(3).toString
+    val inputItemDataType = ApproxTopK.DDLToDataType(inputItemDataTypeDDL)
     // update maxItemsTracked (throw error if not match)
     buffer.updateMaxItemsTracked(combineSizeSpecified, inputMaxItemsTracked)
     // update itemDataType (throw error if not match)
@@ -740,8 +731,8 @@ case class ApproxTopKCombine(
     val sketchBytes =
       buffer.getSketch.toByteArray(ApproxTopK.genSketchSerDe(buffer.getItemDataType))
     val maxItemsTracked = buffer.getMaxItemsTracked
-    val typeCode = ApproxTopK.dataTypeToBytes(buffer.getItemDataType)
-    InternalRow.apply(sketchBytes, null, maxItemsTracked, typeCode)
+    val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(buffer.getItemDataType)
+    InternalRow.apply(sketchBytes, null, maxItemsTracked, UTF8String.fromString(itemDataTypeDDL))
   }
 
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
