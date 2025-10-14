@@ -246,7 +246,8 @@ class SparkConnectPlanner(
           // TODO this might be too complex for no good reason. It might
           //  be easier to inspect the plan after it completes.
           val observation = session.observationManager.getOrNewObservation(
-            collectMetrics.name, collectMetrics.dataframeId)
+            collectMetrics.name,
+            collectMetrics.dataframeId)
           executeHolder.addObservation(collectMetrics.name, observation)
           collectMetrics
       }

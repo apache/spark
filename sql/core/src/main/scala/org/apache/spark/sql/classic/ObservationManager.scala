@@ -46,10 +46,10 @@ private[sql] class ObservationManager(session: SparkSession) {
   }
 
   private[sql] def getOrNewObservation(name: String, dataFrameId: Long): Observation =
-    observations.computeIfAbsent((name, dataFrameId), _ => {
-      val obs = Observation(name)
-      obs.markRegistered()
-      obs
+    observations.computeIfAbsent((name, dataFrameId), { _ =>
+      val observation = Observation(name)
+      observation.markRegistered()
+      observation
     })
 
   private def tryComplete(qe: QueryExecution): Unit = {
