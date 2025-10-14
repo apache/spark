@@ -57,7 +57,7 @@ For example, executing `spark.sql("select 1 as a, 2 as b").filter("c > 1")` will
 
 ## Spark Connect
 
-Spark Connect differs from Classic's eager analysis because the client constructs unresolved proto plans during transformation. When accessing a schema or executing an action, the client sends the unresolved plans to the server via RPC (remote procedure call). The server then performs the schema analysis and execution. This design defers schema analysis.
+Spark Connect differs from Classic because the client constructs unresolved proto plans during transformation. When accessing a schema or executing an action, the client sends the unresolved plans to the server via RPC (remote procedure call). The server then performs the analysis and execution. This design defers schema analysis.
 
 For example, `spark.sql("select 1 as a, 2 as b").filter("c > 1")` will not throw any error because the unresolved plan is client-side only, but on `df.columns` or `df.show()` an error will be thrown because the unresolved plan is sent to the server for analysis.
 
@@ -120,7 +120,7 @@ In Spark Connect, users should be more cautious when reusing temporary view name
 
 ### Mitigation
 
-As a mitigation, you can consider creating unique temporary view names, for example by including a UUID in the view name. This approach helps avoid affecting any existing DataFrames that reference a previously registered temp view, ensuring isolation and consistency.
+Create unique temporary view names, for example by including a UUID in the view name. This avoids affecting any existing DataFrames that reference a previously registered temp view.
 
 ```python
 import uuid
@@ -189,7 +189,7 @@ This is the same issue as above. It happens because Python closures capture vari
 
 ### Mitigation
 
-If you do need to modify the value of external variables that a UDF depends on, you can use a function factory (closure with early binding). Specifically, you can wrap the UDF creation in a helper function to correctly capture the value of a dependent variable at each loop iteration.
+If you need to modify the value of external variables that a UDF depends on, use a function factory (closure with early binding) to correctly capture variable values. Specifically, wrap the UDF creation in a helper function to capture the value of a dependent variable at each loop iteration.
 
 ```python
 from pyspark.sql.functions import udf, col
@@ -269,7 +269,7 @@ Performance can be improved if users avoid large numbers of Analyze requests by 
 
 ### Mitigation
 
-If your code cannot avoid the above anti-pattern and must frequently check columns of new DataFrames, you can maintain a set to keep track of these column names yourself to avoid analysis requests thereby improving performance.
+If your code cannot avoid the above anti-pattern and must frequently check columns of new DataFrames, maintain a set to track column names to avoid analysis requests thereby improving performance.
 
 ```python
 df = spark.range(10)
@@ -299,7 +299,7 @@ However, this code snippet can lead to poor performance when there are many colu
 
 ### Mitigation
 
-Creating a DataFrame to retrieve the fields of a `StructType` column, as shown in the code above, is unnecessary. You can obtain this information directly from the DataFrame's schema.
+Obtain `StructType` field information directly from the DataFrame's schema instead of creating intermediate DataFrames.
 
 ```python
 from pyspark.sql.types import StructType
@@ -312,7 +312,7 @@ struct_column_fields = {
 print(struct_column_fields)
 ```
 
-This approach can be significantly faster when dealing with a large number of columns because it avoids the creation and analysis of numerous DataFrames.
+This approach is significantly faster when dealing with a large number of columns because it avoids creating and analyzing numerous DataFrames.
 
 # Summary
 
