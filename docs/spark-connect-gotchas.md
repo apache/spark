@@ -150,7 +150,7 @@ root {
 import java.util.UUID
 
 def createTempViewAndDataFrame(x: Int) = {
-  val tempViewName = s"temp_view_${UUID.randomUUID().toString.replaceAll("-", "")}"
+  val tempViewName = s"`temp_view_${UUID.randomUUID()}`"
   spark.range(x).createOrReplaceTempView(tempViewName)
   spark.table(tempViewName)
 }
