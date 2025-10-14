@@ -42,7 +42,7 @@ import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
-import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Observation, Row}
+import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
@@ -143,7 +143,7 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
-    sessionHolder.usePlanCache(rel, cachePlan) { rel =>
+    val plan = sessionHolder.usePlanCache(rel, cachePlan) { rel =>
       val plan = rel.getRelTypeCase match {
         // DataFrame API
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
@@ -239,6 +239,18 @@ class SparkConnectPlanner(
       }
       plan
     }
+
+    if (executeHolderOpt.isDefined) {
+      plan.transformUpWithSubqueriesAndPruning(_.containsPattern(TreePattern.COLLECT_METRICS)) {
+        case collectMetrics: CollectMetrics if !collectMetrics.child.isStreaming =>
+          // TODO this might be too complex for no good reason. It might
+          //  be easier to inspect the plan after it completes.
+          val observation = session.observationManager.getOrNewObservation(
+            collectMetrics.name, collectMetrics.dataframeId)
+          executeHolder.addObservation(collectMetrics.name, observation)
+          collectMetrics
+      }
+    } else plan
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -1375,19 +1387,7 @@ class SparkConnectPlanner(
     val metrics = rel.getMetricsList.asScala.toSeq.map { expr =>
       Column(transformExpression(expr))
     }
-    val name = rel.getName
-    val input = transformRelation(rel.getInput)
-
-    if (input.isStreaming || executeHolderOpt.isEmpty) {
-      CollectMetrics(name, metrics.map(_.named), input, planId)
-    } else {
-      // TODO this might be too complex for no good reason. It might
-      //  be easier to inspect the plan after it completes.
-      val observation = Observation(name)
-      session.observationManager.register(observation, planId)
-      executeHolderOpt.get.addObservation(name, observation)
-      CollectMetrics(name, metrics.map(_.named), input, planId)
-    }
+    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput), planId)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
