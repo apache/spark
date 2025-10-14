@@ -2834,8 +2834,7 @@ object TryMakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
           expressions.drop(2).lastOption
         )
       )
-    }
-    else if (numArgs == 6 || numArgs == 7) {
+    } else if (numArgs == 6 || numArgs == 7) {
       MakeTimestamp(
         expressions(0),
         expressions(1),
