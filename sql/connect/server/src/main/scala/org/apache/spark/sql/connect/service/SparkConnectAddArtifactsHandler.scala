@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.service
 
-import java.io.File
+import java.io.{Closeable, File}
 import java.nio.file.{Files, Path, Paths}
 import java.util.zip.{CheckedOutputStream, CRC32}
 
@@ -33,6 +33,7 @@ import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.sql.util.ArtifactUtils
+import org.apache.spark.util.SparkErrorUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -143,20 +144,10 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
   protected def cleanUpStagedArtifacts(): Unit = {
     // Close all staged artifacts to release file handles and stream resources
-    stagedArtifacts.foreach { artifact =>
-      try {
-        artifact.close()
-      } catch {
-        case NonFatal(_) => // Ignore errors during cleanup
-      }
-    }
+    stagedArtifacts.foreach(SparkErrorUtils.closeQuietly)
     // Close the chunked artifact if it's still active
     if (chunkedArtifact != null) {
-      try {
-        chunkedArtifact.close()
-      } catch {
-        case NonFatal(_) => // Ignore errors during cleanup
-      }
+      SparkErrorUtils.closeQuietly(chunkedArtifact)
       chunkedArtifact = null
     }
     Utils.deleteRecursively(stagingDir.toFile)
@@ -218,7 +209,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   /**
    * Handles rebuilding an artifact from bytes sent over the wire.
    */
-  class StagedArtifact(val name: String) {
+  class StagedArtifact(val name: String) extends Closeable {
     // Workaround to keep the fragment.
     val (canonicalFileName: String, fragment: Option[String]) =
       if (name.startsWith(s"archives${File.separator}")) {
@@ -279,25 +270,12 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
     def close(): Unit = {
       if (artifactSummary == null) {
-        // Close streams defensively: even if outer stream close fails, try inner streams.
-        // Normally checksumOut.close() cascades to inner streams, but if it throws an
-        // exception, we still attempt to close the inner streams to prevent resource leaks.
-        var closeException: Throwable = null
-        try {
-          checksumOut.close()
-        } catch {
-          case NonFatal(e) =>
-            closeException = e
-            // Try to close inner streams directly as fallback
-            try countingOut.close() catch { case NonFatal(_) => }
-            try fileOut.close() catch { case NonFatal(_) => }
-        }
+        // Closing checksumOut cascades: checksumOut -> countingOut -> fileOut
+        checksumOut.close()
         artifactSummary = builder
           .setName(name)
           .setIsCrcSuccessful(getCrcStatus.getOrElse(false))
           .build()
-        // Re-throw the close exception after building summary
-        if (closeException != null) throw closeException
       }
     }
 
