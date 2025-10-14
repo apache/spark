@@ -180,17 +180,33 @@ case class ArrowAggregatePythonExec(
         rows
       }
 
-      val columnarBatchIter = new ArrowPythonWithNamedArgumentRunner(
-        pyFuncs,
-        evalType,
-        argMetas,
-        aggInputSchema,
-        sessionLocalTimeZone,
-        largeVarTypes,
-        pythonRunnerConf,
-        pythonMetrics,
-        jobArtifactUUID,
-        conf.pythonUDFProfiler).compute(projectedRowIter, context.partitionId(), context)
+      val runner = if (evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+        new ArrowPythonWithNamedArgumentRunner(
+          pyFuncs,
+          evalType,
+          argMetas,
+          aggInputSchema,
+          sessionLocalTimeZone,
+          largeVarTypes,
+          pythonRunnerConf,
+          pythonMetrics,
+          jobArtifactUUID,
+          conf.pythonUDFProfiler) with GroupedPythonArrowInput
+      } else {
+        new ArrowPythonWithNamedArgumentRunner(
+          pyFuncs,
+          evalType,
+          argMetas,
+          aggInputSchema,
+          sessionLocalTimeZone,
+          largeVarTypes,
+          pythonRunnerConf,
+          pythonMetrics,
+          jobArtifactUUID,
+          conf.pythonUDFProfiler)
+      }
+
+      val columnarBatchIter = runner.compute(projectedRowIter, context.partitionId(), context)
 
       val joinedAttributes =
         groupingExpressions.map(_.toAttribute) ++ aggExpressions.map(_.resultAttribute)
