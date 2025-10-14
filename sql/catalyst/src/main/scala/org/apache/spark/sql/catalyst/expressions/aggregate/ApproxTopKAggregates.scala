@@ -326,8 +326,12 @@ object ApproxTopK {
         StructField("itemDataType", itemDataType) ::
         StructField("itemDataTypeDDL", StringType, nullable = false) :: Nil)
 
-  def dataTypeToDDL(dataType: DataType): String = {
-    StructField("item", dataType, nullable = false).toDDL
+  def dataTypeToDDL(dataType: DataType): String = dataType match {
+    case _: StringType =>
+      // Hide collation information in DDL format
+      s"item string not null"
+    case other =>
+      StructField("item", other, nullable = false).toDDL
   }
 
   def DDLToDataType(ddl: String): DataType = {
