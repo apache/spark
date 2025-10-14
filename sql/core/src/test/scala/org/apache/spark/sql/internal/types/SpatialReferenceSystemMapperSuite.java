@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types;
+package org.apache.spark.sql.internal.types;
  
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

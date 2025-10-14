@@ -21,6 +21,7 @@ import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.internal.types.SpatialReferenceSystemMapper
 
 /**
  * The data type representing GEOMETRY values which are spatial objects, as defined in the Open

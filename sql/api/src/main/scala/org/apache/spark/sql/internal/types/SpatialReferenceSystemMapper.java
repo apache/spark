@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types;
+package org.apache.spark.sql.internal.types;
 
 import java.util.HashMap;
 
