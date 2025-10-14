@@ -90,6 +90,7 @@ class PipelineSpec:
     """Spec for a pipeline.
 
     :param name: The name of the pipeline.
+    :param storage: The root directory for storing metadata, such as streaming checkpoints.
     :param catalog: The default catalog to use for the pipeline.
     :param database: The default database to use for the pipeline.
     :param configuration: A dictionary of Spark configuration properties to set for the pipeline.
@@ -97,6 +98,7 @@ class PipelineSpec:
     """
 
     name: str
+    storage: str
     catalog: Optional[str]
     database: Optional[str]
     configuration: Mapping[str, str]
@@ -150,8 +152,16 @@ def load_pipeline_spec(spec_path: Path) -> PipelineSpec:
 
 
 def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
-    ALLOWED_FIELDS = {"name", "catalog", "database", "schema", "configuration", "libraries"}
-    REQUIRED_FIELDS = ["name"]
+    ALLOWED_FIELDS = {
+        "name",
+        "storage",
+        "catalog",
+        "database",
+        "schema",
+        "configuration",
+        "libraries",
+    }
+    REQUIRED_FIELDS = ["name", "storage"]
     for key in spec_data.keys():
         if key not in ALLOWED_FIELDS:
             raise PySparkException(
@@ -167,6 +177,7 @@ def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
 
     return PipelineSpec(
         name=spec_data["name"],
+        storage=spec_data["storage"],
         catalog=spec_data.get("catalog"),
         database=spec_data.get("database", spec_data.get("schema")),
         configuration=validate_str_dict(spec_data.get("configuration", {}), "configuration"),
@@ -323,6 +334,7 @@ def run(
         full_refresh_all=full_refresh_all,
         refresh=refresh,
         dry=dry,
+        storage=spec.storage,
     )
     try:
         handle_pipeline_events(result_iter)

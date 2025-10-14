@@ -1396,6 +1396,7 @@ class RocksDB(
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(
         numVersionsToRetain = conf.minVersionsToRetain,
+        maxVersionsToDeletePerMaintenance = conf.maxVersionsToDeletePerMaintenance,
         minVersionsToDelete = conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
@@ -1460,7 +1461,6 @@ class RocksDB(
   private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
-    val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
       "put" -> DB_WRITE,
@@ -1495,6 +1495,10 @@ class RocksDB(
 
     // Use RocksDBMemoryManager to calculate the memory usage accounting
     val memoryUsage = RocksDBMemoryManager.getInstanceMemoryUsage(instanceUniqueId, getMemoryUsage)
+
+    val totalPinnedBlocksMemUsage = lruCache.getPinnedUsage()
+    val pinnedBlocksMemUsage = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+      instanceUniqueId, totalPinnedBlocksMemUsage)
 
     RocksDBMetrics(
       numKeysOnLoadedVersion,
@@ -1953,7 +1957,8 @@ case class RocksDBConf(
     compressionCodec: String,
     allowFAllocate: Boolean,
     compression: String,
-    reportSnapshotUploadLag: Boolean)
+    reportSnapshotUploadLag: Boolean,
+    maxVersionsToDeletePerMaintenance: Int)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -2144,7 +2149,8 @@ object RocksDBConf {
       storeConf.compressionCodec,
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
-      storeConf.reportSnapshotUploadLag)
+      storeConf.reportSnapshotUploadLag,
+      storeConf.maxVersionsToDeletePerMaintenance)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

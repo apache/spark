@@ -36,6 +36,7 @@ import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Test suite that starts a Spark Connect server and executes Spark Declarative Pipelines Python
@@ -128,7 +129,7 @@ class PythonPipelineSuite
         |    return df.select("name")
         |""".stripMargin)
 
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
 
     assertFlowProgressEvent(
@@ -173,7 +174,7 @@ class PythonPipelineSuite
         |   return spark.readStream.table('mv2')
         |""".stripMargin)
 
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -288,6 +289,36 @@ class PythonPipelineSuite
         graphIdentifier("supplement")))
   }
 
+  test("external sink") {
+    val graph = buildGraph("""
+        |dp.create_sink(
+        |  "myKafkaSink",
+        |  format = "kafka",
+        |  options = {"kafka.bootstrap.servers": "host1:port1,host2:port2"}
+        |)
+        |
+        |@dp.append_flow(
+        |  target = "myKafkaSink"
+        |)
+        |def mySinkFlow():
+        |  return spark.readStream.format("rate").load()
+        |""".stripMargin)
+
+    assert(graph.sinks.map(_.identifier) == Seq(TableIdentifier("myKafkaSink")))
+
+    // ensure format and options are properly set
+    graph.sinks.filter(_.identifier == TableIdentifier("myKafkaSink")).foreach { sink =>
+      assert(sink.format == "kafka")
+      assert(sink.options.get("kafka.bootstrap.servers").contains("host1:port1,host2:port2"))
+    }
+
+    // ensure the flow is properly linked to the sink
+    assert(
+      graph
+        .flowsTo(TableIdentifier("myKafkaSink"))
+        .map(_.identifier) == Seq(TableIdentifier("mySinkFlow")))
+  }
+
   test("referencing internal datasets") {
     val graph = buildGraph("""
       |@dp.materialized_view
@@ -399,7 +430,7 @@ class PythonPipelineSuite
            |  return spark.range(1)
            |""".stripMargin)
     }
-    assert(ex.getCondition == "PIPELINE_DUPLICATE_IDENTIFIERS.DATASET")
+    assert(ex.getCondition == "PIPELINE_DUPLICATE_IDENTIFIERS.OUTPUT")
   }
 
   test("create datasets with fully/partially qualified names") {
@@ -601,7 +632,8 @@ class PythonPipelineSuite
         )
     """)
 
-    val updateContext = new PipelineUpdateContextImpl(graph, _ => ())
+    val updateContext =
+      new PipelineUpdateContextImpl(graph, _ => (), storageRoot = storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -627,18 +659,19 @@ class PythonPipelineSuite
   test("MV/ST with partition columns works") {
     withTable("mv", "st") {
       val graph = buildGraph("""
-             |from pyspark.sql.functions import col
-             |
-             |@dp.materialized_view(partition_cols = ["id_mod"])
-             |def mv():
-             |  return spark.range(5).withColumn("id_mod", col("id") % 2)
-             |
-             |@dp.table(partition_cols = ["id_mod"])
-             |def st():
-             |  return spark.readStream.table("mv")
-             |""".stripMargin)
+            |from pyspark.sql.functions import col
+            |
+            |@dp.materialized_view(partition_cols = ["id_mod"])
+            |def mv():
+            |  return spark.range(5).withColumn("id_mod", col("id") % 2)
+            |
+            |@dp.table(partition_cols = ["id_mod"])
+            |def st():
+            |  return spark.readStream.table("mv")
+            |""".stripMargin)
 
-      val updateContext = new PipelineUpdateContextImpl(graph, eventCallback = _ => ())
+      val updateContext =
+        new PipelineUpdateContextImpl(graph, eventCallback = _ => (), storageRoot = storageRoot)
       updateContext.pipelineExecution.runPipeline()
       updateContext.pipelineExecution.awaitCompletion()
 
@@ -692,6 +725,82 @@ class PythonPipelineSuite
       },
       condition = "RUN_EMPTY_PIPELINE",
       parameters = Map.empty)
+  }
+
+  test("table with string schema") {
+    val graph = buildGraph("""
+        |from pyspark.sql.functions import lit
+        |
+        |@dp.materialized_view(schema="id LONG, name STRING")
+        |def table_with_string_schema():
+        |    return spark.range(5).withColumn("name", lit("test"))
+        |""".stripMargin)
+      .resolve()
+      .validate()
+
+    assert(graph.flows.size == 1)
+    assert(graph.tables.size == 1)
+
+    val table = graph.table(graphIdentifier("table_with_string_schema"))
+    assert(table.specifiedSchema.isDefined)
+    assert(table.specifiedSchema.get == StructType.fromDDL("id LONG, name STRING"))
+  }
+
+  test("table with StructType schema") {
+    val graph = buildGraph("""
+        |from pyspark.sql.types import StructType, StructField, LongType, StringType
+        |from pyspark.sql.functions import lit
+        |
+        |@dp.materialized_view(schema=StructType([
+        |    StructField("id", LongType(), True),
+        |    StructField("name", StringType(), True)
+        |]))
+        |def table_with_struct_schema():
+        |    return spark.range(5).withColumn("name", lit("test"))
+        |""".stripMargin)
+      .resolve()
+      .validate()
+
+    assert(graph.flows.size == 1)
+    assert(graph.tables.size == 1)
+
+    val table = graph.table(graphIdentifier("table_with_struct_schema"))
+    assert(table.specifiedSchema.isDefined)
+    assert(table.specifiedSchema.get == StructType.fromDDL("id LONG, name STRING"))
+  }
+
+  test("string schema validation error - schema mismatch") {
+    val graph = buildGraph("""
+        |from pyspark.sql.functions import lit
+        |
+        |@dp.materialized_view(schema="id LONG, name STRING")
+        |def table_with_wrong_schema():
+        |    return spark.range(5).withColumn("wrong_column", lit("test"))
+        |""".stripMargin)
+      .resolve()
+
+    val ex = intercept[AnalysisException] { graph.validate() }
+    assert(ex.getMessage.contains("has a user-specified schema that is incompatible"))
+    assert(ex.getMessage.contains("table_with_wrong_schema"))
+  }
+
+  test("StructType schema validation error - schema mismatch") {
+    val graph = buildGraph("""
+        |from pyspark.sql.types import StructType, StructField, LongType, StringType
+        |from pyspark.sql.functions import lit
+        |
+        |@dp.materialized_view(schema=StructType([
+        |    StructField("id", LongType(), True),
+        |    StructField("name", StringType(), True)
+        |]))
+        |def table_with_wrong_struct_schema():
+        |    return spark.range(5).withColumn("different_column", lit("test"))
+        |""".stripMargin)
+      .resolve()
+
+    val ex = intercept[AnalysisException] { graph.validate() }
+    assert(ex.getMessage.contains("has a user-specified schema that is incompatible"))
+    assert(ex.getMessage.contains("table_with_wrong_struct_schema"))
   }
 
   /**

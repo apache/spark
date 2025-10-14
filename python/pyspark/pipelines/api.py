@@ -23,10 +23,11 @@ from pyspark.pipelines.flow import Flow, QueryFunction
 from pyspark.pipelines.source_code_location import (
     get_caller_source_code_location,
 )
-from pyspark.pipelines.dataset import (
+from pyspark.pipelines.output import (
     MaterializedView,
     StreamingTable,
     TemporaryView,
+    Sink,
 )
 from pyspark.sql.types import StructType
 
@@ -156,7 +157,7 @@ def table(
 
         resolved_name = name or decorated.__name__
         registry = get_active_graph_element_registry()
-        registry.register_dataset(
+        registry.register_output(
             StreamingTable(
                 comment=comment,
                 name=resolved_name,
@@ -258,7 +259,7 @@ def materialized_view(
 
         resolved_name = name or decorated.__name__
         registry = get_active_graph_element_registry()
-        registry.register_dataset(
+        registry.register_output(
             MaterializedView(
                 comment=comment,
                 name=resolved_name,
@@ -351,7 +352,7 @@ def temporary_view(
 
         resolved_name = name or decorated.__name__
         registry = get_active_graph_element_registry()
-        registry.register_dataset(
+        registry.register_output(
             TemporaryView(
                 comment=comment,
                 name=resolved_name,
@@ -446,4 +447,46 @@ def create_streaming_table(
         schema=schema,
         format=format,
     )
-    get_active_graph_element_registry().register_dataset(table)
+    get_active_graph_element_registry().register_output(table)
+
+
+def create_sink(
+    name: str,
+    format: str,
+    options: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    Creates a sink that can be targeted by streaming flows, providing a generic destination \
+    for flows to send data external to the pipeline.
+
+    :param name: The name of the sink.
+    :param format: The format of the sink, e.g. "parquet".
+    :param options: A dict where the keys are the property names and the values are the \
+        property values. These properties will be set on the sink.
+    """
+    if type(name) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+        )
+    if type(format) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "format", "arg_type": type(format).__name__},
+        )
+    if options is not None and not isinstance(options, dict):
+        raise PySparkTypeError(
+            errorClass="NOT_DICT",
+            messageParameters={
+                "arg_name": "options",
+                "arg_type": type(options).__name__,
+            },
+        )
+    sink = Sink(
+        name=name,
+        format=format,
+        options=options or {},
+        source_code_location=get_caller_source_code_location(stacklevel=1),
+        comment=None,
+    )
+    get_active_graph_element_registry().register_output(sink)

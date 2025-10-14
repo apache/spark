@@ -206,7 +206,7 @@ class ColumnAlias(Expression):
             exp.alias.name.append(self._alias[0])
             exp.alias.expr.CopyFrom(self._child.to_plan(session))
 
-            if self._metadata:
+            if self._metadata is not None:
                 exp.alias.metadata = json.dumps(self._metadata)
             return exp
         else:
