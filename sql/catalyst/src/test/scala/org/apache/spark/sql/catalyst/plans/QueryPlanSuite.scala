@@ -37,7 +37,11 @@ class QueryPlanSuite extends SparkFunSuite {
     CurrentOrigin.reset()
 
     val mappedQuery = query mapExpressions {
-      case _: Expression => Literal(1)
+      case _: Expression =>
+        // Reset CurrentOrigin to prevent contamination from previous operations
+        CurrentOrigin.reset()
+        CurrentOrigin.setPosition(0, 0)
+        Literal(1)
     }
 
     val mappedOrigin = mappedQuery.expressions.apply(0).origin
