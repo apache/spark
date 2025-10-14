@@ -627,7 +627,7 @@ class WindowPandasUDFTestsMixin:
                     self.assertEqual(expected1, result1)
 
                     result2 = (
-                        df.select("*", pandas_sum("v").over(w2).alias("res"))
+                        df.select("*", pandas_sum_unbounded("v").over(w2).alias("res"))
                         .sort("key", "v")
                         .collect()
                     )
