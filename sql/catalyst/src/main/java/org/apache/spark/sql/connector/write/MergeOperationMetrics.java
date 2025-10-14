@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.write;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Interface that provides merge operation metrics.
+ * Interface that provides MERGE operation metrics.
  *
  * @since 4.1.0
  */
