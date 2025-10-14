@@ -12740,14 +12740,14 @@ def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") 
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("HOUR", "13:08:15", "21:30:28")],
-    ...     ['unit', 'start', 'end']).withColumn("start", sf.col("start").cast("time"))
-    ...     .withColumn("end", sf.col("end").cast("time"))
+    >>> df = spark.createDataFrame(
+    ...     [("HOUR", "13:08:15", "21:30:28")], ['unit', 'start', 'end']).withColumn("start",
+    ...     sf.col("start").cast("time")).withColumn("end", sf.col("end").cast("time"))
     >>> df.select('*', sf.time_diff('unit', 'start', 'end')).show()
     +----+--------+--------+---------------------------+
     |unit|   start|     end|time_diff(unit, start, end)|
     +----+--------+--------+---------------------------+
-    |HOUR|20:30:29|21:30:28|                          0|
+    |HOUR|13:08:15|21:30:28|                          8|
     +----+--------+--------+---------------------------+
     """
     return _invoke_function_over_columns("time_diff", unit, start, end)
