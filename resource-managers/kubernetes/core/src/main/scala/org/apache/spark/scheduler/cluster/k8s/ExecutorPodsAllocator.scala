@@ -105,8 +105,7 @@ class ExecutorPodsAllocator(
 
   protected val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(conf)
 
-  // visible for tests
-  val numOutstandingPods = new AtomicInteger()
+  protected val numOutstandingPods = new AtomicInteger()
 
   protected var lastSnapshot = ExecutorPodsSnapshot()
 
