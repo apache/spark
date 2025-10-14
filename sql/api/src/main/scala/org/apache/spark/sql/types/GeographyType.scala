@@ -35,7 +35,7 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
   /**
    * Spatial Reference Identifier (SRID) value of the geography type.
    */
-  val srid: Int = toSrid(crs)
+  val srid: Int = GeographyType.toSrid(crs)
 
   /**
    * The default size of a value of the GeographyType is 2048 bytes, which can store roughly 120
@@ -131,25 +131,6 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
     // If the SRID is mixed, we can accept any other GeographyType.
     // If the SRID is not mixed, we can only accept the same SRID.
     isMixedSrid || gt.srid == srid
-  }
-
-  /**
-   * Converts a CRS string to its corresponding SRID integer value.
-   */
-  private[types] def toSrid(crs: String): Int = {
-    // The special value "SRID:ANY" is used to represent mixed SRID values.
-    if (crs.equalsIgnoreCase(GeographyType.MIXED_CRS)) {
-      GeographyType.MIXED_SRID
-    }
-    // As for other valid CRS values, we currently offer limited support.
-    else if (crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_CRS) ||
-      crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_EPSG_CRS)) {
-      GeographyType.GEOGRAPHY_DEFAULT_SRID
-    } else {
-      throw new SparkIllegalArgumentException(
-        errorClass = "ST_INVALID_CRS_VALUE",
-        messageParameters = Map("crs" -> crs))
-    }
   }
 }
 
@@ -247,6 +228,25 @@ object GeographyType extends SpatialType {
     other.isInstanceOf[GeographyType]
 
   override private[sql] def simpleString: String = "geography"
+
+  /**
+   * Converts a CRS string to its corresponding SRID integer value.
+   */
+  private[types] def toSrid(crs: String): Int = {
+    // The special value "SRID:ANY" is used to represent mixed SRID values.
+    if (crs.equalsIgnoreCase(GeographyType.MIXED_CRS)) {
+      GeographyType.MIXED_SRID
+    }
+    // As for other valid CRS values, we currently offer limited support.
+    else if (crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_CRS) ||
+      crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_EPSG_CRS)) {
+      GeographyType.GEOGRAPHY_DEFAULT_SRID
+    } else {
+      throw new SparkIllegalArgumentException(
+        errorClass = "ST_INVALID_CRS_VALUE",
+        messageParameters = Map("crs" -> crs))
+    }
+  }
 }
 
 /**
