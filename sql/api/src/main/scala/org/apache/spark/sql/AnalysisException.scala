@@ -52,16 +52,7 @@ class AnalysisException protected (
       errorClass: Option[String],
       messageParameters: Map[String, String],
       context: Array[QueryContext]) =
-    this(
-      message,
-      line,
-      startPosition,
-      cause,
-      errorClass,
-      messageParameters,
-      context,
-      None,
-      None)
+    this(message, line, startPosition, cause, errorClass, messageParameters, context, None, None)
 
   def this(errorClass: String, messageParameters: Map[String, String], cause: Option[Throwable]) =
     this(
@@ -83,14 +74,14 @@ class AnalysisException protected (
       cause = cause)
 
   /**
-   * External constructor for callers that want to supply error fields directly,
-   * without requiring a local JSON definition for the error class.
+   * External constructor for callers that want to supply error fields directly, without requiring
+   * a local JSON definition for the error class.
    *
-   * If `message` is provided (Some), it is used verbatim. Otherwise, the message
-   * is rendered from (errorClass, sqlState, messageTemplate, messageParameters).
+   * If `message` is provided (Some), it is used verbatim. Otherwise, the message is rendered from
+   * (errorClass, sqlState, messageTemplate, messageParameters).
    *
-   * `messageTemplate` is always persisted into the exception so clients can read
-   * it via SparkThrowable.getDefaultMessageTemplate().
+   * `messageTemplate` is always persisted into the exception so clients can read it via
+   * SparkThrowable.getDefaultMessageTemplate().
    */
   def this(
       errorClass: String,
@@ -101,8 +92,8 @@ class AnalysisException protected (
       message: Option[String]) =
     this(
       message = message.getOrElse(
-        SparkThrowableHelper.getMessage(errorClass, sqlState, messageTemplate, messageParameters)
-      ),
+        SparkThrowableHelper
+          .getMessage(errorClass, sqlState, messageTemplate, messageParameters)),
       cause = cause,
       errorClass = Option(errorClass),
       messageParameters = messageParameters,
