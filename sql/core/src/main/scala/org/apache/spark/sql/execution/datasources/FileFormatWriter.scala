@@ -159,7 +159,9 @@ object FileFormatWriter extends Logging {
       // columns.
       val ordering = partitionColumns.drop(numStaticPartitionCols) ++
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
-      plan.logicalLink match {
+      plan.logicalLink.orElse {
+        plan.collectFirst { case p if p.logicalLink.isDefined => p.logicalLink.get }
+      } match {
         case Some(WriteFiles(query, _, _, _, _, _)) =>
           V1WritesUtils.eliminateFoldableOrdering(
             ordering.map(SortOrder(_, Ascending)), query).outputOrdering.map(_.child)
