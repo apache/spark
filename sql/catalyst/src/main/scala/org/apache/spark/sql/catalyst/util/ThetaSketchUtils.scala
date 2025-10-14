@@ -38,10 +38,17 @@ object ThetaSketchUtils {
   final val MAX_LG_NOM_LONGS = 26
   final val DEFAULT_LG_NOM_LONGS = 12
 
-  // Family constants for ThetaSketch
+  /*
+   * QUICKSELECT is optimized for speed and is the default choice for most use cases,
+   * providing faster updates and queries with slightly higher error rates. ALPHA offers
+   * better accuracy with slightly higher resource consumption, making it suitable when
+   * precision is more important than performance. The choice primarily affects the speed
+   * vs accuracy trade-off.
+   */
   final val FAMILY_QUICKSELECT = "QUICKSELECT"
   final val FAMILY_ALPHA = "ALPHA"
   final val DEFAULT_FAMILY = FAMILY_QUICKSELECT
+
 
   /**
    * Validates the lgNomLongs parameter for Theta sketch size. Throws a Spark SQL exception if the
