@@ -3475,19 +3475,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key))
   }
 
-  def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> SPARK_DOC_ROOT)
-    )
-  }
-
-  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
-  }
-
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1327",

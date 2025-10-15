@@ -368,7 +368,7 @@ class ArrowWindowPythonEvaluatorFactory(
         }
       }
 
-      val windowFunctionResult = new ArrowPythonWithNamedArgumentRunner(
+      val runner = new ArrowPythonWithNamedArgumentRunner(
         pyFuncs,
         evalType,
         argMetas,
@@ -378,7 +378,9 @@ class ArrowWindowPythonEvaluatorFactory(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        profiler).compute(pythonInput, context.partitionId(), context)
+        profiler) with GroupedPythonArrowInput
+
+      val windowFunctionResult = runner.compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
 

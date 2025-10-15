@@ -882,8 +882,16 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.functions
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.column.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.pandas.functions.pandas_udf.__doc__
+
+    if not have_pyarrow:
+        del pyspark.sql.pandas.functions.arrow_udf.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.sql.pandas.functions tests")

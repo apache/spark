@@ -1143,6 +1143,57 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
         return "GroupArrowUDFSerializer"
 
 
+# Serializer for SQL_GROUPED_AGG_ARROW_UDF and SQL_WINDOW_AGG_ARROW_UDF
+class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        arrow_cast,
+    ):
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=False,
+            arrow_cast=True,
+        )
+        self._timezone = timezone
+        self._safecheck = safecheck
+        self._assign_cols_by_name = assign_cols_by_name
+        self._arrow_cast = arrow_cast
+
+    def load_stream(self, stream):
+        """
+        Flatten the struct into Arrow's record batches.
+        """
+        import pyarrow as pa
+
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 1:
+                batches = ArrowStreamSerializer.load_stream(self, stream)
+                if hasattr(pa, "concat_batches"):
+                    yield pa.concat_batches(batches)
+                else:
+                    # pyarrow.concat_batches not supported in old versions
+                    yield pa.RecordBatch.from_struct_array(
+                        pa.concat_arrays([b.to_struct_array() for b in batches])
+                    )
+
+            elif dataframes_in_group != 0:
+                raise PySparkValueError(
+                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
+                )
+
+    def __repr__(self):
+        return "ArrowStreamAggArrowUDFSerializer"
+
+
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
         self,
@@ -1672,6 +1723,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         safecheck,
         assign_cols_by_name,
         arrow_max_records_per_batch,
+        arrow_max_bytes_per_batch,
         int_to_decimal_coercion_enabled,
     ):
         super(TransformWithStateInPandasSerializer, self).__init__(
@@ -1682,7 +1734,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             arrow_cast=True,
         )
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.arrow_max_bytes_per_batch = arrow_max_bytes_per_batch
         self.key_offsets = None
+        self.average_arrow_row_size = 0
+        self.total_bytes = 0
+        self.total_rows = 0
 
     def load_stream(self, stream):
         """
@@ -1711,6 +1767,18 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
             def row_stream():
                 for batch in batches:
+                    # Short circuit batch size calculation if the batch size is
+                    # unlimited as computing batch size is computationally expensive.
+                    if self.arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
+                        batch_bytes = sum(
+                            buf.size
+                            for col in batch.columns
+                            for buf in col.buffers()
+                            if buf is not None
+                        )
+                        self.total_bytes += batch_bytes
+                        self.total_rows += batch.num_rows
+                        self.average_arrow_row_size = self.total_bytes / self.total_rows
                     data_pandas = [
                         self.arrow_to_pandas(c, i)
                         for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
@@ -1720,8 +1788,17 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                         yield (batch_key, row)
 
             for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
-                df = pd.DataFrame([row for _, row in group_rows])
-                yield (batch_key, df)
+                rows = []
+                for _, row in group_rows:
+                    rows.append(row)
+                    if (
+                        len(rows) >= self.arrow_max_records_per_batch
+                        or len(rows) * self.average_arrow_row_size >= self.arrow_max_bytes_per_batch
+                    ):
+                        yield (batch_key, pd.DataFrame(rows))
+                        rows = []
+                if rows:
+                    yield (batch_key, pd.DataFrame(rows))
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
@@ -1766,6 +1843,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         safecheck,
         assign_cols_by_name,
         arrow_max_records_per_batch,
+        arrow_max_bytes_per_batch,
         int_to_decimal_coercion_enabled,
     ):
         super(TransformWithStateInPandasInitStateSerializer, self).__init__(
@@ -1773,6 +1851,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             safecheck,
             assign_cols_by_name,
             arrow_max_records_per_batch,
+            arrow_max_bytes_per_batch,
             int_to_decimal_coercion_enabled,
         )
         self.init_key_offsets = None

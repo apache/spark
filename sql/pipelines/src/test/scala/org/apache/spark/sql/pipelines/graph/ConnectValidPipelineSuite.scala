@@ -489,6 +489,26 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     )
   }
 
+  test("external sink") {
+    val session = spark
+    import session.implicits._
+
+    val P = new TestGraphRegistrationContext(spark) {
+      val mem = MemoryStream[Int]
+      mem.addData(1, 2)
+      registerTemporaryView("a", query = dfFlowFunc(mem.toDF().select($"value" as "x")))
+      registerSink("sink_a", format = "memory")
+      registerFlow("sink_a", "sink_flow", query = readStreamFlowFunc("a"))
+    }
+    val g = P.resolveToDataflowGraph()
+    g.validate()
+    assert(g.resolved)
+    assert(g.sink(TableIdentifier("sink_a")).isInstanceOf[Sink])
+    val sink = g.sink(TableIdentifier("sink_a"))
+    assert(sink.format == "memory")
+    assert(g.flow(TableIdentifier("sink_flow")).isInstanceOf[StreamingFlow])
+  }
+
   /** Verifies the [[DataflowGraph]] has the specified [[Flow]] with the specified schema. */
   private def verifyFlowSchema(
       pipeline: DataflowGraph,
