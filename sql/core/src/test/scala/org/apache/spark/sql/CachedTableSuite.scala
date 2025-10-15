@@ -2457,6 +2457,63 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
+  test("SPARK-53924: insert into DSv2 table invalidates cache of SQL temp views with plans") {
+    val t = "testcat.tbl"
+    withTable(t, "v") {
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+        sql(s"CREATE TABLE $t (id int, data string) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+        // create and cache SQL temp view
+        sql(s"CREATE TEMPORARY VIEW v AS SELECT id FROM $t")
+        sql("SELECT * FROM v").cache()
+
+        // verify view is cached
+        assertCached(sql("SELECT * FROM v"))
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2)))
+
+        // insert data into base table
+        sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+        // verify cache was refreshed and will pick up new data
+        checkCacheLoading(sql(s"SELECT * FROM v"), isLoaded = false)
+
+        // verify view is recached correctly
+        assertCached(sql("SELECT * FROM v"))
+        checkAnswer(
+          sql("SELECT * FROM v"),
+          Seq(Row(1), Row(2), Row(3), Row(4)))
+      }
+    }
+  }
+
+  test("SPARK-53924: uncache DSv2 table using SQL uncaches SQL temp views with plans") {
+    val t = "testcat.tbl"
+    withTable(t, "v") {
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+        sql(s"CREATE TABLE $t (id int, data string) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+        // cache table
+        sql(s"CACHE TABLE $t")
+        assertCached(sql(s"SELECT * FROM $t"))
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+        // create and cache SQL temp view
+        sql(s"CREATE TEMPORARY VIEW v AS SELECT id FROM $t")
+        sql("SELECT * FROM v").cache()
+        assertCached(sql("SELECT * FROM v"))
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2)))
+
+        // uncache table must invalidate view cache (cascading)
+        sql(s"UNCACHE TABLE $t")
+
+        // verify view is not cached anymore
+        assertNotCached(sql("SELECT * FROM v"))
+      }
+    }
+  }
+
   test("uncache persistent table via catalog API") {
     withTable("tbl1") {
       sql("CREATE TABLE tbl1 (name STRING, age INT) USING parquet")
