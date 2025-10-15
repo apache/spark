@@ -757,9 +757,16 @@ class SparkSession:
         else:
             local_relation = LocalRelation(_table)
 
-        cache_threshold = int(configs["spark.sql.session.localRelationCacheThreshold"])
-        max_chunk_size_rows = int(configs["spark.sql.session.localRelationChunkSizeRows"])
-        max_chunk_size_bytes = int(configs["spark.sql.session.localRelationChunkSizeBytes"])
+        # get_config_dict throws [SQL_CONF_NOT_FOUND] if the key is not found.
+        cache_threshold = int(
+            configs["spark.sql.session.localRelationCacheThreshold"]  # type: ignore[arg-type]
+        )
+        max_chunk_size_rows = int(
+            configs["spark.sql.session.localRelationChunkSizeRows"]  # type: ignore[arg-type]
+        )
+        max_chunk_size_bytes = int(
+            configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
+        )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:
             plan = self._cache_local_relation(

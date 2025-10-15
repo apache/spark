@@ -236,7 +236,7 @@ class ArtifactManager(
    */
   def cacheArtifacts(blobs: Array[Array[Byte]]): Seq[String] = {
     // Compute hashes for all blobs upfront
-    val hashes = blobs.map(sha256Hex)
+    val hashes = blobs.map(sha256Hex).toSeq
     val uniqueHashes = hashes.distinct
 
     // Batch check which artifacts are already cached
@@ -257,7 +257,7 @@ class ArtifactManager(
       addArtifacts(uniqueBlobsToUpload.toList)
     }
 
-    hashes.toSeq
+    hashes
   }
 
   /**

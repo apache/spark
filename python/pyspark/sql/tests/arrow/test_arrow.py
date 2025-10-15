@@ -424,18 +424,17 @@ class ArrowTestsMixin:
         import random
         import string
 
-        threshold_bytes = int(self.spark.conf.get("spark.sql.session.localRelationCacheThreshold"))
-        count = 32
+        row_size = 1000
+        row_count = 64 * 1000
         suffix = "abcdef"
         str_value = (
-            "".join(random.choices(string.ascii_letters + string.digits, k=threshold_bytes))
-            + suffix
+            "".join(random.choices(string.ascii_letters + string.digits, k=row_size)) + suffix
         )
-        data = [(i, str_value) for i in range(count)]
+        data = [(i, str_value) for i in range(row_count)]
 
         for _ in range(2):
             df = self.spark.createDataFrame(data, ["col1", "col2"])
-            assert df.count() == count
+            assert df.count() == row_count
             assert not df.filter(df["col2"].endswith(suffix)).isEmpty()
 
     def check_large_cached_local_relation_same_values(self):

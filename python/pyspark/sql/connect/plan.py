@@ -436,6 +436,7 @@ class LocalRelation(LogicalPlan):
         return plan
 
     def _serialize_table(self) -> bytes:
+        assert self._table is not None
         sink = pa.BufferOutputStream()
         with pa.ipc.new_stream(sink, self._table.schema) as writer:
             batches = self._table.to_batches()
@@ -456,6 +457,7 @@ class LocalRelation(LogicalPlan):
         This method processes the table in fixed-size batches (1024 rows) for
         efficiency, matching the Scala implementation's batchSizeCheckInterval.
         """
+        assert self._table is not None
         chunks = []
         schema = self._table.schema
 

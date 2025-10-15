@@ -5894,7 +5894,7 @@ object SQLConf {
       .version("3.5.0")
       .intConf
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
-      .createWithDefault(64 * 1024 * 1024)
+      .createWithDefault(1024 * 1024)
 
   val LOCAL_RELATION_CHUNK_SIZE_ROWS =
     buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY)

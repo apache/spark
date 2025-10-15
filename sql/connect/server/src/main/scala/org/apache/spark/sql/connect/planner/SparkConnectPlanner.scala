@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import java.util.{HashMap, Properties, UUID}
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -1577,8 +1578,7 @@ class SparkConnectPlanner(
 
       } else {
         if (batchStructType != structType) {
-          throw new IllegalArgumentException(
-            s"Schema mismatch between batches. Expected: $structType, Got: $batchStructType")
+          throw InvalidInputErrors.chunkedCachedLocalRelationChunksWithDifferentSchema()
         }
         combinedRows = combinedRows ++ batchRows
       }
@@ -1606,7 +1606,7 @@ class SparkConnectPlanner(
 
     schemaOpt match {
       case None =>
-        logical.LocalRelation(attributes, data.map(_.copy()).toArray)
+        logical.LocalRelation(attributes, ArraySeq.unsafeWrapArray(data.map(_.copy()).toArray))
       case Some(schema) =>
         def normalize(dt: DataType): DataType = dt match {
           case udt: UserDefinedType[_] => normalize(udt.sqlType)
