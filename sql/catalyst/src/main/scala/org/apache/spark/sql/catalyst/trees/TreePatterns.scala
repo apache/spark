@@ -40,6 +40,7 @@ object TreePattern extends Enumeration  {
   val COMMON_EXPR_REF: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
+  val CREATE_MAP: Value = Value
   val CREATE_NAMED_STRUCT: Value = Value
   val CURRENT_LIKE: Value = Value
   val DATETIME: Value = Value
@@ -66,6 +67,8 @@ object TreePattern extends Enumeration  {
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value
+  val MAP_FROM_ARRAYS: Value = Value
+  val MAP_FROM_ENTRIES: Value = Value
   val MAP_OBJECTS: Value = Value
   val MULTI_ALIAS: Value = Value
   val NEW_INSTANCE: Value = Value
@@ -100,6 +103,7 @@ object TreePattern extends Enumeration  {
   val UPDATE_FIELDS: Value = Value
   val UPPER_OR_LOWER: Value = Value
   val UP_CAST: Value = Value
+  val VARIABLE_REFERENCE: Value = Value
   val DISTRIBUTED_SEQUENCE_ID: Value = Value
 
   // Unresolved expression patterns (Alphabetically ordered)
