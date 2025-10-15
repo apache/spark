@@ -64,7 +64,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
       orderingMatched: Boolean,
       hasEmpty2Null: Boolean = false)(query: => Unit): Unit = {
     executeAndCheckOrderingAndCustomValidate(
-      hasLogicalSort, orderingMatched, hasEmpty2Null)(query)(_ => ())
+      hasLogicalSort, Some(orderingMatched), hasEmpty2Null)(query)(_ => ())
   }
 
   /**
@@ -72,7 +72,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
    */
   protected def executeAndCheckOrderingAndCustomValidate(
       hasLogicalSort: Boolean,
-      orderingMatched: Boolean,
+      orderingMatched: Option[Boolean],
       hasEmpty2Null: Boolean = false)(query: => Unit)(
       customValidate: LogicalPlan => Unit): Unit = {
     @volatile var optimizedPlan: LogicalPlan = null
@@ -98,10 +98,12 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
 
     query
 
-    // Check whether the output ordering is matched before FileFormatWriter executes rdd.
-    assert(FileFormatWriter.outputOrderingMatched == orderingMatched,
-      s"Expect orderingMatched: $orderingMatched, " +
-        s"Actual: ${FileFormatWriter.outputOrderingMatched}")
+    orderingMatched.foreach { matched =>
+      // Check whether the output ordering is matched before FileFormatWriter executes rdd.
+      assert(FileFormatWriter.outputOrderingMatched == matched,
+        s"Expect orderingMatched: $matched, " +
+          s"Actual: ${FileFormatWriter.outputOrderingMatched}")
+    }
 
     sparkContext.listenerBus.waitUntilEmpty()
 
@@ -416,8 +418,10 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
             |CREATE TABLE t(i INT, j INT, k STRING) USING PARQUET
             |PARTITIONED BY (k)
             |""".stripMargin)
+        // Skip checking orderingMatched temporarily to avoid touching `FileFormatWriter`,
+        // see details at https://github.com/apache/spark/pull/52584#issuecomment-3407716019
         executeAndCheckOrderingAndCustomValidate(
-          hasLogicalSort = true, orderingMatched = true) {
+          hasLogicalSort = true, orderingMatched = None) {
           sql(
             """
               |INSERT OVERWRITE t

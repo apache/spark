@@ -138,8 +138,10 @@ class V1WriteHiveCommandSuite
                 |CREATE TABLE t(i INT, j INT, k STRING) STORED AS PARQUET
                 |PARTITIONED BY (k)
                 |""".stripMargin)
+            // Skip checking orderingMatched temporarily to avoid touching `FileFormatWriter`,
+            // see details at https://github.com/apache/spark/pull/52584#issuecomment-3407716019
             executeAndCheckOrderingAndCustomValidate(
-              hasLogicalSort = true, orderingMatched = true) {
+              hasLogicalSort = true, orderingMatched = None) {
               sql(
                 """
                   |INSERT OVERWRITE t

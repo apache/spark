@@ -138,6 +138,10 @@ object FileFormatWriter extends Logging {
       statsTrackers = statsTrackers
     )
 
+    // We should first sort by dynamic partition columns, then bucket id, and finally sorting
+    // columns.
+    val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
+        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
 
     // SPARK-40588: when planned writing is disabled and AQE is enabled,
@@ -153,26 +157,6 @@ object FileFormatWriter extends Logging {
     val actualOrdering = writeFilesOpt.map(_.child)
       .getOrElse(materializeAdaptiveSparkPlan(plan))
       .outputOrdering
-
-    val requiredOrdering = {
-      // We should first sort by dynamic partition columns, then bucket id, and finally sorting
-      // columns.
-      val ordering = partitionColumns.drop(numStaticPartitionCols) ++
-        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
-      plan.logicalLink.orElse {
-        plan.collectFirst { case p if p.logicalLink.isDefined => p.logicalLink.get }
-      } match {
-        case Some(WriteFiles(query, _, _, _, _, _)) =>
-          V1WritesUtils.eliminateFoldableOrdering(
-            ordering.map(SortOrder(_, Ascending)), query).outputOrdering.map(_.child)
-        case Some(query) =>
-          V1WritesUtils.eliminateFoldableOrdering(
-            ordering.map(SortOrder(_, Ascending)), query).outputOrdering.map(_.child)
-        case _ =>
-          ordering
-      }
-    }
-
     val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
 
     SQLExecution.checkSQLExecutionId(sparkSession)
