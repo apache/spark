@@ -555,7 +555,7 @@ class ArrowTableToRowsConversion:
                     assert isinstance(value, dict)
 
                     _values = [
-                        field_convs[i](value.get(name, None))
+                        field_convs[i](value.get(name, None))  # type: ignore[misc]
                         if field_convs[i] is not None
                         else value.get(name, None)
                         for i, name in enumerate(dedup_field_names)
