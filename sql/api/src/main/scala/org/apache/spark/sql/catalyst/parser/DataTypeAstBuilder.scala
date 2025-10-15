@@ -72,6 +72,16 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
   }
 
+  override def visitNamedParameterLiteral(ctx: NamedParameterLiteralContext): AnyRef = {
+    // Parameter markers are not allowed in data type definitions
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
+  }
+
+  override def visitPosParameterLiteral(ctx: PosParameterLiteralContext): AnyRef = {
+    // Parameter markers are not allowed in data type definitions
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
+  }
+
   /**
    * Visit a stringLit context by delegating to the appropriate labeled visitor.
    */
@@ -189,7 +199,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         .map { intVal =>
           // Assert that parameter markers have been substituted before reaching DataTypeAstBuilder
           assert(
-            intVal.getChild(0).getClass.getSimpleName != "ParameterIntegerValueContext",
+            !intVal.isInstanceOf[ParameterIntegerValueContext],
             "Parameter markers should be substituted before DataTypeAstBuilder processes the " +
               s"parse tree. Found unsubstituted parameter: ${intVal.getText}")
           intVal.getText

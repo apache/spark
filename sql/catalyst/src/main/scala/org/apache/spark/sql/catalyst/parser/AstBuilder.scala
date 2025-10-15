@@ -90,6 +90,17 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 
+  /**
+   * Get the integer value from an IntegerValueContext after parameter replacement.
+   * Asserts that parameter markers have been substituted before reaching AstBuilder.
+   */
+  protected def getIntegerValue(ctx: IntegerValueContext): Int = {
+    assert(!ctx.isInstanceOf[ParameterIntegerValueContext],
+      "Parameter markers should be substituted before AstBuilder processes the " +
+      s"parse tree. Found unsubstituted parameter: ${ctx.getText}")
+    ctx.getText.toInt
+  }
+
   protected def withFuncIdentClause(
       ctx: FunctionNameContext,
       otherPlans: Seq[LogicalPlan],
@@ -721,12 +732,7 @@ class AstBuilder extends DataTypeAstBuilder
           operationNotAllowed("Cannot specify MAX RECURSION LEVEL when the CTE is not marked as " +
             "RECURSIVE", ctx)
         }
-        // Assert that parameter markers have been substituted before reaching AstBuilder
-        assert(nCtx.integerValue().getChild(0).getClass.getSimpleName !=
-          "ParameterIntegerValueContext",
-          "Parameter markers should be substituted before AstBuilder processes the " +
-          s"parse tree. Found unsubstituted parameter: ${nCtx.integerValue().getText}")
-        Some(nCtx.integerValue().getText().toInt)
+        Some(getIntegerValue(nCtx.integerValue()))
       } else {
         None
       }
@@ -2207,12 +2213,7 @@ class AstBuilder extends DataTypeAstBuilder
       case ctx: SampleByPercentileContext =>
         val fraction = if (ctx.DECIMAL_VALUE() != null) { ctx.DECIMAL_VALUE().getText.toDouble }
         else {
-          // Assert that parameter markers have been substituted before reaching AstBuilder
-          assert(ctx.integerValue().getChild(0).getClass.getSimpleName !=
-            "ParameterIntegerValueContext",
-            "Parameter markers should be substituted before AstBuilder processes the " +
-            s"parse tree. Found unsubstituted parameter: ${ctx.integerValue().getText}")
-          ctx.integerValue().getText.toDouble
+          getIntegerValue(ctx.integerValue()).toDouble
         }
         val sign = if (ctx.negativeSign == null) 1 else -1
         sample(sign * fraction / 100.0d, seed)
@@ -4199,13 +4200,8 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a [[BucketSpec]].
    */
   override def visitBucketSpec(ctx: BucketSpecContext): BucketSpec = withOrigin(ctx) {
-    // Assert that parameter markers have been substituted before reaching AstBuilder
-    assert(ctx.integerValue().getChild(0).getClass.getSimpleName !=
-      "ParameterIntegerValueContext",
-      "Parameter markers should be substituted before AstBuilder processes the " +
-      s"parse tree. Found unsubstituted parameter: ${ctx.integerValue().getText}")
     BucketSpec(
-      ctx.integerValue().getText.toInt,
+      getIntegerValue(ctx.integerValue()),
       visitIdentifierList(ctx.identifierList),
       Option(ctx.orderedIdentifierList)
           .toSeq

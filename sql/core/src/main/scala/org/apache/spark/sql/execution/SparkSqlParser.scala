@@ -124,7 +124,7 @@ class SparkSqlParser extends AbstractSqlParser {
           (command, false, true)
         } else {
           // Modern mode: perform parameter substitution if parameters are present.
-          val substituted = substituteParametersOrSetupCallback(command, context)
+          val substituted = substituteParametersIfEnabled(command, context)
           (substituted, substituted != command, true) // Track if substitution occurred.
         }
       case _ =>
@@ -154,49 +154,11 @@ class SparkSqlParser extends AbstractSqlParser {
     }
   }
 
-  private def substituteParametersOrSetupCallback(
+  private def substituteParametersIfEnabled(
       command: String,
       context: ParameterContext): String = {
-
-    // Check legacy configuration - if true, skip parameter substitution during parsing.
-    if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-      // In legacy mode, return original command without substitution.
-      command
-    } else {
-      ParameterHandler.substituteParameters(command, context)
-    }
-  }
-
-  /**
-   * Internal parse method for identifiers and data types that bypasses parameter logic.
-   * This ensures clean parsing without parameter substitution side effects.
-   */
-  private def parseIdentifierInternal[T](command: String)(toResult: SqlBaseParser => T): T = {
-    val variableSubstituted = substitutor.substitute(command)
-    super.parse(variableSubstituted)(toResult)
-  }
-
-  // Override parsing methods that should NOT use parameter substitution.
-  // These methods parse identifiers and data types where parameters don't make sense.
-  override def parseTableIdentifier(sqlText: String): TableIdentifier = {
-    parseIdentifierInternal(sqlText) { parser =>
-      parser.tableIdentifier().accept(astBuilder).asInstanceOf[TableIdentifier]
-    }
-  }
-
-  override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
-    parseIdentifierInternal(sqlText) { parser =>
-      parser.multipartIdentifier().accept(astBuilder).asInstanceOf[FunctionIdentifier]
-    }
-  }
-
-  override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
-    parseIdentifierInternal(sqlText) { parser =>
-      val ctx = parser.singleMultipartIdentifier()
-      withErrorHandling(ctx, Some(sqlText)) {
-        astBuilder.visitSingleMultipartIdentifier(ctx)
-      }
-    }
+    // Caller has already checked the legacy config, so we can directly substitute
+    ParameterHandler.substituteParameters(command, context)
   }
 
 

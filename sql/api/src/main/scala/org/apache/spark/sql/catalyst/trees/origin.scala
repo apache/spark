@@ -78,44 +78,6 @@ case class Origin(
  */
 trait WithOrigin {
   def origin: Origin
-
-  /**
-   * Update query contexts in this object with translated positions. Uses reflection to
-   * generically update any object with query context.
-   */
-  def updateQueryContext(translator: Array[QueryContext] => Array[QueryContext]): WithOrigin = {
-    try {
-      val thisClass = this.getClass
-
-      // Try to find query context using common method names.
-      val contextMethodNames = Seq("getQueryContext", "context")
-
-      for (methodName <- contextMethodNames) {
-        try {
-          val getMethod = thisClass.getMethod(methodName)
-          val currentContexts = getMethod.invoke(this).asInstanceOf[Array[QueryContext]]
-          val translatedContexts = translator(currentContexts)
-
-          // Try to update the field in-place.
-          val fieldName = if (methodName == "getQueryContext") "queryContext" else "context"
-          val field = thisClass.getDeclaredField(fieldName)
-          field.setAccessible(true)
-          field.set(this, translatedContexts)
-        } catch {
-          case _: NoSuchMethodException | _: IllegalAccessException |
-              _: IllegalArgumentException | _: java.lang.reflect.InvocationTargetException |
-              _: ClassCastException | _: NoSuchFieldException =>
-          // Method doesn't exist, invocation failed, or field update failed - try next.
-        }
-      }
-
-      this // No update possible, return unchanged.
-    } catch {
-      case _: SecurityException =>
-        // Security manager prevented reflection access.
-        this
-    }
-  }
 }
 
 /**

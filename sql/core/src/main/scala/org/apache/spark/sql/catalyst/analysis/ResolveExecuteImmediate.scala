@@ -207,8 +207,9 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
   private def evaluateParameterExpression(expr: Expression): Any = {
     expr match {
       case varRef: VariableReference =>
-        // Variable references should be evaluated to their values
-        varRef.eval(EmptyRow)
+        // Variable references should be evaluated to their values and wrapped in Literal
+        // to preserve type information
+        Literal.create(varRef.eval(EmptyRow), varRef.dataType)
       case foldable if foldable.foldable =>
         // For foldable expressions, we need to preserve type information by returning
         // the Literal object itself, not just its raw value. This ensures that

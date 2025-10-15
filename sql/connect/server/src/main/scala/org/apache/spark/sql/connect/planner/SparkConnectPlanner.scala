@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, Expr
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.parser.{ParameterHandler, ParseException, ParserUtils}
+import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParameterContext, ParameterHandler, ParseException, ParserUtils, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
@@ -320,41 +320,46 @@ class SparkConnectPlanner(
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
-    val queryText = substituteParametersInQuery(sql)
-    // Parse the substituted query
-    parser.parsePlan(queryText)
+    val parameterContext = buildParameterContext(sql)
+    parameterContext match {
+      case Some(ctx) =>
+        // Use parsePlanWithParameters for proper position mapping
+        parser.parsePlanWithParameters(sql.getQuery, ctx)
+      case None =>
+        // No parameters - use regular parsing
+        parser.parsePlan(sql.getQuery)
+    }
   }
 
   /**
-   * Helper method to handle parameter substitution for SQL queries. Consolidates the logic for
-   * handling different parameter types and sources.
+   * Build a ParameterContext from the protobuf SQL message.
+   * Returns None if no parameters are present.
    */
-  private def substituteParametersInQuery(sql: proto.SQL): String = {
+  private def buildParameterContext(sql: proto.SQL): Option[ParameterContext] = {
     val args = sql.getArgsMap
     val namedArguments = sql.getNamedArgumentsMap
     val posArgs = sql.getPosArgsList
     val posArguments = sql.getPosArgumentsList
 
-    // Apply text-level parameter substitution if we have parameters
     if (!namedArguments.isEmpty) {
       // Use named arguments (expressions)
       val paramMap = namedArguments.asScala.toMap.transform((_, v) => transformExpression(v))
-      ParameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
+      Some(NamedParameterContext(paramMap))
     } else if (!posArguments.isEmpty) {
       // Use positional arguments (expressions)
       val paramList = posArguments.asScala.map(transformExpression).toSeq
-      ParameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
+      Some(PositionalParameterContext(paramList))
     } else if (!args.isEmpty) {
       // Use named arguments (literals)
       val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
-      ParameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
+      Some(NamedParameterContext(paramMap))
     } else if (!posArgs.isEmpty) {
       // Use positional arguments (literals)
       val paramList = posArgs.asScala.map(transformLiteral).toSeq
-      ParameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
+      Some(PositionalParameterContext(paramList))
     } else {
-      // No parameters to substitute
-      sql.getQuery
+      // No parameters
+      None
     }
   }
 

@@ -493,7 +493,7 @@ class SparkSession private(
    *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
    * @param tracker A tracker that can notify when query is ready for execution
    */
-    private[sql] def sql(
+  private[sql] def sql(
       sqlText: String,
       args: Map[String, Any],
       tracker: QueryPlanningTracker): DataFrame =
