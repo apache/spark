@@ -219,7 +219,8 @@ def main(infile: IO, outfile: IO) -> None:
                     columns = [column.to_pylist() for column in batch.columns]
                     for row in range(0, batch.num_rows):
                         values = [
-                            converters[col](columns[col][row]) for col in range(batch.num_columns)
+                            converters[col](columns[col][row])  # type: ignore[misc]
+                            for col in range(batch.num_columns)
                         ]
                         yield _create_row(fields=fields, values=values)
 

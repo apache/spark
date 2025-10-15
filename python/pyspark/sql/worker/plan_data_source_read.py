@@ -198,7 +198,7 @@ def write_read_func_and_partitions(
                 f"but found {batch.num_columns} columns and {batch.num_rows} rows."
             )
             columns = [column.to_pylist() for column in batch.columns]
-            partition_bytes = converter(columns[0][0])
+            partition_bytes = converter(columns[0][0])  # type: ignore[misc]
 
         assert (
             partition_bytes is not None

@@ -2184,7 +2184,7 @@ class DataFrame(ParentDataFrame):
                     columnar_data = [column.to_pylist() for column in table.columns]
                     for i in range(0, table.num_rows):
                         values = [
-                            field_converters[j](columnar_data[j][i])
+                            field_converters[j](columnar_data[j][i])  # type: ignore[misc]
                             for j in range(table.num_columns)
                         ]
                         yield _create_row(fields=schema.fieldNames(), values=values)
