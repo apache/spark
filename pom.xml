@@ -120,7 +120,7 @@
     <java.minimum.version>17.0.11</java.minimum.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <maven.version>3.9.11</maven.version>
-    <exec-maven-plugin.version>3.5.1</exec-maven-plugin.version>
+    <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.8</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
@@ -177,7 +177,7 @@
     <scala.version>2.13.17</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <scala-maven-plugin.version>4.9.5</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.6</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -2619,7 +2619,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.6.0</version>
+          <version>3.6.2</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -2803,7 +2803,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.14.0</version>
+          <version>3.14.1</version>
           <configuration>
             <skipMain>true</skipMain> <!-- skip compile -->
             <skip>true</skip> <!-- skip testCompile -->
@@ -3039,7 +3039,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.6.0</version>
+          <version>3.6.1</version>
           <dependencies>
             <dependency>
               <groupId>org.ow2.asm</groupId>
