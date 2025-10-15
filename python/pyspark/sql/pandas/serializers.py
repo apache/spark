@@ -1175,7 +1175,14 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == 1:
-                yield pa.concat_batches(ArrowStreamSerializer.load_stream(self, stream))
+                batches = ArrowStreamSerializer.load_stream(self, stream)
+                if hasattr(pa, "concat_batches"):
+                    yield pa.concat_batches(batches)
+                else:
+                    # pyarrow.concat_batches not supported in old versions
+                    yield pa.RecordBatch.from_struct_array(
+                        pa.concat_arrays([b.to_struct_array() for b in batches])
+                    )
 
             elif dataframes_in_group != 0:
                 raise PySparkValueError(
