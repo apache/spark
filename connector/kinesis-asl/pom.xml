@@ -64,10 +64,16 @@
       <version>${aws.java.sdk.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.amazonaws</groupId>
+      <groupId>software.amazon.kinesis</groupId>
       <artifactId>amazon-kinesis-producer</artifactId>
       <version>${aws.kinesis.producer.version}</version>
       <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>com.kjetland</groupId>
+          <artifactId>mbknor-jackson-jsonschema_2.12</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <!-- manage this up explicitly to match Spark; com.amazonaws:aws-java-sdk-pom specifies
       2.6.7 but says we can manage it up -->
