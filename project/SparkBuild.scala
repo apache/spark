@@ -46,9 +46,9 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(sqlApi, catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) =
+  val sqlProjects@Seq(sqlApi, catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf, sqlParser) =
     Seq("sql-api", "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10",
-      "sql-kafka-0-10", "avro", "protobuf").map(ProjectRef(buildLocation, _))
+      "sql-kafka-0-10", "avro", "protobuf", "sql-parser").map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
@@ -400,7 +400,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
-      connectClient, variant, connectShims, profiler, commonUtilsJava
+      connectClient, variant, connectShims, profiler, commonUtilsJava, sqlParser
     ).contains(x)
   }
 
@@ -434,7 +434,10 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
-  /* Sql-api ANTLR generation settings */
+  /* Spark SQL Parser ANTLR generation settings */
+  enable(SqlParser.settings)(sqlParser)
+
+  /* Spark API */
   enable(SqlApi.settings)(sqlApi)
 
   /* Spark SQL Core settings */
@@ -1165,7 +1168,7 @@ object OldDeps {
   )
 }
 
-object SqlApi {
+object SqlParser {
   import com.simplytyped.Antlr4Plugin
   import com.simplytyped.Antlr4Plugin.autoImport._
 
@@ -1174,7 +1177,31 @@ object SqlApi {
     (Antlr4 / antlr4PackageName) := Some("org.apache.spark.sql.catalyst.parser"),
     (Antlr4 / antlr4GenListener) := true,
     (Antlr4 / antlr4GenVisitor) := true,
-    (Antlr4 / antlr4TreatWarningsAsErrors) := true
+    (Antlr4 / antlr4TreatWarningsAsErrors) := true,
+
+    excludeDependencies ++= Seq(
+      ExclusionRule("com.google.guava", "guava"),
+      ExclusionRule("org.jpmml", "pmml-model")
+    ),
+
+    (assembly / logLevel) := Level.Info,
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+    assembly / assemblyShadeRules := Seq(
+      ShadeRule.rename("org.antlr.v4.runtime.**" -> "org.sparkproject.antlr.v4.runtime.@1").inAll
+    ),
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    },
+    (assembly / assemblyJarName) := s"${moduleName.value}_${scalaBinaryVersion.value}-${version.value}.jar"
+  )
+}
+
+object SqlApi {
+  lazy val settings = Seq(
+    // Assembly sql-parser to shade antlr4-runtime classes
+    Compile / compile := ((Compile / compile) dependsOn LocalProject("sql-parser") / assembly).value,
   )
 }
 

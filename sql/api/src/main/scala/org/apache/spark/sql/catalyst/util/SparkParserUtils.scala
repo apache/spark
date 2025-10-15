@@ -18,9 +18,9 @@ package org.apache.spark.sql.catalyst.util
 
 import java.lang.{Long => JLong, StringBuilder => JStringBuilder}
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
-import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.TerminalNode
+import org.sparkproject.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.sparkproject.antlr.v4.runtime.misc.Interval
+import org.sparkproject.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 

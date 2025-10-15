@@ -20,11 +20,11 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
 
-import org.antlr.v4.runtime._
-import org.antlr.v4.runtime.atn.{ATN, ParserATNSimulator, PredictionContextCache, PredictionMode}
-import org.antlr.v4.runtime.dfa.DFA
-import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
-import org.antlr.v4.runtime.tree.TerminalNodeImpl
+import org.sparkproject.antlr.v4.runtime._
+import org.sparkproject.antlr.v4.runtime.atn.{ATN, ParserATNSimulator, PredictionContextCache, PredictionMode}
+import org.sparkproject.antlr.v4.runtime.dfa.DFA
+import org.sparkproject.antlr.v4.runtime.misc.{Interval, Pair, ParseCancellationException}
+import org.sparkproject.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -366,7 +366,7 @@ case object PostProcessor extends SqlBaseParserBaseListener {
     parent.removeLastChild()
     val token = ctx.getChild(0).getPayload.asInstanceOf[Token]
     val newToken = new CommonToken(
-      new org.antlr.v4.runtime.misc.Pair(token.getTokenSource, token.getInputStream),
+      new Pair(token.getTokenSource, token.getInputStream),
       SqlBaseParser.IDENTIFIER,
       token.getChannel,
       token.getStartIndex + stripMargins,

@@ -20,8 +20,8 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.antlr.v4.runtime.Token
-import org.antlr.v4.runtime.tree.ParseTree
+import org.sparkproject.antlr.v4.runtime.Token
+import org.sparkproject.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
