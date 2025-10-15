@@ -29,13 +29,13 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
 
   test("ParameterHandler - basic named parameter substitution") {
     val context = NamedParameterContext(Map("param1" -> Literal(42)))
-    val result = ParameterHandler.substituteParameters("SELECT :param1", context)
+    val (result, _) = ParameterHandler.substituteParameters("SELECT :param1", context)
     assert(result === "SELECT 42")
   }
 
   test("ParameterHandler - basic positional parameter substitution") {
     val context = PositionalParameterContext(Seq(Literal(42)))
-    val result = ParameterHandler.substituteParameters("SELECT ?", context)
+    val (result, _) = ParameterHandler.substituteParameters("SELECT ?", context)
     assert(result === "SELECT 42")
   }
 
