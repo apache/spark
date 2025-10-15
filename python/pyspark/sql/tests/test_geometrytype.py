@@ -22,7 +22,6 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class GeometryTypeTestMixin:
-
     # Test cases for GeometryType construction based on SRID.
 
     def test_geometrytype_specified_valid_srid(self):
@@ -47,7 +46,7 @@ class GeometryTypeTestMixin:
             srid_header = "[ST_INVALID_SRID_VALUE] Invalid or unsupported SRID"
             self.assertEqual(
                 str(error_context.exception),
-                f"{srid_header} (spatial reference identifier) value: {srid}."
+                f"{srid_header} (spatial reference identifier) value: {srid}.",
             )
 
     # Special string value "ANY" in place of SRID is used to denote a mixed GEOMETRY type.

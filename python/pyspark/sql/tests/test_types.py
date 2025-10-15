@@ -927,12 +927,12 @@ class TypesTestsMixin:
         from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
 
         valid_test_cases = [
-          ("geography", GeographyType(4326)),
-          ("geography(OGC:CRS84)", GeographyType(4326)),
-          ("geography(OGC:CRS84, SPHERICAL)", GeographyType(4326)),
-          ("geography(SPHERICAL)", GeographyType(4326)),
-          ("geography(SRID:ANY)", GeographyType("ANY")),
-          ("geography(srid:any)", GeographyType("ANY")),
+            ("geography", GeographyType(4326)),
+            ("geography(OGC:CRS84)", GeographyType(4326)),
+            ("geography(OGC:CRS84, SPHERICAL)", GeographyType(4326)),
+            ("geography(SPHERICAL)", GeographyType(4326)),
+            ("geography(SRID:ANY)", GeographyType("ANY")),
+            ("geography(srid:any)", GeographyType("ANY")),
         ]
         for json, expected in valid_test_cases:
             python_datatype = _parse_datatype_json_value(json)
@@ -965,7 +965,7 @@ class TypesTestsMixin:
             "geography(OCG:CRS123)",
             "geography(SRID:0,)",
             "geography(SRID0)",
-            "geography(SRID:4326, ALG)"
+            "geography(SRID:4326, ALG)",
         ]
         for json in invalid_test_cases:
             with self.assertRaises(Exception):
@@ -975,10 +975,10 @@ class TypesTestsMixin:
         from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
 
         valid_test_cases = [
-          ("geometry", GeometryType(4326)),
-          ("geometry(OGC:CRS84)", GeometryType(4326)),
-          ("geometry(SRID:ANY)", GeometryType("ANY")),
-          ("geometry(srid:any)", GeometryType("ANY")),
+            ("geometry", GeometryType(4326)),
+            ("geometry(OGC:CRS84)", GeometryType(4326)),
+            ("geometry(SRID:ANY)", GeometryType("ANY")),
+            ("geometry(srid:any)", GeometryType("ANY")),
         ]
         for json, expected in valid_test_cases:
             python_datatype = _parse_datatype_json_value(json)
@@ -1009,7 +1009,7 @@ class TypesTestsMixin:
             "geometry(OCG:123)",
             "geometry(OCG:CRS123)",
             "geometry(SRID:0,)",
-            "geometry(SRID0)"
+            "geometry(SRID0)",
         ]
         for json in invalid_test_cases:
             with self.assertRaises(Exception):

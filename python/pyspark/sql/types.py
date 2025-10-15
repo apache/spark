@@ -630,6 +630,7 @@ class GeometryType(SpatialType):
 
     """ The constructor for the GEOMETRY type can accept either a single valid geometric integer
     SRID value, or a special string value "ANY" used to represent a mixed SRID GEOMETRY type."""
+
     def __init__(self, srid):
         # Special string value "ANY" is used to represent the mixed SRID GEOMETRY type.
         if srid == "ANY":
@@ -651,6 +652,7 @@ class GeometryType(SpatialType):
     """ JSON parsing logic for the GEOMETRY type relies on the CRS value, instead of the SRID.
     The method can accept either a single valid geometric string CRS value, or a special case
     insensitive string value "SRID:ANY" used to represent a mixed SRID GEOMETRY type."""
+
     @classmethod
     def _from_crs(cls, crs) -> "GeometryType":
         # Special CRS value "SRID:ANY" is used to represent the mixed SRID GEOMETRY type.
