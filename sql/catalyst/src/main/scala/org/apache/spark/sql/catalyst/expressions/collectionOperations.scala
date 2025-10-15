@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, MAP_CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -690,6 +690,8 @@ case class MapEntries(child: Expression)
 case class MapConcat(children: Seq[Expression])
   extends ComplexTypeMergingExpression
   with QueryErrorsBase {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MAP_CONCAT)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.exists(!_.dataType.isInstanceOf[MapType])) {
