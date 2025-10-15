@@ -112,38 +112,36 @@ class SparkSqlParser extends AbstractSqlParser {
       parameterContext: Option[ParameterContext])
       (toResult: SqlBaseParser => T): T = {
 
-    // Step 1: Apply existing variable substitution first.
+    // Step 1: Apply variable substitution to expand any variable references.
     val variableSubstituted = substitutor.substitute(command)
 
-    // Step 2: Check if parameter substitution should occur.
+    // Step 2: Apply parameter substitution if a parameter context is provided.
     val (paramSubstituted, substitutionOccurred, hasParameters) = parameterContext match {
       case Some(context) =>
         if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-          // Legacy mode: skip parameter substitution but still detect parameters for context.
-          // Parameters detected but substitution skipped in legacy mode.
-          // Position mapping will be set up below.
+          // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
           (variableSubstituted, false, true)
         } else {
-          // Modern mode: perform parameter substitution if parameters are present.
-          val substituted = substituteParametersIfEnabled(variableSubstituted, context)
-          (substituted, substituted != variableSubstituted, true) // Track if substitution occurred.
+          // Modern mode: Perform parameter substitution during parsing.
+          val substituted = ParameterHandler.substituteParameters(variableSubstituted, context)
+          (substituted, substituted != variableSubstituted, true)
         }
       case None =>
-        // No parameter context - no parameter substitution.
+        // No parameter context provided; skip parameter substitution.
         (variableSubstituted, false, false)
     }
 
-    // Step 3: Set up origin with original SQL text for parameter-aware error reporting.
+    // Step 3: Set up the origin with SQL text to enable parameter-aware error reporting.
     val currentOrigin = CurrentOrigin.get
     val originToUse = if (substitutionOccurred || hasParameters) {
-      // Set up origin with the substituted SQL text for proper error reporting
+      // Set up origin with the substituted SQL text for proper error reporting.
       currentOrigin.copy(
-        sqlText = Some(paramSubstituted), // Use substituted SQL text
+        sqlText = Some(paramSubstituted),
         startIndex = Some(0),
         stopIndex = Some(paramSubstituted.length - 1)
       )
     } else {
-      // No substitution - use existing origin unchanged.
+      // No substitution occurred; use the existing origin unchanged.
       currentOrigin
     }
 
@@ -151,15 +149,6 @@ class SparkSqlParser extends AbstractSqlParser {
       super.parse(paramSubstituted)(toResult)
     }
   }
-
-  private def substituteParametersIfEnabled(
-      command: String,
-      context: ParameterContext): String = {
-    // Caller has already checked the legacy config, so we can directly substitute
-    ParameterHandler.substituteParameters(command, context)
-  }
-
-
 }
 
 /**
