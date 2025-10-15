@@ -235,8 +235,11 @@ trait SparkParserUtils {
       currentOrigin.positionMapper match {
         case Some(mapper) =>
           // Store substituted positions and the mapper for later mapping
-          (startOpt.map(_.getStartIndex), stopOpt.map(_.getStopIndex),
-           Some(mapper.originalText), Some(mapper))
+          (
+            startOpt.map(_.getStartIndex),
+            stopOpt.map(_.getStopIndex),
+            Some(mapper.originalText),
+            Some(mapper))
         case None =>
           // No position mapper - use positions as-is
           (startOpt.map(_.getStartIndex), stopOpt.map(_.getStopIndex), Some(sqlText), None)
@@ -250,7 +253,8 @@ trait SparkParserUtils {
       sqlText = text,
       objectType = objectType,
       objectName = objectName,
-      positionMapper = mapper) // Store the mapper for later use
+      positionMapper = mapper
+    ) // Store the mapper for later use
   }
 
   /** Get the command which created the token. */
