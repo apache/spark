@@ -177,7 +177,7 @@
     <scala.version>2.13.17</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <scala-maven-plugin.version>4.9.6</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.5</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
