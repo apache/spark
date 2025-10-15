@@ -229,31 +229,28 @@ trait SparkParserUtils {
     // Get the current origin to check for position mapper
     val currentOrigin = CurrentOrigin.get
 
-    // Map positions back to original SQL if position mapper is available
-    val (mappedStartIndex, mappedStopIndex, originalSqlText) =
+    // Don't map positions yet - store them as-is along with the mapper
+    // Position mapping will be applied when creating query context for errors
+    val (startIndex, stopIndex, text, mapper) =
       currentOrigin.positionMapper match {
         case Some(mapper) =>
-          val substitutedStartIndex = startOpt.map(_.getStartIndex)
-          val substitutedStopIndex = stopOpt.map(_.getStopIndex)
-          val mappedStart = substitutedStartIndex.map(mapper.mapToOriginal)
-          val mappedStop = substitutedStopIndex.map(mapper.mapToOriginal)
-          (mappedStart, mappedStop, Some(mapper.originalText))
+          // Store substituted positions and the mapper for later mapping
+          (startOpt.map(_.getStartIndex), stopOpt.map(_.getStopIndex),
+           Some(mapper.originalText), Some(mapper))
         case None =>
           // No position mapper - use positions as-is
-          (startOpt.map(_.getStartIndex), stopOpt.map(_.getStopIndex), Some(sqlText))
+          (startOpt.map(_.getStartIndex), stopOpt.map(_.getStopIndex), Some(sqlText), None)
       }
 
     Origin(
       line = startOpt.map(_.getLine),
       startPosition = startOpt.map(_.getCharPositionInLine),
-      startIndex = mappedStartIndex,
-      stopIndex = mappedStopIndex,
-      sqlText = originalSqlText,
+      startIndex = startIndex,
+      stopIndex = stopIndex,
+      sqlText = text,
       objectType = objectType,
-      objectName = objectName)
-    // NOTE: We intentionally do NOT store positionMapper in the result Origin
-    // This prevents contamination of TreeNode objects while still allowing
-    // position mapping during error creation
+      objectName = objectName,
+      positionMapper = mapper) // Store the mapper for later use
   }
 
   /** Get the command which created the token. */

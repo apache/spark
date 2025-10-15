@@ -43,11 +43,11 @@ case class Origin(
   lazy val context: QueryContext = if (stackTrace.isDefined) {
     DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)
   } else {
-    // Apply position mapping from CurrentOrigin if available
-    val currentOrigin = CurrentOrigin.get
+    // Apply position mapping if available
     val (mappedStartIndex, mappedStopIndex, originalSqlText) =
-      currentOrigin.positionMapper match {
+      positionMapper match {
         case Some(mapper) =>
+          // Map substituted positions back to original SQL positions
           val mappedStart = startIndex.map(mapper.mapToOriginal)
           val mappedStop = stopIndex.map(mapper.mapToOriginal)
           (mappedStart, mappedStop, Some(mapper.originalText))
