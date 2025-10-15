@@ -101,13 +101,6 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     // CurrentOrigin.withOrigin ensures expressions created during parsing get the proper context
     val result = withIsolatedLocalVariableContext {
       CurrentOrigin.withOrigin(executeImmediateOrigin) {
-        // Parse and validate the query inside the isolation context to ensure
-        // local variables are not accessible during parsing
-        if (args.isEmpty) {
-          val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlString)
-          validateQuery(sqlString, parsedPlan)
-        }
-
         val df = if (args.isEmpty) {
           // No parameters - execute directly
           sparkSession.sql(sqlString)
@@ -117,6 +110,14 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
 
           sparkSession.asInstanceOf[ClassicSparkSession]
             .sql(sqlString, paramValues, paramNames)
+        }
+
+        // SQL scripts (BEGIN/END blocks) are explicitly disallowed in EXECUTE IMMEDIATE.
+        // This is a design constraint: EXECUTE IMMEDIATE is for executing single SQL statements,
+        // and SQL scripts have their own variable scoping and control flow that would conflict
+        // with EXECUTE IMMEDIATE's parameter passing semantics.
+        if (df.queryExecution.logical.isInstanceOf[CompoundBody]) {
+          throw QueryCompilationErrors.sqlScriptInExecuteImmediate(sqlString)
         }
 
         // Force analysis to happen within the isolated context to ensure local variables
@@ -168,13 +169,6 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
       case _ =>
         // Fallback to the SQL representation if origin information is not available
         queryExpr.sql
-    }
-  }
-
-  private def validateQuery(queryString: String, parsedPlan: LogicalPlan): Unit = {
-    // Check for compound bodies (SQL scripting)
-    if (parsedPlan.isInstanceOf[CompoundBody]) {
-      throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
     }
   }
 

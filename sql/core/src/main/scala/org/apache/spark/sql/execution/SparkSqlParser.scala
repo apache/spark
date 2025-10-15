@@ -67,7 +67,7 @@ class SparkSqlParser extends AbstractSqlParser {
       command: String,
       parameterContext: ParameterContext)
       (toResult: SqlBaseParser => T): T = {
-    parseInternal(command, Some(parameterContext), isTopLevel = true)(toResult)
+    parseInternal(command, Some(parameterContext))(toResult)
   }
 
   /**
@@ -96,7 +96,7 @@ class SparkSqlParser extends AbstractSqlParser {
   }
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    parseInternal(command, None, isTopLevel = true)(toResult)
+    parseInternal(command, None)(toResult)
   }
 
   /**
@@ -104,53 +104,51 @@ class SparkSqlParser extends AbstractSqlParser {
    *
    * @param command The SQL text to parse
    * @param parameterContext Optional parameter context for parameter substitution
-   * @param isTopLevel Whether this is a top-level parse (vs identifier/data type parsing)
    * @param toResult Function to convert the parser result
    * @return The parsed result
    */
   private def parseInternal[T](
       command: String,
-      parameterContext: Option[ParameterContext],
-      isTopLevel: Boolean)
+      parameterContext: Option[ParameterContext])
       (toResult: SqlBaseParser => T): T = {
 
-    // Step 1: Check if parameter substitution should occur.
+    // Step 1: Apply existing variable substitution first.
+    val variableSubstituted = substitutor.substitute(command)
+
+    // Step 2: Check if parameter substitution should occur.
     val (paramSubstituted, substitutionOccurred, hasParameters) = parameterContext match {
-      case Some(context) if isTopLevel =>
+      case Some(context) =>
         if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
           // Legacy mode: skip parameter substitution but still detect parameters for context.
           // Parameters detected but substitution skipped in legacy mode.
           // Position mapping will be set up below.
-          (command, false, true)
+          (variableSubstituted, false, true)
         } else {
           // Modern mode: perform parameter substitution if parameters are present.
-          val substituted = substituteParametersIfEnabled(command, context)
-          (substituted, substituted != command, true) // Track if substitution occurred.
+          val substituted = substituteParametersIfEnabled(variableSubstituted, context)
+          (substituted, substituted != variableSubstituted, true) // Track if substitution occurred.
         }
-      case _ =>
-        // No parameter context or not top-level - no parameter substitution.
-        (command, false, false)
+      case None =>
+        // No parameter context - no parameter substitution.
+        (variableSubstituted, false, false)
     }
-
-    // Step 2: Apply existing variable substitution.
-    val variableSubstituted = substitutor.substitute(paramSubstituted)
 
     // Step 3: Set up origin with original SQL text for parameter-aware error reporting.
     val currentOrigin = CurrentOrigin.get
-    val originToUse = if ((substitutionOccurred || hasParameters) && isTopLevel) {
+    val originToUse = if (substitutionOccurred || hasParameters) {
       // Set up origin with the substituted SQL text for proper error reporting
       currentOrigin.copy(
-        sqlText = Some(variableSubstituted), // Use substituted SQL text
+        sqlText = Some(paramSubstituted), // Use substituted SQL text
         startIndex = Some(0),
-        stopIndex = Some(variableSubstituted.length - 1)
+        stopIndex = Some(paramSubstituted.length - 1)
       )
     } else {
-      // No substitution or nested call - use existing origin unchanged.
+      // No substitution - use existing origin unchanged.
       currentOrigin
     }
 
     CurrentOrigin.withOrigin(originToUse) {
-      super.parse(variableSubstituted)(toResult)
+      super.parse(paramSubstituted)(toResult)
     }
   }
 

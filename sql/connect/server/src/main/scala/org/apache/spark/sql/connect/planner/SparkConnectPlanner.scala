@@ -332,8 +332,8 @@ class SparkConnectPlanner(
   }
 
   /**
-   * Build a ParameterContext from the protobuf SQL message.
-   * Returns None if no parameters are present.
+   * Build a ParameterContext from the protobuf SQL message. Returns None if no parameters are
+   * present.
    */
   private def buildParameterContext(sql: proto.SQL): Option[ParameterContext] = {
     val args = sql.getArgsMap
