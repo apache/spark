@@ -249,6 +249,21 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .resource(podWithAttachedContainerForId(podAllocationSize + 1))
   }
 
+  test("SPARK-53907: Support spark.kubernetes.allocation.maximum") {
+    val confWithAllocationMaximum = conf.clone.set(KUBERNETES_ALLOCATION_MAXIMUM.key, "1")
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithAllocationMaximum, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    val counter = PrivateMethod[AtomicInteger](Symbol("EXECUTOR_ID_COUNTER"))()
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
+
+    val m = intercept[SparkException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+    }.getMessage
+    assert(m.contains("Exceed the pod creation limit: 1"))
+  }
+
   test("Request executors in batches. Allow another batch to be requested if" +
     " all pending executors start running.") {
     val counter = PrivateMethod[AtomicInteger](Symbol("EXECUTOR_ID_COUNTER"))()

@@ -69,6 +69,8 @@ class ExecutorPodsAllocator(
 
   protected val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
+  protected val podAllocationMaximum = conf.get(KUBERNETES_ALLOCATION_MAXIMUM)
+
   protected val maxPendingPods = conf.get(KUBERNETES_MAX_PENDING_PODS)
 
   protected val podCreationTimeout = math.max(
@@ -426,6 +428,9 @@ class ExecutorPodsAllocator(
         return
       }
       val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
+      if (newExecutorId >= podAllocationMaximum) {
+        throw new SparkException(s"Exceed the pod creation limit: $podAllocationMaximum")
+      }
       val executorConf = KubernetesConf.createExecutorConf(
         conf,
         newExecutorId.toString,
