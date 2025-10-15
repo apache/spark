@@ -226,35 +226,29 @@ trait SparkParserUtils {
     val startOpt = Option(startToken)
     val stopOpt = Option(stopToken)
 
-    // Get the current origin to check for position mapper
+    // Get the current origin to check for position mapper.
     val currentOrigin = CurrentOrigin.get
 
-    // Don't map positions yet - store them as-is along with the mapper
-    // Position mapping will be applied when creating query context for errors
-    val (startIndex, stopIndex, text, mapper) =
-      currentOrigin.positionMapper match {
-        case Some(mapper) =>
-          // Store substituted positions and the mapper for later mapping
-          (
-            startOpt.map(_.getStartIndex),
-            stopOpt.map(_.getStopIndex),
-            Some(mapper.originalText),
-            Some(mapper))
-        case None =>
-          // No position mapper - use positions as-is
-          (startOpt.map(_.getStartIndex), stopOpt.map(_.getStopIndex), Some(sqlText), None)
-      }
+    // Don't map positions yet - store them as-is along with the mapper.
+    // Position mapping will be applied when creating query context for errors.
+    val (text, mapper) = currentOrigin.positionMapper match {
+      case Some(mapper) =>
+        // Store the mapper for later mapping.
+        (Some(mapper.originalText), Some(mapper))
+      case None =>
+        // No position mapper - use SQL text as-is.
+        (Some(sqlText), None)
+    }
 
     Origin(
       line = startOpt.map(_.getLine),
       startPosition = startOpt.map(_.getCharPositionInLine),
-      startIndex = startIndex,
-      stopIndex = stopIndex,
+      startIndex = startOpt.map(_.getStartIndex),
+      stopIndex = stopOpt.map(_.getStopIndex),
       sqlText = text,
       objectType = objectType,
       objectName = objectName,
-      positionMapper = mapper
-    ) // Store the mapper for later use
+      positionMapper = mapper)
   }
 
   /** Get the command which created the token. */

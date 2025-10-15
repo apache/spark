@@ -90,17 +90,6 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 
-  /**
-   * Get the integer value from an IntegerValueContext after parameter replacement.
-   * Asserts that parameter markers have been substituted before reaching AstBuilder.
-   */
-  protected def getIntegerValue(ctx: IntegerValueContext): Int = {
-    assert(!ctx.isInstanceOf[ParameterIntegerValueContext],
-      "Parameter markers should be substituted before AstBuilder processes the " +
-      s"parse tree. Found unsubstituted parameter: ${ctx.getText}")
-    ctx.getText.toInt
-  }
-
   protected def withFuncIdentClause(
       ctx: FunctionNameContext,
       otherPlans: Seq[LogicalPlan],

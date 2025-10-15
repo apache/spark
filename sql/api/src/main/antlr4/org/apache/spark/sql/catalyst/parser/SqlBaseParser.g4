@@ -966,7 +966,7 @@ sample
     : TABLESAMPLE LEFT_PAREN sampleMethod? RIGHT_PAREN (REPEATABLE LEFT_PAREN seed=integerValue RIGHT_PAREN)?
     ;
 
-  sampleMethod
+sampleMethod
     : negativeSign=MINUS? (integerValue | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
     | expression ROWS                                                             #sampleByRows
     | sampleType=BUCKET numerator=integerValue OUT OF denominator=integerValue

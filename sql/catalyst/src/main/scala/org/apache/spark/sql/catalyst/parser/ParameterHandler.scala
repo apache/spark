@@ -17,8 +17,6 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-import org.apache.spark.sql.catalyst.parser.SubstituteParamsParser
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
 
 /**
@@ -53,34 +51,30 @@ object ParameterHandler {
   private val parameterMarkerPattern = java.util.regex.Pattern.compile("[?:]")
 
   /**
-   * Performs parameter substitution and stores the position mapper in CurrentOrigin.
+   * Performs parameter substitution and returns both the substituted SQL and the position mapper.
    * The position mapper enables accurate error reporting by mapping positions in the
    * substituted SQL back to the original SQL text.
    *
    * @param sqlText The SQL text containing parameter markers
    * @param namedParams Optional named parameters map
    * @param positionalParams Optional positional parameters list
-   * @return The SQL text with parameters substituted
+   * @return A tuple of (substituted SQL, optional position mapper)
    */
   private def performSubstitution(
       sqlText: String,
       namedParams: Map[String, String] = Map.empty,
-      positionalParams: List[String] = List.empty): String = {
+      positionalParams: List[String] = List.empty): (String, Option[PositionMapper]) = {
 
     // Optimize: Skip parsing if no parameter markers are present in the SQL text.
     if (!parameterMarkerPattern.matcher(sqlText).find()) {
-      return sqlText
+      return (sqlText, None)
     }
 
     val substitutor = new SubstituteParamsParser()
     val (substituted, _, positionMapper) = substitutor.substitute(sqlText,
       namedParams = namedParams, positionalParams = positionalParams)
 
-    // Store the position mapper to enable accurate error position reporting in the original SQL.
-    val currentOrigin = CurrentOrigin.get
-    CurrentOrigin.set(currentOrigin.copy(positionMapper = Some(positionMapper)))
-
-    substituted
+    (substituted, Some(positionMapper))
   }
 
   /**
@@ -119,15 +113,16 @@ object ParameterHandler {
 
   /**
    * Substitutes parameters in SQL text based on the parameter context.
+   * Returns both the substituted SQL and the position mapper for error reporting.
    *
    * @param sqlText The SQL text containing parameter markers
    * @param context The parameter context (named or positional)
-   * @return The SQL text with parameters substituted
+   * @return A tuple of (substituted SQL, optional position mapper)
    * @throws IllegalArgumentException if context is null
    */
   def substituteParameters(
       sqlText: String,
-      context: ParameterContext): String = {
+      context: ParameterContext): (String, Option[PositionMapper]) = {
     require(context != null, "Parameter context cannot be null")
 
     context match {
@@ -153,16 +148,16 @@ object ParameterHandler {
    * @param sqlText The SQL text containing parameter markers
    * @param args The parameter values
    * @param paramNames The parameter names (empty string for positional parameters)
-   * @return The SQL text with parameters substituted
+   * @return A tuple of (substituted SQL, optional position mapper)
    */
   private def handleHybridParameters(
       sqlText: String,
       args: Seq[Any],
-      paramNames: Seq[String]): String = {
+      paramNames: Seq[String]): (String, Option[PositionMapper]) = {
 
     // Optimize: Skip parsing if no parameter markers are present in the SQL text.
     if (!parameterMarkerPattern.matcher(sqlText).find()) {
-      return sqlText
+      return (sqlText, None)
     }
 
     // Prepare parameters for both types.
@@ -181,11 +176,7 @@ object ParameterHandler {
       sqlText, namedParams, positionalParams, ParameterExpectation.Unknown,
       hasOnlyNamedParams, args, paramNames)
 
-    // Store the position mapper to enable accurate error position reporting in the original SQL.
-    val currentOrigin = CurrentOrigin.get
-    CurrentOrigin.set(currentOrigin.copy(positionMapper = Some(positionMapper)))
-
-    substitutedSql
+    (substitutedSql, Some(positionMapper))
   }
 
   /**
@@ -194,23 +185,19 @@ object ParameterHandler {
    *
    * @param sqlText The SQL text containing parameter markers
    * @param paramMap Map of parameter names to expressions
-   * @return The SQL text with parameters substituted
+   * @return A tuple of (substituted SQL, optional position mapper)
    */
   def substituteNamedParameters(
       sqlText: String,
-      paramMap: Map[String, Expression]): String = {
-    if (paramMap.isEmpty) return sqlText
+      paramMap: Map[String, Expression]): (String, Option[PositionMapper]) = {
+    if (paramMap.isEmpty) return (sqlText, None)
 
     val namedParams = paramMap.map { case (name, expr) => (name, convertToSql(expr)) }
     val substitutor = new SubstituteParamsParser()
     val (substitutedSql, _, positionMapper) = substitutor.substitute(
       sqlText, namedParams, List.empty, ParameterExpectation.Named)
 
-    // Store the position mapper to enable accurate error position reporting in the original SQL.
-    val currentOrigin = CurrentOrigin.get
-    CurrentOrigin.set(currentOrigin.copy(positionMapper = Some(positionMapper)))
-
-    substitutedSql
+    (substitutedSql, Some(positionMapper))
   }
 
   /**
@@ -219,22 +206,18 @@ object ParameterHandler {
    *
    * @param sqlText The SQL text containing parameter markers
    * @param paramList Sequence of parameter expressions
-   * @return The SQL text with parameters substituted
+   * @return A tuple of (substituted SQL, optional position mapper)
    */
   def substitutePositionalParameters(
       sqlText: String,
-      paramList: Seq[Expression]): String = {
-    if (paramList.isEmpty) return sqlText
+      paramList: Seq[Expression]): (String, Option[PositionMapper]) = {
+    if (paramList.isEmpty) return (sqlText, None)
 
     val positionalParams = paramList.map(convertToSql).toList
     val substitutor = new SubstituteParamsParser()
     val (substitutedSql, _, positionMapper) = substitutor.substitute(
       sqlText, Map.empty, positionalParams, ParameterExpectation.Positional)
 
-    // Store the position mapper to enable accurate error position reporting in the original SQL.
-    val currentOrigin = CurrentOrigin.get
-    CurrentOrigin.set(currentOrigin.copy(positionMapper = Some(positionMapper)))
-
-    substitutedSql
+    (substitutedSql, Some(positionMapper))
   }
 }

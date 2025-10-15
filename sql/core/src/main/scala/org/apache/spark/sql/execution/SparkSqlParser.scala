@@ -116,37 +116,47 @@ class SparkSqlParser extends AbstractSqlParser {
     val variableSubstituted = substitutor.substitute(command)
 
     // Step 2: Apply parameter substitution if a parameter context is provided.
-    val (paramSubstituted, substitutionOccurred, hasParameters) = parameterContext match {
+    val (paramSubstituted, positionMapper, hasParameters) = parameterContext match {
       case Some(context) =>
         if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
           // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
-          (variableSubstituted, false, true)
+          (variableSubstituted, None, true)
         } else {
           // Modern mode: Perform parameter substitution during parsing.
-          val substituted = ParameterHandler.substituteParameters(variableSubstituted, context)
-          (substituted, substituted != variableSubstituted, true)
+          val (substituted, mapper) =
+            ParameterHandler.substituteParameters(variableSubstituted, context)
+          (substituted, mapper, true)
         }
       case None =>
         // No parameter context provided; skip parameter substitution.
-        (variableSubstituted, false, false)
+        (variableSubstituted, None, false)
     }
 
-    // Step 3: Set up the origin with SQL text to enable parameter-aware error reporting.
+    // Step 3: Set up the origin with SQL text and position mapper to enable
+    // parameter-aware error reporting.
     val currentOrigin = CurrentOrigin.get
-    val originToUse = if (substitutionOccurred || hasParameters) {
-      // Set up origin with the substituted SQL text for proper error reporting.
+    val originToUse = if (positionMapper.isDefined || hasParameters) {
+      // Set up origin with the substituted SQL text and position mapper for
+      // proper error reporting.
       currentOrigin.copy(
         sqlText = Some(paramSubstituted),
         startIndex = Some(0),
-        stopIndex = Some(paramSubstituted.length - 1)
+        stopIndex = Some(paramSubstituted.length - 1),
+        positionMapper = positionMapper
       )
     } else {
       // No substitution occurred; use the existing origin unchanged.
       currentOrigin
     }
 
+    // Parse with the origin containing position mapper, ensuring cleanup afterwards.
     CurrentOrigin.withOrigin(originToUse) {
-      super.parse(paramSubstituted)(toResult)
+      try {
+        super.parse(paramSubstituted)(toResult)
+      } finally {
+        // Restore the original origin after parsing to prevent contamination.
+        CurrentOrigin.set(currentOrigin)
+      }
     }
   }
 }

@@ -83,6 +83,23 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
+   * Gets the integer value from an IntegerValueContext after parameter replacement. Asserts that
+   * parameter markers have been substituted before reaching DataTypeAstBuilder.
+   *
+   * @param ctx
+   *   The IntegerValueContext to extract the integer from
+   * @return
+   *   The integer value
+   */
+  protected def getIntegerValue(ctx: IntegerValueContext): Int = {
+    assert(
+      !ctx.isInstanceOf[ParameterIntegerValueContext],
+      "Parameter markers should be substituted before DataTypeAstBuilder processes the " +
+        s"parse tree. Found unsubstituted parameter: ${ctx.getText}")
+    ctx.getText.toInt
+  }
+
+  /**
    * Visit a stringLit context by delegating to the appropriate labeled visitor.
    */
   def visitStringLit(ctx: StringLitContext): Token =
@@ -196,14 +213,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       val params = typeCtx
         .integerValue()
         .asScala
-        .map { intVal =>
-          // Assert that parameter markers have been substituted before reaching DataTypeAstBuilder
-          assert(
-            !intVal.isInstanceOf[ParameterIntegerValueContext],
-            "Parameter markers should be substituted before DataTypeAstBuilder processes the " +
-              s"parse tree. Found unsubstituted parameter: ${intVal.getText}")
-          intVal.getText
-        }
+        .map(getIntegerValue(_).toString)
         .toList
       val dtStr =
         if (params.nonEmpty) s"$badType(${params.mkString(",")})"
