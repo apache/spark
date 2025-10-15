@@ -440,6 +440,12 @@
     ],
     "sqlState" : "46110"
   },
+  "CANNOT_MODIFY_STATIC_CONFIG" : {
+    "message" : [
+      "Cannot modify the value of the static Spark config: <key>."
+    ],
+    "sqlState" : "46110"
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal. Please ensure that the input is a valid number with optional decimal point or comma separators."
@@ -9183,11 +9189,6 @@
   "_LEGACY_ERROR_TEMP_3042" : {
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3050" : {
-    "message" : [
-      "Cannot modify the value of a static config: <k>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {
