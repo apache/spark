@@ -101,7 +101,7 @@ class LowLatencyMemoryStream[A: Encoder](
     LowLatencyMemoryStreamOffset((0 until numPartitions).map(i => (i, 0)).toMap)
   }
 
-  override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
+  override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = synchronized {
     LowLatencyMemoryStreamOffset((0 until numPartitions).map(i => (i, records(i).size)).toMap)
   }
 
@@ -166,7 +166,7 @@ class LowLatencyMemoryStream[A: Encoder](
 
   override def commit(end: OffsetV2): Unit = {}
 
-  override def reset(): Unit = {
+  override def reset(): Unit = synchronized {
     super.reset()
     records.foreach(_.clear())
   }
