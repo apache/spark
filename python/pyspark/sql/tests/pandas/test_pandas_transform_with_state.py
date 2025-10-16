@@ -65,6 +65,7 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     ListStateLargeTTLProcessorFactory,
     MapStateProcessorFactory,
     MapStateLargeTTLProcessorFactory,
+    LargeValueStatefulProcessorFactory,
     BasicProcessorFactory,
     BasicProcessorNotNullableFactory,
     AddFieldsProcessorFactory,
@@ -2263,6 +2264,50 @@ class TransformWithStateTestsMixin:
                     ]
                 ),
             )
+
+    # test all state types (value, list, map) with large values (512 KB)
+    def test_transform_with_state_large_values(self):
+        def check_results(batch_df, batch_id):
+            batch_df.collect()
+            # Create expected large string (512 KB)
+            target_size_bytes = 512 * 1024
+            large_string = "a" * target_size_bytes
+            expected_list_elements = ",".join(
+                [large_string, large_string + "b", large_string + "c"]
+            )
+            expected_map_result = f"large_string_key:{large_string}"
+
+            assert set(batch_df.sort("id").collect()) == {
+                Row(
+                    id="0",
+                    valueStateResult=large_string,
+                    listStateResult=expected_list_elements,
+                    mapStateResult=expected_map_result,
+                ),
+                Row(
+                    id="1",
+                    valueStateResult=large_string,
+                    listStateResult=expected_list_elements,
+                    mapStateResult=expected_map_result,
+                ),
+            }
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("valueStateResult", StringType(), True),
+                StructField("listStateResult", StringType(), True),
+                StructField("mapStateResult", StringType(), True),
+            ]
+        )
+
+        self._test_transform_with_state_basic(
+            LargeValueStatefulProcessorFactory(),
+            check_results,
+            True,
+            "None",
+            output_schema=output_schema,
+        )
 
 
 @unittest.skipIf(

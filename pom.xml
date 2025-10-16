@@ -174,7 +174,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.5.0</commons.collections4.version>
-    <scala.version>2.13.16</scala.version>
+    <scala.version>2.13.17</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.5</scala-maven-plugin.version>
@@ -209,8 +209,8 @@
     <libthrift.version>0.16.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.21.0</selenium.version>
-    <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
+    <selenium.version>4.32.0</selenium.version>
+    <htmlunit3-driver.version>4.32.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.10.0</commons-cli.version>
@@ -232,7 +232,7 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>18.3.0</arrow.version>
-    <ammonite.version>3.0.2</ammonite.version>
+    <ammonite.version>3.0.3</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -876,7 +876,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-4</version>
+        <version>1.5.7-5</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

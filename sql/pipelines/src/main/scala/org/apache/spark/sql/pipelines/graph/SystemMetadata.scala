@@ -41,7 +41,8 @@ case class FlowSystemMetadata(
    * @return the checkpoint root directory for `flow`
    */
   private def flowCheckpointsDirOpt(): Option[Path] = {
-    Option(if (graph.table.contains(flow.destinationIdentifier)) {
+    Option(if (graph.table.contains(flow.destinationIdentifier) ||
+      graph.sink.contains(flow.destinationIdentifier)) {
       val checkpointRoot = new Path(context.storageRoot, "_checkpoints")
       val flowTableName = flow.destinationIdentifier.table
       val flowName = flow.identifier.table

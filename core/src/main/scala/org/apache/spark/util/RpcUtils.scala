@@ -36,6 +36,15 @@ private[spark] object RpcUtils {
     rpcEnv.setupEndpointRef(RpcAddress(driverHost, driverPort), name)
   }
 
+  def makeDriverRef(
+      name: String,
+      driverHost: String,
+      driverPort: Int,
+      rpcEnv: RpcEnv): RpcEndpointRef = {
+    Utils.checkHost(driverHost)
+    rpcEnv.setupEndpointRef(RpcAddress(driverHost, driverPort), name)
+  }
+
   /** Returns the default Spark timeout to use for RPC ask operations. */
   def askRpcTimeout(conf: SparkConf): RpcTimeout = {
     RpcTimeout(conf, Seq(RPC_ASK_TIMEOUT.key, NETWORK_TIMEOUT.key), "120s")
