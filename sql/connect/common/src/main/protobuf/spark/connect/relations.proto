@@ -81,6 +81,14 @@ message Relation {
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
     LateralJoin lateral_join = 44;
 
+    // Reference to a node else where in the tree. There are two use cases for this:
+    // 1. Reduce tree duplication. In this case the tree contains two or more subtrees that are
+    //    identical. The referenced plan can only be a back reference, to a subtree that was
+    //    already visited by the planner. The planner is expected to visit the tree bottom-up from
+    //    left to right.
+    // 1. Reduce tree depth.
+    int64 referenced_plan_id = 45;
+
     // NA functions
     NAFill fill_na = 90;
     NADrop drop_na = 91;
@@ -204,6 +212,12 @@ message SQL {
 //
 // This relation can be used to implement CTEs, describe DAGs, or to reduce tree depth.
 message WithRelations {
+  enum ResolutionMethod {
+    LEGACY = 0;
+    BY_NAME = 1;
+    BY_REFERENCE_ID = 2;
+  }
+
   // (Required) Plan at the root of the query tree. This plan is expected to contain one or more
   // references. Those references get expanded later on by the engine.
   Relation root = 1;
@@ -211,6 +225,14 @@ message WithRelations {
   // (Required) Plans referenced by the root plan. Relations in this list are also allowed to
   // contain references to other relations in this list, as long they do not form cycles.
   repeated Relation references = 2;
+
+  // (Required) Resolution method used to resolve the relations in the root relation. This can
+  // either be by name (like a CTE) or by reference id. For resolution by name, all references need
+  // to be a SubqueryAlias. For resolution by id, all references must have a plan_id. The default
+  // is legacy mode. In most cases Legacy mode is uses BY_REFERENCE_ID resolution. However,it makes
+  // an exception for a case where the root is a SQL relation, and all the references are subquery
+  // aliases, in that case we use BY_NAME resolution.
+  ResolutionMethod resolution_method = 3;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
