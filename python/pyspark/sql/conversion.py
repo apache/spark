@@ -322,7 +322,7 @@ class LocalDataToArrowConversion:
                         if not nullable:
                             raise PySparkValueError(f"input for {dataType} must not be None")
                         return None
-                    return round(value, dataType.scale)
+                    return round(value, dataType.scale).normalize()
 
             return convert_decimal
 
