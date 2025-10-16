@@ -54,7 +54,7 @@ object BuildCommons {
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
   val connectProjects@Seq(connectCommon, connect, connectJdbc, connectClient, connectShims) =
-    Seq("connect-common", "connect", "connect-jdbc", "connect-client-jvm", "connect-shims")
+    Seq("connect-common", "connect", "connect-client-jdbc", "connect-client-jvm", "connect-shims")
       .map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
@@ -870,7 +870,7 @@ object SparkConnectJdbc {
     },
 
     // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
-    // At the same time, the build of `connect`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
+    // At the same time, the build of `connect`, `connect-client-jdbc`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
     // so no additional configuration is required.
     test := ((Test / test) dependsOn (buildTestDeps)).value,
 
@@ -895,11 +895,11 @@ object SparkConnectJdbc {
           name.startsWith("jsr305-") || name == "unused-1.0.0.jar"
       }
     },
-    // Only include `spark-connect-jdbc-*.jar`
+    // Only include `spark-connect-client-jdbc-*.jar`
     // This needs to be consistent with the content of `maven-shade-plugin`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      val validPrefixes = Set("spark-connect-jdbc")
+      val validPrefixes = Set("spark-connect-client-jdbc")
       cp filterNot { v =>
         validPrefixes.exists(v.data.getName.startsWith)
       }
@@ -959,7 +959,7 @@ object SparkConnectClient {
     },
 
     // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
-    // At the same time, the build of `connect`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
+    // At the same time, the build of `connect`, `connect-client-jdbc`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
     // so no additional configuration is required.
     test := ((Test / test) dependsOn (buildTestDeps)).value,
 
@@ -1211,7 +1211,7 @@ object ExcludedDependencies {
  * client dependencies.
  */
 object ExcludeShims {
-  val shimmedProjects = Set("spark-sql-api", "spark-connect-common", "spark-connect-client-jvm", "spark-connect-jdbc")
+  val shimmedProjects = Set("spark-sql-api", "spark-connect-common", "spark-connect-client-jdbc", "spark-connect-client-jvm")
   val classPathFilter = TaskKey[Classpath => Classpath]("filter for classpath")
   lazy val settings = Seq(
     classPathFilter := {
@@ -1655,7 +1655,7 @@ object CopyDependencies {
 
           if (jar.getName.contains("spark-connect-common")) {
             // Don't copy the spark connect common JAR as it is shaded in the spark connect.
-          } else if (jar.getName.contains("spark-connect-jdbc")) {
+          } else if (jar.getName.contains("connect-client-jdbc")) {
             // Do not place Spark Connect JDBC driver jar as it is not built-in.
           } else if (jar.getName.contains("connect-client-jvm")) {
             // Do not place Spark Connect client jars as it is not built-in.
@@ -1709,7 +1709,7 @@ object CopyDependencies {
       Def.taskDyn {
         if (moduleName.value.contains("assembly")) {
           Def.task {
-            val replClasspathes = (LocalProject("connect-jdbc") / Compile / dependencyClasspath)
+            val replClasspathes = (LocalProject("connect-client-jdbc") / Compile / dependencyClasspath)
               .value.map(_.data).filter(_.isFile())
             val scalaBinaryVer = SbtPomKeys.effectivePom.value.getProperties.get(
               "scala.binary.version").asInstanceOf[String]
@@ -1721,8 +1721,8 @@ object CopyDependencies {
 
             val sourceAssemblyJar = Paths.get(
               BuildCommons.sparkHome.getAbsolutePath, "sql", "connect", "client",
-              "jdbc", "target", s"scala-$scalaBinaryVer", s"spark-connect-jdbc-assembly-$sparkVer.jar")
-            val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-jdbc-assembly-$sparkVer.jar")
+              "jdbc", "target", s"scala-$scalaBinaryVer", s"spark-connect-client-jdbc-assembly-$sparkVer.jar")
+            val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-client-jdbc-assembly-$sparkVer.jar")
             Files.copy(sourceAssemblyJar, destAssemblyJar, StandardCopyOption.REPLACE_EXISTING)
 
             replClasspathes.foreach { f =>
@@ -1731,7 +1731,7 @@ object CopyDependencies {
                 Files.copy(f.toPath, destFile, StandardCopyOption.REPLACE_EXISTING)
               }
             }
-          }.dependsOn(LocalProject("connect-jdbc") / assembly)
+          }.dependsOn(LocalProject("connect-client-jdbc") / assembly)
         } else {
           Def.task {}
         }

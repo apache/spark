@@ -29,7 +29,7 @@ class NonRegisteringSparkConnectDriver extends Driver {
   override def acceptsURL(url: String): Boolean = url.startsWith("jdbc:sc://")
 
   override def connect(url: String, info: Properties): Connection = {
-    throw new UnsupportedOperationException("TODO")
+    throw new UnsupportedOperationException("TODO(SPARK-53934)")
   }
 
   override def getPropertyInfo(url: String, info: Properties): Array[DriverPropertyInfo] =

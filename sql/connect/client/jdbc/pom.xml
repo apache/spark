@@ -26,12 +26,12 @@
     <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-connect-jdbc_2.13</artifactId>
+  <artifactId>spark-connect-client-jdbc_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Connect JDBC Driver</name>
   <url>https://spark.apache.org/</url>
   <properties>
-    <sbt.project.name>connect-jdbc</sbt.project.name>
+    <sbt.project.name>connect-client-jdbc</sbt.project.name>
   </properties>
 
   <dependencies>
@@ -140,7 +140,7 @@
           <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
           <artifactSet>
             <includes>
-              <include>org.apache.spark:spark-connect-jdbc_${scala.binary.version}</include>
+              <include>org.apache.spark:spark-connect-client-jdbc_${scala.binary.version}</include>
             </includes>
           </artifactSet>
           <relocations>

@@ -437,7 +437,7 @@ connect = Module(
     sbt_test_goals=[
         "connect/test",
         "connect-client-jvm/test",
-        "connect-jdbc/test",
+        "connect-client-jdbc/test",
     ],
 )
 
