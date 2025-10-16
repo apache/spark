@@ -5561,7 +5561,7 @@
   },
   "ST_INVALID_SRID_VALUE" : {
     "message" : [
-      "Invalid or unsupported SRID (spatial reference identifier) value: <srid>"
+      "Invalid or unsupported SRID (spatial reference identifier) value: <srid>."
     ],
     "sqlState" : "22023"
   },
