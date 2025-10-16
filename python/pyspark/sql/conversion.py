@@ -80,6 +80,7 @@ class LocalDataToArrowConversion:
             return True
         elif isinstance(dataType, DecimalType):
             # Convert Decimal('NaN') to None
+            # Rescale Decimal values
             return True
         elif isinstance(dataType, StringType):
             # Coercion to StringType is allowed
@@ -321,7 +322,7 @@ class LocalDataToArrowConversion:
                         if not nullable:
                             raise PySparkValueError(f"input for {dataType} must not be None")
                         return None
-                    return value
+                    return round(value, dataType.scale)
 
             return convert_decimal
 
