@@ -3726,12 +3726,12 @@ object SQLConf {
 
   val PYSPARK_BINARY_AS_BYTES =
     buildConf("spark.sql.execution.pyspark.binaryAsBytes")
-      .doc("When true, BinaryType is mapped consistently to bytes in PySpark." +
-        "When false, matches the PySpark behavior before 4.1.0. Before 4.1.0, BinaryType is " +
-        "mapped to bytearray for input of regular UDF and UDTF without arrow optimization, " +
-        "regular UDF and UDTF with arrow optimization and without legacy pandas conversion, " +
-        "Dataframe APIs, and data source; BinaryType is mapped to bytes for " +
-        "input of regular UDF and UDTF with arrow optimization and legacy pandas conversion.")
+      .doc("When true, BinaryType is consistently mapped to bytes in PySpark. " +
+        "When false, restores the PySpark behavior before 4.1.0. Before 4.1.0, BinaryType is " +
+        "mapped to bytearray for regular UDF and UDTF without Arrow optimization, " +
+        "DataFrame APIs (both Spark Classic and Spark Connect), and data sources; " +
+        "BinaryType is mapped to bytes for Arrow-optimized UDF and UDTF with " +
+        "legacy pandas conversion.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
