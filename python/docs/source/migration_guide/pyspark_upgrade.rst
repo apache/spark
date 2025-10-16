@@ -29,8 +29,8 @@ Upgrading from PySpark 4.0 to 4.1
 * In Spark 4.1, Arrow-optimized Python UDF supports UDT input / output instead of falling back to the regular UDF. To restore the legacy behavior, set ``spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT`` to ``true``.
 * In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``.
 * In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDTF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``.
-* In Spark 4.1, the data type ``BinaryType`` is mapped to Python ``bytes`` consistently in PySpark.
-  To restore the previous behavior, set ``spark.sql.execution.pyspark.binaryAsBytes`` to ``true``. The behavior before Spark 4.1.0 is illustrated in the following table:
+* In Spark 4.1, the data type ``BinaryType`` is  by default mapped to Python ``bytes`` consistently in PySpark.
+  To restore the previous behavior, set ``spark.sql.execution.pyspark.binaryAsBytes`` to ``false``. The behavior before Spark 4.1.0 is illustrated in the following table:
 
     ===============================================================================  ==============================
     Case                                                                             Python type for ``BinaryType``
