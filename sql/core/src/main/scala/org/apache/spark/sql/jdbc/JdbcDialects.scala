@@ -40,7 +40,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
-import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
@@ -392,9 +392,16 @@ abstract class JdbcDialect extends Serializable with Logging {
       "CASE WHEN " + input + " THEN 1 ELSE 0 END"
 
     override def visitLiteral(literal: Literal[_]): String = {
-      Option(literal.value()).map(v =>
-        compileValue(CatalystTypeConverters.convertToScala(v, literal.dataType())).toString)
-        .getOrElse(super.visitLiteral(literal))
+      literal match {
+        case _: AlwaysTrue if !SQLConf.get.legacyJdbcConnectorBooleanLiteralTranslation =>
+          "1=1"
+        case _: AlwaysFalse if !SQLConf.get.legacyJdbcConnectorBooleanLiteralTranslation =>
+          "1=0"
+        case _ =>
+          Option(literal.value()).map(v =>
+              compileValue(CatalystTypeConverters.convertToScala(v, literal.dataType())).toString)
+            .getOrElse(super.visitLiteral(literal))
+      }
     }
 
     override def visitNamedReference(namedRef: NamedReference): String = {
