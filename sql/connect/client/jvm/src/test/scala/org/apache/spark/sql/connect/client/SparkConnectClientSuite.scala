@@ -225,7 +225,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
           cause = None,
           errorClass = Some("DUPLICATE_KEY"),
           messageParameters = Map("keyColumn" -> "`abc`"),
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = Some("23505"))
         val error = constructor(testParams).asInstanceOf[Throwable with SparkThrowable]
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
@@ -242,7 +243,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
           cause = None,
           errorClass = None,
           messageParameters = Map.empty,
-          queryContext = Array.empty)
+          queryContext = Array.empty,
+          sqlState = None)
         val error = constructor(testParams)
         assert(error.getMessage.contains(testParams.message))
         assert(error.getCause == null)
