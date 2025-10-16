@@ -115,12 +115,12 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
   self: BasePythonRunner[Iterator[InternalRow], _] =>
   protected val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
 
-  protected val maxRecordsPerBatch = {
+  protected val maxRecordsPerBatch: Int = {
     val v = SQLConf.get.arrowMaxRecordsPerBatch
     if (v > 0) v else Int.MaxValue
   }
 
-  protected val maxBytesPerBatch = SQLConf.get.arrowMaxBytesPerBatch
+  protected val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
 
   protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
