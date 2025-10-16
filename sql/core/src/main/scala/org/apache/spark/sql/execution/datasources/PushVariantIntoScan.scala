@@ -282,12 +282,10 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       hadoopFsRelation@HadoopFsRelation(_, _, _, _, _: ParquetFileFormat, _), _)) =>
         rewritePlan(p, projectList, filters, relation, hadoopFsRelation)
 
-      // BEGIN-V2-SUPPORT: DataSource V2 pattern matching with API
       case p@PhysicalOperation(projectList, filters,
         scanRelation @ DataSourceV2ScanRelation(
           relation, scan: SupportsPushDownVariants, output, _, _)) =>
         rewritePlanV2(p, projectList, filters, scanRelation, scan)
-      // END-V2-SUPPORT
     }
   }
 
@@ -338,12 +336,13 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     buildFilterAndProject(newRelation, projectList, filters, variants, attributeMap)
   }
 
-  // BEGIN-V2-SUPPORT: DataSource V2 rewrite method using SupportsPushDownVariants API
+  // DataSource V2 rewrite method using SupportsPushDownVariants API
   // Key differences from V1 implementation:
   // 1. V2 uses DataSourceV2ScanRelation instead of LogicalRelation
   // 2. Uses SupportsPushDownVariants API instead of directly manipulating scan
   // 3. Schema is already resolved in scanRelation.output (no need for relation.resolve())
   // 4. Scan rebuilding is handled by the scan implementation via the API
+  // Data sources like Delta and Iceberg can implement this API to support variant pushdown.
   private def rewritePlanV2(
       originalPlan: LogicalPlan,
       projectList: Seq[NamedExpression],
@@ -426,17 +425,6 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
 
     buildFilterAndProject(newScanRelation, projectList, filters, variants, attributeMap)
   }
-  // END-V2-SUPPORT
-  //
-  // NOTE: V2 implementation uses the SupportsPushDownVariants API. Data sources that implement
-  // this API can control how variant pushdown is handled. The data source is responsible for:
-  // 1. Validating that variant pushdown is supported
-  // 2. Storing the variant access information
-  // 3. Modifying readSchema() to return the rewritten schema
-  // 4. Implementing variant-to-struct conversion in their readers
-  //    (like ParquetVariantConverter in V1)
-  //
-  // Data sources like Delta and Iceberg can implement this API to support variant pushdown.
 
   /**
    * Build the final Project(Filter(relation)) plan with rewritten expressions.
