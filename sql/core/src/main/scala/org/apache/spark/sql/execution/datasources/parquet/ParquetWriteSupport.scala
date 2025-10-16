@@ -192,6 +192,10 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   // schema. This affects how timestamp values are written.
   private def makeWriter(dataType: DataType, inShredded: Boolean): ValueWriter = {
     dataType match {
+      case NullType => // We arbitrarily choose Boolean as the physical type for NullType/UNKNOWN
+        (row: SpecializedGetters, ordinal: Int) =>
+          recordConsumer.addBoolean(row.getBoolean(ordinal))
+
       case BooleanType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBoolean(row.getBoolean(ordinal))

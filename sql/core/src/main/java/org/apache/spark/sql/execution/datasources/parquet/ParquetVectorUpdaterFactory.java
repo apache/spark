@@ -26,6 +26,7 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.UnknownLogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.SparkUnsupportedOperationException;
@@ -70,7 +71,13 @@ public class ParquetVectorUpdaterFactory {
   }
 
   public ParquetVectorUpdater getUpdater(ColumnDescriptor descriptor, DataType sparkType) {
-    PrimitiveType.PrimitiveTypeName typeName = descriptor.getPrimitiveType().getPrimitiveTypeName();
+    PrimitiveType type = descriptor.getPrimitiveType();
+    PrimitiveType.PrimitiveTypeName typeName = type.getPrimitiveTypeName();
+    boolean isUnknownType = type.getLogicalTypeAnnotation() instanceof UnknownLogicalTypeAnnotation;
+    if (isUnknownType && sparkType instanceof NullType) {
+      // Updater should never be used if all values are nulls, so we can return null here.
+      return null;
+    }
 
     switch (typeName) {
       case BOOLEAN -> {

@@ -836,6 +836,10 @@ class SparkToParquetSchemaConverter(
       case udt: UserDefinedType[_] =>
         convertField(field.copy(dataType = udt.sqlType), inShredded)
 
+      case NullType => // Selected primitive type here doesn't have significance.
+        Types.primitive(BOOLEAN, repetition).named(field.name)
+          .withLogicalTypeAnnotation(LogicalTypeAnnotation.unknownType())
+
       case _ =>
         throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)
     }
