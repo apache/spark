@@ -25,5 +25,5 @@ import org.apache.spark.annotation.Evolving;
  * @since 4.1.0
  */
 @Evolving
-public interface WriteMetrics {
+public interface WriterMetrics {
 }

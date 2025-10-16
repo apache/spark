@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeMetricsImpl, PhysicalWriteInfoImpl, Write, WriteMetrics, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeMetricsImpl, PhysicalWriteInfoImpl, Write, WriterCommitMessage, WriterMetrics}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -452,9 +452,9 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       )
 
-      val operationMetrics = getOperationMetrics(query)
+      val writerMetrics = getWriterMetrics(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      operationMetrics match {
+      writerMetrics match {
         case Some(m) => batchWrite.commit(messages, m)
         case None => batchWrite.commit(messages)
       }
@@ -480,7 +480,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     Nil
   }
 
-  private def getOperationMetrics(query: SparkPlan): Option[WriteMetrics] = {
+  private def getWriterMetrics(query: SparkPlan): Option[WriterMetrics] = {
     collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
       val metrics = n.metrics
       MergeMetricsImpl(
