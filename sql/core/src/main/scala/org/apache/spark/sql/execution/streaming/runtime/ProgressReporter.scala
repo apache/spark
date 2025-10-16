@@ -36,7 +36,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSinkMetrics, ReportsSourceMetrics, SparkDataStream}
 import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPlan}
-import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
+import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, RealTimeStreamScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
@@ -242,6 +242,14 @@ abstract class ProgressContext(
     currentTriggerLatestOffsets = latest.transform((_, v) => v.json)
     latestStreamProgress = to
     currentTriggerLatestOffsets = latest.transform((_, v) => v.json)
+  }
+
+  /**
+   * Only used by Real-time Mode. For other cases, end offsets are determined
+   * in the batch planning phase so it is never need to be updated.
+   */
+  def recordEndOffsets(to: StreamProgress): Unit = {
+    currentTriggerEndOffsets = to.transform((_, v) => v.json)
   }
 
   /** Finalizes the trigger which did not execute a batch. */
@@ -507,6 +515,10 @@ abstract class ProgressContext(
           val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
           val source = s.stream
           source -> numRows
+        case s: RealTimeStreamScanExec =>
+          val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+          val source = s.stream
+          source -> numRows
       }
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
       sumRows(sourceToInputRowsTuples)
@@ -552,6 +564,8 @@ abstract class ProgressContext(
             // streaming source, hence we cannot lookup the actual source from the map.
             // The physical node for DSv2 streaming source contains the information of the source
             // by itself, so leverage it.
+            Some(ep -> ep.stream)
+          case (_, ep: RealTimeStreamScanExec) =>
             Some(ep -> ep.stream)
           case (lp, ep) =>
             logicalPlanLeafToSource.get(lp).map { source => ep -> source }

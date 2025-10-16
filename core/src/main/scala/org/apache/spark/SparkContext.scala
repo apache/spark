@@ -3155,6 +3155,11 @@ object SparkContext extends Logging {
   /** Separator of tags in SPARK_JOB_TAGS property */
   private[spark] val SPARK_JOB_TAGS_SEP = ","
 
+  def isDriver(executorId: String): Boolean = {
+    // Check for null to match the behavior of executorId == DRIVER_IDENTIFIER
+    executorId != null && executorId.startsWith(DRIVER_IDENTIFIER)
+  }
+
   // Same rules apply to Spark Connect execution tags, see ExecuteHolder.throwIfInvalidTag
   private[spark] def throwIfInvalidTag(tag: String) = {
     if (tag == null) {
