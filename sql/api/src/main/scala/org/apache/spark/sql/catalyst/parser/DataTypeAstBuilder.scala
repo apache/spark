@@ -103,14 +103,17 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    * through string() to handle escaping, then concatenates.
    */
   private def createCoalescedStringToken(tokens: Seq[Token]): Token = {
-    import org.apache.spark.sql.catalyst.util.SparkParserUtils.string
-
     val firstToken = tokens.head
     val lastToken = tokens.last
 
-    // Process each token through string() which handles all escaping,
-    // then concatenate the results
-    val coalescedValue = tokens.map(token => string(token)).mkString
+    // Concatenate the raw content of each token (without the outer quotes).
+    // The getText() on CoalescedStringToken will wrap this in quotes,
+    // and the final string() call will handle unescaping based on the config.
+    val coalescedRawContent = tokens.map { token =>
+      val text = token.getText
+      // Remove outer quotes: first and last character
+      text.substring(1, text.length - 1)
+    }.mkString
 
     new CoalescedStringToken(
       new org.antlr.v4.runtime.misc.Pair(firstToken.getTokenSource, firstToken.getInputStream),
@@ -118,7 +121,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       firstToken.getChannel,
       firstToken.getStartIndex,
       lastToken.getStopIndex,
-      coalescedValue)
+      coalescedRawContent)
   }
 
   override def visitNamedParameterMarkerRule(ctx: NamedParameterMarkerRuleContext): Token = {
@@ -469,6 +472,11 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
  * automatically coalesced into a single logical string. This token class represents such
  * coalesced strings while maintaining the Token interface.
  *
+ * The coalescedValue contains the raw concatenated content from all the string literals (with
+ * outer quotes removed but escape sequences preserved). The getText() method wraps this in
+ * quotes, and when SparkParserUtils.string() is called, it will unescape the content based on the
+ * current SQL configuration (respecting ESCAPED_STRING_LITERALS).
+ *
  * @param source
  *   The token source and input stream
  * @param tokenType
@@ -480,7 +488,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
  * @param stop
  *   The stop index of the last literal in the input stream
  * @param coalescedValue
- *   The coalesced string value (already unescaped, without quotes)
+ *   The raw concatenated content (without outer quotes, escape sequences NOT processed)
  */
 private[parser] class CoalescedStringToken(
     source: Pair[TokenSource, CharStream],
