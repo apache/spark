@@ -2991,6 +2991,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION = buildConf(
+    "spark.sql.streaming.realTimeMode.minBatchDuration")
+    .doc("The minimum long-running batch duration in milliseconds for real-time mode.")
+    .version("4.1.0")
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefault(5000)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
