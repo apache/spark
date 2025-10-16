@@ -21,6 +21,7 @@ import java.util.function.UnaryOperator
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
+import org.apache.hadoop.util.StringUtils
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -75,12 +76,12 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
       .set(KUBERNETES_NAMESPACE, namespace)
 
     assertThrows[IllegalArgumentException] {
-      setter.setDiagnostics("diag", conf)
+      setter.setDiagnostics(new Throwable("diag"), conf)
     }
   }
 
   test("setDiagnostics should patch pod with diagnostics annotation") {
-    val diagnostics = "Fake diagnostics stack trace"
+    val diagnostics = new Throwable("Fake diagnostics stack trace")
     val conf = new SparkConf()
       .set(KUBERNETES_DRIVER_MASTER_URL, k8sClusterManagerUrl)
       .set(KUBERNETES_NAMESPACE, namespace)
@@ -96,6 +97,7 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
     val initialPod = SparkPod.initialPod().pod
     val editedPod = fn.apply(initialPod)
 
-    assert(editedPod.getMetadata.getAnnotations.get(DIAGNOSTICS_ANNOTATION) == diagnostics)
+    assert(editedPod.getMetadata.getAnnotations.get(DIAGNOSTICS_ANNOTATION)
+      == StringUtils.stringifyException(diagnostics))
   }
 }

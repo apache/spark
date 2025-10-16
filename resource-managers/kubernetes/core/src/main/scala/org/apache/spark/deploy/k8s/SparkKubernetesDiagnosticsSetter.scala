@@ -18,6 +18,8 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
+import org.apache.hadoop.util.StringUtils
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkDiagnosticsSetter
 import org.apache.spark.deploy.k8s.Config._
@@ -59,8 +61,7 @@ private[spark] class SparkKubernetesDiagnosticsSetter(
   override def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit = {
     require(conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
       "Driver pod name must be set in order to set diagnostics on the driver pod.")
-    val diagnostics = SparkStringUtils.abbreviate(
-      org.apache.hadoop.util.StringUtils.stringifyException(throwable),
+    val diagnostics = SparkStringUtils.abbreviate(StringUtils.stringifyException(throwable),
       KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES)
     Utils.tryWithResource(clientProvider.create(conf)) { client =>
       conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
