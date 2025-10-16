@@ -56,8 +56,7 @@ class SubstituteParamsParser extends Logging {
       expectationType: ParameterExpectation.Value = ParameterExpectation.Unknown,
       allParametersAreNamed: Boolean = true,
       originalArgs: Seq[Any] = Seq.empty,
-      originalParamNames: Seq[String] = Seq.empty):
-      (String, Int, PositionMapper) = {
+      originalParamNames: Seq[String] = Seq.empty): (String, Int, PositionMapper) = {
 
     // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
     if (!sqlText.contains("?") && !sqlText.contains(":")) {

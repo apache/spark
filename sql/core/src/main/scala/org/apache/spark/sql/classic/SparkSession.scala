@@ -451,55 +451,48 @@ class SparkSession private(
     }.toSeq
     val fakePlan = Project(aliases, OneRowRelation())
 
-    // Analyze and optimize to resolve and constant-fold
+    // Analyze the plan to resolve expressions
     val analyzed = sessionState.analyzer.execute(fakePlan)
-    val optimized = sessionState.optimizer.execute(analyzed)
 
-    // Extract the resolved expressions from the project list
-    val resolvedParams = optimized.asInstanceOf[Project].projectList.map { alias =>
-      val resolvedExpr = alias.asInstanceOf[Alias].child
+    // Validate: the expression tree must only contain allowed expression types.
+    // This mirrors the validation in BindParameters.checkArgs.
+    // We check this BEFORE optimization to catch unsupported functions like str_to_map.
+    def isNotAllowed(expr: Expression): Boolean = expr.exists {
+      case _: Literal | _: CreateArray | _: CreateNamedStruct |
+        _: CreateMap | _: MapFromArrays | _: MapFromEntries | _: VariableReference => false
+      case a: Alias => isNotAllowed(a.child)
+      case _ => true
+    }
 
-      // Validate: the expression tree must only contain allowed expression types.
-      // This mirrors the validation in BindParameters.checkArgs.
-      // The validation happens on the analyzed (but not yet optimized) plan to catch
-      // unsupported functions like str_to_map before they get folded.
-      val analyzedExpr = analyzed.asInstanceOf[Project].projectList
-        .find(_.asInstanceOf[Alias].name == alias.name)
-        .get.asInstanceOf[Alias].child
-
-      def isNotAllowed(expr: Expression): Boolean = expr.exists {
-        case _: Literal | _: CreateArray | _: CreateNamedStruct |
-          _: CreateMap | _: MapFromArrays | _: MapFromEntries | _: VariableReference => false
-        case a: Alias => isNotAllowed(a.child)
-        case _ => true
-      }
-
-      if (isNotAllowed(analyzedExpr)) {
+    analyzed.asInstanceOf[Project].projectList.foreach { alias =>
+      val optimizedExpr = alias.asInstanceOf[Alias].child
+      if (isNotAllowed(optimizedExpr)) {
         // Both modern and legacy modes use INVALID_SQL_ARG for sql() API argument validation.
         // UNSUPPORTED_EXPR_FOR_PARAMETER is reserved for EXECUTE IMMEDIATE.
         throw new AnalysisException(
           errorClass = "INVALID_SQL_ARG",
           messageParameters = Map("name" -> alias.name),
-          origin = analyzedExpr.origin)
+          origin = optimizedExpr.origin)
       }
+    }
 
-      // For non-literal allowed expressions, evaluate them to literals
-      val literal = resolvedExpr match {
+    // Optimize to constant-fold expressions. After optimization, all allowed expressions
+    // should be folded to Literals.
+    val optimized = sessionState.optimizer.execute(analyzed)
+
+    // Extract the resolved literals from the project list
+    optimized.asInstanceOf[Project].projectList.map { alias =>
+      val literal = alias.asInstanceOf[Alias].child match {
         case lit: Literal => lit
-        case foldable if foldable.foldable =>
-          Literal.create(foldable.eval(EmptyRow), foldable.dataType)
         case other =>
-          // This case should not happen if validation above is correct
+          // This should not happen - optimizer should have constant-folded everything
           throw new AnalysisException(
             errorClass = "INVALID_SQL_ARG",
             messageParameters = Map("name" -> alias.name),
             origin = other.origin)
       }
-
       alias.name -> literal
     }.toMap
-
-    resolvedParams
   }
 
   /**
@@ -662,9 +655,9 @@ class SparkSession private(
               s"_pos_$idx"
             }
             resolvedParams(name)
-          }.toArray
+          }.toSeq
 
-          val paramContext = HybridParameterContext(paramExpressions, paramNames)
+          val paramContext = HybridParameterContext(paramExpressions, paramNames.toSeq)
 
           val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
 

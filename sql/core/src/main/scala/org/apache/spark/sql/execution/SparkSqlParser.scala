@@ -120,7 +120,7 @@ class SparkSqlParser extends AbstractSqlParser {
       case Some(context) =>
         if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
           // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
-          (variableSubstituted, None, true)
+          (variableSubstituted, PositionMapper.identity(variableSubstituted), true)
         } else {
           // Modern mode: Perform parameter substitution during parsing.
           val (substituted, mapper) =
@@ -129,34 +129,30 @@ class SparkSqlParser extends AbstractSqlParser {
         }
       case None =>
         // No parameter context provided; skip parameter substitution.
-        (variableSubstituted, None, false)
+        (variableSubstituted, PositionMapper.identity(variableSubstituted), false)
     }
 
     // Step 3: Set up the origin with SQL text and position mapper to enable
     // parameter-aware error reporting.
     val currentOrigin = CurrentOrigin.get
-    val originToUse = if (positionMapper.isDefined || hasParameters) {
+    val originToUse = if (hasParameters) {
       // Set up origin with the substituted SQL text and position mapper for
       // proper error reporting.
       currentOrigin.copy(
         sqlText = Some(paramSubstituted),
         startIndex = Some(0),
         stopIndex = Some(paramSubstituted.length - 1),
-        positionMapper = positionMapper
+        positionMapper = Some(positionMapper)
       )
     } else {
       // No substitution occurred; use the existing origin unchanged.
       currentOrigin
     }
 
-    // Parse with the origin containing position mapper, ensuring cleanup afterwards.
+    // Parse with the origin containing position mapper.
+    // CurrentOrigin.withOrigin automatically restores the previous origin.
     CurrentOrigin.withOrigin(originToUse) {
-      try {
-        super.parse(paramSubstituted)(toResult)
-      } finally {
-        // Restore the original origin after parsing to prevent contamination.
-        CurrentOrigin.set(currentOrigin)
-      }
+      super.parse(paramSubstituted)(toResult)
     }
   }
 }

@@ -57,23 +57,23 @@ object ParameterHandler {
    * @param sqlText The SQL text containing parameter markers
    * @param namedParams Optional named parameters map
    * @param positionalParams Optional positional parameters list
-   * @return A tuple of (substituted SQL, optional position mapper)
+   * @return A tuple of (substituted SQL, position mapper)
    */
   private def performSubstitution(
       sqlText: String,
       namedParams: Map[String, String] = Map.empty,
-      positionalParams: List[String] = List.empty): (String, Option[PositionMapper]) = {
+      positionalParams: List[String] = List.empty): (String, PositionMapper) = {
 
     // Optimize: Skip parsing if no parameter markers are present in the SQL text.
     if (!parameterMarkerPattern.matcher(sqlText).find()) {
-      return (sqlText, None)
+      return (sqlText, PositionMapper.identity(sqlText))
     }
 
     val substitutor = new SubstituteParamsParser()
     val (substituted, _, positionMapper) = substitutor.substitute(sqlText,
       namedParams = namedParams, positionalParams = positionalParams)
 
-    (substituted, Some(positionMapper))
+    (substituted, positionMapper)
   }
 
   /**
@@ -123,12 +123,12 @@ object ParameterHandler {
    *
    * @param sqlText The SQL text containing parameter markers
    * @param context The parameter context (named or positional)
-   * @return A tuple of (substituted SQL, optional position mapper)
+   * @return A tuple of (substituted SQL, position mapper)
    * @throws IllegalArgumentException if context is null
    */
   def substituteParameters(
       sqlText: String,
-      context: ParameterContext): (String, Option[PositionMapper]) = {
+      context: ParameterContext): (String, PositionMapper) = {
     require(context != null, "Parameter context cannot be null")
 
     context match {
@@ -159,11 +159,11 @@ object ParameterHandler {
   private def handleHybridParameters(
       sqlText: String,
       args: Seq[Any],
-      paramNames: Seq[String]): (String, Option[PositionMapper]) = {
+      paramNames: Seq[String]): (String, PositionMapper) = {
 
     // Optimize: Skip parsing if no parameter markers are present in the SQL text.
     if (!parameterMarkerPattern.matcher(sqlText).find()) {
-      return (sqlText, None)
+      return (sqlText, PositionMapper.identity(sqlText))
     }
 
     // Prepare parameters for both types.
@@ -182,7 +182,7 @@ object ParameterHandler {
       sqlText, namedParams, positionalParams, ParameterExpectation.Unknown,
       hasOnlyNamedParams, args, paramNames)
 
-    (substitutedSql, Some(positionMapper))
+    (substitutedSql, positionMapper)
   }
 
   /**
@@ -191,19 +191,19 @@ object ParameterHandler {
    *
    * @param sqlText The SQL text containing parameter markers
    * @param paramMap Map of parameter names to expressions
-   * @return A tuple of (substituted SQL, optional position mapper)
+   * @return A tuple of (substituted SQL, position mapper)
    */
   def substituteNamedParameters(
       sqlText: String,
-      paramMap: Map[String, Expression]): (String, Option[PositionMapper]) = {
-    if (paramMap.isEmpty) return (sqlText, None)
+      paramMap: Map[String, Expression]): (String, PositionMapper) = {
+    if (paramMap.isEmpty) return (sqlText, PositionMapper.identity(sqlText))
 
     val namedParams = paramMap.map { case (name, expr) => (name, convertToSql(expr)) }
     val substitutor = new SubstituteParamsParser()
     val (substitutedSql, _, positionMapper) = substitutor.substitute(
       sqlText, namedParams, List.empty, ParameterExpectation.Named)
 
-    (substitutedSql, Some(positionMapper))
+    (substitutedSql, positionMapper)
   }
 
   /**
@@ -212,18 +212,18 @@ object ParameterHandler {
    *
    * @param sqlText The SQL text containing parameter markers
    * @param paramList Sequence of parameter expressions
-   * @return A tuple of (substituted SQL, optional position mapper)
+   * @return A tuple of (substituted SQL, position mapper)
    */
   def substitutePositionalParameters(
       sqlText: String,
-      paramList: Seq[Expression]): (String, Option[PositionMapper]) = {
-    if (paramList.isEmpty) return (sqlText, None)
+      paramList: Seq[Expression]): (String, PositionMapper) = {
+    if (paramList.isEmpty) return (sqlText, PositionMapper.identity(sqlText))
 
     val positionalParams = paramList.map(convertToSql).toList
     val substitutor = new SubstituteParamsParser()
     val (substitutedSql, _, positionMapper) = substitutor.substitute(
       sqlText, Map.empty, positionalParams, ParameterExpectation.Positional)
 
-    (substitutedSql, Some(positionMapper))
+    (substitutedSql, positionMapper)
   }
 }
