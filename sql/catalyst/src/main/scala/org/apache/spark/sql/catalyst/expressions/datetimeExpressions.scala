@@ -1014,6 +1014,8 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): DateFormatClass =
     copy(left = newLeft, right = newRight)
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(DATETIME)
 }
 
 /**
@@ -1147,6 +1149,8 @@ case class GetTimestamp(
       newLeft: Expression,
       newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(DATETIME)
 }
 
 

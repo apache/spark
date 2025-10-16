@@ -3650,6 +3650,13 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
 
 
+def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_diff", unit, start, end)
+
+
+time_diff.__doc__ = pysparkfuncs.time_diff.__doc__
+
+
 def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("time_trunc", unit, time)
 

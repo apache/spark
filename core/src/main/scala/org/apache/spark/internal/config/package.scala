@@ -2889,7 +2889,7 @@ package object config {
       .createWithDefault(Seq("stdout", "stderr"))
 
   private[spark] val EXEC_REDIRECT_CONSOLE_OUTPUTS =
-    ConfigBuilder("spark.executor.log.redirectConsoleOutputs")
+    ConfigBuilder("spark.executor.logs.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for executor that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
         s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")

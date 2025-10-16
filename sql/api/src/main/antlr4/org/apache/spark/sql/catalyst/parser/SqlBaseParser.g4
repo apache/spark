@@ -1340,6 +1340,8 @@ nonTrivialPrimitiveType
          fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
     | TIMESTAMP (WITHOUT TIME ZONE)?
     | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)? (WITHOUT TIME ZONE)?
+    | GEOGRAPHY (LEFT_PAREN srid=(INTEGER_VALUE | ANY) RIGHT_PAREN)
+    | GEOMETRY (LEFT_PAREN srid=(INTEGER_VALUE | ANY) RIGHT_PAREN)
     ;
 
 trivialPrimitiveType
@@ -1832,6 +1834,8 @@ ansiNonReserved
     | FUNCTION
     | FUNCTIONS
     | GENERATED
+    | GEOGRAPHY
+    | GEOMETRY
     | GLOBAL
     | GROUPING
     | HANDLER
@@ -2210,6 +2214,8 @@ nonReserved
     | FUNCTION
     | FUNCTIONS
     | GENERATED
+    | GEOGRAPHY
+    | GEOMETRY
     | GLOBAL
     | GRANT
     | GROUP

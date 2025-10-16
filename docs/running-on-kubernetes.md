@@ -701,6 +701,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.allocation.maximum</code></td>
+  <td><code>Int.MaxValue</code></td>
+  <td>
+    The maximum number of executor pods to try to create during the whole job lifecycle.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.jars.avoidDownloadSchemes</code></td>
   <td><code>(none)</code></td>
   <td>
@@ -1378,6 +1386,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.terminationGracePeriodSeconds</code></td>
+  <td>30s</td>
+  <td>
+    Time to wait for graceful termination of executor pods.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.checkAllContainers</code></td>
   <td><code>true</code></td>
   <td>
@@ -1604,6 +1620,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.pod.excludedFeatureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class names of a driver pod feature step to exclude.
+    This is a developer API. Comma separated.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.pod.featureSteps</code></td>
   <td>(none)</td>
   <td>
@@ -1614,6 +1639,15 @@ See the [configuration page](configuration.html) for information on Spark config
     is also available.
   </td>
   <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pod.excludedFeatureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class names of an executor pod feature step to exclude.
+    This is a developer API. Comma separated.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.maxPendingPods</code></td>
