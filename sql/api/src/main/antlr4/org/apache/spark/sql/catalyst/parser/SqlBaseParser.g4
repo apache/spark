@@ -1269,7 +1269,7 @@ constant
     | literalType stringLitWithoutMarker                                                       #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
-    | stringLit+                                                                               #stringLiteral
+    | stringLit                                                                                #stringLiteral
     ;
 
 namedParameterMarker
@@ -1683,9 +1683,8 @@ alterColumnAction
     ;
 
 stringLitWithoutMarker
-    : STRING_LITERAL                                                                           #stringLiteralValue
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #doubleQuotedStringLiteralValue
-;
+    : (STRING_LITERAL | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING)+
+    ;
 
 parameterMarker
     : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule

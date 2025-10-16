@@ -50,7 +50,7 @@ import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{LEGACY_BANG_EQUALS_NOT, LEGACY_CONSECUTIVE_STRING_LITERALS}
+import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -3411,6 +3411,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Currently Date, Timestamp, Interval and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
+    // Type constructor supports string coalescing via stringLitWithoutMarker rule
     val value = string(visit(ctx.stringLitWithoutMarker).asInstanceOf[Token])
     val valueType = ctx.literalType.start.getType
 
@@ -3648,15 +3649,14 @@ class AstBuilder extends DataTypeAstBuilder
    * converted into "helloworld".
    *
    * Special characters can be escaped by using Hive/C-style escaping.
+   *
+   * Note: With the modified stringLit grammar rule, visitStringLit now returns a Token
+   * that already represents the coalesced value of multiple literals.
    */
   private def createString(ctx: StringLiteralContext): String = {
-    if (conf.escapedStringLiterals) {
-      ctx.stringLit.asScala.map(x => stringWithoutUnescape(visitStringLit(x))).mkString
-    } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
-      ctx.stringLit.asScala.map(x => stringIgnoreQuoteQuote(visitStringLit(x))).mkString
-    } else {
-      ctx.stringLit.asScala.map(x => string(visitStringLit(x))).mkString
-    }
+    // visitStringLit already handles coalescing multiple literals and returns
+    // a CoalescedStringToken with the proper escaping applied
+    string(visitStringLit(ctx.stringLit()))
   }
 
   /**
