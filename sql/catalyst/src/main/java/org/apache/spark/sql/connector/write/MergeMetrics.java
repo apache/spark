@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Evolving;
  * @since 4.1.0
  */
 @Evolving
-public interface MergeOperationMetrics extends OperationMetrics {
+public interface MergeMetrics extends WriteMetrics {
 
   /**
    * Returns the number of target rows copied unmodified because they did not match any action.

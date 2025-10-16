@@ -18,9 +18,9 @@
 package org.apache.spark.sql.connector.write
 
 /**
- * Implementation of {@link MergeOperationMetrics} that provides merge operation metrics.
+ * Implementation of [[MergeMetrics]] that provides merge operation metrics.
  */
-private[sql] case class MergeOperationMetricsImpl(
+private[sql] case class MergeMetricsImpl(
     numTargetRowsCopied: Long,
     numTargetRowsDeleted: Long,
     numTargetRowsUpdated: Long,
@@ -29,5 +29,5 @@ private[sql] case class MergeOperationMetricsImpl(
     numTargetRowsMatchedDeleted: Long,
     numTargetRowsNotMatchedBySourceUpdated: Long,
     numTargetRowsNotMatchedBySourceDeleted: Long)
-  extends MergeOperationMetrics {
+  extends MergeMetrics {
 }

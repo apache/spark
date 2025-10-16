@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
-import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, MergeOperationMetrics, OperationMetrics, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, MergeMetrics, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriteMetrics, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -114,9 +114,9 @@ class InMemoryRowLevelOperationTable(
 
   abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
 
-    override def commit(messages: Array[WriterCommitMessage], metrics: OperationMetrics): Unit = {
+    override def commit(messages: Array[WriterCommitMessage], metrics: WriteMetrics): Unit = {
       metrics match {
-        case mergeMetrics: MergeOperationMetrics =>
+        case mergeMetrics: MergeMetrics =>
           commitProperties += "merge.numTargetRowsCopied" ->
             mergeMetrics.numTargetRowsCopied.toString
           commitProperties += "merge.numTargetRowsDeleted" ->
