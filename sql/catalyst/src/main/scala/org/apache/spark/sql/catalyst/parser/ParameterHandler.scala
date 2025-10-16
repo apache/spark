@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
 
 /**
  * Handler for parameter substitution across different Spark SQL contexts.
@@ -103,12 +102,19 @@ object ParameterHandler {
 
   /**
    * Converts an Expression to its SQL string representation.
+   * All expressions must be resolved Literals at this point.
    *
-   * @param expr The expression to convert
+   * @param expr The expression to convert (must be a Literal)
    * @return SQL string representation
    */
-  private def convertToSql(expr: Expression): String = {
-    LiteralToSqlConverter.convert(expr)
+  private def convertToSql(expr: Expression): String = expr match {
+    case lit: Literal => lit.sql
+    case other =>
+      throw new IllegalArgumentException(
+        s"ParameterHandler only accepts resolved Literal expressions. " +
+        s"Received: ${other.getClass.getSimpleName}. " +
+        s"All parameters must be resolved using SparkSession.resolveAndValidateParameters " +
+        s"before being passed to the pre-parser.")
   }
 
   /**

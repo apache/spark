@@ -37,14 +37,14 @@ import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTE
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql
-import org.apache.spark.sql.{Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
+import org.apache.spark.sql.{AnalysisException, Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateArray, CreateMap, CreateNamedStruct, EmptyRow, Expression, Literal, MapFromArrays, MapFromEntries, VariableReference}
 import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext}
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, OneRowRelation, Project, Range}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -432,6 +432,76 @@ class SparkSession private(
    * ----------------- */
 
   /**
+   * Resolves and validates parameter expressions using a fake Project plan.
+   * This ensures parameters are properly resolved and constant-folded before being
+   * passed to the pre-parser.
+   *
+   * @param args Map of parameter names to expressions
+   * @return Map of parameter names to resolved literal expressions
+   */
+  private def resolveAndValidateParameters(args: Map[String, Expression]): Map[String, Literal] = {
+    if (args.isEmpty) {
+      return Map.empty
+    }
+
+    // Create a fake Project plan: Project(parameters, OneRowRelation)
+    val aliases = args.map { case (name, expr) =>
+      Alias(expr, name)()
+    }.toSeq
+    val fakePlan = Project(aliases, OneRowRelation())
+
+    // Analyze and optimize to resolve and constant-fold
+    val analyzed = sessionState.analyzer.execute(fakePlan)
+    val optimized = sessionState.optimizer.execute(analyzed)
+
+    // Extract the resolved expressions from the project list
+    val resolvedParams = optimized.asInstanceOf[Project].projectList.map { alias =>
+      val resolvedExpr = alias.asInstanceOf[Alias].child
+
+      // Validate: the expression tree must only contain allowed expression types.
+      // This mirrors the validation in BindParameters.checkArgs.
+      // The validation happens on the analyzed (but not yet optimized) plan to catch
+      // unsupported functions like str_to_map before they get folded.
+      val analyzedExpr = analyzed.asInstanceOf[Project].projectList
+        .find(_.asInstanceOf[Alias].name == alias.name)
+        .get.asInstanceOf[Alias].child
+
+      def isNotAllowed(expr: Expression): Boolean = expr.exists {
+        case _: Literal | _: CreateArray | _: CreateNamedStruct |
+          _: CreateMap | _: MapFromArrays | _: MapFromEntries | _: VariableReference => false
+        case a: Alias => isNotAllowed(a.child)
+        case _ => true
+      }
+
+      if (isNotAllowed(analyzedExpr)) {
+        // Both modern and legacy modes use INVALID_SQL_ARG for sql() API argument validation.
+        // UNSUPPORTED_EXPR_FOR_PARAMETER is reserved for EXECUTE IMMEDIATE.
+        throw new AnalysisException(
+          errorClass = "INVALID_SQL_ARG",
+          messageParameters = Map("name" -> alias.name),
+          origin = analyzedExpr.origin)
+      }
+
+      // For non-literal allowed expressions, evaluate them to literals
+      val literal = resolvedExpr match {
+        case lit: Literal => lit
+        case foldable if foldable.foldable =>
+          Literal.create(foldable.eval(EmptyRow), foldable.dataType)
+        case other =>
+          // This case should not happen if validation above is correct
+          throw new AnalysisException(
+            errorClass = "INVALID_SQL_ARG",
+            messageParameters = Map("name" -> alias.name),
+            origin = other.origin)
+      }
+
+      alias.name -> literal
+    }.toMap
+
+    resolvedParams
+  }
+
+  /**
    * Executes a SQL query substituting positional parameters by the given arguments,
    * returning the result as a `DataFrame`.
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
@@ -450,8 +520,12 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = if (args.nonEmpty) {
-          // Use parameter context directly for parsing
-          val paramContext = PositionalParameterContext(args.map(lit(_).expr).toSeq)
+          // Resolve and validate parameters first
+          val paramMap = args.zipWithIndex.map { case (arg, idx) =>
+            s"_pos_$idx" -> lit(arg).expr
+          }.toMap
+          val resolvedParams = resolveAndValidateParameters(paramMap)
+          val paramContext = PositionalParameterContext(resolvedParams.values.toSeq)
           val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
           // Check for SQL scripting with positional parameters
           if (parsed.isInstanceOf[CompoundBody]) {
@@ -500,7 +574,9 @@ class SparkSession private(
     withActive {
       // Always set parameter context if we have actual parameters
       if (args.nonEmpty) {
-        val paramContext = NamedParameterContext(args.transform((_, v) => lit(v).expr))
+        // Resolve and validate parameters first
+        val resolvedParams = resolveAndValidateParameters(args.transform((_, v) => lit(v).expr))
+        val paramContext = NamedParameterContext(resolvedParams)
         val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
           val parsedPlan = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
           // In legacy mode, wrap the parsed plan with NameParameterizedQuery
@@ -559,10 +635,14 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = if (args.nonEmpty) {
-          // For EXECUTE IMMEDIATE, handle parameter arguments following the original pattern
-          // Convert all arguments to expressions (not evaluated values)
-          val paramExpressions = args.map { arg =>
-            arg match {
+          // Resolve and validate parameter arguments
+          val paramMap = args.zipWithIndex.map { case (arg, idx) =>
+            val name = if (idx < paramNames.length && paramNames(idx).nonEmpty) {
+              paramNames(idx)
+            } else {
+              s"_pos_$idx"
+            }
+            val expr = arg match {
               case literal: Literal =>
                 // Already a Literal expression from ResolveExecuteImmediate - use it directly
                 literal
@@ -570,7 +650,19 @@ class SparkSession private(
                 // Raw value or Column - convert to expression using lit()
                 lit(arg).expr
             }
-          }
+            name -> expr
+          }.toMap
+
+          val resolvedParams = resolveAndValidateParameters(paramMap)
+          val paramExpressions = args.indices.map { idx =>
+            val name = if (idx < paramNames.length && paramNames(idx).nonEmpty) {
+              paramNames(idx)
+            } else {
+              s"_pos_$idx"
+            }
+            resolvedParams(name)
+          }.toArray
+
           val paramContext = HybridParameterContext(paramExpressions, paramNames)
 
           val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)

@@ -327,68 +327,63 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("named parameters now allowed in view body ") {
+  test("named parameters are allowed in view body ") {
     val sqlText = "CREATE VIEW v AS SELECT :p AS p"
     val args = Map("p" -> 1)
-    // Named parameters are now supported in view bodies
+    // Named parameters are are supported in view bodies
     withView("v") {
       spark.sql(sqlText, args)
       checkAnswer(spark.table("v"), Row(1))
     }
   }
 
-  test("positional parameters now allowed in view body ") {
+  test("positional parameters are allowed in view body ") {
     val sqlText = "CREATE VIEW v AS SELECT ? AS p"
     val args = Array(1)
-    // Positional parameters are now supported in view bodies
     withView("v") {
       spark.sql(sqlText, args)
       checkAnswer(spark.table("v"), Row(1))
     }
   }
 
-  test("named parameters now allowed in view body - WITH and scalar subquery") {
+  test("named parameters are allowed in view body - WITH and scalar subquery") {
     val sqlText = "CREATE VIEW v AS WITH cte(a) AS (SELECT (SELECT :p) AS a)  SELECT a FROM cte"
     val args = Map("p" -> 1)
-    // Named parameters are now supported in view bodies with WITH and scalar subqueries
     withView("v") {
       spark.sql(sqlText, args)
       checkAnswer(spark.table("v"), Row(1))
     }
   }
 
-  test("positional parameters now allowed in view body - WITH and scalar subquery") {
+  test("positional parameters are allowed in view body - WITH and scalar subquery") {
     val sqlText = "CREATE VIEW v AS WITH cte(a) AS (SELECT (SELECT ?) AS a)  SELECT a FROM cte"
     val args = Array(1)
-    // Positional parameters are now supported in view bodies with WITH and scalar subqueries
     withView("v") {
       spark.sql(sqlText, args)
       checkAnswer(spark.table("v"), Row(1))
     }
   }
 
-  test("named parameters now allowed in view body - nested WITH and EXIST") {
+  test("named parameters are allowed in view body - nested WITH and EXIST") {
     val sqlText =
       """CREATE VIEW v AS
         |SELECT a as a
         |FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT :p) THEN 1 END AS a)
         |SELECT a FROM cte)""".stripMargin
     val args = Map("p" -> 1)
-    // Named parameters are now supported in view bodies with nested WITH and EXISTS
     withView("v") {
       spark.sql(sqlText, args)
       checkAnswer(spark.table("v"), Row(1))
     }
   }
 
-  test("positional parameters now allowed in view body - nested WITH and EXIST") {
+  test("positional parameters are allowed in view body - nested WITH and EXIST") {
     val sqlText =
       """CREATE VIEW v AS
         |SELECT a as a
         |FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT ?) THEN 1 END AS a)
         |SELECT a FROM cte)""".stripMargin
     val args = Array(1)
-    // Positional parameters are now supported in view bodies with nested WITH and EXISTS
     withView("v") {
       spark.sql(sqlText, args)
       checkAnswer(spark.table("v"), Row(1))
@@ -541,9 +536,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       parameters = Map.empty[String, String])
   }
 
-  test("SPARK-44680: parameters in DEFAULT now work") {
+  test("SPARK-44680: parameters in DEFAULT work") {
     withTable("t11") {
-      // Parameter markers are now supported in DEFAULT expressions
       spark.sql(
         "CREATE TABLE t11(c1 int default :parm) USING parquet",
         args = Map("parm" -> 5))
@@ -595,11 +589,11 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     }
     def createMap(keys: Array[_], values: Array[_]): Column = {
       val zipped = keys.map(k => lit(k)).zip(values.map(v => lit(v)))
-      map(zipped.flatMap { case (k, v) => Array(k, v) }.toImmutableArraySeq: _*)
+      map(zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def callMap(keys: Array[_], values: Array[_]): Column = {
       val zipped = keys.map(k => lit(k)).zip(values.map(v => lit(v)))
-      call_function("map", zipped.flatMap { case (k, v) => Array(k, v) }.toImmutableArraySeq: _*)
+      call_function("map", zipped.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq: _*)
     }
     def fromEntries(keys: Array[_], values: Array[_]): Column = {
       val structures = keys.zip(values)
@@ -612,7 +606,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       call_function("map_from_entries", call_function("array", structures.toImmutableArraySeq: _*))
     }
 
-    Array(fromArr(_, _), createMap(_, _), callFromArr(_, _), callMap(_, _)).foreach { f =>
+    Seq(fromArr(_, _), createMap(_, _), callFromArr(_, _), callMap(_, _)).foreach { f =>
       checkAnswer(
         spark.sql("SELECT map_contains_key(:mapParam, 0)",
           Map("mapParam" -> f(Array.empty[Int], Array.empty[String]))),
@@ -622,7 +616,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           Array(f(Array.empty[String], Array.empty[Double]))),
         Row(false))
     }
-    Array(fromArr(_, _), createMap(_, _), fromEntries(_, _),
+    Seq(fromArr(_, _), createMap(_, _), fromEntries(_, _),
       callFromArr(_, _), callMap(_, _), callFromEntries(_, _)).foreach { f =>
       checkAnswer(
         spark.sql("SELECT element_at(:mapParam, 'a')",
@@ -645,7 +639,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
             lit(Array("a")),
             array(map_from_arrays(lit(Array(1)), lit(Array(2))))))),
       Row(2))
-    // `str_to_map` is not supported in parameter substitution
+    // `str_to_map` is not supported
     checkError(
       exception = intercept[AnalysisException] {
         spark.sql("SELECT :m['a'][1]",
@@ -654,10 +648,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
               lit(Array("a")),
               array(str_to_map(lit("a:1,b:2,c:3"))))))
       },
-      condition = "UNSUPPORTED_EXPR_FOR_PARAMETER",
-      parameters = Map("invalidExprSql" -> "\"str_to_map(a:1,b:2,c:3)\""),
+      condition = "INVALID_SQL_ARG",
+      parameters = Map("name" -> "m"),
       context = ExpectedContext(
-        fragment = "str_to_map",
+        fragment = "map_from_arrays",
         callSitePattern = getCurrentClassCallSitePattern)
     )
   }
@@ -687,21 +681,21 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
       // Select from table using param
       checkAnswer(spark.sql("select * from identifier(:tab)", Map("tab" -> "testtab")),
-        Array(Row(1, "test1")))
+        Seq(Row(1, "test1")))
 
       // Insert into table using multiple params
       spark.sql("insert into identifier(:tab) values(2, :name)",
         Map("tab" -> "testtab", "name" -> "test2"))
 
       // Select from table using param
-      checkAnswer(sql("select * from testtab"), Array(Row(1, "test1"), Row(2, "test2")))
+      checkAnswer(sql("select * from testtab"), Seq(Row(1, "test1"), Row(2, "test2")))
 
       // Insert into table using multiple params and idents
       sql("insert into testtab values(2, 'test3')")
 
       // Select from table using param
       checkAnswer(spark.sql("select identifier(:col) from identifier(:tab) where :name == name",
-        Map("tab" -> "testtab", "name" -> "test2", "col" -> "id")), Array(Row(2)))
+        Map("tab" -> "testtab", "name" -> "test2", "col" -> "id")), Seq(Row(2)))
     }
   }
 
@@ -716,21 +710,21 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
       // Select from table using param
       checkAnswer(spark.sql("select * from identifier(?)", Array("testtab")),
-        Array(Row(1, "test1")))
+        Seq(Row(1, "test1")))
 
       // Insert into table using multiple params
       spark.sql("insert into identifier(?) values(2, ?)",
         Array("testtab", "test2"))
 
       // Select from table using param
-      checkAnswer(sql("select * from testtab"), Array(Row(1, "test1"), Row(2, "test2")))
+      checkAnswer(sql("select * from testtab"), Seq(Row(1, "test1"), Row(2, "test2")))
 
       // Insert into table using multiple params and idents
       sql("insert into testtab values(2, 'test3')")
 
       // Select from table using param
       checkAnswer(spark.sql("select identifier(?) from identifier(?) where ? == name",
-        Array("id", "testtab", "test2")), Array(Row(2)))
+        Array("id", "testtab", "test2")), Seq(Row(2)))
     }
   }
 
@@ -746,7 +740,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           | select * from testtab where identifier(:col) == 1""".stripMargin,
         Map("tab" -> "testtab1", "col" -> "id"))
 
-      checkAnswer(sql("select * from testtab1"), Array(Row(1, "test1")))
+      checkAnswer(sql("select * from testtab1"), Seq(Row(1, "test1")))
     }
   }
 
@@ -777,9 +771,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("SPARK-49398: Cache Table with parameter markers in select query now works") {
+  test("SPARK-49398: Cache Table with parameter markers in select query works") {
     val sqlText = "CACHE TABLE CacheTable as SELECT 1 + :param1"
-    // Parameter markers are now supported in CACHE TABLE statements
     spark.sql(sqlText, Map("param1" -> "1"))
 
     // Verify the cached table works correctly
@@ -1720,10 +1713,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         spark.sql("create table testtab_legacy (id int, name string)")
         spark.sql("insert into identifier(:tab) values(1, 'test1')", Map("tab" -> "testtab_legacy"))
         checkAnswer(spark.sql("select * from identifier(:tab)", Map("tab" -> "testtab_legacy")),
-          Array(Row(1, "test1")))
+          Seq(Row(1, "test1")))
         spark.sql("insert into identifier(:tab) values(2, :name)",
           Map("tab" -> "testtab_legacy", "name" -> "test2"))
-        checkAnswer(sql("select * from testtab_legacy"), Array(Row(1, "test1"), Row(2, "test2")))
+        checkAnswer(sql("select * from testtab_legacy"), Seq(Row(1, "test1"), Row(2, "test2")))
       }
     }
   }
@@ -1734,11 +1727,11 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         spark.sql("create table testtab_legacy_pos (id int, name string)")
         spark.sql("insert into identifier(?) values(1, 'test1')", Array("testtab_legacy_pos"))
         checkAnswer(spark.sql("select * from identifier(?)", Array("testtab_legacy_pos")),
-          Array(Row(1, "test1")))
+          Seq(Row(1, "test1")))
         spark.sql("insert into identifier(?) values(2, ?)",
           Array("testtab_legacy_pos", "test2"))
         checkAnswer(sql("select * from testtab_legacy_pos"),
-          Array(Row(1, "test1"), Row(2, "test2")))
+          Seq(Row(1, "test1"), Row(2, "test2")))
       }
     }
   }

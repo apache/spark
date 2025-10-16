@@ -18,8 +18,6 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.util.LiteralToSqlConverter
-import org.apache.spark.sql.types._
 
 /**
  * Test suite for the new parameter substitution architecture.
@@ -91,61 +89,8 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     assert(result2 === "SELECT 1")
   }
 
-  test("LiteralToSqlConverter - basic literals") {
-    assert(LiteralToSqlConverter.convert(Literal(42)) === "42")
-    assert(LiteralToSqlConverter.convert(Literal("hello")) === "'hello'")
-    assert(LiteralToSqlConverter.convert(Literal(true)) === "true")
-    assert(LiteralToSqlConverter.convert(Literal(null, StringType)) === "CAST(NULL AS STRING)")
-  }
-
-  test("LiteralToSqlConverter - string escaping") {
-    assert(LiteralToSqlConverter.convert(Literal("it's")) === "'it\\'s'")
-    assert(LiteralToSqlConverter.convert(Literal("'quoted'")) === "'\\'quoted\\''")
-  }
-
-  test("LiteralToSqlConverter - array literals") {
-    val arrayData = Array(1, 2, 3)
-    val arrayLiteral = Literal.create(arrayData, ArrayType(IntegerType))
-    val result = LiteralToSqlConverter.convert(arrayLiteral)
-    assert(result === "ARRAY(1, 2, 3)")
-  }
-
-  test("LiteralToSqlConverter - map literals") {
-    val mapData = Map("key1" -> "value1", "key2" -> "value2")
-    val mapLiteral = Literal.create(mapData, MapType(StringType, StringType))
-    val result = LiteralToSqlConverter.convert(mapLiteral)
-    assert(result.startsWith("MAP("))
-    assert(result.contains("'key1', 'value1'"))
-    assert(result.contains("'key2', 'value2'"))
-  }
-
-  test("LiteralToSqlConverter - handles complex data types") {
-    // Test with more complex data types to ensure comprehensive support
-
-    // Test with nested array
-    val nestedArrayData = Array(Array(1, 2), Array(3, 4))
-    val nestedArrayLit = Literal.create(nestedArrayData, ArrayType(ArrayType(IntegerType)))
-    val nestedResult = LiteralToSqlConverter.convert(nestedArrayLit)
-    assert(nestedResult.startsWith("ARRAY("))
-    assert(nestedResult.contains("ARRAY(1, 2)"))
-    assert(nestedResult.contains("ARRAY(3, 4)"))
-
-    // Test with null values
-    val nullLit = Literal.create(null, StringType)
-    assert(LiteralToSqlConverter.convert(nullLit) === "CAST(NULL AS STRING)")
-  }
-
-  test("LiteralToSqlConverter - handles foldable expressions") {
-    import org.apache.spark.sql.catalyst.expressions.Add
-
-    // Test with a foldable expression (should evaluate and convert)
-    val addExpr = Add(Literal(1), Literal(2))
-    val result = LiteralToSqlConverter.convert(addExpr)
-    assert(result === "3")
-
-  }
-
   test("Integration - complex parameter substitution") {
+    import org.apache.spark.sql.types._
 
     val arrayData = Array(1, 2, 3)
     val mapData = Map("status" -> "active")
