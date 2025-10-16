@@ -1706,11 +1706,10 @@ object CopyDependencies {
         }
       }.value
 
+      // Copy the Spark Connect JDBC driver assembly manually.
       Def.taskDyn {
         if (moduleName.value.contains("assembly")) {
           Def.task {
-            val replClasspathes = (LocalProject("connect-client-jdbc") / Compile / dependencyClasspath)
-              .value.map(_.data).filter(_.isFile())
             val scalaBinaryVer = SbtPomKeys.effectivePom.value.getProperties.get(
               "scala.binary.version").asInstanceOf[String]
             val sparkVer = SbtPomKeys.effectivePom.value.getProperties.get(
@@ -1724,13 +1723,7 @@ object CopyDependencies {
               "jdbc", "target", s"scala-$scalaBinaryVer", s"spark-connect-client-jdbc-assembly-$sparkVer.jar")
             val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-client-jdbc-assembly-$sparkVer.jar")
             Files.copy(sourceAssemblyJar, destAssemblyJar, StandardCopyOption.REPLACE_EXISTING)
-
-            replClasspathes.foreach { f =>
-              val destFile = Paths.get(destDir.toString, f.getName)
-              if (!f.getName.startsWith("spark-")) {
-                Files.copy(f.toPath, destFile, StandardCopyOption.REPLACE_EXISTING)
-              }
-            }
+            ()
           }.dependsOn(LocalProject("connect-client-jdbc") / assembly)
         } else {
           Def.task {}
