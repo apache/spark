@@ -18,13 +18,13 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkDiagnosticsSetter
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DIAGNOSTICS_ANNOTATION
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory.ClientType
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.{SparkStringUtils, Utils}
 
 /**
  * We use this trait and its implementation to allow for mocking the static
@@ -50,30 +50,33 @@ private[spark] class SparkKubernetesDiagnosticsSetter(
   clientProvider: KubernetesClientProvider
   ) extends SparkDiagnosticsSetter with Logging {
 
+  private val KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES = 64 * 1024 // 64 KiB
+
   def this() = {
     this(new DefaultKubernetesClientProvider)
   }
 
-  override def setDiagnostics(diagnostics: String, conf: SparkConf): Unit = {
+  override def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit = {
     require(conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
       "Driver pod name must be set in order to set diagnostics on the driver pod.")
-    val client = clientProvider.create(conf)
-    conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
-      client.pods()
-        .inNamespace(conf.get(KUBERNETES_NAMESPACE))
-        .withName(podName)
-        .edit((p: Pod) => new PodBuilder(p)
-          .editMetadata()
-          .addToAnnotations(DIAGNOSTICS_ANNOTATION, diagnostics)
-          .endMetadata()
-          .build());
+    val diagnostics = SparkStringUtils.abbreviate(
+      org.apache.hadoop.util.StringUtils.stringifyException(throwable),
+      KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES)
+    Utils.tryWithResource(clientProvider.create(conf)) { client =>
+      conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
+        client.pods()
+          .inNamespace(conf.get(KUBERNETES_NAMESPACE))
+          .withName(podName)
+          .edit((p: Pod) => new PodBuilder(p)
+            .editOrNewMetadata()
+            .addToAnnotations(DIAGNOSTICS_ANNOTATION, diagnostics)
+            .endMetadata()
+            .build());
+      }
     }
   }
 
   override def supports(clusterManagerUrl: String, conf: SparkConf): Boolean = {
-    if (conf.get(KUBERNETES_STORE_DIAGNOSTICS)) {
-      return clusterManagerUrl.startsWith("k8s://")
-    }
-    false
+    conf.get(KUBERNETES_STORE_DIAGNOSTICS) && clusterManagerUrl.startsWith("k8s://")
   }
 }

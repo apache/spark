@@ -67,8 +67,6 @@ private[spark] class SparkSubmit extends Logging {
   import DependencyUtils._
   import SparkSubmit._
 
-  private val KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES = 64 * 1024 // 64 KiB
-
   def doSubmit(args: Array[String]): Unit = {
     val appArgs = parseArguments(args)
     val sparkConf = appArgs.toSparkConf()
@@ -1065,18 +1063,16 @@ private[spark] class SparkSubmit extends Logging {
   /**
    * Store the diagnostics using the SparkDiagnosticsSetter.
    */
-  private def storeDiagnostics(args: SparkSubmitArguments, sparkConf: SparkConf,
-      t: Throwable): Unit = {
+  private def storeDiagnostics(
+      args: SparkSubmitArguments,
+      sparkConf: SparkConf,
+      throwable: Throwable): Unit = {
     // Swallow exceptions when storing diagnostics, this shouldn't fail the application.
     try {
-      if (args.master.startsWith("k8s") && !isShell(args.primaryResource)
-        && !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass)) {
-        val diagnostics = SparkStringUtils.abbreviate(
-          org.apache.hadoop.util.StringUtils.stringifyException(t),
-          KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES)
-        SparkSubmitUtils.
-          getSparkDiagnosticsSetters(args.master, sparkConf)
-          .map(_.setDiagnostics(diagnostics, sparkConf))
+      if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass)
+        && !isThriftServer(args.mainClass)) {
+        SparkSubmitUtils.getSparkDiagnosticsSetters(args.master, sparkConf)
+          .foreach(_.setDiagnostics(throwable, sparkConf))
       }
     } catch {
       case e: Throwable => logWarning(s"Failed to set diagnostics: $e")
@@ -1259,7 +1255,8 @@ private[spark] object SparkSubmitUtils {
   }
 
   private[deploy] def getSparkDiagnosticsSetters(
-    master: String, sparkConf: SparkConf): Option[SparkDiagnosticsSetter] = {
+      master: String,
+      sparkConf: SparkConf): Option[SparkDiagnosticsSetter] = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoaders =
       ServiceLoader.load(classOf[SparkDiagnosticsSetter], loader)
@@ -1298,9 +1295,19 @@ private[spark] trait SparkSubmitOperation {
   def supports(master: String): Boolean
 }
 
+/**
+ * Provides a hook to set the application failure details in some external system.
+ */
 private[spark] trait SparkDiagnosticsSetter {
 
-  def setDiagnostics(diagnostics: String, conf: SparkConf): Unit
+  /**
+   * Set the failure details.
+   */
+  def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit
 
+  /**
+   * Whether this implementation of the SparkDiagnosticsSetter supports setting the stack
+   * trace for this application.
+   */
   def supports(clusterManagerUrl: String, conf: SparkConf): Boolean
 }
