@@ -439,7 +439,8 @@ class SparkSession private(
    * @param args Map of parameter names to expressions
    * @return Map of parameter names to resolved literal expressions
    */
-  private def resolveAndValidateParameters(args: Map[String, Expression]): Map[String, Literal] = {
+  private[sql] def resolveAndValidateParameters(
+      args: Map[String, Expression]): Map[String, Literal] = {
     if (args.isEmpty) {
       return Map.empty
     }

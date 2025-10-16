@@ -333,7 +333,7 @@ class SparkConnectPlanner(
 
   /**
    * Build a ParameterContext from the protobuf SQL message. Returns None if no parameters are
-   * present.
+   * present. Resolves and validates parameter expressions to ensure they are all Literals.
    */
   private def buildParameterContext(sql: proto.SQL): Option[ParameterContext] = {
     val args = sql.getArgsMap
@@ -342,19 +342,24 @@ class SparkConnectPlanner(
     val posArguments = sql.getPosArgumentsList
 
     if (!namedArguments.isEmpty) {
-      // Use named arguments (expressions)
+      // Use named arguments (expressions) - resolve and validate
       val paramMap = namedArguments.asScala.toMap.transform((_, v) => transformExpression(v))
-      Some(NamedParameterContext(paramMap))
+      val resolvedParams = session.resolveAndValidateParameters(paramMap)
+      Some(NamedParameterContext(resolvedParams))
     } else if (!posArguments.isEmpty) {
-      // Use positional arguments (expressions)
+      // Use positional arguments (expressions) - resolve and validate
       val paramList = posArguments.asScala.map(transformExpression).toSeq
-      Some(PositionalParameterContext(paramList))
+      val paramMap = paramList.zipWithIndex.map { case (expr, idx) =>
+        s"_pos_$idx" -> expr
+      }.toMap
+      val resolvedParams = session.resolveAndValidateParameters(paramMap)
+      Some(PositionalParameterContext(resolvedParams.values.toSeq))
     } else if (!args.isEmpty) {
-      // Use named arguments (literals)
+      // Use named arguments (literals) - already resolved
       val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
       Some(NamedParameterContext(paramMap))
     } else if (!posArgs.isEmpty) {
-      // Use positional arguments (literals)
+      // Use positional arguments (literals) - already resolved
       val paramList = posArgs.asScala.map(transformLiteral).toSeq
       Some(PositionalParameterContext(paramList))
     } else {
