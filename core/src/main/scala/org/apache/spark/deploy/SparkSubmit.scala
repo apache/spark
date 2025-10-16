@@ -78,6 +78,8 @@ private[spark] class SparkSubmit extends Logging {
   import DependencyUtils._
   import SparkSubmit._
 
+  private val KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES = 64 * 1024 // 64 KiB
+
   def doSubmit(args: Array[String]): Unit = {
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.
@@ -1029,7 +1031,10 @@ private[spark] class SparkSubmit extends Logging {
       app.start(childArgs.toArray, sparkConf)
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        val cause = findCause(t)
+        // Store the diagnostics externally if enabled, but still throw to complete the application.
+        storeDiagnostics(args, sparkConf, cause)
+        throw cause
     } finally {
       if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
@@ -1046,6 +1051,26 @@ private[spark] class SparkSubmit extends Logging {
   /** Throw a SparkException with the given error message. */
   private def error(msg: String): Unit = throw new SparkException(msg)
 
+  /**
+   * Store the diagnostics using the SparkDiagnosticsSetter.
+   */
+  private def storeDiagnostics(args: SparkSubmitArguments, sparkConf: SparkConf,
+      t: Throwable): Unit = {
+    // Swallow exceptions when storing diagnostics, this shouldn't fail the application.
+    try {
+      if (args.master.startsWith("k8s") && !isShell(args.primaryResource)
+        && !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass)) {
+        val diagnostics = StringUtils.abbreviate(
+          org.apache.hadoop.util.StringUtils.stringifyException(t),
+          KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES)
+        SparkSubmitUtils.
+          getSparkDiagnosticsSetters(args.master, sparkConf)
+          .map(_.setDiagnostics(diagnostics, sparkConf))
+      }
+    } catch {
+      case e: Throwable => logWarning(s"Failed to set diagnostics: $e")
+    }
+  }
 }
 
 
@@ -1656,6 +1681,24 @@ private[spark] object SparkSubmitUtils extends Logging {
           s"clients found for master url: '$master'")
     }
   }
+
+  private[deploy] def getSparkDiagnosticsSetters(
+    master: String, sparkConf: SparkConf): Option[SparkDiagnosticsSetter] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoaders =
+      ServiceLoader.load(classOf[SparkDiagnosticsSetter], loader)
+        .asScala
+        .filter(_.supports(master, sparkConf))
+
+    serviceLoaders.size match {
+      case x if x > 1 =>
+        throw new SparkException(s"Multiple($x) external SparkDiagnosticsSetter" +
+          s"registered for master url $master.")
+      case 1 =>
+        Some(serviceLoaders.headOption.get)
+      case _ => None
+    }
+  }
 }
 
 /**
@@ -1677,4 +1720,11 @@ private[spark] trait SparkSubmitOperation {
   def printSubmissionStatus(submissionId: String, conf: SparkConf): Unit
 
   def supports(master: String): Boolean
+}
+
+private[spark] trait SparkDiagnosticsSetter {
+
+  def setDiagnostics(diagnostics: String, conf: SparkConf): Unit
+
+  def supports(clusterManagerUrl: String, conf: SparkConf): Boolean
 }
