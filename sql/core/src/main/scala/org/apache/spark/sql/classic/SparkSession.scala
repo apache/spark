@@ -42,10 +42,9 @@ import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateArray, CreateMap, CreateNamedStruct, EmptyRow, Expression, Literal, MapFromArrays, MapFromEntries, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, MapFromArrays, MapFromEntries, VariableReference}
 import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, OneRowRelation, Project, Range}
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.SparkSession.applyAndLoadExtensions
@@ -584,12 +583,6 @@ class SparkSession private(
 
         Dataset.ofRows(self, plan, tracker)
       } else {
-        // Reset position mapper to prevent contamination from previous parameterized sql() calls
-        val currentOrigin = CurrentOrigin.get
-        if (currentOrigin.positionMapper.isDefined) {
-          CurrentOrigin.set(currentOrigin.copy(positionMapper = None))
-        }
-
         // No parameters - parse normally without parameter context
         val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
           sessionState.sqlParser.parsePlan(sqlText)
