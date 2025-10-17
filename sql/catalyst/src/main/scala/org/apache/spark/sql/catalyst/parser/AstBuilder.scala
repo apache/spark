@@ -4222,9 +4222,23 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitPropertyList(
       ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.property.asScala.map { property =>
-      val key = visitPropertyKey(property.key)
-      val value = visitPropertyValue(property.value)
-      key -> value
+      property match {
+        case p: PropertyWithIdentifierKeyContext =>
+          val key = visitPropertyKey(p.key)
+          val value = visitPropertyValue(p.value)
+          key -> value
+        case p: PropertyWithStringKeyAndEqualsContext =>
+          // Key uses stringLit (allows coalescing and parameter markers)
+          val key = string(visitStringLit(p.key))
+          val value = visitPropertyValue(p.value)
+          key -> value
+        case p: PropertyWithStringKeyNoEqualsContext =>
+          // Key uses propertyKeyNoCoalesce (single token to prevent coalescing with value)
+          val key = visitPropertyKeyNoCoalesce(p.key)
+          // Value uses propertyValue (supports stringLit with coalescing, etc)
+          val value = visitPropertyValue(p.value)
+          key -> value
+      }
     }
     // Check for duplicate property names.
     checkDuplicateKeys(properties.toSeq, ctx)
@@ -4258,15 +4272,25 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * A property key can either be String or a collection of dot separated elements. This
-   * function extracts the property key based on whether its a string literal or a property
-   * identifier.
+   * A property key is a collection of dot separated identifiers.
+   * String literal keys are handled separately in the property rule alternatives.
    */
   override def visitPropertyKey(key: PropertyKeyContext): String = {
-    if (key.stringLit() != null) {
-      string(visitStringLit(key.stringLit()))
+    key.getText
+  }
+
+  /**
+   * A property key that doesn't support coalescing (used when no = sign is present).
+   * Can be a stringLitWithoutMarker or a parameterMarker.
+   */
+  override def visitPropertyKeyNoCoalesce(key: PropertyKeyNoCoalesceContext): String = {
+    if (key.STRING_LITERAL() != null) {
+      string(key.STRING_LITERAL().getSymbol)
+    } else if (key.DOUBLEQUOTED_STRING() != null) {
+      string(key.DOUBLEQUOTED_STRING().getSymbol)
     } else {
-      key.getText
+      // parameterMarker - will be substituted before this code runs
+      string(visit(key.parameterMarker()).asInstanceOf[Token])
     }
   }
 
@@ -4293,9 +4317,25 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitExpressionPropertyList(
       ctx: ExpressionPropertyListContext): OptionList = {
     val options = ctx.expressionProperty.asScala.map { property =>
-      val key: String = visitPropertyKey(property.key)
-      val value: Expression = Option(property.value).map(expression).getOrElse {
-        operationNotAllowed(s"A value must be specified for the key: $key.", ctx)
+      val (key, value) = property match {
+        case p: ExpressionPropertyWithIdentifierKeyContext =>
+          val k = visitPropertyKey(p.key)
+          val v = Option(p.value).map(expression).getOrElse {
+            operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
+          }
+          (k, v)
+        case p: ExpressionPropertyWithStringKeyAndEqualsContext =>
+          val k = string(visitStringLit(p.key))
+          val v = Option(p.value).map(expression).getOrElse {
+            operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
+          }
+          (k, v)
+        case p: ExpressionPropertyWithStringKeyNoEqualsContext =>
+          val k = visitPropertyKeyNoCoalesce(p.key)
+          val v = Option(p.value).map(expression).getOrElse {
+            operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
+          }
+          (k, v)
       }
       key -> value
     }.toSeq

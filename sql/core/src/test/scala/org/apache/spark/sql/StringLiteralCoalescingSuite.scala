@@ -276,6 +276,197 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("property string coalescing - identifier keys") {
+    withTable("t") {
+      // Identifier key with value coalescing works with CREATE TABLE OPTIONS
+      sql("""CREATE TABLE t (id INT) USING parquet
+             OPTIONS(compression 'gzi' 'p')""")
+
+      // Check that the option was set (look in catalog metadata)
+      val props = spark.table("t").schema.json
+      // The table was created successfully with coalesced value
+      assert(sql("SHOW CREATE TABLE t").collect().head.getString(0).contains("gzip"))
+    }
+  }
+
+  test("property string coalescing - string keys with equals") {
+    withTable("t") {
+      // String key with = and key coalescing
+      sql("""CREATE TABLE t (id INT) USING parquet
+             OPTIONS('my' '.' 'key' = 'value')""")
+
+      val createStmt = sql("SHOW CREATE TABLE t").collect().head.getString(0)
+      assert(createStmt.contains("my.key"))
+
+      // String key with = and value coalescing
+      withTable("t2") {
+        sql("""CREATE TABLE t2 (id INT) USING parquet
+               OPTIONS('compression' = 'sn' 'appy')""")
+
+        val createStmt2 = sql("SHOW CREATE TABLE t2").collect().head.getString(0)
+        assert(createStmt2.contains("snappy"))
+      }
+    }
+  }
+
+  test("property string coalescing - string keys without equals") {
+    withTable("t") {
+      // String key without = (key must be single token, value can coalesce)
+      sql("""CREATE TABLE t (id INT) USING parquet
+             OPTIONS('compression' 'snappy')""")
+
+      val createStmt = sql("SHOW CREATE TABLE t").collect().head.getString(0)
+      assert(createStmt.contains("compression"))
+      assert(createStmt.contains("snappy"))
+
+      // String key without = - multiple value tokens (should coalesce values)
+      withTable("t2") {
+        sql("""CREATE TABLE t2 (id INT) USING parquet
+               OPTIONS('compression' 'sn' 'app' 'y')""")
+
+        val createStmt2 = sql("SHOW CREATE TABLE t2").collect().head.getString(0)
+        assert(createStmt2.contains("snappy"))
+      }
+    }
+  }
+
+  test("property string coalescing - CACHE TABLE") {
+    // This was the original failing test case
+    sql("CACHE LAZY TABLE cache_test AS SELECT 1 AS id")
+
+    try {
+      // String key without = should work (not coalesce key with value)
+      sql("CACHE LAZY TABLE a OPTIONS('storageLevel' 'DISK_ONLY') AS SELECT 1")
+
+      // Verify it's cached
+      assert(spark.catalog.isCached("a"))
+
+      // String key with = and value coalescing should also work
+      sql("CACHE LAZY TABLE b OPTIONS('storageLevel' = 'MEMORY' '_ONLY') AS SELECT 1")
+      assert(spark.catalog.isCached("b"))
+    } finally {
+      sql("UNCACHE TABLE IF EXISTS a")
+      sql("UNCACHE TABLE IF EXISTS b")
+      sql("UNCACHE TABLE IF EXISTS cache_test")
+    }
+  }
+
+  test("property string coalescing - mixed property types") {
+    withTable("t") {
+      // Mix of different property key types in same OPTIONS clause
+      sql("""CREATE TABLE t (id INT) USING parquet
+             OPTIONS(
+               compression 'snap' 'py',
+               'my.prop' = 'val' 'ue',
+               another_prop 'test' '123',
+               'string.key' 'part1' 'part2'
+             )""")
+
+      val createStmt = sql("SHOW CREATE TABLE t").collect().head.getString(0)
+      assert(createStmt.contains("snappy"))
+      assert(createStmt.contains("value"))
+      assert(createStmt.contains("test123"))
+      assert(createStmt.contains("part1part2"))
+    }
+  }
+
+  test("property string coalescing - R-strings in properties") {
+    withTable("t") {
+      // R-strings should work in property values
+      // Use a valid option key instead of 'path' to avoid URI validation issues
+      sql("""CREATE TABLE t (id INT) USING parquet
+             OPTIONS('myoption' R'C:\Users\' 'data')""")
+
+      val createStmt = sql("SHOW CREATE TABLE t").collect().head.getString(0)
+      assert(createStmt.contains("""C:\Users\data"""))
+    }
+  }
+
+  test("property string coalescing - TBLPROPERTIES") {
+    withTable("t") {
+      // TBLPROPERTIES uses propertyList (not expressionPropertyList)
+      // Test string key with = and value coalescing
+      sql("""CREATE TABLE t (id INT)
+             TBLPROPERTIES('my' '.' 'key' = 'val' 'ue')""")
+
+      val props = sql("SHOW TBLPROPERTIES t").collect()
+      val propMap = props.map(r => r.getString(0) -> r.getString(1)).toMap
+      assert(propMap.get("my.key").contains("value"))
+
+      // Test string key without = (should not coalesce key with value)
+      withTable("t2") {
+        sql("""CREATE TABLE t2 (id INT)
+               TBLPROPERTIES('another' 'test' '123')""")
+
+        val props2 = sql("SHOW TBLPROPERTIES t2").collect()
+        val propMap2 = props2.map(r => r.getString(0) -> r.getString(1)).toMap
+        assert(propMap2.get("another").contains("test123"))
+      }
+    }
+  }
+
+  test("property string coalescing - parameter markers in OPTIONS") {
+    withTable("t") {
+      // Parameter marker as key (without =) - key is single token
+      spark.sql(
+        "CREATE TABLE t (id INT) USING parquet OPTIONS(:key 'value')",
+        Map("key" -> "compression")
+      )
+
+      val createStmt = sql("SHOW CREATE TABLE t").collect().head.getString(0)
+      assert(createStmt.contains("value"))
+
+      // Parameter marker in value (without =)
+      withTable("t2") {
+        spark.sql(
+          "CREATE TABLE t2 (id INT) USING parquet OPTIONS('compression' :value)",
+          Map("value" -> "snappy")
+        )
+
+        val createStmt2 = sql("SHOW CREATE TABLE t2").collect().head.getString(0)
+        assert(createStmt2.contains("snappy"))
+      }
+
+      // Parameter marker mixed with string literals in value (without =)
+      withTable("t3") {
+        spark.sql(
+          "CREATE TABLE t3 (id INT) USING parquet OPTIONS('compression' :part1 'py')",
+          Map("part1" -> "snap")
+        )
+
+        val createStmt3 = sql("SHOW CREATE TABLE t3").collect().head.getString(0)
+        assert(createStmt3.contains("snappy"))
+      }
+    }
+  }
+
+  test("property string coalescing - parameter markers without equals in TBLPROPERTIES") {
+    withTable("t") {
+      // TBLPROPERTIES uses propertyList which supports keys without =
+      // Parameter marker as key (without =)
+      spark.sql(
+        "CREATE TABLE t (id INT) TBLPROPERTIES(:key 'value')",
+        Map("key" -> "my.property")
+      )
+
+      val props = sql("SHOW TBLPROPERTIES t").collect()
+      val propMap = props.map(r => r.getString(0) -> r.getString(1)).toMap
+      assert(propMap.get("my.property").contains("value"))
+
+      // Parameter marker as value (without =)
+      withTable("t2") {
+        spark.sql(
+          "CREATE TABLE t2 (id INT) TBLPROPERTIES('another' :value)",
+          Map("value" -> "test123")
+        )
+
+        val props2 = sql("SHOW TBLPROPERTIES t2").collect()
+        val propMap2 = props2.map(r => r.getString(0) -> r.getString(1)).toMap
+        assert(propMap2.get("another").contains("test123"))
+      }
+    }
+  }
+
   test("string coalescing preserves whitespace within literals") {
     checkAnswer(
       sql("SELECT 'hello  ' '  world'"),

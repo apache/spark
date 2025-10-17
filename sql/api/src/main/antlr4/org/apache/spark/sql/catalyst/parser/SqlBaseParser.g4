@@ -602,12 +602,19 @@ propertyList
     ;
 
 property
-    : key=propertyKey (EQ? value=propertyValue)?
+    : key=propertyKey (EQ? value=propertyValue)?                      #propertyWithIdentifierKey
+    | key=stringLit EQ value=propertyValue                            #propertyWithStringKeyAndEquals
+    | key=propertyKeyNoCoalesce value=propertyValue                   #propertyWithStringKeyNoEquals
     ;
 
 propertyKey
     : errorCapturingIdentifier (DOT errorCapturingIdentifier)*
-    | stringLit
+    ;
+
+propertyKeyNoCoalesce
+    : STRING_LITERAL
+    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
+    | parameterMarker
     ;
 
 propertyValue
@@ -622,7 +629,9 @@ expressionPropertyList
     ;
 
 expressionProperty
-    : key=propertyKey (EQ? value=expression)?
+    : key=propertyKey (EQ? value=expression)?                         #expressionPropertyWithIdentifierKey
+    | key=stringLit EQ value=expression                               #expressionPropertyWithStringKeyAndEquals
+    | key=propertyKeyNoCoalesce value=expression                      #expressionPropertyWithStringKeyNoEquals
     ;
 
 constantList
