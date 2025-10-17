@@ -270,11 +270,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.sql(sqlScriptText, args).asInstanceOf[CompoundBody]
       },
-      condition = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "_16"),
-      context = ExpectedContext(
-        fragment = "?",
-        start = 16,
-        stop = 16))
+      condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+      parameters = Map())
   }
 }
