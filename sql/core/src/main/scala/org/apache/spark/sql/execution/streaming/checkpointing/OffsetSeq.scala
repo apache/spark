@@ -22,6 +22,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, DEFAULT_VALUE, NEW_VALUE, OLD_VALUE, TIP}
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
@@ -85,6 +86,11 @@ object OffsetSeq {
  * @param batchTimestampMs: The current batch processing timestamp.
  * Time unit: milliseconds
  * @param conf: Additional conf_s to be persisted across batches, e.g. number of shuffle partitions.
+ * CAVEAT: This does not apply the logic we handle in [[OffsetSeqMetadata]] object, e.g.
+ * deducing the default value of SQL config if the entry does not exist in the offset log,
+ * resolving the re-bind of config key (the config key in offset log is not same with the
+ * actual key in session), etc. If you need to get the value with applying the logic, use
+ * [[OffsetSeqMetadata.readValue()]].
  */
 case class OffsetSeqMetadata(
     batchWatermarkMs: Long = 0,
@@ -101,12 +107,34 @@ object OffsetSeqMetadata extends Logging {
    * log in the checkpoint position.
    */
   private val relevantSQLConfs = Seq(
-    SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
+    STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION,
     STREAMING_JOIN_STATE_FORMAT_VERSION, STATE_STORE_COMPRESSION_CODEC,
     STATE_STORE_ROCKSDB_FORMAT_VERSION, STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION,
     PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN, STREAMING_STATE_STORE_ENCODING_FORMAT
   )
+
+  /**
+   * This is an extension of `relevantSQLConfs`. The characteristic is the same, but we persist the
+   * value of config A as config B in offset log. This exists for compatibility purpose e.g. if
+   * user upgrades Spark and runs a streaming query, but has to downgrade due to some issues.
+   *
+   * A config should be only bound to either `relevantSQLConfs` or `rebindSQLConfs` (key or value).
+   */
+  private val rebindSQLConfsSessionToOffsetLog: Map[ConfigEntry[_], ConfigEntry[_]] = {
+    Map(
+      // TODO: The proper way to handle this is to make the number of partitions in the state
+      //  metadata as the source of truth, but it requires major changes if we want to take care
+      //  of compatibility.
+      STATEFUL_SHUFFLE_PARTITIONS_INTERNAL -> SHUFFLE_PARTITIONS
+    )
+  }
+
+  /**
+   * Reversed index of `rebindSQLConfsSessionToOffsetLog`.
+   */
+  private val rebindSQLConfsOffsetLogToSession: Map[ConfigEntry[_], ConfigEntry[_]] =
+    rebindSQLConfsSessionToOffsetLog.map { case (k, v) => (v, k) }.toMap
 
   /**
    * Default values of relevant configurations that are used for backward compatibility.
@@ -132,6 +160,20 @@ object OffsetSeqMetadata extends Logging {
     STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "unsaferow"
   )
 
+  def readValue[T](metadataLog: OffsetSeqMetadata, confKey: ConfigEntry[T]): String = {
+    readValueOpt(metadataLog, confKey).getOrElse(confKey.defaultValueString)
+  }
+
+  def readValueOpt[T](
+      metadataLog: OffsetSeqMetadata,
+      confKey: ConfigEntry[T]): Option[String] = {
+    val actualKey = if (rebindSQLConfsSessionToOffsetLog.contains(confKey)) {
+      rebindSQLConfsSessionToOffsetLog(confKey)
+    } else confKey
+
+    metadataLog.conf.get(actualKey.key).orElse(relevantSQLConfDefaultValues.get(actualKey.key))
+  }
+
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
 
   def apply(
@@ -139,49 +181,59 @@ object OffsetSeqMetadata extends Logging {
       batchTimestampMs: Long,
       sessionConf: RuntimeConfig): OffsetSeqMetadata = {
     val confs = relevantSQLConfs.map { conf => conf.key -> sessionConf.get(conf.key) }.toMap
-    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs)
+    val confsFromRebind = rebindSQLConfsSessionToOffsetLog.map {
+      case (confInSession, confInOffsetLog) =>
+        confInOffsetLog.key -> sessionConf.get(confInSession.key)
+    }.toMap
+    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs++ confsFromRebind)
   }
 
   /** Set the SparkSession configuration with the values in the metadata */
   def setSessionConf(metadata: OffsetSeqMetadata, sessionConf: SQLConf): Unit = {
-    val configs = sessionConf.getAllConfs
-    OffsetSeqMetadata.relevantSQLConfs.map(_.key).foreach { confKey =>
-
-      metadata.conf.get(confKey) match {
+    def setOneSessionConf(confKeyInOffsetLog: String, confKeyInSession: String): Unit = {
+      metadata.conf.get(confKeyInOffsetLog) match {
 
         case Some(valueInMetadata) =>
           // Config value exists in the metadata, update the session config with this value
-          val optionalValueInSession = sessionConf.getConfString(confKey, null)
+          val optionalValueInSession = sessionConf.getConfString(confKeyInSession, null)
           if (optionalValueInSession != null && optionalValueInSession != valueInMetadata) {
-            logWarning(log"Updating the value of conf '${MDC(CONFIG, confKey)}' in current " +
-              log"session from '${MDC(OLD_VALUE, optionalValueInSession)}' " +
+            logWarning(log"Updating the value of conf '${MDC(CONFIG, confKeyInSession)}' in " +
+              log"current session from '${MDC(OLD_VALUE, optionalValueInSession)}' " +
               log"to '${MDC(NEW_VALUE, valueInMetadata)}'.")
           }
-          sessionConf.setConfString(confKey, valueInMetadata)
+          sessionConf.setConfString(confKeyInSession, valueInMetadata)
 
         case None =>
           // For backward compatibility, if a config was not recorded in the offset log,
           // then either inject a default value (if specified in `relevantSQLConfDefaultValues`) or
           // let the existing conf value in SparkSession prevail.
-          relevantSQLConfDefaultValues.get(confKey) match {
+          relevantSQLConfDefaultValues.get(confKeyInOffsetLog) match {
 
             case Some(defaultValue) =>
-              sessionConf.setConfString(confKey, defaultValue)
-              logWarning(log"Conf '${MDC(CONFIG, confKey)}' was not found in the offset log, " +
-                log"using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
+              sessionConf.setConfString(confKeyInSession, defaultValue)
+              logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the offset " +
+                log"log, using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
 
             case None =>
-              val value = sessionConf.getConfString(confKey, null)
+              val value = sessionConf.getConfString(confKeyInSession, null)
               val valueStr = if (value != null) {
                 s" Using existing session conf value '$value'."
               } else {
                 " No value set in session conf."
               }
-              logWarning(log"Conf '${MDC(CONFIG, confKey)}' was not found in the offset log. " +
-                log"${MDC(TIP, valueStr)}")
-
+              logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the " +
+                log"offset log. ${MDC(TIP, valueStr)}")
           }
       }
+    }
+
+    OffsetSeqMetadata.relevantSQLConfs.map(_.key).foreach { confKey =>
+      setOneSessionConf(confKey, confKey)
+    }
+
+    rebindSQLConfsOffsetLogToSession.foreach {
+      case (confInOffsetLog, confInSession) =>
+        setOneSessionConf(confInOffsetLog.key, confInSession.key)
     }
   }
 }
