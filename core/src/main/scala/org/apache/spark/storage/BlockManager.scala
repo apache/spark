@@ -2028,9 +2028,8 @@ private[spark] class BlockManager(
    * @return The number of blocks removed.
    */
   def removeRdd(rddId: Int): Int = {
-    // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
     logInfo(log"Removing RDD ${MDC(RDD_ID, rddId)}")
-    val blocksToRemove = blockInfoManager.entries.flatMap(_._1.asRDDId).filter(_.rddId == rddId)
+    val blocksToRemove = blockInfoManager.rddBlockIds(rddId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
   }
@@ -2064,9 +2063,7 @@ private[spark] class BlockManager(
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
     logDebug(s"Removing broadcast $broadcastId")
-    val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
-      case bid @ BroadcastBlockId(`broadcastId`, _) => bid
-    }
+    val blocksToRemove = blockInfoManager.broadcastBlockIds(broadcastId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster) }
     blocksToRemove.size
   }
@@ -2078,9 +2075,7 @@ private[spark] class BlockManager(
    */
   def removeCache(sessionUUID: String): Int = {
     logDebug(s"Removing cache of spark session with UUID: $sessionUUID")
-    val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
-      case cid: CacheId if cid.sessionUUID == sessionUUID => cid
-    }
+    val blocksToRemove = blockInfoManager.sessionBlockIds(sessionUUID)
     blocksToRemove.foreach { blockId => removeBlock(blockId) }
     blocksToRemove.size
   }
