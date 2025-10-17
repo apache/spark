@@ -87,7 +87,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("ordered distribution and sort with same exprs: micro-batch append") {
-    // SPARK-XXXXX: Once AQE is enabled, the optimization kicks in and the write distribution
+    // SPARK-53941: Once AQE is enabled, the optimization kicks in and the write distribution
     // can be adjusted by AQE. There is a logic for batch query to consider the AQE optimization
     // while verifying the write distribution, but that seems to be quite complicated and we
     // should not block the code change by updating the tests to deal with AQE optimization.
@@ -98,7 +98,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("ordered distribution and sort with same exprs: micro-batch update") {
-    // SPARK-XXXXX: Once AQE is enabled, the optimization kicks in and the write distribution
+    // SPARK-53941: Once AQE is enabled, the optimization kicks in and the write distribution
     // can be adjusted by AQE. There is a logic for batch query to consider the AQE optimization
     // while verifying the write distribution, but that seems to be quite complicated and we
     // should not block the code change by updating the tests to deal with AQE optimization.
@@ -201,7 +201,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and sort with same exprs: micro-batch append") {
-    // SPARK-XXXXX: Once AQE is enabled, the optimization kicks in and the write distribution
+    // SPARK-53941: Once AQE is enabled, the optimization kicks in and the write distribution
     // can be adjusted by AQE. There is a logic for batch query to consider the AQE optimization
     // while verifying the write distribution, but that seems to be quite complicated and we
     // should not block the code change by updating the tests to deal with AQE optimization.
@@ -212,7 +212,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and sort with same exprs: micro-batch update") {
-    // SPARK-XXXXX: Once AQE is enabled, the optimization kicks in and the write distribution
+    // SPARK-53941: Once AQE is enabled, the optimization kicks in and the write distribution
     // can be adjusted by AQE. There is a logic for batch query to consider the AQE optimization
     // while verifying the write distribution, but that seems to be quite complicated and we
     // should not block the code change by updating the tests to deal with AQE optimization.
@@ -321,7 +321,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and sort with extended exprs: micro-batch append") {
-    // SPARK-XXXXX: Once AQE is enabled, the optimization kicks in and the write distribution
+    // SPARK-53941: Once AQE is enabled, the optimization kicks in and the write distribution
     // can be adjusted by AQE. There is a logic for batch query to consider the AQE optimization
     // while verifying the write distribution, but that seems to be quite complicated and we
     // should not block the code change by updating the tests to deal with AQE optimization.
@@ -332,7 +332,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   }
 
   test("clustered distribution and sort with extended exprs: micro-batch update") {
-    // SPARK-XXXXX: Once AQE is enabled, the optimization kicks in and the write distribution
+    // SPARK-53941: Once AQE is enabled, the optimization kicks in and the write distribution
     // can be adjusted by AQE. There is a logic for batch query to consider the AQE optimization
     // while verifying the write distribution, but that seems to be quite complicated and we
     // should not block the code change by updating the tests to deal with AQE optimization.

@@ -56,7 +56,7 @@ case class InsertAdaptiveSparkPlan(
     case c: DataWritingCommandExec
         if !c.cmd.isInstanceOf[V1WriteCommand] || !conf.plannedWriteEnabled =>
       c.copy(child = apply(c.child))
-    // SPARK-XXXXX: Do not apply AQE for stateful streaming workloads. From recent change of shuffle
+    // SPARK-53941: Do not apply AQE for stateful streaming workloads. From recent change of shuffle
     // origin for shuffle being added from stateful operator, we anticipate stateful operator to
     // work with AQE. But we want to make the adoption of AQE be gradual, to have a risk under
     // control. Note that we will disable the value of AQE config explicitly in streaming engine,
