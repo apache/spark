@@ -73,7 +73,7 @@ class JSONFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
-            "context": record.__dict__.get("kwargs", {}),
+            "context": record.__dict__.get("context", {}),
         }
         if record.exc_info:
             exc_type, exc_value, exc_tb = record.exc_info
@@ -295,7 +295,7 @@ class PySparkLogger(logging.Logger):
             msg=msg,
             args=args,
             exc_info=exc_info,
-            extra={"kwargs": kwargs},
+            extra={"context": kwargs},
             stack_info=stack_info,
             stacklevel=stacklevel,
         )

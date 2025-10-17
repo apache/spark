@@ -16,13 +16,14 @@
 #
 
 from contextlib import contextmanager
+import inspect
 import io
 import logging
 import os
 import sys
 import time
-from typing import BinaryIO, Generator, Iterable, Iterator, Optional, TextIO, Union
-from types import TracebackType
+from typing import BinaryIO, Callable, Generator, Iterable, Iterator, Optional, TextIO, Union
+from types import FrameType, TracebackType
 
 from pyspark.logger.logger import JSONFormatter
 
@@ -137,11 +138,16 @@ class DelegatingTextIOWrapper(TextIO):
 class JSONFormatterWithMarker(JSONFormatter):
     default_microsec_format = "%s.%06d"
 
-    def __init__(self, marker: str):
+    def __init__(self, marker: str, context_provider: Callable[[], dict[str, str]]):
         super().__init__(ensure_ascii=True)
         self._marker = marker
+        self._context_provider = context_provider
 
     def format(self, record: logging.LogRecord) -> str:
+        context = self._context_provider()
+        if context:
+            context.update(record.__dict__.get("context", {}))
+            record.__dict__["context"] = context
         return f"{self._marker}:{os.getpid()}:{super().format(record)}"
 
     def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
@@ -168,12 +174,13 @@ class JsonOutput(DelegatingTextIOWrapper):
         logger_name: str,
         log_level: int,
         marker: str,
+        context_provider: Callable[[], dict[str, str]],
     ):
         super().__init__(delegate)
         self._json_out = json_out
         self._logger_name = logger_name
         self._log_level = log_level
-        self._formatter = JSONFormatterWithMarker(marker)
+        self._formatter = JSONFormatterWithMarker(marker, context_provider)
 
     def write(self, s: str) -> int:
         if s.strip():
@@ -201,19 +208,75 @@ class JsonOutput(DelegatingTextIOWrapper):
         pass
 
 
+def context_provider() -> dict[str, str]:
+    """
+    Provides context information for logging, including caller function name.
+    Finds the function name from the bottom of the stack, ignoring Python builtin
+    libraries and PySpark modules. Test packages are included.
+
+    Returns:
+        dict[str, str]: A dictionary containing context information including:
+            - func_name: Name of the function that initiated the logging
+            - class_name: Name of the class that initiated the logging if available
+    """
+
+    def is_pyspark_module(module_name: str) -> bool:
+        return module_name.startswith("pyspark.") and ".tests." not in module_name
+
+    bottom: Optional[FrameType] = None
+
+    # Get caller function information using inspect
+    try:
+        frame = inspect.currentframe()
+        is_in_pyspark_module = False
+
+        if frame:
+            while frame.f_back:
+                f_back = frame.f_back
+                module_name = f_back.f_globals.get("__name__", "")
+
+                if is_pyspark_module(module_name):
+                    if not is_in_pyspark_module:
+                        bottom = frame
+                        is_in_pyspark_module = True
+                else:
+                    is_in_pyspark_module = False
+
+                frame = f_back
+    except Exception:
+        # If anything goes wrong with introspection, don't fail the logging
+        # Just continue without caller information
+        pass
+
+    context = {}
+    if bottom:
+        context["func_name"] = bottom.f_code.co_name
+        if "self" in bottom.f_locals:
+            context["class_name"] = bottom.f_locals["self"].__class__.__name__
+        elif "cls" in bottom.f_locals:
+            context["class_name"] = bottom.f_locals["cls"].__name__
+    return context
+
+
 @contextmanager
-def capture_outputs() -> Generator[None, None, None]:
+def capture_outputs(
+    context_provider: Callable[[], dict[str, str]] = context_provider
+) -> Generator[None, None, None]:
     if "SPARK_SESSION_UUID" in os.environ:
         marker: str = "PYTHON_WORKER_LOGGING"
         json_out = original_stdout = sys.stdout
         delegate = original_stderr = sys.stderr
 
         handler = logging.StreamHandler(json_out)
-        handler.setFormatter(JSONFormatterWithMarker(marker))
+        handler.setFormatter(JSONFormatterWithMarker(marker, context_provider))
         logger = logging.getLogger()
         try:
-            sys.stdout = JsonOutput(delegate, json_out, "stdout", logging.INFO, marker)
-            sys.stderr = JsonOutput(delegate, json_out, "stderr", logging.ERROR, marker)
+            sys.stdout = JsonOutput(
+                delegate, json_out, "stdout", logging.INFO, marker, context_provider
+            )
+            sys.stderr = JsonOutput(
+                delegate, json_out, "stderr", logging.ERROR, marker, context_provider
+            )
             logger.addHandler(handler)
             try:
                 yield

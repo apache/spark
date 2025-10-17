@@ -1581,11 +1581,26 @@ class BaseUDFTestsMixin(object):
         logs = self.spark.table("system.session.python_worker_logs")
 
         assertDataFrameEqual(
-            logs.select("level", "msg", "logger"),
+            logs.select("level", "msg", "context", "logger"),
             [
-                Row(level="INFO", msg="print to stdout ❤", logger="stdout"),
-                Row(level="ERROR", msg="print to stderr 😀", logger="stderr"),
-                Row(level="ERROR", msg="exception", logger="test"),
+                Row(
+                    level="INFO",
+                    msg="print to stdout ❤",
+                    context={"func_name": my_udf.__name__},
+                    logger="stdout",
+                ),
+                Row(
+                    level="ERROR",
+                    msg="print to stderr 😀",
+                    context={"func_name": my_udf.__name__},
+                    logger="stderr",
+                ),
+                Row(
+                    level="ERROR",
+                    msg="exception",
+                    context={"func_name": my_udf.__name__},
+                    logger="test",
+                ),
             ],
         )
 
@@ -1614,10 +1629,20 @@ class BaseUDFTestsMixin(object):
         logs = self.spark.table("system.session.python_worker_logs")
 
         assertDataFrameEqual(
-            logs.select("level", "msg", "logger"),
+            logs.select("level", "msg", "context", "logger"),
             [
-                Row(level="WARNING", msg="test1", logger="test1"),
-                Row(level="WARNING", msg="test2", logger="test2"),
+                Row(
+                    level="WARNING",
+                    msg="test1",
+                    context={"func_name": my_udf1.__name__},
+                    logger="test1",
+                ),
+                Row(
+                    level="WARNING",
+                    msg="test2",
+                    context={"func_name": my_udf2.__name__},
+                    logger="test2",
+                ),
             ],
         )
 

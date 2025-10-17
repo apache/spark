@@ -2117,7 +2117,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 if len(args) == 0:
                     for _ in range(num_rows):
                         yield (
-                            verify_result(pd.DataFrame(check_return_value(func()))),
+                            verify_result(pd.DataFrame(list(check_return_value(func())))),
                             arrow_return_type,
                             return_type,
                         )
@@ -2127,7 +2127,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     row_tuples = zip(*args)
                     for row in row_tuples:
                         yield (
-                            verify_result(pd.DataFrame(check_return_value(func(*row)))),
+                            verify_result(pd.DataFrame(list(check_return_value(func(*row))))),
                             arrow_return_type,
                             return_type,
                         )
