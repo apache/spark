@@ -558,7 +558,8 @@ class CombineInternal[T](
       ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]])
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(itemDataType)
     val ddlBytes: Array[Byte] = itemDataTypeDDL.getBytes(StandardCharsets.UTF_8)
-    val byteArray = new Array[Byte](sketchBytes.length + 4 + 4 + ddlBytes.length)
+    val byteArray = new Array[Byte](
+      sketchBytes.length + Integer.BYTES + Integer.BYTES + ddlBytes.length)
 
     val byteBuffer = ByteBuffer.wrap(byteArray)
     byteBuffer.putInt(maxItemsTracked)
@@ -589,7 +590,7 @@ object CombineInternal {
     val itemDataTypeDDL = new String(ddlBytes, StandardCharsets.UTF_8)
     val itemDataType = ApproxTopK.DDLToDataType(itemDataTypeDDL)
     // read sketchBytes
-    val sketchBytes = new Array[Byte](buffer.length - 4 - 4 - ddlLength)
+    val sketchBytes = new Array[Byte](buffer.length - Integer.BYTES - Integer.BYTES - ddlLength)
     byteBuffer.get(sketchBytes)
     val sketch = ItemsSketch.getInstance(
       Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
@@ -724,8 +725,9 @@ case class ApproxTopKCombine(
     buffer
   }
 
-  override def merge(buffer: CombineInternal[Any], input: CombineInternal[Any])
-  : CombineInternal[Any] = {
+  override def merge(
+      buffer: CombineInternal[Any],
+      input: CombineInternal[Any]): CombineInternal[Any] = {
     // update maxItemsTracked (throw error if not match)
     buffer.updateMaxItemsTracked(combineSizeSpecified, input.getMaxItemsTracked)
     // update itemDataType (throw error if not match)
