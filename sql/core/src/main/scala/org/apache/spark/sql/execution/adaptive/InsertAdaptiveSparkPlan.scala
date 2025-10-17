@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
-
 import org.apache.spark.internal.LogKeys.{CONFIG, SUB_QUERY}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ListQuery, SubqueryExpression}
@@ -32,6 +31,7 @@ import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedC
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperator
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -55,6 +55,15 @@ case class InsertAdaptiveSparkPlan(
     case c: DataWritingCommandExec
         if !c.cmd.isInstanceOf[V1WriteCommand] || !conf.plannedWriteEnabled =>
       c.copy(child = apply(c.child))
+    // SPARK-XXXXX: Do not apply AQE for stateful streaming workloads. From recent change of shuffle
+    // origin for shuffle being added from stateful operator, we anticipate stateful operator to
+    // work with AQE. But we want to make the adoption of AQE be gradual, to have a risk under
+    // control. Note that we will disable the value of AQE config explicitly in streaming engine,
+    // but also introduce this pattern here for defensive programming.
+    case _ if plan.exists {
+      case _: StatefulOperator => true
+      case _ => false
+    } => plan
     case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {
         try {

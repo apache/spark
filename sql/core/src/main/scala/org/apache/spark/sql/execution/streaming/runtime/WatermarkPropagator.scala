@@ -18,12 +18,12 @@
 package org.apache.spark.sql.execution.streaming.runtime
 
 import java.{util => jutil}
-
 import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -173,11 +173,21 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
   private def getInputWatermarks(
       node: SparkPlan,
       nodeToOutputWatermark: mutable.Map[Int, Option[Long]]): Seq[Long] = {
+    def watermarkForChild(child: SparkPlan): Option[Long] = {
+      child match {
+        case s: InMemoryTableScanExec => watermarkForChild(s.relation.cachedPlan)
+        case a: AdaptiveSparkPlanExec => watermarkForChild(a.executedPlan)
+        case e: QueryStageExec => watermarkForChild(e.plan)
+        case _ =>
+          nodeToOutputWatermark.getOrElse(child.id, {
+            throw new IllegalStateException(
+              s"watermark for the node ${child.id} should be registered")
+          })
+      }
+    }
+
     node.children.flatMap { child =>
-      nodeToOutputWatermark.getOrElse(child.id, {
-        throw new IllegalStateException(
-          s"watermark for the node ${child.id} should be registered")
-      })
+      watermarkForChild(child)
       // Since we use flatMap here, this will exclude children from watermark calculation
       // which don't have watermark information.
     }
@@ -187,51 +197,57 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
     val nodeToOutputWatermark = mutable.HashMap[Int, Option[Long]]()
     val nextStatefulOperatorToWatermark = mutable.HashMap[Long, Option[Long]]()
 
-    // This calculation relies on post-order traversal of the query plan.
-    plan.transformUp {
-      case node: EventTimeWatermarkExec =>
-        val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
-        if (inputWatermarks.nonEmpty) {
-          throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_3076",
-            messageParameters = Map("config" -> SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key))
-        }
+    def traverseAndSimulate(p: SparkPlan): Unit = {
+      p.foreachUp {
+        case s: InMemoryTableScanExec => traverseAndSimulate(s.relation.cachedPlan)
+        case a: AdaptiveSparkPlanExec => traverseAndSimulate(a.executedPlan)
+        case e: QueryStageExec => traverseAndSimulate(e.plan)
+        case node: EventTimeWatermarkExec =>
+          val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
+          if (inputWatermarks.nonEmpty) {
+            throw new AnalysisException(
+              errorClass = "_LEGACY_ERROR_TEMP_3076",
+              messageParameters = Map("config" -> SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key))
+          }
 
-        nodeToOutputWatermark.put(node.id, Some(originWatermark))
-        node
+          nodeToOutputWatermark.put(node.id, Some(originWatermark))
+          node
 
-      case node: StateStoreWriter =>
-        val stOpId = node.stateInfo.get.operatorId
+        case node: StateStoreWriter =>
+          val stOpId = node.stateInfo.get.operatorId
 
-        val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
+          val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
 
-        val finalInputWatermarkMs = if (inputWatermarks.nonEmpty) {
-          Some(inputWatermarks.min)
-        } else {
-          // We can't throw exception here, as we allow stateful operator to process without
-          // watermark. E.g. streaming aggregation with update/complete mode.
-          None
-        }
+          val finalInputWatermarkMs = if (inputWatermarks.nonEmpty) {
+            Some(inputWatermarks.min)
+          } else {
+            // We can't throw exception here, as we allow stateful operator to process without
+            // watermark. E.g. streaming aggregation with update/complete mode.
+            None
+          }
 
-        val outputWatermarkMs = finalInputWatermarkMs.flatMap { wm =>
-          node.produceOutputWatermark(wm)
-        }
-        nodeToOutputWatermark.put(node.id, outputWatermarkMs)
-        nextStatefulOperatorToWatermark.put(stOpId, finalInputWatermarkMs)
-        node
+          val outputWatermarkMs = finalInputWatermarkMs.flatMap { wm =>
+            node.produceOutputWatermark(wm)
+          }
+          nodeToOutputWatermark.put(node.id, outputWatermarkMs)
+          nextStatefulOperatorToWatermark.put(stOpId, finalInputWatermarkMs)
+          node
 
-      case node =>
-        // pass-through, but also consider multiple children like the case of union
-        val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
-        val finalInputWatermarkMs = if (inputWatermarks.nonEmpty) {
-          Some(inputWatermarks.min)
-        } else {
-          None
-        }
+        case node =>
+          // pass-through, but also consider multiple children like the case of union
+          val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
+          val finalInputWatermarkMs = if (inputWatermarks.nonEmpty) {
+            Some(inputWatermarks.min)
+          } else {
+            None
+          }
 
-        nodeToOutputWatermark.put(node.id, finalInputWatermarkMs)
-        node
+          nodeToOutputWatermark.put(node.id, finalInputWatermarkMs)
+          node
+      }
     }
+
+    traverseAndSimulate(plan)
 
     inputWatermarks.put(batchId, nextStatefulOperatorToWatermark.toMap)
     batchIdToWatermark.put(batchId, originWatermark)
