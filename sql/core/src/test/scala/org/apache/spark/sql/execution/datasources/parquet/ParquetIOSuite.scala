@@ -741,12 +741,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("vectorized reader: missing all struct fields") {
     for {
       offheapEnabled <- Seq(true, false)
-      readAnyFieldForMissingStruct <- Seq(true, false)
+      returnNullStructIfAllFieldsMissing <- Seq(true, false)
     } {
       withSQLConf(
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-          SQLConf.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT.key ->
-              readAnyFieldForMissingStruct.toString,
+          SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
+              returnNullStructIfAllFieldsMissing.toString,
           SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
         val data = Seq(
           Tuple1((1, "a")),
@@ -760,7 +760,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
               .add("_4", LongType, nullable = true),
           nullable = true)
 
-        val expectedAnswer = if (readAnyFieldForMissingStruct) {
+        val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
           Row(Row(null, null)) :: Row(Row(null, null)) :: Row(null) :: Nil
         } else {
           Row(null) :: Row(null) :: Row(null) :: Nil
@@ -801,15 +801,15 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
       for {
         offheapEnabled <- Seq(true, false)
-        readAnyFieldForMissingStruct <- Seq(true, false)
+        returnNullStructIfAllFieldsMissing <- Seq(true, false)
       } {
         withSQLConf(
-          SQLConf.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT.key ->
-            readAnyFieldForMissingStruct.toString,
+          SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
+            returnNullStructIfAllFieldsMissing.toString,
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
           SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString
         ) {
-          val expectedAnswer = if (readAnyFieldForMissingStruct) {
+          val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
             Row(Row(null, null), 100) :: Row(Row(null, null), 100) :: Row(null, 100) :: Nil
           } else {
             Row(null, 100) :: Row(null, 100) :: Row(null, 100) :: Nil

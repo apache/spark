@@ -2481,10 +2481,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       catalystSchema: StructType,
       expectedSchema: String,
       caseSensitive: Boolean = true,
-      readAnyFieldForMissingStruct: Boolean = true): Unit = {
+      returnNullStructIfAllFieldsMissing: Boolean = false): Unit = {
     testSchemaClipping(testName, parquetSchema, catalystSchema,
       MessageTypeParser.parseMessageType(expectedSchema), caseSensitive,
-      readAnyFieldForMissingStruct)
+      returnNullStructIfAllFieldsMissing)
   }
 
   private def testSchemaClipping(
@@ -2493,14 +2493,14 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       catalystSchema: StructType,
       expectedSchema: MessageType,
       caseSensitive: Boolean,
-      readAnyFieldForMissingStruct: Boolean): Unit = {
+      returnNullStructIfAllFieldsMissing: Boolean): Unit = {
     test(s"Clipping - $testName") {
       val actual = ParquetReadSupport.clipParquetSchema(
         MessageTypeParser.parseMessageType(parquetSchema),
         catalystSchema,
         caseSensitive,
         useFieldId = false,
-        readAnyFieldForMissingStruct)
+        returnNullStructIfAllFieldsMissing)
 
       try {
         expectedSchema.checkContains(actual)
@@ -3069,7 +3069,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           catalystSchema,
           caseSensitive = false,
           useFieldId = false,
-          readAnyFieldForMissingStruct = true)
+          returnNullStructIfAllFieldsMissing = false)
       }
     }
 
@@ -3093,10 +3093,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |}
       """.stripMargin)
 
-  for (readAnyFieldForMissingStruct <- Seq(true, false)) {
+  for (returnNullStructIfAllFieldsMissing <- Seq(true, false)) {
     testSchemaClipping(
       s"SPARK-53535: struct in struct, with missing field being requested, " +
-        s"readAnyFieldForMissingStruct=$readAnyFieldForMissingStruct",
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
       parquetSchema =
         """message root {
           |  required group f0 {
@@ -3113,7 +3113,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       expectedSchema =
         ("""message root {
            |  required group f0 {
-           |    optional int32 f01;""" + (if (readAnyFieldForMissingStruct) {
+           |    optional int32 f01;""" + (if (!returnNullStructIfAllFieldsMissing) {
          """
            |    required group f00 {
            |      required int32 f001;
@@ -3122,11 +3122,11 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
            |  }
            |}
          """).stripMargin,
-      readAnyFieldForMissingStruct = readAnyFieldForMissingStruct)
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
 
     testSchemaClipping(
       s"SPARK-53535: missing struct with complex fields, " +
-        s"readAnyFieldForMissingStruct=$readAnyFieldForMissingStruct",
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
       parquetSchema =
         """message root {
           |  optional group _1 {
@@ -3162,7 +3162,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         ("""message root {
            |  optional group _1 {
            |    optional int32 _101;
-           |    optional int64 _102;""" + (if (readAnyFieldForMissingStruct) {
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
          """
            |    optional group _3 {
            |      optional boolean _2;
@@ -3171,7 +3171,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
            |  }
            |}
          """).stripMargin,
-      readAnyFieldForMissingStruct = readAnyFieldForMissingStruct)
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
   }
 
   testSchemaClipping(
@@ -3274,10 +3274,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |}
       """.stripMargin)
 
-  for (readAnyFieldForMissingStruct <- Seq(true, false)) {
+  for (returnNullStructIfAllFieldsMissing <- Seq(true, false)) {
     testSchemaClipping(
       s"struct in struct missing in requested schema, " +
-        s"readAnyFieldForMissingStruct=$readAnyFieldForMissingStruct",
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
       parquetSchema =
         """message root {
           |  required int32 f0;
@@ -3295,11 +3295,11 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           |  required int32 f0;
           |}
         """.stripMargin,
-      readAnyFieldForMissingStruct = readAnyFieldForMissingStruct)
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
 
     testSchemaClipping(
       s"struct in struct, with missing field being requested, " +
-        s"readAnyFieldForMissingStruct=$readAnyFieldForMissingStruct",
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
       parquetSchema =
         """message root {
           |  required group f0 {
@@ -3316,7 +3316,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       expectedSchema =
         ("""message root {
            |  required group f0 {
-           |    optional int32 f01;""" + (if (readAnyFieldForMissingStruct) {
+           |    optional int32 f01;""" + (if (!returnNullStructIfAllFieldsMissing) {
          """
            |    required group f00 {
            |      required int32 f001;
@@ -3325,11 +3325,11 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
            |  }
            |}
          """).stripMargin,
-      readAnyFieldForMissingStruct = readAnyFieldForMissingStruct)
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
 
     testSchemaClipping(
       s"missing struct with complex fields, " +
-        s"readAnyFieldForMissingStruct=$readAnyFieldForMissingStruct",
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
       parquetSchema =
         """message root {
           |  optional group _1 {
@@ -3365,7 +3365,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         ("""message root {
            |  optional group _1 {
            |    optional int32 _101;
-           |    optional int64 _102;""" + (if (readAnyFieldForMissingStruct) {
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
          """
            |    optional group _3 {
            |      optional boolean _2;
@@ -3374,6 +3374,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
            |  }
            |}
          """).stripMargin,
-      readAnyFieldForMissingStruct = readAnyFieldForMissingStruct)
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
   }
 }

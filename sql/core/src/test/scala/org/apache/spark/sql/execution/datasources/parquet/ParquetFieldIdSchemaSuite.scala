@@ -47,7 +47,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         catalystSchema,
         caseSensitive = caseSensitive,
         useFieldId = useFieldId,
-        readAnyFieldForMissingStruct = true)
+        returnNullStructIfAllFieldsMissing = false)
 
       // each fake name should be uniquely generated
       val fakeColumnNames = actual.getPaths.asScala.flatten.filter(_.startsWith(FAKE_COLUMN_NAME))

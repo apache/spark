@@ -265,12 +265,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       MemoryMode memMode,
       StructType partitionColumns,
       InternalRow partitionValues) {
-    boolean readAnyFieldForMissingStruct = configuration.getBoolean(
-      SQLConf$.MODULE$.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT().key(),
-      (boolean) SQLConf$.MODULE$.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT().defaultValue().get());
-    StructType batchSchema = readAnyFieldForMissingStruct
-      ? (StructType) truncateType(sparkSchema, sparkRequestedSchema)
-      : new StructType(sparkSchema.fields());
+    boolean returnNullStructIfAllFieldsMissing = configuration.getBoolean(
+      SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING().key(),
+      (boolean) SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING().defaultValue().get());
+    StructType batchSchema = !returnNullStructIfAllFieldsMissing
+      ? new StructType(sparkSchema.fields())
+      : (StructType) truncateType(sparkSchema, sparkRequestedSchema);
 
     int constantColumnLength = 0;
     if (partitionColumns != null) {
