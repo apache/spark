@@ -1480,7 +1480,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
   }
 
-  test("SPARK-XXXXX: changing the number of stateful shuffle partitions via config") {
+  test("SPARK-53942: changing the number of stateful shuffle partitions via config") {
     val stream = MemoryStream[Int]
 
     val df = stream.toDF()
@@ -1540,7 +1540,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("SPARK-XXXXX: changing the number of stateless shuffle partitions via config") {
+  test("SPARK-53942: changing the number of stateless shuffle partitions via config") {
     val inputData = MemoryStream[(String, Int)]
     val dfStream = inputData.toDF()
       .select($"_1".as("key"), $"_2".as("value"))
