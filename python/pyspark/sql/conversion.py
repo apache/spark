@@ -118,8 +118,6 @@ class LocalDataToArrowConversion:
         none_on_identity: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
     ) -> Optional[Callable]:
-        import pyarrow as pa
-
         assert dataType is not None and isinstance(dataType, DataType)
         assert isinstance(nullable, bool)
 
