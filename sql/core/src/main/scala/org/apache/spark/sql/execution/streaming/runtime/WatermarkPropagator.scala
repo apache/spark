@@ -213,7 +213,6 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
           }
 
           nodeToOutputWatermark.put(node.id, Some(originWatermark))
-          node
 
         case node: StateStoreWriter =>
           val stOpId = node.stateInfo.get.operatorId
@@ -233,7 +232,6 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
           }
           nodeToOutputWatermark.put(node.id, outputWatermarkMs)
           nextStatefulOperatorToWatermark.put(stOpId, finalInputWatermarkMs)
-          node
 
         case node =>
           // pass-through, but also consider multiple children like the case of union
@@ -245,7 +243,6 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
           }
 
           nodeToOutputWatermark.put(node.id, finalInputWatermarkMs)
-          node
       }
     }
 
