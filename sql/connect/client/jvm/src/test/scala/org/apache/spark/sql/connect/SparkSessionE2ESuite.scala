@@ -473,7 +473,7 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     for (_ <- 0 until 2) {
       val df = spark.createDataFrame(data)
       assert(df.count() === rowCount)
-      assert(!df.filter(df("_1").endsWith(suffix)).isEmpty)
+      assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
     }
   }
 }
