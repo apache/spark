@@ -1266,7 +1266,7 @@ constant
     | QUESTION                                                                                 #posParameterLiteral
     | namedParameterMarker                                                                     #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
-    | literalType stringLitWithoutMarker                                                       #typeConstructor
+    | literalType stringLit                                                                    #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit                                                                                #stringLiteral
@@ -1692,8 +1692,7 @@ parameterMarker
     ;
 
 stringLit
-    : stringLitWithoutMarker                                                                   #stringLiteralInContext
-    | parameterMarker                                                                          #parameterStringValue
+    : (stringLitWithoutMarker | parameterMarker)+
     ;
 
 comment

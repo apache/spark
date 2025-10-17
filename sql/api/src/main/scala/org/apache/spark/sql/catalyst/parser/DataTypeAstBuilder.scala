@@ -46,6 +46,37 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
+  // Visit stringLit which can now have multiple stringLitWithoutMarker or parameterMarker children
+  override def visitStringLit(ctx: StringLitContext): Token = {
+    if (ctx == null) {
+      return null
+    }
+
+    // Collect all children (could be mix of stringLitWithoutMarker and parameterMarker)
+    val children = scala.collection.mutable.ListBuffer[Token]()
+    // Visit each child and collect resulting tokens
+    val childCount = ctx.getChildCount
+    var i = 0
+    while (i < childCount) {
+      val child = ctx.getChild(i)
+      val token = visit(child).asInstanceOf[Token]
+      if (token != null) {
+        children += token
+      }
+      i += 1
+    }
+
+    if (children.isEmpty) {
+      null
+    } else if (children.size == 1) {
+      // Fast path: single token, return unchanged
+      children.head
+    } else {
+      // Multiple tokens: create coalesced token
+      createCoalescedStringToken(children.toSeq)
+    }
+  }
+
   // Visit stringLitWithoutMarker which now supports coalescing with +
   override def visitStringLitWithoutMarker(ctx: StringLitWithoutMarkerContext): Token = {
     if (ctx == null) {
@@ -163,12 +194,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         s"parse tree. Found unsubstituted parameter: ${ctx.getText}")
     ctx.getText.toInt
   }
-
-  /**
-   * Visit a stringLit context by delegating to the appropriate labeled visitor.
-   */
-  def visitStringLit(ctx: StringLitContext): Token =
-    Option(ctx).map(visit(_).asInstanceOf[Token]).orNull
 
   /**
    * Create a multi-part identifier.

@@ -289,4 +289,224 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
       assert(comment == "single")
     }
   }
+
+  // ========================================================================
+  // Parameter Marker + String Literal Coalescing Tests
+  // ========================================================================
+
+  test("parameter marker with string literals - basic") {
+    // Test mixing parameter markers with string literals
+    checkAnswer(
+      spark.sql("SELECT :param1 '/' :param2", Map("param1" -> "/data", "param2" -> "logs")),
+      Row("/data/logs")
+    )
+
+    // Multiple literals around parameters
+    checkAnswer(
+      spark.sql("SELECT 'prefix' :mid 'suffix'", Map("mid" -> "_middle_")),
+      Row("prefix_middle_suffix")
+    )
+  }
+
+  test("parameter marker coalescing in LOCATION clause") {
+    withTable("t") {
+      withTempPath { dir =>
+        val basePath = dir.getAbsolutePath
+        spark.sql(
+          "CREATE TABLE t (id INT) USING parquet LOCATION :base '/' :sub",
+          Map("base" -> basePath, "sub" -> "data")
+        )
+
+        val location = spark.sessionState.catalog.getTableMetadata(
+          spark.sessionState.sqlParser.parseTableIdentifier("t")).location
+        assert(location.toString.contains(s"$basePath/data"))
+      }
+    }
+  }
+
+  test("parameter marker coalescing in COMMENT") {
+    withTable("t") {
+      spark.sql(
+        "CREATE TABLE t (id INT) COMMENT :prefix ': ' :desc",
+        Map("prefix" -> "Table", "desc" -> "User data")
+      )
+
+      val comment = sql("DESCRIBE EXTENDED t")
+        .filter("col_name = 'Comment'")
+        .select("data_type")
+        .collect()
+        .head
+        .getString(0)
+
+      assert(comment == "Table: User data")
+    }
+  }
+
+  test("parameter marker coalescing in column comments") {
+    withTable("t") {
+      spark.sql(
+        """CREATE TABLE t (
+          |  id INT COMMENT :prefix ' - ' :desc
+          |) USING parquet
+        """.stripMargin,
+        Map("prefix" -> "ID", "desc" -> "Primary key")
+      )
+
+      val columnComment = sql("DESCRIBE t")
+        .filter("col_name = 'id'")
+        .select("comment")
+        .collect()
+        .head
+        .getString(0)
+
+      assert(columnComment == "ID - Primary key")
+    }
+  }
+
+  test("parameter marker coalescing with type constructors") {
+    // Parameters can appear in any position (leading, middle, trailing) and coalesce properly
+    // After substitution, they become string literals that participate in coalescing
+
+    // Parameter at the end
+    checkAnswer(
+      spark.sql("SELECT DATE '2024-10' :day", Map("day" -> "-16")),
+      Row(java.sql.Date.valueOf("2024-10-16"))
+    )
+
+    // Parameter at the beginning
+    checkAnswer(
+      spark.sql("SELECT TIMESTAMP :datepart ' 12:30:00'", Map("datepart" -> "2024-10-16")),
+      Row(java.sql.Timestamp.valueOf("2024-10-16 12:30:00"))
+    )
+
+    // Parameter in the middle
+    checkAnswer(
+      spark.sql("SELECT X'DE' :middle 'EF'", Map("middle" -> "ADBE")),
+      Row(Array[Byte](0xDE.toByte, 0xAD.toByte, 0xBE.toByte, 0xEF.toByte))
+    )
+  }
+
+  test("parameter marker coalescing in WHERE clause") {
+    withTable("t") {
+      sql("CREATE TABLE t (name STRING) USING parquet")
+      sql("INSERT INTO t VALUES ('prefix_value'), ('prefix_other'), ('different')")
+
+      checkAnswer(
+        spark.sql("SELECT * FROM t WHERE name = :p1 '_' :p2",
+          Map("p1" -> "prefix", "p2" -> "value")),
+        Row("prefix_value")
+      )
+    }
+  }
+
+  test("parameter marker coalescing in LIKE patterns") {
+    withTable("t") {
+      sql("CREATE TABLE t (name STRING) USING parquet")
+      sql("INSERT INTO t VALUES ('prefix_123'), ('prefix_456'), ('other')")
+
+      val result = spark.sql(
+        "SELECT * FROM t WHERE name LIKE :prefix '%'",
+        Map("prefix" -> "prefix_")
+      ).collect()
+
+      assert(result.length == 2)
+      assert(result.map(_.getString(0)).sorted === Array("prefix_123", "prefix_456"))
+    }
+  }
+
+  test("parameter marker coalescing with empty strings") {
+    checkAnswer(
+      spark.sql("SELECT :p1 '' :p2", Map("p1" -> "", "p2" -> "hello")),
+      Row("hello")
+    )
+
+    checkAnswer(
+      spark.sql("SELECT 'start' :p1 'end'", Map("p1" -> "")),
+      Row("startend")
+    )
+  }
+
+  test("parameter marker coalescing - complex paths") {
+    // Simulate building complex S3/HDFS paths
+    checkAnswer(
+      spark.sql(
+        "SELECT :protocol '://' :bucket '/' :year '/' :month '/' :day '/' :file",
+        Map(
+          "protocol" -> "s3",
+          "bucket" -> "my-bucket",
+          "year" -> "2024",
+          "month" -> "10",
+          "day" -> "16",
+          "file" -> "data.parquet"
+        )
+      ),
+      Row("s3://my-bucket/2024/10/16/data.parquet")
+    )
+  }
+
+  test("parameter marker coalescing across multiple lines") {
+    val result = spark.sql(
+      """SELECT :part1
+        |       '/'
+        |       :part2
+        |       '/'
+        |       :part3
+      """.stripMargin,
+      Map("part1" -> "a", "part2" -> "b", "part3" -> "c")
+    ).collect().head.getString(0)
+
+    assert(result == "a/b/c")
+  }
+
+  test("parameter marker coalescing with special characters") {
+    checkAnswer(
+      spark.sql("SELECT :p1 '\\t' :p2", Map("p1" -> "hello", "p2" -> "world")),
+      Row("hello\tworld")
+    )
+
+    checkAnswer(
+      spark.sql("SELECT :p1 '\\n' :p2", Map("p1" -> "line1", "p2" -> "line2")),
+      Row("line1\nline2")
+    )
+  }
+
+  test("parameter marker - consecutive parameters with literals") {
+    // Test with consecutive parameter markers mixed with string literals
+    checkAnswer(
+      spark.sql("SELECT :p1 '' :p2 '' :p3", Map("p1" -> "a", "p2" -> "b", "p3" -> "c")),
+      Row("abc")
+    )
+  }
+
+  test("parameter marker - positional only") {
+    // Test with only positional parameters
+    checkAnswer(
+      spark.sql("SELECT ? '/' ?", Array("first", "second")),
+      Row("first/second")
+    )
+  }
+
+  test("parameter marker coalescing in INSERT VALUES") {
+    withTable("t") {
+      sql("CREATE TABLE t (path STRING) USING parquet")
+      spark.sql(
+        "INSERT INTO t VALUES (:base '/' :file)",
+        Map("base" -> "/data", "file" -> "file.txt")
+      )
+
+      checkAnswer(
+        sql("SELECT * FROM t"),
+        Row("/data/file.txt")
+      )
+    }
+  }
+
+  test("parameter marker coalescing with INTERVAL") {
+    // YEAR TO MONTH intervals use 'y-m' format
+    checkAnswer(
+      spark.sql("SELECT INTERVAL '10' :sep '1' YEAR TO MONTH",
+        Map("sep" -> "-")),
+      sql("SELECT INTERVAL '10-1' YEAR TO MONTH")
+    )
+  }
 }
