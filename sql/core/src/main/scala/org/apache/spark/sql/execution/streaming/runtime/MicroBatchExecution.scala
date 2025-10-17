@@ -346,8 +346,7 @@ class MicroBatchExecution(
     populateStartOffsets(execCtx, sparkSessionForStream)
 
     // SPARK-53941: This code path is executed for the first batch, regardless of whether it's a
-    // fresh new run or restart, and whether it's a single uncommitted batch or multiple
-    // uncommitted batches.
+    // fresh new run or restart.
     disableAQESupportInStatelessIfUnappropriated(sparkSessionForStream)
 
     logInfo(log"Stream started from ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)}")
