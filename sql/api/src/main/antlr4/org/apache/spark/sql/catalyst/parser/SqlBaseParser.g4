@@ -315,7 +315,7 @@ statement
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
         LIKE pattern=stringLit partitionSpec?                             #showTableExtended
     | SHOW TBLPROPERTIES table=identifierReference
-        (LEFT_PAREN key=propertyKey RIGHT_PAREN)?                      #showTblProperties
+        (LEFT_PAREN key=propertyKeyOrStringLit RIGHT_PAREN)?           #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=identifierReference
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) identifierReference)?
@@ -609,6 +609,11 @@ property
 
 propertyKey
     : errorCapturingIdentifier (DOT errorCapturingIdentifier)*
+    ;
+
+propertyKeyOrStringLit
+    : propertyKey
+    | stringLit
     ;
 
 propertyKeyNoCoalesce

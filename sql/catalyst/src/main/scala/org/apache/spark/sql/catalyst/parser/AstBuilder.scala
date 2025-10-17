@@ -4273,10 +4273,24 @@ class AstBuilder extends DataTypeAstBuilder
 
   /**
    * A property key is a collection of dot separated identifiers.
-   * String literal keys are handled separately in the property rule alternatives.
    */
   override def visitPropertyKey(key: PropertyKeyContext): String = {
     key.getText
+  }
+
+  /**
+   * A property key or string literal can be either:
+   * - A collection of dot separated identifiers (propertyKey)
+   * - A string literal (potentially coalesced, supports parameter markers)
+   */
+  override def visitPropertyKeyOrStringLit(key: PropertyKeyOrStringLitContext): String = {
+    if (key.stringLit != null) {
+      // String literal key (supports coalescing and parameter markers)
+      string(visitStringLit(key.stringLit))
+    } else {
+      // Identifier key (dot-separated identifiers)
+      visitPropertyKey(key.propertyKey)
+    }
   }
 
   /**
@@ -6208,7 +6222,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
       createUnresolvedTableOrView(ctx.table, "SHOW TBLPROPERTIES"),
-      Option(ctx.key).map(visitPropertyKey))
+      Option(ctx.key).map(visitPropertyKeyOrStringLit))
   }
 
   /**
