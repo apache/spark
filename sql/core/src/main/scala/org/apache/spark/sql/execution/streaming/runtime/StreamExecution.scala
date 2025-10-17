@@ -315,7 +315,7 @@ abstract class StreamExecution(
           "false")
 
         if (trigger.isInstanceOf[ContinuousTrigger]) {
-          // SPARK-XXXXX: AQE does not make sense for continuous processing, disable it.
+          // SPARK-53941: AQE does not make sense for continuous processing, disable it.
           logWarning("Disabling AQE since the query runs with continuous mode.")
           sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
         }

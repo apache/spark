@@ -345,7 +345,7 @@ class MicroBatchExecution(
 
     populateStartOffsets(execCtx, sparkSessionForStream)
 
-    // SPARK-XXXXX: This code path is executed for the first batch, regardless of whether it's a
+    // SPARK-53941: This code path is executed for the first batch, regardless of whether it's a
     // fresh new run or restart, and whether it's a single uncommitted batch or multiple
     // uncommitted batches.
     disableAQESupportInStatelessIfUnappropriated(sparkSessionForStream)
@@ -373,7 +373,7 @@ class MicroBatchExecution(
     }
 
     if (containsStatefulOperator(analyzedPlan)) {
-      // SPARK-XXXXX: We disable AQE for stateful workloads as of now.
+      // SPARK-53941: We disable AQE for stateful workloads as of now.
       logWarning(log"Disabling AQE since AQE is not supported in stateful workloads.")
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
     }
