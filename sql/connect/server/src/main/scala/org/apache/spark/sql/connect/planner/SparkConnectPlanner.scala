@@ -1330,7 +1330,9 @@ class SparkConnectPlanner(
 
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
     val blockManager = session.sparkContext.env.blockManager
-    val blockId = CacheId(sessionHolder.session.sessionUUID, rel.getHash)
+    val blockId = session.artifactManager.getCachedBlockId(rel.getHash).getOrElse {
+      throw InvalidPlanInput(s"Cannot find a cached local relation for hash: ${rel.getHash}")
+    }
     val bytes = blockManager.getLocalBytes(blockId)
     bytes
       .map { blockData =>
