@@ -2576,7 +2576,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
 
     val logBlockId1 = TestLogBlockId(2L, store.executorId)
     val logBlockId2 = TestLogBlockId(3L, store.executorId)
-    val logBlockIds = store.getMatchingBlockIds(_.isInstanceOf[TestLogBlockId])
+    val logBlockIds = store
+      .getMatchingBlockIds(_.isInstanceOf[TestLogBlockId])
+      .distinct
     assert(logBlockIds.size === 2)
     assert(logBlockIds.contains(logBlockId1) && logBlockIds.contains(logBlockId2))
   }

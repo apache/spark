@@ -300,10 +300,10 @@ object BlockId {
       TempLocalBlockId(UUID.fromString(uuid))
     case TEMP_SHUFFLE(uuid) =>
       TempShuffleBlockId(UUID.fromString(uuid))
-    case TEST(value) =>
-      TestBlockId(value)
     case TEST_LOG_BLOCK(lastLogTime, executorId) =>
       TestLogBlockId(lastLogTime.toLong, executorId)
+    case TEST(value) =>
+      TestBlockId(value)
     case _ => throw SparkCoreErrors.unrecognizedBlockIdError(name)
   }
 }
