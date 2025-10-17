@@ -28,9 +28,9 @@ import org.apache.spark.unsafe.types._
 /**
  *
  * Infer a schema when there are Variant values in the shredding schema.
- * Only VariantType values at the top level or nested in struct fields are replaced.
- * VariantType nested in arrays or maps are not modified.
- * @param schema The original schema containing VariantType.
+ * Only VariantType values at the top level or nested in struct fields are shredded.
+ * VariantType nested in arrays or maps are not shredded.
+ * @param schema The original schema, with no shredding.
  */
 class InferVariantShreddingSchema(val schema: StructType) {
 
@@ -41,8 +41,8 @@ class InferVariantShreddingSchema(val schema: StructType) {
    * struct<v: variant, struct<a: int, b: int, c: variant>>
    * the function will return [[0], [1, 2]
    */
-  private def getPathsToVariant(s: StructType): Seq[Seq[Int]] = {
-    s.fields.zipWithIndex
+  private def getPathsToVariant(schema: StructType): Seq[Seq[Int]] = {
+    schema.fields.zipWithIndex
       .map {
         case (field, idx) =>
           field.dataType match {
@@ -60,19 +60,24 @@ class InferVariantShreddingSchema(val schema: StructType) {
       .flatten
   }
 
-  private def getValueAtPath(s: StructType, row: InternalRow, p: Seq[Int]): Option[VariantVal] = {
-    if (row.isNullAt(p.head)) {
+  /**
+   * Return the VariantVal at the given path in the schema, or None if the Variant value or any of
+   * its containing structs is null.
+   */
+  private def getValueAtPath(schema: StructType, row: InternalRow, path: Seq[Int]):
+      Option[VariantVal] = {
+    if (row.isNullAt(path.head)) {
       None
-    } else if (p.length == 1) {
+    } else if (path.length == 1) {
       // We've reached the Variant value.
-      Some(row.getVariant(p.head))
+      Some(row.getVariant(path.head))
     } else {
       // The field must be a struct.
-      val childStruct = s.fields(p.head).dataType.asInstanceOf[StructType]
+      val childStruct = schema.fields(path.head).dataType.asInstanceOf[StructType]
       getValueAtPath(
         childStruct,
-        row.getStruct(p.head, childStruct.length),
-        p.tail
+        row.getStruct(path.head, childStruct.length),
+        path.tail
       )
     }
   }
@@ -248,7 +253,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
   }
 
   /**
-   * Update each VariantType with its inferred schema.
+   * Return a new schema, with each VariantType replaced its inferred shredding schema.
    */
   private def updateSchema(
       schema: StructType,
