@@ -467,7 +467,7 @@ class LocalRelation(LogicalPlan):
             pass  # Just write schema
         schema_size = len(schema_buffer.getvalue())
 
-        current_batches = []
+        current_batches: list[pa.RecordBatch] = []
         current_size = schema_size
 
         for batch in self._table.to_batches(max_chunksize=min(1024, max_chunk_size_rows)):
@@ -498,6 +498,7 @@ class LocalRelation(LogicalPlan):
 
     def _serialize_schema(self) -> bytes:
         # the server uses UTF-8 for decoding the schema
+        assert self._schema is not None
         return self._schema.encode("utf-8")
 
     def serialize(self, session: "SparkConnectClient") -> bytes:
