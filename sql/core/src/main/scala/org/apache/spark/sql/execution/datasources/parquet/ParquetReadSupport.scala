@@ -132,6 +132,9 @@ object ParquetReadSupport extends Logging {
       SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get)
     val ignoreMissingIds = conf.getBoolean(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.key,
       SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.defaultValue.get)
+    val readAnyFieldForMissingStruct = conf.getBoolean(
+      SQLConf.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT.key,
+      SQLConf.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT.defaultValue.get)
 
     if (!ignoreMissingIds &&
         !containsFieldIds(parquetFileSchema) &&
@@ -150,7 +153,7 @@ object ParquetReadSupport extends Logging {
            |""".stripMargin)
     }
     val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
-      catalystRequestedSchema, caseSensitive, useFieldId)
+      catalystRequestedSchema, caseSensitive, useFieldId, readAnyFieldForMissingStruct)
 
     // We pass two schema to ParquetRecordMaterializer:
     // - parquetRequestedSchema: the schema of the file data we want to read
@@ -192,9 +195,10 @@ object ParquetReadSupport extends Logging {
       parquetSchema: MessageType,
       catalystSchema: StructType,
       caseSensitive: Boolean,
-      useFieldId: Boolean): MessageType = {
-    val clippedParquetFields = clipParquetGroupFields(
-      parquetSchema.asGroupType(), catalystSchema, caseSensitive, useFieldId)
+      useFieldId: Boolean,
+      readAnyFieldForMissingStruct: Boolean): MessageType = {
+    val clippedParquetFields = clipParquetGroupFields(parquetSchema.asGroupType(), catalystSchema,
+      caseSensitive, useFieldId, readAnyFieldForMissingStruct)
     if (clippedParquetFields.isEmpty) {
       ParquetSchemaConverter.EMPTY_MESSAGE
     } else {
@@ -209,24 +213,28 @@ object ParquetReadSupport extends Logging {
       parquetType: Type,
       catalystType: DataType,
       caseSensitive: Boolean,
-      useFieldId: Boolean): Type = {
+      useFieldId: Boolean,
+      readAnyFieldForMissingStruct: Boolean): Type = {
     val newParquetType = catalystType match {
       case t: ArrayType if ParquetSchemaConverter.isComplexType(t.elementType) =>
         // Only clips array types with nested type as element type.
-        clipParquetListType(parquetType.asGroupType(), t.elementType, caseSensitive, useFieldId)
+        clipParquetListType(parquetType.asGroupType(), t.elementType, caseSensitive, useFieldId,
+          readAnyFieldForMissingStruct)
 
       case t: MapType
         if ParquetSchemaConverter.isComplexType(t.keyType) ||
            ParquetSchemaConverter.isComplexType(t.valueType) =>
         // Only clips map types with nested key type or value type
         clipParquetMapType(
-          parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, useFieldId)
+          parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, useFieldId,
+            readAnyFieldForMissingStruct)
 
       case t: StructType if VariantMetadata.isVariantStruct(t) =>
-        clipVariantSchema(parquetType.asGroupType(), t)
+        clipVariantSchema(parquetType.asGroupType(), t, readAnyFieldForMissingStruct)
 
       case t: StructType =>
-        clipParquetGroup(parquetType.asGroupType(), t, caseSensitive, useFieldId)
+        clipParquetGroup(parquetType.asGroupType(), t, caseSensitive, useFieldId,
+          readAnyFieldForMissingStruct)
 
       case _ =>
         // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
@@ -250,7 +258,8 @@ object ParquetReadSupport extends Logging {
       parquetList: GroupType,
       elementType: DataType,
       caseSensitive: Boolean,
-      useFieldId: Boolean): Type = {
+      useFieldId: Boolean,
+      readAnyFieldForMissingStruct: Boolean): Type = {
     // Precondition of this method, should only be called for lists with nested element types.
     assert(ParquetSchemaConverter.isComplexType(elementType))
 
@@ -258,7 +267,8 @@ object ParquetReadSupport extends Logging {
     // list element type is just the group itself.  Clip it.
     if (parquetList.getLogicalTypeAnnotation == null &&
       parquetList.isRepetition(Repetition.REPEATED)) {
-      clipParquetType(parquetList, elementType, caseSensitive, useFieldId)
+      clipParquetType(parquetList, elementType, caseSensitive, useFieldId,
+        readAnyFieldForMissingStruct)
     } else {
       assert(
         parquetList.getLogicalTypeAnnotation.isInstanceOf[ListLogicalTypeAnnotation],
@@ -292,14 +302,15 @@ object ParquetReadSupport extends Logging {
           .as(LogicalTypeAnnotation.listType())
           .addField(
             clipParquetType(
-              repeatedGroup, elementType, caseSensitive, useFieldId))
+              repeatedGroup, elementType, caseSensitive, useFieldId, readAnyFieldForMissingStruct))
           .named(parquetList.getName)
       } else {
         val newRepeatedGroup = Types
           .repeatedGroup()
           .addField(
             clipParquetType(
-              repeatedGroup.getType(0), elementType, caseSensitive, useFieldId))
+              repeatedGroup.getType(0), elementType, caseSensitive, useFieldId,
+              readAnyFieldForMissingStruct))
           .named(repeatedGroup.getName)
 
         val newElementType = if (useFieldId && repeatedGroup.getId != null) {
@@ -329,7 +340,8 @@ object ParquetReadSupport extends Logging {
       keyType: DataType,
       valueType: DataType,
       caseSensitive: Boolean,
-      useFieldId: Boolean): GroupType = {
+      useFieldId: Boolean,
+      readAnyFieldForMissingStruct: Boolean): GroupType = {
     // Precondition of this method, only handles maps with nested key types or value types.
     assert(ParquetSchemaConverter.isComplexType(keyType) ||
       ParquetSchemaConverter.isComplexType(valueType))
@@ -343,9 +355,11 @@ object ParquetReadSupport extends Logging {
         .repeatedGroup()
         .as(repeatedGroup.getLogicalTypeAnnotation)
         .addField(
-          clipParquetType(parquetKeyType, keyType, caseSensitive, useFieldId))
+          clipParquetType(parquetKeyType, keyType, caseSensitive, useFieldId,
+            readAnyFieldForMissingStruct))
         .addField(
-          clipParquetType(parquetValueType, valueType, caseSensitive, useFieldId))
+          clipParquetType(parquetValueType, valueType, caseSensitive, useFieldId,
+            readAnyFieldForMissingStruct))
         .named(repeatedGroup.getName)
       if (useFieldId && repeatedGroup.getId != null) {
         newRepeatedGroup.withId(repeatedGroup.getId.intValue())
@@ -373,9 +387,11 @@ object ParquetReadSupport extends Logging {
       parquetRecord: GroupType,
       structType: StructType,
       caseSensitive: Boolean,
-      useFieldId: Boolean): GroupType = {
+      useFieldId: Boolean,
+      readAnyFieldForMissingStruct: Boolean): GroupType = {
     val clippedParquetFields =
-      clipParquetGroupFields(parquetRecord, structType, caseSensitive, useFieldId)
+      clipParquetGroupFields(parquetRecord, structType, caseSensitive, useFieldId,
+        readAnyFieldForMissingStruct)
     Types
       .buildGroup(parquetRecord.getRepetition)
       .as(parquetRecord.getLogicalTypeAnnotation)
@@ -383,7 +399,10 @@ object ParquetReadSupport extends Logging {
       .named(parquetRecord.getName)
   }
 
-  private def clipVariantSchema(parquetType: GroupType, variantStruct: StructType): GroupType = {
+  private def clipVariantSchema(
+      parquetType: GroupType,
+      variantStruct: StructType,
+      readAnyFieldForMissingStruct: Boolean): GroupType = {
     // TODO(SHREDDING): clip `parquetType` to retain the necessary columns.
     parquetType
   }
@@ -397,7 +416,8 @@ object ParquetReadSupport extends Logging {
       parquetRecord: GroupType,
       structType: StructType,
       caseSensitive: Boolean,
-      useFieldId: Boolean): Seq[Type] = {
+      useFieldId: Boolean,
+      readAnyFieldForMissingStruct: Boolean): Seq[Type] = {
     val toParquet = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = false,
       useFieldId = useFieldId)
@@ -414,7 +434,8 @@ object ParquetReadSupport extends Logging {
           .get(f.name)
           .map { parquetType =>
             isStructWithMissingFields = false
-            clipParquetType(parquetType, f.dataType, caseSensitive, useFieldId)
+            clipParquetType(parquetType, f.dataType, caseSensitive, useFieldId,
+              readAnyFieldForMissingStruct)
           }
           .getOrElse(toParquet.convertField(f, inShredded = false))
     }
@@ -431,7 +452,8 @@ object ParquetReadSupport extends Logging {
                 f.name, parquetTypesString)
             } else {
               isStructWithMissingFields = false
-              clipParquetType(parquetTypes.head, f.dataType, caseSensitive, useFieldId)
+              clipParquetType(parquetTypes.head, f.dataType, caseSensitive, useFieldId,
+                readAnyFieldForMissingStruct)
             }
           }.getOrElse(toParquet.convertField(f, inShredded = false))
     }
@@ -448,7 +470,8 @@ object ParquetReadSupport extends Logging {
               fieldId, parquetTypesString)
           } else {
             isStructWithMissingFields = false
-            clipParquetType(parquetTypes.head, f.dataType, caseSensitive, useFieldId)
+            clipParquetType(parquetTypes.head, f.dataType, caseSensitive, useFieldId,
+              readAnyFieldForMissingStruct)
           }
         }.getOrElse {
           // When there is no ID match, we use a fake name to avoid a name match by accident
@@ -468,7 +491,8 @@ object ParquetReadSupport extends Logging {
       }
     }
     // Ignore MessageType, because it is the root of the schema, not a struct.
-    if (!isStructWithMissingFields || parquetRecord.isInstanceOf[MessageType]) {
+    if (!readAnyFieldForMissingStruct || !isStructWithMissingFields ||
+        parquetRecord.isInstanceOf[MessageType]) {
       clippedType
     } else {
       // Read one arbitrary field to understand when the struct value is null or not null.

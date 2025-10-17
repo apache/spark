@@ -739,9 +739,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("vectorized reader: missing all struct fields") {
-    Seq(true, false).foreach { offheapEnabled =>
+    for {
+      offheapEnabled <- Seq(true, false)
+      readAnyFieldForMissingStruct <- Seq(true, false)
+    } {
       withSQLConf(
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT.key ->
+              readAnyFieldForMissingStruct.toString,
           SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
         val data = Seq(
           Tuple1((1, "a")),
@@ -755,10 +760,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
               .add("_4", LongType, nullable = true),
           nullable = true)
 
+        val expectedAnswer = if (readAnyFieldForMissingStruct) {
+          Row(Row(null, null)) :: Row(Row(null, null)) :: Row(null) :: Nil
+        } else {
+          Row(null) :: Row(null) :: Row(null) :: Nil
+        }
+
         withParquetFile(data) { file =>
-          checkAnswer(spark.read.schema(readSchema).parquet(file),
-            Row(Row(null, null)) :: Row(Row(null, null)) :: Row(null) :: Nil
-          )
+          checkAnswer(spark.read.schema(readSchema).parquet(file), expectedAnswer)
         }
       }
     }
@@ -790,15 +799,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       val file = path.getCanonicalPath
       spark.createDataFrame(data.asJava, tableSchema).write.partitionBy("_2").parquet(file)
 
-      Seq(true, false).foreach { offheapEnabled =>
+      for {
+        offheapEnabled <- Seq(true, false)
+        readAnyFieldForMissingStruct <- Seq(true, false)
+      } {
         withSQLConf(
+          SQLConf.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT.key ->
+            readAnyFieldForMissingStruct.toString,
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
           SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString
         ) {
+          val expectedAnswer = if (readAnyFieldForMissingStruct) {
+            Row(Row(null, null), 100) :: Row(Row(null, null), 100) :: Row(null, 100) :: Nil
+          } else {
+            Row(null, 100) :: Row(null, 100) :: Row(null, 100) :: Nil
+          }
+
           withAllParquetReaders {
-            checkAnswer(spark.read.schema(readSchema).parquet(file),
-              Row(Row(null, null), 100) :: Row(Row(null, null), 100) :: Row(null, 100) :: Nil
-            )
+            checkAnswer(spark.read.schema(readSchema).parquet(file), expectedAnswer)
           }
         }
       }

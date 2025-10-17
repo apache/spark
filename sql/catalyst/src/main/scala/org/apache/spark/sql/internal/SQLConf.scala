@@ -1534,6 +1534,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT =
+    buildConf("spark.sql.parquet.readAnyFieldForMissingStruct")
+      .internal()
+      .doc("If all requested fields of a struct are missing in a parquet file, but other fields " +
+          "are present, fetch and read an arbitrary field to determine struct nullness. If " +
+          "disabled, schema pruning may cause non-null structs to be read as null.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
       "filters. " +

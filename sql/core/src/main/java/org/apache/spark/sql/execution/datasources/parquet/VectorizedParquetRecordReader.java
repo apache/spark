@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.internal.SQLConf$;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -264,7 +265,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       MemoryMode memMode,
       StructType partitionColumns,
       InternalRow partitionValues) {
-    StructType batchSchema = (StructType) truncateType(sparkSchema, sparkRequestedSchema);
+    boolean readAnyFieldForMissingStruct = configuration.getBoolean(
+      SQLConf$.MODULE$.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT().key(),
+      (boolean) SQLConf$.MODULE$.PARQUET_READ_ANY_FIELD_FOR_MISSING_STRUCT().defaultValue().get());
+    StructType batchSchema = readAnyFieldForMissingStruct
+      ? (StructType) truncateType(sparkSchema, sparkRequestedSchema)
+      : new StructType(sparkSchema.fields());
 
     int constantColumnLength = 0;
     if (partitionColumns != null) {
