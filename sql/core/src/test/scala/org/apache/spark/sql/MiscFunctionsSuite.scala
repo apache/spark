@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
+import org.apache.spark.{SPARK_REVISION, SPARK_VERSION}
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions._
@@ -42,7 +42,7 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = sql("SELECT version()")
     checkAnswer(
       df,
-      Row(SPARK_VERSION_SHORT + " " + SPARK_REVISION))
+      Row(SPARK_VERSION + " " + SPARK_REVISION))
     assert(df.schema.fieldNames === Seq("version()"))
 
     checkAnswer(df.selectExpr("version()"), df.select(version()))

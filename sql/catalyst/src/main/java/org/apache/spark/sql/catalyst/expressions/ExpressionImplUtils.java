@@ -183,7 +183,7 @@ public class ExpressionImplUtils {
    *  Space separated version and revision.
    */
   public static UTF8String getSparkVersion() {
-    String shortVersion = VersionUtils.shortVersion(SparkBuildInfo.spark_version());
+    String shortVersion = SparkBuildInfo.spark_version();
     String revision = SparkBuildInfo.spark_revision();
     return UTF8String.fromString(shortVersion + " " + revision);
   }
