@@ -13962,12 +13962,12 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     --------
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(0, 1)], ['a', 'b'])
-    >>> df.select('*', sf.assert_true(df.a < df.b)).show() # doctest: +SKIP
-    +------------------------------------------------------+
-    |assert_true((a < b), '(a#788L < b#789L)' is not true!)|
-    +------------------------------------------------------+
-    |                                                  NULL|
-    +------------------------------------------------------+
+    >>> df.select('*', sf.assert_true(df.a < df.b)).show()
+    +---+---+--------------------------------------------+
+    |  a|  b|assert_true((a < b), '(a < b)' is not true!)|
+    +---+---+--------------------------------------------+
+    |  0|  1|                                        NULL|
+    +---+---+--------------------------------------------+
 
     >>> df.select('*', sf.assert_true(df.a < df.b, df.a)).show()
     +---+---+-----------------------+
