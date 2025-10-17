@@ -222,6 +222,32 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("string coalescing with R-strings (raw strings)") {
+    // R-strings don't process escape sequences
+    checkAnswer(
+      sql("""SELECT R'C:\Users\' 'JohnDoe' R'\Documents'"""),
+      Row("""C:\Users\JohnDoe\Documents""")
+    )
+
+    // Mix R-strings with regular strings
+    checkAnswer(
+      sql("""SELECT 'path: ' R'C:\Windows\System32'"""),
+      Row("""path: C:\Windows\System32""")
+    )
+
+    // R-strings with double quotes
+    checkAnswer(
+      sql("""SELECT R"C:\Users\" "JohnDoe" R"\Documents""""),
+      Row("""C:\Users\JohnDoe\Documents""")
+    )
+
+    // Verify backslashes are preserved in R-strings
+    checkAnswer(
+      sql("""SELECT R'\n' '\t' R'\r'"""),
+      Row("""\n\t\r""")
+    )
+  }
+
   test("string coalescing in INSERT VALUES") {
     withTable("t") {
       sql("CREATE TABLE t (name STRING) USING parquet")
@@ -475,6 +501,21 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       spark.sql("SELECT :p1 '' :p2 '' :p3", Map("p1" -> "a", "p2" -> "b", "p3" -> "c")),
       Row("abc")
+    )
+  }
+
+  test("parameter marker coalescing with R-strings") {
+    // R-strings with parameters
+    checkAnswer(
+      spark.sql("""SELECT R'C:\Users\' :username R'\Documents'""",
+        Map("username" -> "JohnDoe")),
+      Row("""C:\Users\JohnDoe\Documents""")
+    )
+
+    // Mix parameter with R-string and regular string
+    checkAnswer(
+      spark.sql("""SELECT :prefix R'\path\to\file'""", Map("prefix" -> "Location: ")),
+      Row("""Location: \path\to\file""")
     )
   }
 

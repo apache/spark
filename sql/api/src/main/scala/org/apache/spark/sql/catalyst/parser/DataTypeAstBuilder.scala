@@ -137,13 +137,31 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     val firstToken = tokens.head
     val lastToken = tokens.last
 
+    // Check if any of the tokens are R-strings
+    val hasRString = tokens.exists { token =>
+      val text = token.getText
+      text.length >= 2 &&
+      (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
+      (text.charAt(1) == '\'' || text.charAt(1) == '"')
+    }
+
     // Concatenate the raw content of each token (without the outer quotes).
     // The getText() on CoalescedStringToken will wrap this in quotes,
     // and the final string() call will handle unescaping based on the config.
     val coalescedRawContent = tokens.map { token =>
       val text = token.getText
-      // Remove outer quotes: first and last character
-      text.substring(1, text.length - 1)
+      // Check if this is an R-string (raw string literal)
+      val isRString = text.length >= 2 &&
+        (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
+        (text.charAt(1) == '\'' || text.charAt(1) == '"')
+
+      if (isRString) {
+        // For R-strings: Remove R prefix and outer quotes (first 2 chars and last char)
+        text.substring(2, text.length - 1)
+      } else {
+        // For regular strings: Remove outer quotes (first and last character)
+        text.substring(1, text.length - 1)
+      }
     }.mkString
 
     new CoalescedStringToken(
@@ -152,7 +170,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       firstToken.getChannel,
       firstToken.getStartIndex,
       lastToken.getStopIndex,
-      coalescedRawContent)
+      coalescedRawContent,
+      hasRString)
   }
 
   override def visitNamedParameterMarkerRule(ctx: NamedParameterMarkerRuleContext): Token = {
@@ -521,10 +540,24 @@ private[parser] class CoalescedStringToken(
     channel: Int,
     start: Int,
     stop: Int,
-    private val coalescedValue: String)
+    private val coalescedValue: String,
+    private val isRawString: Boolean = false)
     extends CommonToken(source, tokenType, channel, start, stop) {
 
-  override def getText: String = s"'$coalescedValue'"
+  override def getText: String = {
+    if (isRawString) {
+      // Preserve R-string prefix so unescapeSQLString knows not to process escapes
+      s"R'$coalescedValue'"
+    } else {
+      s"'$coalescedValue'"
+    }
+  }
 
-  override def toString: String = s"CoalescedStringToken('$coalescedValue')"
+  override def toString: String = {
+    if (isRawString) {
+      s"CoalescedStringToken(R'$coalescedValue')"
+    } else {
+      s"CoalescedStringToken('$coalescedValue')"
+    }
+  }
 }
