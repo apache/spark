@@ -29,6 +29,7 @@ import scala.util.Try
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.connect.PythonTestDepsChecker
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.pipelines.Language.Python
@@ -48,6 +49,7 @@ class PythonPipelineSuite
     with EventVerificationTestHelpers {
 
   def buildGraph(pythonText: String): DataflowGraph = {
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val indentedPythonText = pythonText.linesIterator.map("    " + _).mkString("\n")
     // create a unique identifier to allow identifying the session and dataflow graph
     val customSessionIdentifier = UUID.randomUUID().toString
@@ -289,6 +291,36 @@ class PythonPipelineSuite
         graphIdentifier("supplement")))
   }
 
+  test("external sink") {
+    val graph = buildGraph("""
+        |dp.create_sink(
+        |  "myKafkaSink",
+        |  format = "kafka",
+        |  options = {"kafka.bootstrap.servers": "host1:port1,host2:port2"}
+        |)
+        |
+        |@dp.append_flow(
+        |  target = "myKafkaSink"
+        |)
+        |def mySinkFlow():
+        |  return spark.readStream.format("rate").load()
+        |""".stripMargin)
+
+    assert(graph.sinks.map(_.identifier) == Seq(TableIdentifier("myKafkaSink")))
+
+    // ensure format and options are properly set
+    graph.sinks.filter(_.identifier == TableIdentifier("myKafkaSink")).foreach { sink =>
+      assert(sink.format == "kafka")
+      assert(sink.options.get("kafka.bootstrap.servers").contains("host1:port1,host2:port2"))
+    }
+
+    // ensure the flow is properly linked to the sink
+    assert(
+      graph
+        .flowsTo(TableIdentifier("myKafkaSink"))
+        .map(_.identifier) == Seq(TableIdentifier("mySinkFlow")))
+  }
+
   test("referencing internal datasets") {
     val graph = buildGraph("""
       |@dp.materialized_view
@@ -389,6 +421,7 @@ class PythonPipelineSuite
   }
 
   test("create dataset with the same name will fail") {
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[AnalysisException] {
       buildGraph(s"""
            |@dp.materialized_view
@@ -400,7 +433,7 @@ class PythonPipelineSuite
            |  return spark.range(1)
            |""".stripMargin)
     }
-    assert(ex.getCondition == "PIPELINE_DUPLICATE_IDENTIFIERS.DATASET")
+    assert(ex.getCondition == "PIPELINE_DUPLICATE_IDENTIFIERS.OUTPUT")
   }
 
   test("create datasets with fully/partially qualified names") {
@@ -462,6 +495,7 @@ class PythonPipelineSuite
   }
 
   test("create datasets with three part names") {
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val graphTry = Try {
       buildGraph(s"""
            |@dp.table(name = "some_catalog.some_schema.mv")
@@ -514,6 +548,7 @@ class PythonPipelineSuite
   }
 
   test("create named flow with multipart name will fail") {
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
            |@dp.table
@@ -661,6 +696,7 @@ class PythonPipelineSuite
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -672,6 +708,7 @@ class PythonPipelineSuite
   }
 
   test("create pipeline with only temp view will throw RUN_EMPTY_PIPELINE exception") {
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -685,6 +722,7 @@ class PythonPipelineSuite
   }
 
   test("create pipeline with only flow will throw RUN_EMPTY_PIPELINE exception") {
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""

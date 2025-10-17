@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 
 class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -118,6 +118,30 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
             currentCtx.precision.getText.toInt
           }
           TimeType(precision)
+        case GEOGRAPHY =>
+          // Unparameterized geometry type isn't supported and will be caught by the default branch.
+          // Here, we only handle the parameterized GEOGRAPHY type syntax, which comes in two forms:
+          if (currentCtx.srid.getText.toLowerCase(Locale.ROOT) == "any") {
+            // The special parameterized GEOGRAPHY type syntax uses a single "ANY" string value.
+            // This implies a mixed GEOGRAPHY type, with potentially different SRIDs across rows.
+            GeographyType("ANY")
+          } else {
+            // The explicitly parameterzied GEOGRAPHY syntax uses a specified integer SRID value.
+            // This implies a fixed GEOGRAPHY type, with a single fixed SRID value across all rows.
+            GeographyType(currentCtx.srid.getText.toInt)
+          }
+        case GEOMETRY =>
+          // Unparameterized geometry type isn't supported and will be caught by the default branch.
+          // Here, we only handle the parameterized GEOMETRY type syntax, which comes in two forms:
+          if (currentCtx.srid.getText.toLowerCase(Locale.ROOT) == "any") {
+            // The special parameterized GEOMETRY type syntax uses a single "ANY" string value.
+            // This implies a mixed GEOMETRY type, with potentially different SRIDs across rows.
+            GeometryType("ANY")
+          } else {
+            // The explicitly parameterzied GEOMETRY type syntax has a single integer SRID value.
+            // This implies a fixed GEOMETRY type, with a single fixed SRID value across all rows.
+            GeometryType(currentCtx.srid.getText.toInt)
+          }
       }
     } else if (typeCtx.trivialPrimitiveType != null) {
       // This is a primitive type without parameters, e.g. BOOLEAN, TINYINT, etc.

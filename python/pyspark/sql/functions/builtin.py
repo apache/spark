@@ -12711,6 +12711,49 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    """
+    Returns the difference between two times, measured in specified units.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : :class:`~pyspark.sql.Column` or column name
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    start : :class:`~pyspark.sql.Column` or column name
+        A starting time.
+    end : :class:`~pyspark.sql.Column` or column name
+        An ending time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The difference between two times, in the specified units.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.timestamp_diff`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("HOUR", "13:08:15", "21:30:28")], ['unit', 'start', 'end']).withColumn("start",
+    ...     sf.col("start").cast("time")).withColumn("end", sf.col("end").cast("time"))
+    >>> df.select('*', sf.time_diff('unit', 'start', 'end')).show()
+    +----+--------+--------+---------------------------+
+    |unit|   start|     end|time_diff(unit, start, end)|
+    +----+--------+--------+---------------------------+
+    |HOUR|13:08:15|21:30:28|                          8|
+    +----+--------+--------+---------------------------+
+    """
+    return _invoke_function_over_columns("time_diff", unit, start, end)
+
+
+@_try_remote_functions
 def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     """
     Returns `time` truncated to the `unit`.
@@ -27441,6 +27484,7 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.bitmap_bucket_number`
     :meth:`pyspark.sql.functions.bitmap_construct_agg`
     :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_and_agg`
 
     Parameters
     ----------
@@ -27459,6 +27503,41 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
     +--------------------------------+
     """
     return _invoke_function_over_columns("bitmap_or_agg", col)
+
+
+@_try_remote_functions
+def bitmap_and_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND of all of the bitmaps from the input column.
+    The input column should be bitmaps created from bitmap_construct_agg().
+
+    .. versionadded:: 4.1.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0",),("70",),("30",)], ["a"])
+    >>> df.select(sf.bitmap_and_agg(sf.to_binary(df.a, sf.lit("hex")))).show()
+    +---------------------------------+
+    |bitmap_and_agg(to_binary(a, hex))|
+    +---------------------------------+
+    |             [30 00 00 00 00 0...|
+    +---------------------------------+
+    """
+    return _invoke_function_over_columns("bitmap_and_agg", col)
 
 
 # ---------------------------- User Defined Function ----------------------------------
@@ -27895,8 +27974,14 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.functions.builtin
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.functions.builtin.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.functions.builtin.udf.__doc__
+        del pyspark.sql.functions.builtin.arrow_udtf.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()
     )

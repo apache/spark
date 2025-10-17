@@ -295,8 +295,8 @@ class CLIUtilityTests(unittest.TestCase):
 
             registry = LocalGraphElementRegistry()
             register_definitions(outer_dir / "pipeline.yaml", registry, spec)
-            self.assertEqual(len(registry.datasets), 1)
-            self.assertEqual(registry.datasets[0].name, "mv1")
+            self.assertEqual(len(registry.outputs), 1)
+            self.assertEqual(registry.outputs[0].name, "mv1")
 
     def test_register_definitions_file_raises_error(self):
         """Errors raised while executing definitions code should make it to the outer context."""

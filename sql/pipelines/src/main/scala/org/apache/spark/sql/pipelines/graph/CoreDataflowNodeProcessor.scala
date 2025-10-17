@@ -103,6 +103,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
               s"${upstreamNodes.getClass}"
             )
         }
+      case sink: Sink => Seq(sink)
       case _ =>
         throw new IllegalArgumentException(s"Unsupported node type: ${node.getClass}")
     }

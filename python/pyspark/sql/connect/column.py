@@ -25,6 +25,7 @@ import warnings
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Union,
     Optional,
     Tuple,
@@ -468,6 +469,9 @@ class Column(ParentColumn):
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
+
+    def transform(self, f: Callable[[ParentColumn], ParentColumn]) -> ParentColumn:
+        return f(self)
 
     def outer(self) -> ParentColumn:
         return Column(self._expr)

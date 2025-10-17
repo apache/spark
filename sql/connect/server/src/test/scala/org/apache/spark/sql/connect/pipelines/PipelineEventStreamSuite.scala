@@ -30,14 +30,14 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
       val pipeline = new TestPipelineDefinition(graphId) {
         createTable(
           name = "a",
-          datasetType = proto.DatasetType.MATERIALIZED_VIEW,
+          outputType = proto.OutputType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "b",
-          datasetType = proto.DatasetType.TABLE,
+          outputType = proto.OutputType.TABLE,
           sql = Some("SELECT * FROM STREAM a"))
       }
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
@@ -83,14 +83,14 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
         val pipeline = new TestPipelineDefinition(graphId) {
           createTable(
             name = "a",
-            datasetType = proto.DatasetType.MATERIALIZED_VIEW,
+            outputType = proto.OutputType.MATERIALIZED_VIEW,
             sql = Some("SELECT * FROM unknown_table"))
           createTable(
             name = "b",
-            datasetType = proto.DatasetType.TABLE,
+            outputType = proto.OutputType.TABLE,
             sql = Some("SELECT * FROM STREAM a"))
         }
-        registerPipelineDatasets(pipeline)
+        registerPipelineOutputs(pipeline)
 
         val capturedEvents = new ArrayBuffer[PipelineEvent]()
         withClient { client =>
@@ -134,14 +134,14 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
       val pipeline = new TestPipelineDefinition(graphId) {
         createTable(
           name = "a",
-          datasetType = proto.DatasetType.MATERIALIZED_VIEW,
+          outputType = proto.OutputType.MATERIALIZED_VIEW,
           sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "b",
-          datasetType = proto.DatasetType.TABLE,
+          outputType = proto.OutputType.TABLE,
           sql = Some("SELECT * FROM STREAM a"))
       }
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
