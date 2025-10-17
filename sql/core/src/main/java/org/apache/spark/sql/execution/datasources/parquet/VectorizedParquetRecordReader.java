@@ -267,7 +267,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       InternalRow partitionValues) {
     boolean returnNullStructIfAllFieldsMissing = configuration.getBoolean(
       SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING().key(),
-      (boolean) SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING().defaultValue().get());
+      (boolean) SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING()
+        .defaultValue().get());
     StructType batchSchema = !returnNullStructIfAllFieldsMissing
       ? new StructType(sparkSchema.fields())
       : (StructType) truncateType(sparkSchema, sparkRequestedSchema);
