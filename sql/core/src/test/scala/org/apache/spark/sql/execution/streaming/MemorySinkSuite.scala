@@ -343,6 +343,28 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
       intsToDF(expected)(schema))
   }
 
+  test("LowPriorityMemoryStreamImplicits works with implicit sqlContext") {
+    // Test that MemoryStream can be created using implicit sqlContext
+    implicit val sqlContext: SQLContext = spark.sqlContext
+
+    // Test MemoryStream[A]() with implicit sqlContext
+    val stream1 = MemoryStream[Int]()
+    assert(stream1 != null)
+
+    // Test MemoryStream[A](numPartitions) with implicit sqlContext
+    val stream2 = MemoryStream[String](3)
+    assert(stream2 != null)
+
+    // Verify the streams work correctly
+    stream1.addData(1, 2, 3)
+    val df1 = stream1.toDF()
+    assert(df1.schema.fieldNames.contains("value"))
+
+    stream2.addData("a", "b", "c")
+    val df2 = stream2.toDF()
+    assert(df2.schema.fieldNames.contains("value"))
+  }
+
   private implicit def intsToDF(seq: Seq[Int])(implicit schema: StructType): DataFrame = {
     require(schema.fields.length === 1)
     sqlContext.createDataset(seq).toDF(schema.fieldNames.head)
