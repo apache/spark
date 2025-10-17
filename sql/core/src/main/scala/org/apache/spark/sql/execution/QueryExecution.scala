@@ -20,9 +20,7 @@ package org.apache.spark.sql.execution
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -35,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, Command
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan, PlanInitDynamicPruningFilters}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
@@ -44,6 +42,8 @@ import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeq
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
+
+import scala.collection.Seq
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -439,6 +439,7 @@ object QueryExecution {
       subquery: Boolean): Seq[Rule[SparkPlan]] = {
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
+    Seq(PlanInitDynamicPruningFilters(sparkSession)) ++
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
