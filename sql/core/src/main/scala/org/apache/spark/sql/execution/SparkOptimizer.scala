@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.datasources.{PruneFileSourcePartitions, SchemaPruning, V1Writes}
+import org.apache.spark.sql.execution.datasources.{GeneratorOrdinalRewriting, PruneFileSourcePartitions, SchemaPruning, V1Writes}
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
@@ -36,7 +36,9 @@ class SparkOptimizer(
 
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
-    Seq(SchemaPruning) :+
+    // SPARK-47230: GeneratorOrdinalRewriting must run IMMEDIATELY AFTER SchemaPruning
+    // to fix ordinals before other optimizer rules transform the plan
+    Seq(SchemaPruning, GeneratorOrdinalRewriting) :+
       GroupBasedRowLevelOperationScanPlanning :+
       V1Writes :+
       V2ScanRelationPushDown :+
