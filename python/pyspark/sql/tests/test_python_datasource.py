@@ -778,7 +778,9 @@ class BasePythonDataSourceTestsMixin:
 
         self.spark.dataSource.register(SimpleDataSource)
         df = self.spark.read.format("simple_decimal").load()
-        self.assertEqual(df.select("d").first().d, Decimal("1.233999999999999986"))
+
+        rounded = df.select("d").first().d
+        self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
     @unittest.skipIf(
         "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
