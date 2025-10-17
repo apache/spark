@@ -19,11 +19,8 @@ package org.apache.spark.sql.execution.streaming.runtime
 
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
-
 import scala.collection.mutable.{Map => MutableMap}
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
@@ -33,13 +30,14 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
+import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, UnaryExecNode, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
+import org.apache.spark.sql.execution.streaming.StreamingQueryPlanTraverseHelper
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata}
-import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StatefulOperator, StatefulOperatorStateInfo, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
@@ -638,10 +636,11 @@ class IncrementalExecution(
   def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     val tentativeBatchId = currentBatchId + 1
     watermarkPropagator.propagate(tentativeBatchId, executedPlan, newMetadata.batchWatermarkMs)
-    executedPlan.collect {
-      case p: StateStoreWriter => p.shouldRunAnotherBatch(
-        watermarkPropagator.getInputWatermarkForEviction(tentativeBatchId,
-          p.stateInfo.get.operatorId))
-    }.exists(_ == true)
+    StreamingQueryPlanTraverseHelper
+      .collectFromUnfoldedPlan(executedPlan) {
+        case p: StateStoreWriter => p.shouldRunAnotherBatch(
+          watermarkPropagator.getInputWatermarkForEviction(tentativeBatchId,
+            p.stateInfo.get.operatorId))
+      }.exists(_ == true)
   }
 }

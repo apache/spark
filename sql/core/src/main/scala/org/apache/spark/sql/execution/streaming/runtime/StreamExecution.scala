@@ -20,18 +20,15 @@ package org.apache.spark.sql.execution.streaming.runtime
 import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit, TimeoutException}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
-
 import scala.collection.mutable.{Map => MutableMap}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
-
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.CloseableThreadContext
-
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, QUERY_ID, RUN_ID, SPARK_DATA_STREAM}
@@ -39,12 +36,13 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.classic.{SparkSession, StreamingQuery}
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
+import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SparkDataStream, Offset => OffsetV2}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
+import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitLog, OffsetSeqLog, OffsetSeqMetadata}
-import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperator, StateStoreWriter}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StateStoreWriter, StatefulOperator}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncException, ForeachUserFuncException}
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataV2FileManager
 import org.apache.spark.sql.internal.SQLConf
@@ -304,8 +302,6 @@ abstract class StreamExecution(
 
       // While active, repeatedly attempt to run batches.
       sparkSessionForStream.withActive {
-        // Adaptive execution can change num shuffle partitions, disallow
-        sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
         // Disable cost-based join optimization as we do not want stateful operations
         // to be rearranged
         sparkSessionForStream.conf.set(SQLConf.CBO_ENABLED.key, "false")
@@ -314,6 +310,12 @@ abstract class StreamExecution(
         // details.
         sparkSessionForStream.conf.set(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key,
           "false")
+
+        if (trigger.isInstanceOf[ContinuousTrigger]) {
+          // SPARK-XXXXX: AQE does not make sense for continuous processing, disable it.
+          logWarning("Disabling AQE since the query runs with continuous mode.")
+          sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+        }
 
         getLatestExecutionContext().updateStatusMessage("Initializing sources")
         // force initialization of the logical plan so that the sources can be created

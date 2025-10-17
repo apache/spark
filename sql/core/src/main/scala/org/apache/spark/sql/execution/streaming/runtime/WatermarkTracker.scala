@@ -18,14 +18,13 @@
 package org.apache.spark.sql.execution.streaming.runtime
 
 import java.util.{Locale, UUID}
-
 import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.streaming.StreamingQueryPlanTraverseHelper
 import org.apache.spark.sql.execution.streaming.operators.stateful.EventTimeWatermarkExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -103,9 +102,11 @@ class WatermarkTracker(
   }
 
   def updateWatermark(executedPlan: SparkPlan): Unit = synchronized {
-    val watermarkOperators = executedPlan.collect {
-      case e: EventTimeWatermarkExec => e
-    }
+    val watermarkOperators = StreamingQueryPlanTraverseHelper
+      .collectFromUnfoldedPlan(executedPlan) {
+        case e: EventTimeWatermarkExec =>
+          e
+      }
     if (watermarkOperators.isEmpty) return
 
     watermarkOperators.foreach {

@@ -20,28 +20,26 @@ package org.apache.spark.sql.execution.streaming.runtime
 import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys.BATCH_ID
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow, Offset => OffsetV2}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{SQLExecution, SparkPlan}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamWriterCommitProgress, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, Sink, Source}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeq, OffsetSeqMetadata}
-import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StateStoreWriter, StatefulOpStateStoreCheckpointInfo, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -344,9 +342,41 @@ class MicroBatchExecution(
     setLatestExecutionContext(execCtx)
 
     populateStartOffsets(execCtx, sparkSessionForStream)
+
+    // SPARK-XXXXX: This code path is executed for the first batch, regardless of whether it's a
+    // fresh new run or restart, and whether it's a single uncommitted batch or multiple
+    // uncommitted batches.
+    disableAQESupportInStatelessIfUnappropriated(sparkSessionForStream)
+
     logInfo(log"Stream started from ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)}")
     execCtx
   }
+
+  private def disableAQESupportInStatelessIfUnappropriated(
+      sparkSessionToRunBatches: SparkSession): Unit = {
+    def containsStatefulOperator(p: LogicalPlan): Boolean = {
+      p.exists {
+        case node: Aggregate if node.isStreaming => true
+        case node: Deduplicate if node.isStreaming => true
+        case node: DeduplicateWithinWatermark if node.isStreaming => true
+        case node: Distinct if node.isStreaming => true
+        case node: Join if node.left.isStreaming && node.right.isStreaming => true
+        case node: FlatMapGroupsWithState if node.isStreaming => true
+        case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
+        case node: TransformWithState if node.isStreaming => true
+        case node: TransformWithStateInPySpark if node.isStreaming => true
+        case node: GlobalLimit if node.isStreaming => true
+        case _ => false
+      }
+    }
+
+    if (containsStatefulOperator(analyzedPlan)) {
+      // SPARK-XXXXX: We disable AQE for stateful workloads as of now.
+      logWarning(log"Disabling AQE since AQE is not supported in stateful workloads.")
+      sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+    }
+  }
+
   /**
    * Repeatedly attempts to run batches as data arrives.
    */
