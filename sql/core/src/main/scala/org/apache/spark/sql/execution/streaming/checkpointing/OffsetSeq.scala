@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.checkpointing
 
+import scala.language.existentials
+
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
