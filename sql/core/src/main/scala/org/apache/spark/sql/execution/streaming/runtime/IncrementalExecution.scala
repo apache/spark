@@ -105,7 +105,8 @@ class IncrementalExecution(
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
-  private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
+  private[sql] val numStateStores = OffsetSeqMetadata.readValueOpt(offsetSeqMetadata,
+      SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL)
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
