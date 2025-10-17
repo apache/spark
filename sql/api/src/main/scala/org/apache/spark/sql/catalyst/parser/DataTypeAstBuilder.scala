@@ -145,6 +145,23 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       (text.charAt(1) == '\'' || text.charAt(1) == '"')
     }
 
+    // Determine the quote character to use (preserve from first non-R-string token)
+    val quoteChar = {
+      val firstNonRToken = tokens.find { token =>
+        val text = token.getText
+        !(text.length >= 2 &&
+          (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
+          (text.charAt(1) == '\'' || text.charAt(1) == '"'))
+      }.getOrElse(tokens.head)
+
+      val text = firstNonRToken.getText
+      if (text.startsWith("\"") || (text.length >= 2 && text.charAt(1) == '"')) {
+        '"'
+      } else {
+        '\''
+      }
+    }
+
     // Concatenate the raw content of each token (without the outer quotes).
     // The getText() on CoalescedStringToken will wrap this in quotes,
     // and the final string() call will handle unescaping based on the config.
@@ -171,7 +188,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       firstToken.getStartIndex,
       lastToken.getStopIndex,
       coalescedRawContent,
-      hasRString)
+      hasRString,
+      quoteChar)
   }
 
   override def visitNamedParameterMarkerRule(ctx: NamedParameterMarkerRuleContext): Token = {
@@ -541,23 +559,24 @@ private[parser] class CoalescedStringToken(
     start: Int,
     stop: Int,
     private val coalescedValue: String,
-    private val isRawString: Boolean = false)
+    private val isRawString: Boolean = false,
+    private val quoteChar: Char = '\'')
     extends CommonToken(source, tokenType, channel, start, stop) {
 
   override def getText: String = {
     if (isRawString) {
       // Preserve R-string prefix so unescapeSQLString knows not to process escapes
-      s"R'$coalescedValue'"
+      s"R$quoteChar$coalescedValue$quoteChar"
     } else {
-      s"'$coalescedValue'"
+      s"$quoteChar$coalescedValue$quoteChar"
     }
   }
 
   override def toString: String = {
     if (isRawString) {
-      s"CoalescedStringToken(R'$coalescedValue')"
+      s"CoalescedStringToken(R$quoteChar$coalescedValue$quoteChar)"
     } else {
-      s"CoalescedStringToken('$coalescedValue')"
+      s"CoalescedStringToken($quoteChar$coalescedValue$quoteChar)"
     }
   }
 }
