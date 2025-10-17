@@ -440,6 +440,18 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("property string coalescing - UNSET TBLPROPERTIES with string key") {
+    withTable("t") {
+      // Test UNSET with string literal key (no value should be allowed)
+      sql("CREATE TABLE t (id INT) TBLPROPERTIES('yes'='true')")
+      sql("ALTER TABLE t UNSET TBLPROPERTIES('yes')")
+
+      val props = sql("SHOW TBLPROPERTIES t").collect()
+      val propMap = props.map(r => r.getString(0) -> r.getString(1)).toMap
+      assert(!propMap.contains("yes"))
+    }
+  }
+
   test("property string coalescing - parameter markers without equals in TBLPROPERTIES") {
     withTable("t") {
       // TBLPROPERTIES uses propertyList which supports keys without =

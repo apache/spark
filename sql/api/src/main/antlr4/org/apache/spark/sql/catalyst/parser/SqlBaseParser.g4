@@ -604,7 +604,7 @@ propertyList
 property
     : key=propertyKey (EQ? value=propertyValue)?                      #propertyWithIdentifierKey
     | key=stringLit EQ value=propertyValue                            #propertyWithStringKeyAndEquals
-    | key=propertyKeyNoCoalesce value=propertyValue                   #propertyWithStringKeyNoEquals
+    | key=propertyKeyNoCoalesce value=propertyValue?                  #propertyWithStringKeyNoEquals
     ;
 
 propertyKey

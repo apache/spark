@@ -4236,7 +4236,7 @@ class AstBuilder extends DataTypeAstBuilder
           // Key uses propertyKeyNoCoalesce (single token to prevent coalescing with value)
           val key = visitPropertyKeyNoCoalesce(p.key)
           // Value uses propertyValue (supports stringLit with coalescing, etc)
-          val value = visitPropertyValue(p.value)
+          val value = Option(p.value).map(visitPropertyValue).orNull
           key -> value
       }
     }
