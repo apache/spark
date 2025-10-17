@@ -118,6 +118,8 @@ class LocalDataToArrowConversion:
         none_on_identity: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
     ) -> Optional[Callable]:
+        import pyarrow as pa
+
         assert dataType is not None and isinstance(dataType, DataType)
         assert isinstance(nullable, bool)
 
@@ -307,6 +309,8 @@ class LocalDataToArrowConversion:
             return convert_timestamp_ntz
 
         elif isinstance(dataType, DecimalType):
+            exp = decimal.Decimal(f"1E-{dataType.scale}")
+            ctx = decimal.Context(prec=dataType.precision, rounding=decimal.ROUND_HALF_EVEN)
 
             def convert_decimal(value: Any) -> Any:
                 if value is None:
@@ -322,7 +326,8 @@ class LocalDataToArrowConversion:
                         if not nullable:
                             raise PySparkValueError(f"input for {dataType} must not be None")
                         return None
-                    return round(value, dataType.scale).normalize()
+
+                    return value.quantize(exp, context=ctx)
 
             return convert_decimal
 
