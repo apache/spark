@@ -17,6 +17,9 @@
 
 package org.apache.spark.storage
 
+import scala.reflect.ClassTag
+import scala.reflect.classTag
+
 /**
  * Base class representing a log line.
  *
@@ -24,7 +27,22 @@ package org.apache.spark.storage
  * @param sequenceId sequence ID of the log line
  * @param message log message
  */
-case class LogLine(
-  eventTime: Long,
-  sequenceId: Long,
-  message: String)
+trait LogLine {
+  val eventTime: Long
+  val sequenceId: Long
+  val message: String
+}
+
+object LogLine {
+  def getClassTag(logBlockType: LogBlockType.LogBlockType): ClassTag[_<:LogLine] =
+    logBlockType match {
+      case LogBlockType.TEST =>
+        classTag[TestLogLine]
+      case unsupportedLogBlockType =>
+        throw new RuntimeException("Not supported log type " + unsupportedLogBlockType)
+    }
+}
+
+case class TestLogLine(eventTime: Long, sequenceId: Long, message: String)
+  extends LogLine {
+}

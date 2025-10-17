@@ -21,8 +21,6 @@ import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 
-import scala.reflect.ClassTag
-
 import org.apache.commons.io.output.CountingOutputStream
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -70,7 +68,7 @@ private[spark] class LogBlockWriter(
       val emptyBlockId = LogBlockId.empty(logBlockType)
       objOut = blockManager
         .serializerManager
-        .blockSerializationStream(emptyBlockId, cos)(implicitly[ClassTag[LogLine]])
+        .blockSerializationStream(emptyBlockId, cos)(LogLine.getClassTag(logBlockType))
     } catch {
       case e: Exception =>
         logError(log"Failed to initialize LogBlockWriter.", e)
@@ -176,7 +174,7 @@ private[spark] class LogBlockWriter(
       TempFileBasedBlockStoreUpdater(
         blockId,
         StorageLevel.DISK_ONLY,
-        implicitly[ClassTag[LogLine]],
+        LogLine.getClassTag(logBlockType),
         tmpFile,
         blockSize)
       .save()

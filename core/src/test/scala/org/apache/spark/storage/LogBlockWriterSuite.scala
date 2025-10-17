@@ -68,8 +68,8 @@ class LogBlockWriterSuite extends SparkFunSuite {
   test("SPARK-53755: bytes written stats") {
     val logBlockWriter = makeLogBlockWriter()
 
-    val log1 = LogLine(0L, 1, "Log message 1")
-    val log2 = LogLine(1L, 2, "Log message 2")
+    val log1 = TestLogLine(0L, 1, "Log message 1")
+    val log2 = TestLogLine(1L, 2, "Log message 2")
     try {
       logBlockWriter.writeLog(log1)
       logBlockWriter.writeLog(log2)
@@ -82,7 +82,7 @@ class LogBlockWriterSuite extends SparkFunSuite {
 
   test("SPARK-53755: writeLog/save operations should fail on closed LogBlockWriter") {
     val logBlockWriter = makeLogBlockWriter()
-    val log = LogLine(0L, 1, "Log message 1")
+    val log = TestLogLine(0L, 1, "Log message 1")
 
     logBlockWriter.writeLog(log)
     logBlockWriter.close()
@@ -99,7 +99,7 @@ class LogBlockWriterSuite extends SparkFunSuite {
   }
 
   test("SPARK-53755: close writer after saving to block manager") {
-    val log = LogLine(0L, 1, "Log message 1")
+    val log = TestLogLine(0L, 1, "Log message 1")
 
     Seq(true, false).foreach { success =>
       val logBlockWriter = spy(makeLogBlockWriter())

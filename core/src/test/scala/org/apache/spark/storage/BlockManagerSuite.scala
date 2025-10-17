@@ -2528,8 +2528,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val store = makeBlockManager(8000, "executor1")
     val logBlockWriter = store.getLogBlockWriter(LogBlockType.TEST)
     val logBlockId = TestLogBlockId(1L, store.executorId)
-    val log1 = LogLine(0L, 1, "Log message 1")
-    val log2 = LogLine(1L, 2, "Log message 2")
+    val log1 = TestLogLine(0L, 1, "Log message 1")
+    val log2 = TestLogLine(1L, 2, "Log message 2")
 
     logBlockWriter.writeLog(log1)
     logBlockWriter.writeLog(log2)
@@ -2543,7 +2543,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       assert(s.diskSize > 0)
     }
 
-    val data = store.get[LogLine](logBlockId).get.data.toSeq
+    val data = store.get[TestLogLine](logBlockId).get.data.toSeq
     assert(data === Seq(log1, log2))
   }
 
@@ -2560,10 +2560,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     }
 
     val logBlockWriter = store.getRollingLogWriter(logBlockIdGenerator, 100)
-    val log1 = LogLine(0L, 1, "Log message 1")
-    val log2 = LogLine(1L, 2, "Log message 2")
-    val log3 = LogLine(2L, 3, "Log message 3")
-    val log4 = LogLine(3L, 4, "Log message 4")
+    val log1 = TestLogLine(0L, 1, "Log message 1")
+    val log2 = TestLogLine(1L, 2, "Log message 2")
+    val log3 = TestLogLine(2L, 3, "Log message 3")
+    val log4 = TestLogLine(3L, 4, "Log message 4")
 
     // 65 bytes for each log line, 2 log lines for each block
     logBlockWriter.writeLog(log1)
