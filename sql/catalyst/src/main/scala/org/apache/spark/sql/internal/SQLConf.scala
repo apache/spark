@@ -877,9 +877,7 @@ object SQLConf {
     .createOptional
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
-    .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
-      "Note: For structured streaming, this configuration cannot be changed between query " +
-      "restarts from the same checkpoint location.")
+    .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
     .version("1.1.0")
     .intConf
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
