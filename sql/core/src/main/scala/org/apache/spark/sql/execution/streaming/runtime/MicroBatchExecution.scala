@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -1022,13 +1022,12 @@ class MicroBatchExecution(
       execCtx.reportTimeTaken("addBatch") {
       SQLExecution.withNewExecutionId(execCtx.executionPlan) {
         sink match {
-          case _: ForeachBatchSink[_] =>
-            if (trigger.isInstanceOf[RealTimeTrigger]) {
-              throw new SparkException("foreach batch sink is not supported in RealTimeMode.")
-            }
           case s: Sink =>
             if (trigger.isInstanceOf[RealTimeTrigger]) {
-              throw new SparkException(s"$s is not supported in RealTimeMode.")
+              throw new SparkIllegalStateException(
+                errorClass = "STREAMING_REAL_TIME_MODE.SINK_NOT_SUPPORTED",
+                messageParameters = Map("className" -> s.getClass.getName)
+              )
             }
             s.addBatch(execCtx.batchId, nextBatch)
             // DSv2 write node has a mechanism to invalidate DSv2 relation, but there is no

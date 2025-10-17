@@ -5544,14 +5544,14 @@
           "Async progress tracking is not supported in real-time mode. Set option asyncProgressTrackingEnabled to false and retry your query."
         ]
       },
-      "INPUT_STREAM_NOT_SUPPORTED" : {
-        "message" : [
-          "The input stream <className> is not supported in Real-time Mode."
-        ]
-      },
       "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
         "message" : [
           "Real-time mode does not support union on two or more identical streaming data sources in a single query. This includes scenarios such as referencing the same source DataFrame more than once, or using two data sources with identical configurations for some sources. For Kafka, avoid reusing the same DataFrame and create different ones. Sources provided in the query: <sources>"
+        ]
+      },
+      "INPUT_STREAM_NOT_SUPPORTED" : {
+        "message" : [
+          "The input stream <className> is not supported in Real-time Mode."
         ]
       }
     },
