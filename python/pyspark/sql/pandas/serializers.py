@@ -168,7 +168,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
                 assert isinstance(batch, pa.RecordBatch)
 
                 # Wrap the root struct
-                if len(batch.columns) == 0:
+                if batch.num_columns == 0:
                     # When batch has no column, it should still create
                     # an empty batch with the number of rows set.
                     struct = pa.array([{}] * batch.num_rows)
