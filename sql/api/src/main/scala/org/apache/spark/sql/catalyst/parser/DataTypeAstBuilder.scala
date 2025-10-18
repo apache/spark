@@ -129,6 +129,27 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     Option(ctx).map(_.INTEGER_VALUE.getSymbol).orNull
 
   /**
+   * Helper method to convert ANTLR's terminal node accessor to a Scala sequence. ANTLR generates
+   * a List when the + quantifier is used in the grammar.
+   *
+   * @param accessor
+   *   The terminal node accessor that may return a List or null.
+   * @return
+   *   A sequence of terminal nodes, or empty sequence if null.
+   */
+  private def getTerminals(accessor: Any): Seq[org.antlr.v4.runtime.tree.TerminalNode] = {
+    if (accessor != null) {
+      accessor
+        .asInstanceOf[java.util.List[_]]
+        .asScala
+        .map(_.asInstanceOf[org.antlr.v4.runtime.tree.TerminalNode])
+        .toSeq
+    } else {
+      Seq.empty
+    }
+  }
+
+  /**
    * Collects all string literal terminals from a stringLitWithoutMarker context. The grammar rule
    * allows one or more consecutive string literals, which are collected in source order for
    * coalescing.
@@ -140,30 +161,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   private def collectStringTerminals(
       ctx: StringLitWithoutMarkerContext): Seq[org.antlr.v4.runtime.tree.TerminalNode] = {
-    val stringLiterals = if (ctx.STRING_LITERAL != null) {
-      // ANTLR generates a List when the + quantifier is used in the grammar.
-      ctx.STRING_LITERAL
-        .asInstanceOf[java.util.List[_]]
-        .asScala
-        .map(_.asInstanceOf[org.antlr.v4.runtime.tree.TerminalNode])
-        .toSeq
-    } else {
-      Seq.empty
-    }
-
-    val doubleQuoted = if (ctx.DOUBLEQUOTED_STRING != null) {
-      // ANTLR generates a List when the + quantifier is used in the grammar.
-      ctx.DOUBLEQUOTED_STRING
-        .asInstanceOf[java.util.List[_]]
-        .asScala
-        .map(_.asInstanceOf[org.antlr.v4.runtime.tree.TerminalNode])
-        .toSeq
-    } else {
-      Seq.empty
-    }
-
     // Combine and sort by position in source.
-    (stringLiterals ++ doubleQuoted).sortBy(_.getSymbol.getStartIndex)
+    (getTerminals(ctx.STRING_LITERAL) ++ getTerminals(ctx.DOUBLEQUOTED_STRING))
+      .sortBy(_.getSymbol.getStartIndex)
   }
 
   /**
