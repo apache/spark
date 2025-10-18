@@ -39,6 +39,19 @@ abstract class DataStreamReader {
   def format(source: String): this.type
 
   /**
+   * Assigns a name to this streaming source for source evolution capability.
+   * When sources are named, they can be added, removed, or reordered without
+   * losing checkpoint state, enabling query evolution.
+   *
+   * If not specified, sources are automatically assigned ordinal names ("0", "1", "2", etc.)
+   * based on their position in the query, which maintains backward compatibility.
+   *
+   * @param sourceName The unique name for this source (alphanumeric, underscore, hyphen only)
+   * @since 4.1.0
+   */
+  def name(sourceName: String): this.type
+
+  /**
    * Specifies the input schema. Some data sources (e.g. JSON) can infer the input schema
    * automatically from data. By specifying the schema here, the underlying data source can skip
    * the schema inference step, and thus speed up data loading.
