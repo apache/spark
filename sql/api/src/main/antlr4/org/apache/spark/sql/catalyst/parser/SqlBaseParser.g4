@@ -315,7 +315,7 @@ statement
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
         LIKE pattern=stringLit partitionSpec?                             #showTableExtended
     | SHOW TBLPROPERTIES table=identifierReference
-        (LEFT_PAREN key=propertyKey RIGHT_PAREN)?                      #showTblProperties
+        (LEFT_PAREN key=propertyKeyOrStringLit RIGHT_PAREN)?           #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=identifierReference
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) identifierReference)?
@@ -602,12 +602,24 @@ propertyList
     ;
 
 property
-    : key=propertyKey (EQ? value=propertyValue)?
+    : key=propertyKey (EQ? value=propertyValue)?                      #propertyWithIdentifierKey
+    | key=stringLit EQ value=propertyValue                            #propertyWithStringKeyAndEquals
+    | key=propertyKeyNoCoalesce value=propertyValue?                  #propertyWithStringKeyNoEquals
     ;
 
 propertyKey
     : errorCapturingIdentifier (DOT errorCapturingIdentifier)*
+    ;
+
+propertyKeyOrStringLit
+    : propertyKey
     | stringLit
+    ;
+
+propertyKeyNoCoalesce
+    : STRING_LITERAL
+    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
+    | parameterMarker
     ;
 
 propertyValue
@@ -622,7 +634,9 @@ expressionPropertyList
     ;
 
 expressionProperty
-    : key=propertyKey (EQ? value=expression)?
+    : key=propertyKey (EQ? value=expression)?                         #expressionPropertyWithIdentifierKey
+    | key=stringLit EQ value=expression                               #expressionPropertyWithStringKeyAndEquals
+    | key=propertyKeyNoCoalesce value=expression                      #expressionPropertyWithStringKeyNoEquals
     ;
 
 constantList
@@ -1266,10 +1280,10 @@ constant
     | QUESTION                                                                                 #posParameterLiteral
     | namedParameterMarker                                                                     #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
-    | literalType stringLitWithoutMarker                                                       #typeConstructor
+    | literalType singleStringLit                                                               #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
-    | stringLit+                                                                               #stringLiteral
+    | stringLit                                                                                #stringLiteral
     ;
 
 namedParameterMarker
@@ -1683,9 +1697,13 @@ alterColumnAction
     ;
 
 stringLitWithoutMarker
-    : STRING_LITERAL                                                                           #stringLiteralValue
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #doubleQuotedStringLiteralValue
-;
+    : (STRING_LITERAL | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING)+
+    ;
+
+singleStringLit
+    : STRING_LITERAL                                                                           #singleStringLiteralValue
+    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #singleDoubleQuotedStringLiteralValue
+    ;
 
 parameterMarker
     : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule
@@ -1693,8 +1711,7 @@ parameterMarker
     ;
 
 stringLit
-    : stringLitWithoutMarker                                                                   #stringLiteralInContext
-    | parameterMarker                                                                          #parameterStringValue
+    : (stringLitWithoutMarker | parameterMarker)+
     ;
 
 comment

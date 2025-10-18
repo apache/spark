@@ -3411,7 +3411,8 @@ class AstBuilder extends DataTypeAstBuilder
    * Currently Date, Timestamp, Interval and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
-    val value = string(visit(ctx.stringLitWithoutMarker).asInstanceOf[Token])
+    // Type constructor uses a single string literal (no coalescing, no parameter markers)
+    val value = string(visit(ctx.singleStringLit).asInstanceOf[Token])
     val valueType = ctx.literalType.start.getType
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
@@ -3488,11 +3489,11 @@ class AstBuilder extends DataTypeAstBuilder
             throw ex
         }
       case _ =>
+        // For unsupported type identifiers (e.g., GEO, GEOMETRY, etc.)
+        val supportedTypes = Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP",
+          "INTERVAL", "X", "TIME")
         throw QueryParsingErrors.literalValueTypeUnsupportedError(
-          unsupportedType = ctx.literalType.getText,
-          supportedTypes =
-            Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME"),
-          ctx)
+          ctx.literalType.getText, supportedTypes, ctx)
     }
   }
 
@@ -3648,14 +3649,20 @@ class AstBuilder extends DataTypeAstBuilder
    * converted into "helloworld".
    *
    * Special characters can be escaped by using Hive/C-style escaping.
+   *
+   * Note: With the modified stringLit grammar rule, visitStringLit now returns a Token
+   * that already represents the coalesced value of multiple literals.
    */
   private def createString(ctx: StringLiteralContext): String = {
+    // visitStringLit already handles coalescing multiple literals and returns
+    // a CoalescedStringToken. We need to unescape based on configuration.
+    val token = visitStringLit(ctx.stringLit())
     if (conf.escapedStringLiterals) {
-      ctx.stringLit.asScala.map(x => stringWithoutUnescape(visitStringLit(x))).mkString
+      stringWithoutUnescape(token)
     } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
-      ctx.stringLit.asScala.map(x => stringIgnoreQuoteQuote(visitStringLit(x))).mkString
+      stringIgnoreQuoteQuote(token)
     } else {
-      ctx.stringLit.asScala.map(x => string(visitStringLit(x))).mkString
+      string(token)
     }
   }
 
@@ -4222,9 +4229,23 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitPropertyList(
       ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.property.asScala.map { property =>
-      val key = visitPropertyKey(property.key)
-      val value = visitPropertyValue(property.value)
-      key -> value
+      property match {
+        case p: PropertyWithIdentifierKeyContext =>
+          val key = visitPropertyKey(p.key)
+          val value = visitPropertyValue(p.value)
+          key -> value
+        case p: PropertyWithStringKeyAndEqualsContext =>
+          // Key uses stringLit (allows coalescing and parameter markers)
+          val key = string(visitStringLit(p.key))
+          val value = visitPropertyValue(p.value)
+          key -> value
+        case p: PropertyWithStringKeyNoEqualsContext =>
+          // Key uses propertyKeyNoCoalesce (single token to prevent coalescing with value)
+          val key = visitPropertyKeyNoCoalesce(p.key)
+          // Value uses propertyValue (supports stringLit with coalescing, etc)
+          val value = Option(p.value).map(visitPropertyValue).orNull
+          key -> value
+      }
     }
     // Check for duplicate property names.
     checkDuplicateKeys(properties.toSeq, ctx)
@@ -4258,15 +4279,39 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * A property key can either be String or a collection of dot separated elements. This
-   * function extracts the property key based on whether its a string literal or a property
-   * identifier.
+   * A property key is a collection of dot separated identifiers.
    */
   override def visitPropertyKey(key: PropertyKeyContext): String = {
-    if (key.stringLit() != null) {
-      string(visitStringLit(key.stringLit()))
+    key.getText
+  }
+
+  /**
+   * A property key or string literal can be either:
+   * - A collection of dot separated identifiers (propertyKey)
+   * - A string literal (potentially coalesced, supports parameter markers)
+   */
+  override def visitPropertyKeyOrStringLit(key: PropertyKeyOrStringLitContext): String = {
+    if (key.stringLit != null) {
+      // String literal key (supports coalescing and parameter markers)
+      string(visitStringLit(key.stringLit))
     } else {
-      key.getText
+      // Identifier key (dot-separated identifiers)
+      visitPropertyKey(key.propertyKey)
+    }
+  }
+
+  /**
+   * A property key that doesn't support coalescing (used when no = sign is present).
+   * Can be a stringLitWithoutMarker or a parameterMarker.
+   */
+  override def visitPropertyKeyNoCoalesce(key: PropertyKeyNoCoalesceContext): String = {
+    if (key.STRING_LITERAL() != null) {
+      string(key.STRING_LITERAL().getSymbol)
+    } else if (key.DOUBLEQUOTED_STRING() != null) {
+      string(key.DOUBLEQUOTED_STRING().getSymbol)
+    } else {
+      // parameterMarker - will be substituted before this code runs
+      string(visit(key.parameterMarker()).asInstanceOf[Token])
     }
   }
 
@@ -4293,9 +4338,25 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitExpressionPropertyList(
       ctx: ExpressionPropertyListContext): OptionList = {
     val options = ctx.expressionProperty.asScala.map { property =>
-      val key: String = visitPropertyKey(property.key)
-      val value: Expression = Option(property.value).map(expression).getOrElse {
-        operationNotAllowed(s"A value must be specified for the key: $key.", ctx)
+      val (key, value) = property match {
+        case p: ExpressionPropertyWithIdentifierKeyContext =>
+          val k = visitPropertyKey(p.key)
+          val v = Option(p.value).map(expression).getOrElse {
+            operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
+          }
+          (k, v)
+        case p: ExpressionPropertyWithStringKeyAndEqualsContext =>
+          val k = string(visitStringLit(p.key))
+          val v = Option(p.value).map(expression).getOrElse {
+            operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
+          }
+          (k, v)
+        case p: ExpressionPropertyWithStringKeyNoEqualsContext =>
+          val k = visitPropertyKeyNoCoalesce(p.key)
+          val v = Option(p.value).map(expression).getOrElse {
+            operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
+          }
+          (k, v)
       }
       key -> value
     }.toSeq
@@ -6168,7 +6229,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
       createUnresolvedTableOrView(ctx.table, "SHOW TBLPROPERTIES"),
-      Option(ctx.key).map(visitPropertyKey))
+      Option(ctx.key).map(visitPropertyKeyOrStringLit))
   }
 
   /**

@@ -20,7 +20,8 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.antlr.v4.runtime.Token
+import org.antlr.v4.runtime.{CharStream, CommonToken, Token, TokenSource}
+import org.antlr.v4.runtime.misc.Pair
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
@@ -45,18 +46,165 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  override def visitStringLiteralValue(ctx: StringLiteralValueContext): Token =
-    Option(ctx).map(_.STRING_LITERAL.getSymbol).orNull
+  // Visit stringLit which can now have multiple stringLitWithoutMarker or parameterMarker children
+  override def visitStringLit(ctx: StringLitContext): Token = {
+    if (ctx == null) {
+      return null
+    }
 
-  override def visitDoubleQuotedStringLiteralValue(
-      ctx: DoubleQuotedStringLiteralValueContext): Token =
-    Option(ctx).map(_.DOUBLEQUOTED_STRING.getSymbol).orNull
+    // Collect all children (could be mix of stringLitWithoutMarker and parameterMarker)
+    val children = scala.collection.mutable.ListBuffer[Token]()
+    // Visit each child and collect resulting tokens
+    val childCount = ctx.getChildCount
+    var i = 0
+    while (i < childCount) {
+      val child = ctx.getChild(i)
+      val token = visit(child).asInstanceOf[Token]
+      if (token != null) {
+        children += token
+      }
+      i += 1
+    }
 
-  override def visitIntegerVal(ctx: IntegerValContext): Token =
-    Option(ctx).map(_.INTEGER_VALUE.getSymbol).orNull
+    if (children.isEmpty) {
+      null
+    } else if (children.size == 1) {
+      // Fast path: single token, return unchanged
+      children.head
+    } else {
+      // Multiple tokens: create coalesced token
+      createCoalescedStringToken(children.toSeq)
+    }
+  }
 
-  override def visitStringLiteralInContext(ctx: StringLiteralInContextContext): Token = {
-    visit(ctx.stringLitWithoutMarker).asInstanceOf[Token]
+  // Visit stringLitWithoutMarker which now supports coalescing with +
+  override def visitStringLitWithoutMarker(ctx: StringLitWithoutMarkerContext): Token = {
+    if (ctx == null) {
+      return null
+    }
+
+    // Collect all string literal terminals (could be multiple with stringLitWithoutMarker+)
+    val allTerminals = collectStringTerminals(ctx)
+
+    if (allTerminals.isEmpty) {
+      null
+    } else if (allTerminals.size == 1) {
+      // Fast path: single literal, return original token unchanged
+      allTerminals.head.getSymbol
+    } else {
+      // Multiple literals: create coalesced token
+      createCoalescedStringToken(allTerminals.map(_.getSymbol).toSeq)
+    }
+  }
+
+  /**
+   * Visit singleStringLit alternatives and return the token (always exactly one token).
+   */
+  override def visitSingleStringLiteralValue(ctx: SingleStringLiteralValueContext): Token = {
+    ctx.STRING_LITERAL().getSymbol
+  }
+
+  override def visitSingleDoubleQuotedStringLiteralValue(
+      ctx: SingleDoubleQuotedStringLiteralValueContext): Token = {
+    ctx.DOUBLEQUOTED_STRING().getSymbol
+  }
+
+  /**
+   * Collect all STRING_LITERAL and DOUBLEQUOTED_STRING terminals from the context. With the
+   * stringLitWithoutMarker+ grammar rule, there can be multiple terminals.
+   */
+  private def collectStringTerminals(
+      ctx: StringLitWithoutMarkerContext): Seq[org.antlr.v4.runtime.tree.TerminalNode] = {
+    val stringLiterals = if (ctx.STRING_LITERAL != null) {
+      // With stringLit+, ANTLR generates a List
+      ctx.STRING_LITERAL
+        .asInstanceOf[java.util.List[_]]
+        .asScala
+        .map(_.asInstanceOf[org.antlr.v4.runtime.tree.TerminalNode])
+        .toSeq
+    } else {
+      Seq.empty
+    }
+
+    val doubleQuoted = if (ctx.DOUBLEQUOTED_STRING != null) {
+      // With stringLit+, ANTLR generates a List
+      ctx.DOUBLEQUOTED_STRING
+        .asInstanceOf[java.util.List[_]]
+        .asScala
+        .map(_.asInstanceOf[org.antlr.v4.runtime.tree.TerminalNode])
+        .toSeq
+    } else {
+      Seq.empty
+    }
+
+    // Combine and sort by position in source
+    (stringLiterals ++ doubleQuoted).sortBy(_.getSymbol.getStartIndex)
+  }
+
+  /**
+   * Create a CoalescedStringToken from multiple string literal tokens. Processes each token
+   * through string() to handle escaping, then concatenates.
+   */
+  private def createCoalescedStringToken(tokens: Seq[Token]): Token = {
+    val firstToken = tokens.head
+    val lastToken = tokens.last
+
+    // Check if any of the tokens are R-strings
+    val hasRString = tokens.exists { token =>
+      val text = token.getText
+      text.length >= 2 &&
+      (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
+      (text.charAt(1) == '\'' || text.charAt(1) == '"')
+    }
+
+    // Determine the quote character to use (preserve from first non-R-string token)
+    val quoteChar = {
+      val firstNonRToken = tokens
+        .find { token =>
+          val text = token.getText
+          !(text.length >= 2 &&
+            (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
+            (text.charAt(1) == '\'' || text.charAt(1) == '"'))
+        }
+        .getOrElse(tokens.head)
+
+      val text = firstNonRToken.getText
+      if (text.startsWith("\"") || (text.length >= 2 && text.charAt(1) == '"')) {
+        '"'
+      } else {
+        '\''
+      }
+    }
+
+    // Concatenate the raw content of each token (without the outer quotes).
+    // Preserve all inner content including "" or '' sequences - these will be
+    // handled later by unescapeSQLString based on the config.
+    val coalescedRawContent = tokens.map { token =>
+      val text = token.getText
+      // Check if this is an R-string (raw string literal)
+      val isRString = text.length >= 2 &&
+        (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
+        (text.charAt(1) == '\'' || text.charAt(1) == '"')
+
+      if (isRString) {
+        // For R-strings: Remove R prefix and outer quotes (first 2 chars and last char)
+        text.substring(2, text.length - 1)
+      } else {
+        // For regular strings: Remove only the outer quotes (first and last character)
+        // Keep all inner content including "" or '' which will be processed by unescapeSQLString
+        text.substring(1, text.length - 1)
+      }
+    }.mkString
+
+    new CoalescedStringToken(
+      new org.antlr.v4.runtime.misc.Pair(firstToken.getTokenSource, firstToken.getInputStream),
+      firstToken.getType,
+      firstToken.getChannel,
+      firstToken.getStartIndex,
+      lastToken.getStopIndex,
+      coalescedRawContent,
+      hasRString,
+      quoteChar)
   }
 
   override def visitNamedParameterMarkerRule(ctx: NamedParameterMarkerRuleContext): Token = {
@@ -98,12 +246,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         s"parse tree. Found unsubstituted parameter: ${ctx.getText}")
     ctx.getText.toInt
   }
-
-  /**
-   * Visit a stringLit context by delegating to the appropriate labeled visitor.
-   */
-  def visitStringLit(ctx: StringLitContext): Token =
-    Option(ctx).map(visit(_).asInstanceOf[Token]).orNull
 
   /**
    * Create a multi-part identifier.
@@ -397,5 +539,59 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       }
     }
     (start.getOrElse(defaultStart), step.getOrElse(defaultStep))
+  }
+}
+
+/**
+ * A synthetic token representing multiple coalesced string literals.
+ *
+ * When the parser encounters consecutive string literals (e.g., 'hello' 'world'), they are
+ * automatically coalesced into a single logical string. This token class represents such
+ * coalesced strings while maintaining the Token interface.
+ *
+ * The coalescedValue contains the raw concatenated content from all the string literals (with
+ * outer quotes removed but escape sequences preserved). The getText() method wraps this in
+ * quotes, and when SparkParserUtils.string() is called, it will unescape the content based on the
+ * current SQL configuration (respecting ESCAPED_STRING_LITERALS).
+ *
+ * @param source
+ *   The token source and input stream
+ * @param tokenType
+ *   The ANTLR token type (typically STRING_LITERAL)
+ * @param channel
+ *   The token channel
+ * @param start
+ *   The start index of the first literal in the input stream
+ * @param stop
+ *   The stop index of the last literal in the input stream
+ * @param coalescedValue
+ *   The raw concatenated content (without outer quotes, escape sequences NOT processed)
+ */
+private[parser] class CoalescedStringToken(
+    source: Pair[TokenSource, CharStream],
+    tokenType: Int,
+    channel: Int,
+    start: Int,
+    stop: Int,
+    private val coalescedValue: String,
+    private val isRawString: Boolean = false,
+    private val quoteChar: Char = '\'')
+    extends CommonToken(source, tokenType, channel, start, stop) {
+
+  override def getText: String = {
+    if (isRawString) {
+      // Preserve R-string prefix so unescapeSQLString knows not to process escapes
+      s"R$quoteChar$coalescedValue$quoteChar"
+    } else {
+      s"$quoteChar$coalescedValue$quoteChar"
+    }
+  }
+
+  override def toString: String = {
+    if (isRawString) {
+      s"CoalescedStringToken(R$quoteChar$coalescedValue$quoteChar)"
+    } else {
+      s"CoalescedStringToken($quoteChar$coalescedValue$quoteChar)"
+    }
   }
 }
