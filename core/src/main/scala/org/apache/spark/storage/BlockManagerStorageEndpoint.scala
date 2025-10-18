@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 
-import org.apache.spark.{MapOutputTracker, SparkEnv}
+import org.apache.spark.{MapOutputTracker, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{BLOCK_ID, BROADCAST_ID, RDD_ID, SHUFFLE_ID}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}
@@ -57,7 +57,14 @@ class BlockManagerStorageEndpoint(
 
     case RemoveShuffle(shuffleId) =>
       doAsync[Boolean](log"removing shuffle ${MDC(SHUFFLE_ID, shuffleId)}", context) {
-        if (mapOutputTracker != null) {
+        if (mapOutputTracker != null && !mapOutputTracker.isInstanceOf[MapOutputTrackerMaster]) {
+          // SPARK-53898: `MapOutputTrackerMaster.unregisterShuffle()` should only be called
+          // through `ContextCleaner` when the shuffle is considered no longer referenced anywhere.
+          // Otherwise, we might hit exceptions if there is any subsequent access (which still
+          // reference that shuffle) to that shuffle metadata in `MapOutputTrackerMaster`. E.g.,
+          // an ongoing subquery could access the same shuffle metadata which could have been
+          // cleaned up after the main query completes. Note this currently only happens in local
+          // cluster where both driver and executor use the `MapOutputTrackerMaster`.
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
         val shuffleManager = SparkEnv.get.shuffleManager
