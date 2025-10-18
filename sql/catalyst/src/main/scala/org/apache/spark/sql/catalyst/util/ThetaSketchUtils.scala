@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.datasketches.common.SketchesArgumentException
+import java.util.Locale
+
+import org.apache.datasketches.common.{Family, SketchesArgumentException}
 import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
 import org.apache.datasketches.theta.CompactSketch
 
@@ -36,6 +38,18 @@ object ThetaSketchUtils {
   final val MAX_LG_NOM_LONGS = 26
   final val DEFAULT_LG_NOM_LONGS = 12
 
+  /*
+   * QUICKSELECT is optimized for speed and is the default choice for most use cases,
+   * providing faster updates and queries with slightly higher error rates. ALPHA offers
+   * better accuracy with slightly higher resource consumption, making it suitable when
+   * precision is more important than performance. The choice primarily affects the speed
+   * vs accuracy trade-off.
+   */
+  final val FAMILY_QUICKSELECT = "QUICKSELECT"
+  final val FAMILY_ALPHA = "ALPHA"
+  final val DEFAULT_FAMILY = FAMILY_QUICKSELECT
+
+
   /**
    * Validates the lgNomLongs parameter for Theta sketch size. Throws a Spark SQL exception if the
    * value is out of bounds.
@@ -50,6 +64,26 @@ object ThetaSketchUtils {
         min = MIN_LG_NOM_LONGS,
         max = MAX_LG_NOM_LONGS,
         value = lgNomLongs)
+    }
+  }
+
+  /**
+   * Converts a family string to DataSketches Family enum.
+   * Throws a Spark SQL exception if the family name is invalid.
+   *
+   * @param familyName The family name string
+   * @param prettyName The display name of the function/expression for error messages
+   * @return The corresponding DataSketches Family enum value
+   */
+  def parseFamily(familyName: String, prettyName: String): Family = {
+    familyName.toUpperCase(Locale.ROOT) match {
+      case FAMILY_QUICKSELECT => Family.QUICKSELECT
+      case FAMILY_ALPHA => Family.ALPHA
+      case _ =>
+        throw QueryExecutionErrors.thetaInvalidFamily(
+          function = prettyName,
+          value = familyName,
+          validFamilies = Seq(FAMILY_QUICKSELECT, FAMILY_ALPHA))
     }
   }
 

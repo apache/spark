@@ -26029,10 +26029,12 @@ def hll_union(
 def theta_sketch_agg(
     col: "ColumnOrName",
     lgNomEntries: Optional[Union[int, Column]] = None,
+    family: Optional[str] = None,
 ) -> Column:
     """
     Aggregate function: returns the compact binary representation of the Datasketches
-    ThetaSketch with the values in the input column configured with lgNomEntries nominal entries.
+    ThetaSketch with the values in the input column configured with lgNomEntries nominal entries
+    and the specified sketch family.
 
     .. versionadded:: 4.1.0
 
@@ -26042,6 +26044,8 @@ def theta_sketch_agg(
     lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries, where nominal entries is the size of the sketch
         (must be between 4 and 26, defaults to 12)
+    family : str, optional
+        The sketch family: 'QUICKSELECT' or 'ALPHA' (defaults to 'QUICKSELECT').
 
     Returns
     -------
@@ -26062,24 +26066,35 @@ def theta_sketch_agg(
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value"))).show()
-    +--------------------------------------------------+
-    |theta_sketch_estimate(theta_sketch_agg(value, 12))|
-    +--------------------------------------------------+
-    |                                                 3|
-    +--------------------------------------------------+
+    +---------------------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 12, QUICKSELECT))|
+    +---------------------------------------------------------------+
+    |                                                              3|
+    +---------------------------------------------------------------+
 
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value", 15))).show()
-    +--------------------------------------------------+
-    |theta_sketch_estimate(theta_sketch_agg(value, 15))|
-    +--------------------------------------------------+
-    |                                                 3|
-    +--------------------------------------------------+
+    +---------------------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 15, QUICKSELECT))|
+    +---------------------------------------------------------------+
+    |                                                              3|
+    +---------------------------------------------------------------+
+
+    >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value", 15, "ALPHA"))).show()
+    +---------------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 15, ALPHA))|
+    +---------------------------------------------------------+
+    |                                                        3|
+    +---------------------------------------------------------+
     """
     fn = "theta_sketch_agg"
-    if lgNomEntries is None:
+    if lgNomEntries is None and family is None:
         return _invoke_function_over_columns(fn, col)
-    else:
+    elif family is None:
         return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
+    else:
+        if lgNomEntries is None:
+            lgNomEntries = 12  # default value
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries), lit(family))
 
 
 @_try_remote_functions
@@ -26206,11 +26221,11 @@ def theta_sketch_estimate(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
     >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value"))).show()
-    +--------------------------------------------------+
-    |theta_sketch_estimate(theta_sketch_agg(value, 12))|
-    +--------------------------------------------------+
-    |                                                 3|
-    +--------------------------------------------------+
+    +---------------------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 12, QUICKSELECT))|
+    +---------------------------------------------------------------+
+    |                                                              3|
+    +---------------------------------------------------------------+
     """
 
     fn = "theta_sketch_estimate"
