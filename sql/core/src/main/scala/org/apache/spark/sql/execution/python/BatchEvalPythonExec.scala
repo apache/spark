@@ -76,10 +76,20 @@ class BatchEvalPythonEvaluatorFactory(
     // Input iterator to Python.
     val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema, batchSize)
 
+    val binaryAsBytes = SQLConf.get.getConf(SQLConf.PYSPARK_USE_BYTES_FOR_BINARY_ENABLED)
+    val workerConf = Map(
+      SQLConf.PYSPARK_USE_BYTES_FOR_BINARY_ENABLED.key -> binaryAsBytes.toString)
+
     // Output iterator for results from Python.
     val outputIterator =
       new PythonUDFWithNamedArgumentsRunner(
-        funcs, PythonEvalType.SQL_BATCHED_UDF, argMetas, pythonMetrics, jobArtifactUUID, profiler)
+        funcs,
+        PythonEvalType.SQL_BATCHED_UDF,
+        argMetas,
+        workerConf,
+        pythonMetrics,
+        jobArtifactUUID,
+        profiler)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler

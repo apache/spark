@@ -357,7 +357,22 @@ class VarcharType(AtomicType):
 class BinaryType(AtomicType, metaclass=DataTypeSingleton):
     """Binary (byte array) data type."""
 
-    pass
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Any) -> Any:
+        if obj is None:
+            return None
+        from pyspark.sql.conversion import _should_use_bytes_for_binary
+
+        if _should_use_bytes_for_binary():
+            if isinstance(obj, bytearray):
+                return bytes(obj)
+            return obj
+        else:
+            if isinstance(obj, bytes):
+                return bytearray(obj)
+            return obj
 
 
 class BooleanType(AtomicType, metaclass=DataTypeSingleton):

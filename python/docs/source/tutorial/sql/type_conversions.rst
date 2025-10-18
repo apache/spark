@@ -105,7 +105,7 @@ All Conversions
       - string
       - StringType()
     * - **BinaryType**
-      - bytearray
+      - bytes
       - BinaryType()
     * - **BooleanType**
       - bool
