@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.hive.ql.exec._
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer
-import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory, StructObjectInspector}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -224,7 +224,9 @@ private[hive] case class HiveGenericUDTF(
   }
 
   @transient
-  protected lazy val outputInspector = function.initialize(inputInspector)
+  protected lazy val outputInspector = funcWrapper.getReturnInspector {
+    function.initialize(inputInspector)
+  }.asInstanceOf[StructObjectInspector]
 
   @transient
   protected lazy val udtInput = new Array[AnyRef](children.length)
