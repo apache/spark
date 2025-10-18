@@ -28,8 +28,9 @@ cd "$FWDIR"
 # Clean ignored/untracked files that do not need
 # for pip packaging test. Machines in GitHub Action do not have
 # enough space, see also SPARK-44557.
+# We need to keep the coverage file from previous tests in coverage runs.
 if [[ ! -z "${GITHUB_ACTIONS}" ]]; then
-  git clean -d -f -x -e assembly
+  git clean -d -f -x -e assembly -e python/coverage.xml
 fi
 
 echo "Constructing virtual env for testing"
