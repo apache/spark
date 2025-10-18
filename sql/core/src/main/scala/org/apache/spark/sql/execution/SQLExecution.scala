@@ -56,7 +56,7 @@ object SQLExecution extends Logging {
   private val testing = sys.props.contains(IS_TESTING.key)
 
   private[sql] def executionIdJobTag(session: SparkSession, id: Long) =
-    s"${session.sessionJobTag}-execution-root-id-$id"
+    s"${session.sessionJobTag}-execution-root-id-$id-thread-${session.threadUuid.get()}"
 
   private[sql] def checkSQLExecutionId(sparkSession: SparkSession): Unit = {
     val sc = sparkSession.sparkContext
@@ -211,6 +211,17 @@ object SQLExecution extends Logging {
                   }
                 }
               }
+
+              // Cancel all spark jobs associated with this executionID, but only if it's the
+              // root execution.
+
+              // TODO: Consider enhancing this logic to cancel jobs earlier when nested
+              // query executions are completed.
+              if (executionId == rootExecutionId) {
+                sparkSession.sparkContext.cancelJobsWithTag(
+                  executionIdJobTag(sparkSession, executionId))
+              }
+
               val event = SparkListenerSQLExecutionEnd(
                 executionId,
                 System.currentTimeMillis(),
