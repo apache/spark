@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.{lang, util}
 import java.time.Instant
-
-import scala.jdk.CollectionConverters._
+import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -28,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
-import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, MergeMetrics, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage, WriterMetrics}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -116,10 +114,27 @@ class InMemoryRowLevelOperationTable(
 
   abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
 
-    override def commit(messages: Array[WriterCommitMessage],
-                                            metrics: util.Map[String, lang.Long]): Unit = {
-      metrics.asScala.map {
-        case (key, value) => commitProperties += key -> String.valueOf(value)
+    override def commit(messages: Array[WriterCommitMessage], metrics: WriterMetrics): Unit = {
+      metrics match {
+        case mergeMetrics: MergeMetrics =>
+          commitProperties += "merge.numTargetRowsCopied" ->
+            mergeMetrics.numTargetRowsCopied.toString
+          commitProperties += "merge.numTargetRowsDeleted" ->
+            mergeMetrics.numTargetRowsDeleted.toString
+          commitProperties += "merge.numTargetRowsUpdated" ->
+            mergeMetrics.numTargetRowsUpdated.toString
+          commitProperties += "merge.numTargetRowsInserted" ->
+            mergeMetrics.numTargetRowsInserted.toString
+          commitProperties += "merge.numTargetRowsMatchedUpdated" ->
+            mergeMetrics.numTargetRowsMatchedUpdated.toString
+          commitProperties += "merge.numTargetRowsMatchedDeleted" ->
+            mergeMetrics.numTargetRowsMatchedDeleted.toString
+          commitProperties += "merge.numTargetRowsNotMatchedBySourceUpdated" ->
+            mergeMetrics.numTargetRowsNotMatchedBySourceUpdated.toString
+          commitProperties += "merge.numTargetRowsNotMatchedBySourceDeleted" ->
+            mergeMetrics.numTargetRowsNotMatchedBySourceDeleted.toString
+        case _ =>
+          // Handle other metrics types if needed in the future
       }
       commit(messages)
       commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
