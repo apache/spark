@@ -499,7 +499,7 @@ The following SQL properties enable Storage Partition Join in different join que
 
 If Storage Partition Join is performed, the query plan will not contain Exchange nodes prior to the join.
 
-The following example uses Iceberg ([https://iceberg.apache.org/docs/latest/spark-getting-started/](https://iceberg.apache.org/docs/latest/spark-getting-started/)), a Spark V2 DataSource that supports Storage Partition Join.
+The following example uses [Iceberg](https://iceberg.apache.org/docs/latest/spark-getting-started/), a Spark V2 DataSource that supports Storage Partition Join.
 ```sql
 CREATE TABLE prod.db.target (id INT, salary INT, dep STRING)
 USING iceberg
