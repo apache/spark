@@ -269,8 +269,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING().key(),
       (boolean) SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING()
         .defaultValue().get());
-    StructType batchSchema = !returnNullStructIfAllFieldsMissing
+    StructType batchSchema = returnNullStructIfAllFieldsMissing
       ? new StructType(sparkSchema.fields())
+      // Truncate to match requested schema to make sure extra struct field that we read for
+      // nullability is not included in columnarBatch and exposed outside.
       : (StructType) truncateType(sparkSchema, sparkRequestedSchema);
 
     int constantColumnLength = 0;

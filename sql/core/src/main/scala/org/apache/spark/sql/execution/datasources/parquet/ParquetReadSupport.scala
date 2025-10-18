@@ -428,13 +428,13 @@ object ParquetReadSupport extends Logging {
         parquetRecord.getFields.asScala.groupBy(_.getName.toLowerCase(Locale.ROOT))
     lazy val idToParquetFieldMap =
         parquetRecord.getFields.asScala.filter(_.getId != null).groupBy(f => f.getId.intValue())
-    var isStructWithMissingFields = true
+    var isStructWithMissingAllFields = true
 
     def matchCaseSensitiveField(f: StructField): Type = {
       caseSensitiveParquetFieldMap
           .get(f.name)
           .map { parquetType =>
-            isStructWithMissingFields = false
+            isStructWithMissingAllFields = false
             clipParquetType(parquetType, f.dataType, caseSensitive, useFieldId,
               returnNullStructIfAllFieldsMissing)
           }
@@ -452,7 +452,7 @@ object ParquetReadSupport extends Logging {
               throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
                 f.name, parquetTypesString)
             } else {
-              isStructWithMissingFields = false
+              isStructWithMissingAllFields = false
               clipParquetType(parquetTypes.head, f.dataType, caseSensitive, useFieldId,
                 returnNullStructIfAllFieldsMissing)
             }
@@ -470,7 +470,7 @@ object ParquetReadSupport extends Logging {
             throw QueryExecutionErrors.foundDuplicateFieldInFieldIdLookupModeError(
               fieldId, parquetTypesString)
           } else {
-            isStructWithMissingFields = false
+            isStructWithMissingAllFields = false
             clipParquetType(parquetTypes.head, f.dataType, caseSensitive, useFieldId,
               returnNullStructIfAllFieldsMissing)
           }
@@ -492,7 +492,7 @@ object ParquetReadSupport extends Logging {
       }
     }
     // Ignore MessageType, because it is the root of the schema, not a struct.
-    if (returnNullStructIfAllFieldsMissing || !isStructWithMissingFields ||
+    if (returnNullStructIfAllFieldsMissing || !isStructWithMissingAllFields ||
         parquetRecord.isInstanceOf[MessageType]) {
       clippedType
     } else {
@@ -537,12 +537,14 @@ object ParquetReadSupport extends Logging {
             case PrimitiveType.PrimitiveTypeName.BOOLEAN => 1
             case PrimitiveType.PrimitiveTypeName.INT32 => 4
             case PrimitiveType.PrimitiveTypeName.INT64 => 8
+            case PrimitiveType.PrimitiveTypeName.INT96 => 12
             case PrimitiveType.PrimitiveTypeName.FLOAT => 4
             case PrimitiveType.PrimitiveTypeName.DOUBLE => 8
             // Strings seem undesirable, since they don't have a fixed size. Give them a high cost.
             case PrimitiveType.PrimitiveTypeName.BINARY |
                  PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY => 32
-            case PrimitiveType.PrimitiveTypeName.INT96 => 12
+            // High default cost for types added in the future.
+            case _ => 32
           }
           (primitiveType, repLevel, cost)
       }
