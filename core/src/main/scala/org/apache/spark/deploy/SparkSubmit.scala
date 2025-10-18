@@ -1035,6 +1035,8 @@ private[spark] class SparkSubmit extends Logging {
             exitCode = e.exitCode
           case _ =>
         }
+        // Store the diagnostics externally if enabled, but still throw to complete the application.
+        storeDiagnostics(args, sparkConf, cause)
         throw cause
     } finally {
       if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
@@ -1058,6 +1060,24 @@ private[spark] class SparkSubmit extends Logging {
   /** Throw a SparkException with the given error message. */
   private def error(msg: String): Unit = throw new SparkException(msg)
 
+  /**
+   * Store the diagnostics using the SparkDiagnosticsSetter.
+   */
+  private def storeDiagnostics(
+      args: SparkSubmitArguments,
+      sparkConf: SparkConf,
+      throwable: Throwable): Unit = {
+    // Swallow exceptions when storing diagnostics, this shouldn't fail the application.
+    try {
+      if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass)
+        && !isThriftServer(args.mainClass) && !isConnectServer(args.mainClass)) {
+        SparkSubmitUtils.getSparkDiagnosticsSetters(args.master, sparkConf)
+          .foreach(_.setDiagnostics(throwable, sparkConf))
+      }
+    } catch {
+      case e: Throwable => logWarning(s"Failed to set diagnostics: $e")
+    }
+  }
 }
 
 
@@ -1233,6 +1253,24 @@ private[spark] object SparkSubmitUtils {
       case _ => throw new SparkException(s"Spark config without '=': $pair")
     }
   }
+
+  private[deploy] def getSparkDiagnosticsSetters(
+      master: String,
+      sparkConf: SparkConf): Option[SparkDiagnosticsSetter] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoaders =
+      ServiceLoader.load(classOf[SparkDiagnosticsSetter], loader)
+        .asScala
+        .filter(_.supports(master, sparkConf))
+
+    serviceLoaders.size match {
+      case x if x > 1 =>
+        throw new SparkException(s"Multiple($x) external SparkDiagnosticsSetter registered.")
+      case 1 =>
+        Some(serviceLoaders.headOption.get)
+      case _ => None
+    }
+  }
 }
 
 /**
@@ -1254,4 +1292,21 @@ private[spark] trait SparkSubmitOperation {
   def printSubmissionStatus(submissionId: String, conf: SparkConf): Unit
 
   def supports(master: String): Boolean
+}
+
+/**
+ * Provides a hook to set the application failure details in some external system.
+ */
+private[spark] trait SparkDiagnosticsSetter {
+
+  /**
+   * Set the failure details.
+   */
+  def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit
+
+  /**
+   * Whether this implementation of the SparkDiagnosticsSetter supports setting the stack
+   * trace for this application.
+   */
+  def supports(clusterManagerUrl: String, conf: SparkConf): Boolean
 }
