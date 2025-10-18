@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.internal.SQLConf
@@ -478,5 +479,66 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       parameters = Map(
         "methodName" -> "createPartitioning$",
         "className" -> "org.apache.spark.sql.catalyst.plans.physical.ShuffleSpec"))
+  }
+
+  test("compatibility: ShufflePartitionIdPassThroughSpec on both sides") {
+    val ab = ClusteredDistribution(Seq($"a", $"b"))
+    val cd = ClusteredDistribution(Seq($"c", $"d"))
+    val passThrough_a_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
+
+    // Identical specs should be compatible
+    checkCompatible(
+      passThrough_a_10.createShuffleSpec(ab),
+      ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 10).createShuffleSpec(cd),
+      expected = true
+    )
+
+    // Different number of partitions should be incompatible
+    checkCompatible(
+      passThrough_a_10.createShuffleSpec(ab),
+      ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 5).createShuffleSpec(cd),
+      expected = false
+    )
+
+    // Mismatched key positions should be incompatible
+    checkCompatible(
+      ShufflePartitionIdPassThrough(DirectShufflePartitionID($"b"), 10).createShuffleSpec(ab),
+      ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 10).createShuffleSpec(cd),
+      expected = false
+    )
+
+    // Mismatched clustering keys
+    checkCompatible(
+      passThrough_a_10.createShuffleSpec(ClusteredDistribution(Seq($"e", $"b"))),
+      ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 10).createShuffleSpec(ab),
+      expected = false
+    )
+  }
+
+  test("compatibility: ShufflePartitionIdPassThroughSpec vs other specs") {
+    val ab = ClusteredDistribution(Seq($"a", $"b"))
+    val cd = ClusteredDistribution(Seq($"c", $"d"))
+    val passThrough_a_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
+
+    // Compatibility with SinglePartitionShuffleSpec when numPartitions is 1
+    checkCompatible(
+      ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 1).createShuffleSpec(ab),
+      SinglePartitionShuffleSpec,
+      expected = true
+    )
+
+    // Incompatible with SinglePartitionShuffleSpec when numPartitions > 1
+    checkCompatible(
+      passThrough_a_10.createShuffleSpec(ab),
+      SinglePartitionShuffleSpec,
+      expected = false
+    )
+
+    // Incompatible with HashShuffleSpec
+    checkCompatible(
+      passThrough_a_10.createShuffleSpec(ab),
+      HashShuffleSpec(HashPartitioning(Seq($"c"), 10), cd),
+      expected = false
+    )
   }
 }
