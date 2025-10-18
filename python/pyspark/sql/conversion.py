@@ -80,6 +80,7 @@ class LocalDataToArrowConversion:
             return True
         elif isinstance(dataType, DecimalType):
             # Convert Decimal('NaN') to None
+            # Rescale Decimal values
             return True
         elif isinstance(dataType, StringType):
             # Coercion to StringType is allowed
@@ -306,6 +307,8 @@ class LocalDataToArrowConversion:
             return convert_timestamp_ntz
 
         elif isinstance(dataType, DecimalType):
+            exp = decimal.Decimal(f"1E-{dataType.scale}")
+            ctx = decimal.Context(prec=dataType.precision, rounding=decimal.ROUND_HALF_EVEN)
 
             def convert_decimal(value: Any) -> Any:
                 if value is None:
@@ -321,7 +324,8 @@ class LocalDataToArrowConversion:
                         if not nullable:
                             raise PySparkValueError(f"input for {dataType} must not be None")
                         return None
-                    return value
+
+                    return value.quantize(exp, context=ctx)
 
             return convert_decimal
 

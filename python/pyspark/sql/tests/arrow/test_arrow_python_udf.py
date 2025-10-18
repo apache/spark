@@ -15,13 +15,21 @@
 # limitations under the License.
 #
 
+from decimal import Decimal
 import unittest
 
 from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
-from pyspark.sql.types import DayTimeIntervalType, VarcharType, StructType, StructField, StringType
+from pyspark.sql.types import (
+    DayTimeIntervalType,
+    DecimalType,
+    VarcharType,
+    StructType,
+    StructField,
+    StringType,
+)
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -181,8 +189,6 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
 
     def test_arrow_udf_int_to_decimal_coercion(self):
-        from decimal import Decimal
-
         with self.sql_conf(
             {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
         ):
@@ -234,6 +240,19 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
                     PythonException, "An exception was thrown from the Python worker"
                 ):
                     df.select(high_precision_udf("id").alias("decimal_val")).collect()
+
+    def test_decimal_round(self):
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
+        ):
+            df = self.spark.sql("SELECT DOUBLE(1.234) AS v")
+
+            @udf(returnType=DecimalType(38, 18))
+            def f(v: float):
+                return Decimal(v)
+
+            rounded = df.select(f("v").alias("d")).first().d
+            self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
     def test_err_return_type(self):
         with self.assertRaises(PySparkNotImplementedError) as pe:
