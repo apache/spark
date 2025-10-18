@@ -534,6 +534,7 @@ object FunctionRegistry {
     expression[ThetaUnionAgg]("theta_union_agg"),
     expression[ThetaIntersectionAgg]("theta_intersection_agg"),
     expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
+    expression[ApproxTopKCombine]("approx_top_k_combine"),
 
     // string functions
     expression[Ascii]("ascii"),

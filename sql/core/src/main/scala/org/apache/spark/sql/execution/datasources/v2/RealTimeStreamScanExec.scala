@@ -15,16 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.types.AbstractDataType
+import org.apache.spark.util.{Clock, SystemClock}
 
-trait SpatialType extends AbstractDataType {
+/* The singleton object to control the time in testing */
+object LowLatencyClock {
+  private var clock: Clock = new SystemClock
 
-  /**
-   * Mixed SRID value and the corresponding CRS for geospatial types (Geometry and Geography).
-   * These values represent a geospatial type that can hold different SRID values per row.
-   */
-  final val MIXED_SRID: Int = -1
-  final val MIXED_CRS: String = "SRID:ANY"
+  def getClock: Clock = clock
+
+  def getTimeMillis(): Long = {
+    clock.getTimeMillis()
+  }
+
+  def waitTillTime(targetTime: Long): Unit = {
+    clock.waitTillTime(targetTime)
+  }
+
+  def setClock(inputClock: Clock): Unit = {
+    clock = inputClock
+  }
 }

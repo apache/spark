@@ -158,6 +158,13 @@ case class MemoryStream[A : Encoder](
     id: Int,
     sqlContext: SQLContext,
     numPartitions: Option[Int] = None)
+  extends MemoryStreamBaseClass[A](
+    id, sqlContext, numPartitions = numPartitions)
+
+abstract class MemoryStreamBaseClass[A: Encoder](
+    id: Int,
+    sqlContext: SQLContext,
+    numPartitions: Option[Int] = None)
   extends MemoryStreamBase[A](sqlContext)
   with MicroBatchStream
   with SupportsTriggerAvailableNow
