@@ -80,6 +80,7 @@ message Relation {
     Transpose transpose = 42;
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
     LateralJoin lateral_join = 44;
+    ChunkedCachedLocalRelation chunked_cached_local_relation = 45;
 
     // NA functions
     NAFill fill_na = 90;
@@ -499,6 +500,7 @@ message LocalRelation {
 }
 
 // A local relation that has been cached already.
+// CachedLocalRelation doesn't support LocalRelations of size over 2GB.
 message CachedLocalRelation {
   // `userId` and `sessionId` fields are deleted since the server must always use the active
   // session/user rather than arbitrary values provided by the client. It is never valid to access
@@ -508,6 +510,20 @@ message CachedLocalRelation {
 
   // (Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation.
   string hash = 3;
+}
+
+// A local relation that has been cached already.
+message ChunkedCachedLocalRelation {
+  // (Required) A list of sha-256 hashes for representing LocalRelation.data.
+  // Data is serialized in Arrow IPC streaming format, each batch is cached on the server as
+  // a separate artifact. Each hash represents one batch stored on the server.
+  // Hashes are hex-encoded strings (e.g., "a3b2c1d4...").
+  repeated string dataHashes = 1;
+
+  // (Optional) A sha-256 hash of the serialized LocalRelation.schema.
+  // Scala clients always provide the schema, Python clients can omit it.
+  // Hash is a hex-encoded string (e.g., "a3b2c1d4...").
+  optional string schemaHash = 2;
 }
 
 // Represents a remote relation that has been cached on server.

@@ -25,7 +25,6 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
-import com.google.protobuf.ByteString
 import io.grpc._
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
@@ -404,16 +403,23 @@ private[sql] class SparkConnectClient(
   }
 
   /**
-   * Cache the given local relation at the server, and return its key in the remote cache.
+   * Cache the given local relation Arrow stream from a local file and return its hashes. The file
+   * is streamed in chunks and does not need to fit in memory.
+   *
+   * This method batches artifact status checks and uploads to minimize RPC overhead.
    */
-  private[sql] def cacheLocalRelation(data: ByteString, schema: String): String = {
-    val localRelation = proto.Relation
-      .newBuilder()
-      .getLocalRelationBuilder
-      .setSchema(schema)
-      .setData(data)
-      .build()
-    artifactManager.cacheArtifact(localRelation.toByteArray)
+  private[sql] def cacheLocalRelation(
+      data: Array[Array[Byte]],
+      schema: String): (Seq[String], String) = {
+    val schemaBytes = schema.getBytes
+    val allBlobs = data :+ schemaBytes
+    val allHashes = artifactManager.cacheArtifacts(allBlobs)
+
+    // Last hash is the schema hash, rest are data hashes
+    val dataHashes = allHashes.dropRight(1)
+    val schemaHash = allHashes.last
+
+    (dataHashes, schemaHash)
   }
 
   /**
