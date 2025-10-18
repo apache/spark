@@ -30,6 +30,7 @@ import scala.language.existentials
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.ops.ExternalTypeOps
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -71,7 +72,6 @@ object CatalystTypeConverters {
       case _: StringType => StringConverter
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
-      case _: TimeType => TimeConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
@@ -85,6 +85,7 @@ object CatalystTypeConverters {
       case DoubleType => DoubleConverter
       case DayTimeIntervalType(_, endField) => DurationConverter(endField)
       case YearMonthIntervalType(_, endField) => PeriodConverter(endField)
+      case _ if ExternalTypeOps.supports(dataType) => ExternalTypeOps(dataType)
       case dataType: DataType => IdentityConverter(dataType)
     }
     converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]
@@ -97,7 +98,7 @@ object CatalystTypeConverters {
    * @tparam ScalaOutputType The type of Scala values returned when converting Catalyst to Scala.
    * @tparam CatalystType The internal Catalyst type used to represent values of this Scala type.
    */
-  private abstract class CatalystTypeConverter[ScalaInputType, ScalaOutputType, CatalystType]
+  trait CatalystTypeConverter[ScalaInputType, ScalaOutputType, CatalystType]
     extends Serializable {
 
     /**
@@ -373,18 +374,6 @@ object CatalystTypeConverters {
       DateTimeUtils.daysToLocalDate(row.getInt(column))
   }
 
-  private object TimeConverter extends CatalystTypeConverter[LocalTime, LocalTime, Any] {
-    override def toCatalystImpl(scalaValue: LocalTime): Long = {
-      DateTimeUtils.localTimeToNanos(scalaValue)
-    }
-    override def toScala(catalystValue: Any): LocalTime = {
-      if (catalystValue == null) null
-      else DateTimeUtils.nanosToLocalTime(catalystValue.asInstanceOf[Long])
-    }
-    override def toScalaImpl(row: InternalRow, column: Int): LocalTime =
-      DateTimeUtils.nanosToLocalTime(row.getLong(column))
-  }
-
   private object TimestampConverter extends CatalystTypeConverter[Any, Timestamp, Any] {
     override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
       case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
@@ -571,7 +560,7 @@ object CatalystTypeConverters {
     case c: Char => StringConverter.toCatalyst(c.toString)
     case d: Date => DateConverter.toCatalyst(d)
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
-    case t: LocalTime => TimeConverter.toCatalyst(t)
+    case t: LocalTime => ExternalTypeOps(TimeType()).toCatalyst(t)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
     case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
