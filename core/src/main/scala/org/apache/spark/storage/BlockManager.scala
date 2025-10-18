@@ -58,6 +58,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
+import org.apache.spark.storage.LogBlockType.LogBlockType
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
@@ -294,11 +295,16 @@ private[spark] class BlockManager(
     decommissioner.isDefined
   }
 
-  @inline final private def checkShouldStore(blockId: BlockId) = {
+  @inline final private def checkShouldStore(blockId: BlockId, level: StorageLevel) = {
     // Don't reject broadcast blocks since they may be stored during task exec and
     // don't need to be migrated.
     if (isDecommissioning() && !blockId.isBroadcast) {
       throw SparkCoreErrors.cannotSaveBlockOnDecommissionedExecutorError(blockId)
+    }
+    if (blockId.isInstanceOf[LogBlockId] && level != StorageLevel.DISK_ONLY) {
+      throw SparkException.internalError(
+        s"Cannot store log block $blockId with storage level $level. " +
+          "Log blocks must be stored with DISK_ONLY.")
     }
   }
 
@@ -763,7 +769,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[_]): StreamCallbackWithID = {
 
-    checkShouldStore(blockId)
+    checkShouldStore(blockId, level)
 
     if (blockId.isShuffle) {
       logDebug(s"Putting shuffle block ${blockId}")
@@ -1484,6 +1490,26 @@ private[spark] class BlockManager(
   }
 
   /**
+   * To get a log block writer that can write logs directly to a disk block. Either `save` or
+   * `close` should be called to finish the writing and release opened resources.
+   * `save` would write the block to the block manager, while `close` would just close the writer.
+   */
+  def getLogBlockWriter(
+      logBlockType: LogBlockType): LogBlockWriter = {
+    new LogBlockWriter(this, logBlockType, conf)
+  }
+
+  /**
+   * To get a rolling log writer that can write logs to block manager and split the logs
+   * to multiple blocks if the log size exceeds the threshold.
+   */
+  def getRollingLogWriter(
+      blockIdGenerator: LogBlockIdGenerator,
+      rollingSize: Long = 33554432L): RollingLogWriter = {
+    new RollingLogWriter(this, blockIdGenerator, rollingSize)
+  }
+
+  /**
    * Put a new block of serialized bytes to the block manager.
    *
    * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
@@ -1540,7 +1566,7 @@ private[spark] class BlockManager(
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
-    checkShouldStore(blockId)
+    checkShouldStore(blockId, level)
 
     val putBlockInfo = {
       val newInfo = new BlockInfo(level, classTag, tellMaster)

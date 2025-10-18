@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver
+import org.apache.spark.storage.LogBlockType.LogBlockType
 
 /**
  * :: DeveloperApi ::
@@ -175,6 +176,42 @@ case class PythonStreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
   override def name: String = "python-stream-" + streamId + "-" + uniqueId
 }
 
+object LogBlockType extends Enumeration {
+  type LogBlockType = Value
+  val TEST = Value
+}
+
+/**
+ * Identifies a block of log data.
+ *
+ * @param lastLogTime the timestamp of the last log entry in this block, used for filtering
+ *                    and log management.
+ * @param executorId the ID of the executor that produced this log block.
+ */
+abstract sealed class LogBlockId(
+    val lastLogTime: Long,
+    val executorId: String) extends BlockId {
+  def logBlockType: LogBlockType
+}
+
+object LogBlockId {
+  def empty(logBlockType: LogBlockType): LogBlockId = {
+    logBlockType match {
+      case LogBlockType.TEST => TestLogBlockId(0L, "")
+      case _ => throw new SparkException(s"Unsupported log block type: $logBlockType")
+    }
+  }
+}
+
+// Used for test purpose only.
+case class TestLogBlockId(override val lastLogTime: Long, override val executorId: String)
+  extends LogBlockId(lastLogTime, executorId) {
+  override def name: String =
+    "test_log_" + lastLogTime + "_" + executorId
+
+  override def logBlockType: LogBlockType = LogBlockType.TEST
+}
+
 /** Id associated with temporary local data managed as blocks. Not serializable. */
 private[spark] case class TempLocalBlockId(id: UUID) extends BlockId {
   override def name: String = "temp_local_" + id
@@ -222,6 +259,7 @@ object BlockId {
   val TEMP_LOCAL = "temp_local_([-A-Fa-f0-9]+)".r
   val TEMP_SHUFFLE = "temp_shuffle_([-A-Fa-f0-9]+)".r
   val TEST = "test_(.*)".r
+  val TEST_LOG_BLOCK = "test_log_([0-9]+)_(.*)".r
 
   def apply(name: String): BlockId = name match {
     case RDD(rddId, splitIndex) =>
@@ -262,6 +300,8 @@ object BlockId {
       TempLocalBlockId(UUID.fromString(uuid))
     case TEMP_SHUFFLE(uuid) =>
       TempShuffleBlockId(UUID.fromString(uuid))
+    case TEST_LOG_BLOCK(lastLogTime, executorId) =>
+      TestLogBlockId(lastLogTime.toLong, executorId)
     case TEST(value) =>
       TestBlockId(value)
     case _ => throw SparkCoreErrors.unrecognizedBlockIdError(name)
