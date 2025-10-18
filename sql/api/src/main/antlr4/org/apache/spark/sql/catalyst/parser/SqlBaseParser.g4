@@ -1279,7 +1279,7 @@ constant
     | QUESTION                                                                                 #posParameterLiteral
     | namedParameterMarker                                                                     #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
-    | literalType stringLit                                                                    #typeConstructor
+    | literalType singleStringLit                                                               #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit                                                                                #stringLiteral
@@ -1697,6 +1697,11 @@ alterColumnAction
 
 stringLitWithoutMarker
     : (STRING_LITERAL | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING)+
+    ;
+
+singleStringLit
+    : STRING_LITERAL
+    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
     ;
 
 parameterMarker

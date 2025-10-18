@@ -98,6 +98,21 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
+   * Visit a singleStringLit rule and return the token (always exactly one token).
+   */
+  override def visitSingleStringLit(ctx: SingleStringLitContext): Token = {
+    if (ctx == null) {
+      return null
+    }
+
+    if (ctx.STRING_LITERAL() != null) {
+      ctx.STRING_LITERAL().getSymbol
+    } else {
+      ctx.DOUBLEQUOTED_STRING().getSymbol
+    }
+  }
+
+  /**
    * Collect all STRING_LITERAL and DOUBLEQUOTED_STRING terminals from the context. With the
    * stringLitWithoutMarker+ grammar rule, there can be multiple terminals.
    */

@@ -158,37 +158,6 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("type constructor with string coalescing") {
-    // DATE type constructor should support coalescing
-    checkAnswer(
-      sql("SELECT DATE '2023' '-10' '-16'"),
-      Row(java.sql.Date.valueOf("2023-10-16"))
-    )
-
-    // TIMESTAMP type constructor should support coalescing
-    checkAnswer(
-      sql("SELECT TIMESTAMP '2023-10-16' ' 12:30:00'"),
-      Row(java.sql.Timestamp.valueOf("2023-10-16 12:30:00"))
-    )
-
-    // INTERVAL type constructor should support coalescing
-    checkAnswer(
-      sql("SELECT INTERVAL '10' '-1' YEAR TO MONTH"),
-      sql("SELECT INTERVAL '10-1' YEAR TO MONTH")
-    )
-
-    checkAnswer(
-      sql("SELECT INTERVAL '1' ' 12:30:45.678' DAY TO SECOND"),
-      sql("SELECT INTERVAL '1 12:30:45.678' DAY TO SECOND")
-    )
-
-    // Binary hex literal (X'...') should support coalescing
-    checkAnswer(
-      sql("SELECT X'DE' 'AD' 'BE' 'EF'"),
-      Row(Array[Byte](0xDE.toByte, 0xAD.toByte, 0xBE.toByte, 0xEF.toByte))
-    )
-  }
-
   test("string coalescing across multiple lines") {
     val result = sql("""
       SELECT 'line'
@@ -603,29 +572,6 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
 
       assert(columnComment == "ID - Primary key")
     }
-  }
-
-  test("parameter marker coalescing with type constructors") {
-    // Parameters can appear in any position (leading, middle, trailing) and coalesce properly
-    // After substitution, they become string literals that participate in coalescing
-
-    // Parameter at the end
-    checkAnswer(
-      spark.sql("SELECT DATE '2024-10' :day", Map("day" -> "-16")),
-      Row(java.sql.Date.valueOf("2024-10-16"))
-    )
-
-    // Parameter at the beginning
-    checkAnswer(
-      spark.sql("SELECT TIMESTAMP :datepart ' 12:30:00'", Map("datepart" -> "2024-10-16")),
-      Row(java.sql.Timestamp.valueOf("2024-10-16 12:30:00"))
-    )
-
-    // Parameter in the middle
-    checkAnswer(
-      spark.sql("SELECT X'DE' :middle 'EF'", Map("middle" -> "ADBE")),
-      Row(Array[Byte](0xDE.toByte, 0xAD.toByte, 0xBE.toByte, 0xEF.toByte))
-    )
   }
 
   test("parameter marker coalescing in WHERE clause") {
