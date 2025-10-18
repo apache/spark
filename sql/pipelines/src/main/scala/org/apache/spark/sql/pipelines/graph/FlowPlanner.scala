@@ -31,8 +31,7 @@ import org.apache.spark.sql.streaming.Trigger
 class FlowPlanner(
     graph: DataflowGraph,
     updateContext: PipelineUpdateContext,
-    triggerFor: Flow => Trigger
-) {
+    triggerFor: Flow => Trigger) {
 
   /**
    * Turns a [[Flow]] into an executable [[FlowExecution]].
