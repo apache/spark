@@ -22,14 +22,87 @@
 
 import os
 import sys
+import argparse
 
 
-def _find_spark_home():
-    """Find the SPARK_HOME."""
+def _validate_spark_home(spark_home):
+    """Validate that the found SPARK_HOME is actually a valid Spark installation.
+    
+    Parameters
+    ----------
+    spark_home : str
+        Path to the potential SPARK_HOME directory
+        
+    Returns
+    -------
+    bool
+        True if the path is a valid Spark installation, False otherwise
+    """
+    if not spark_home or not os.path.isdir(spark_home):
+        return False
+    
+    # Check for essential Spark files and directories
+    required_files = [
+        "bin/spark-submit",
+        "README.md",
+        "LICENSE"
+    ]
+    
+    required_dirs = [
+        "bin",
+        "conf"
+    ]
+    
+    # At least one of these should exist
+    jar_dirs = [
+        "jars",
+        "assembly"
+    ]
+    
+    # Check required files
+    for file_path in required_files:
+        if not os.path.isfile(os.path.join(spark_home, file_path)):
+            return False
+    
+    # Check required directories
+    for dir_path in required_dirs:
+        if not os.path.isdir(os.path.join(spark_home, dir_path)):
+            return False
+    
+    # Check that at least one jar directory exists
+    jar_dir_exists = any(
+        os.path.isdir(os.path.join(spark_home, jar_dir)) 
+        for jar_dir in jar_dirs
+    )
+    
+    return jar_dir_exists
+
+
+def _find_spark_home(debug=False):
+    """Find the SPARK_HOME with enhanced validation and debugging.
+    
+    Parameters
+    ----------
+    debug : bool, optional
+        If True, print debug information about the search process
+        
+    Returns
+    -------
+    str
+        The validated SPARK_HOME path
+    """
     # If the environment has SPARK_HOME set trust it.
     if "SPARK_HOME" in os.environ:
-        return os.environ["SPARK_HOME"]
-
+        spark_home = os.environ["SPARK_HOME"]
+        if debug:
+            print(f"Found SPARK_HOME in environment: {spark_home}", file=sys.stderr)
+        
+        if _validate_spark_home(spark_home):
+            return spark_home
+        else:
+            if debug:
+                print(f"Environment SPARK_HOME is invalid: {spark_home}", file=sys.stderr)
+    
     def is_spark_home(path):
         """Takes a path and returns true if the provided path could be a reasonable SPARK_HOME"""
         return os.path.isfile(os.path.join(path, "bin/spark-submit")) and (
@@ -68,9 +141,23 @@ def _find_spark_home():
 
     # Normalize the paths
     paths = [os.path.abspath(p) for p in paths]
+    
+    if debug:
+        print(f"Searching for Spark installation in paths: {paths}", file=sys.stderr)
 
     try:
-        return next(path for path in paths if is_spark_home(path))
+        spark_home = next(path for path in paths if is_spark_home(path))
+        
+        # Additional validation
+        if _validate_spark_home(spark_home):
+            if debug:
+                print(f"Found valid SPARK_HOME: {spark_home}", file=sys.stderr)
+            return spark_home
+        else:
+            if debug:
+                print(f"Found SPARK_HOME but validation failed: {spark_home}", file=sys.stderr)
+            raise StopIteration
+            
     except StopIteration:
         print("Could not find valid SPARK_HOME while searching {0}".format(paths), file=sys.stderr)
         if import_error_raised:
@@ -88,8 +175,13 @@ def _find_spark_home():
                 "'PYSPARK_PYTHON=python3 pyspark'.\n",
                 file=sys.stderr,
             )
-        sys.exit(-1)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    print(_find_spark_home())
+    parser = argparse.ArgumentParser(description="Find SPARK_HOME directory")
+    parser.add_argument("--debug", action="store_true", 
+                       help="Enable debug output")
+    args = parser.parse_args()
+    
+    print(_find_spark_home(debug=args.debug))
