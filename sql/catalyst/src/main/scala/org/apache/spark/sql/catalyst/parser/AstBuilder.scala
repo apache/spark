@@ -3488,6 +3488,12 @@ class AstBuilder extends DataTypeAstBuilder
             ex.setStackTrace(e.getStackTrace)
             throw ex
         }
+      case _ =>
+        // For unsupported type identifiers (e.g., GEO, GEOMETRY, etc.)
+        val supportedTypes = Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP",
+          "INTERVAL", "X", "TIME")
+        throw QueryParsingErrors.literalValueTypeUnsupportedError(
+          ctx.literalType.getText, supportedTypes, ctx)
     }
   }
 

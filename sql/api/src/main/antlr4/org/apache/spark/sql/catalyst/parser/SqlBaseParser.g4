@@ -1272,6 +1272,7 @@ literalType
     | TIMESTAMP | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | INTERVAL
     | BINARY_HEX
+    | unsupportedType=identifier
     ;
 
 constant
