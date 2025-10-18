@@ -147,12 +147,14 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
     // Determine the quote character to use (preserve from first non-R-string token)
     val quoteChar = {
-      val firstNonRToken = tokens.find { token =>
-        val text = token.getText
-        !(text.length >= 2 &&
-          (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
-          (text.charAt(1) == '\'' || text.charAt(1) == '"'))
-      }.getOrElse(tokens.head)
+      val firstNonRToken = tokens
+        .find { token =>
+          val text = token.getText
+          !(text.length >= 2 &&
+            (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
+            (text.charAt(1) == '\'' || text.charAt(1) == '"'))
+        }
+        .getOrElse(tokens.head)
 
       val text = firstNonRToken.getText
       if (text.startsWith("\"") || (text.length >= 2 && text.charAt(1) == '"')) {
@@ -163,8 +165,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
 
     // Concatenate the raw content of each token (without the outer quotes).
-    // The getText() on CoalescedStringToken will wrap this in quotes,
-    // and the final string() call will handle unescaping based on the config.
+    // Preserve all inner content including "" or '' sequences - these will be
+    // handled later by unescapeSQLString based on the config.
     val coalescedRawContent = tokens.map { token =>
       val text = token.getText
       // Check if this is an R-string (raw string literal)
@@ -176,7 +178,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         // For R-strings: Remove R prefix and outer quotes (first 2 chars and last char)
         text.substring(2, text.length - 1)
       } else {
-        // For regular strings: Remove outer quotes (first and last character)
+        // For regular strings: Remove only the outer quotes (first and last character)
+        // Keep all inner content including "" or '' which will be processed by unescapeSQLString
         text.substring(1, text.length - 1)
       }
     }.mkString

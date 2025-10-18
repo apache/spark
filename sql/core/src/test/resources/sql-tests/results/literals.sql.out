@@ -360,10 +360,12 @@ pattern%	no-pattern\%	pattern\%	pattern\\%
 select '\'', '"', '\n', '\r', '\t', 'Z'
 -- !query schema
 struct<':string,":string,
-:string,:string,	:string,Z:string>
+:string,
+:string,	:string,Z:string>
 -- !query output
-'	"	
-				Z
+'	"
+
+			Z
 
 
 -- !query
@@ -451,19 +453,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_TYPED_LITERAL",
-  "sqlState" : "0A000",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\", \"TIME\"",
-    "unsupportedType" : "\"GEO\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 20,
-    "fragment" : "GEO '(10,-6)'"
-  } ]
+    "error" : "'(10,-6)'",
+    "hint" : ""
+  }
 }
 
 

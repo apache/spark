@@ -50,7 +50,7 @@ import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_BANG_EQUALS_NOT, LEGACY_CONSECUTIVE_STRING_LITERALS}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -3488,12 +3488,6 @@ class AstBuilder extends DataTypeAstBuilder
             ex.setStackTrace(e.getStackTrace)
             throw ex
         }
-      case _ =>
-        throw QueryParsingErrors.literalValueTypeUnsupportedError(
-          unsupportedType = ctx.literalType.getText,
-          supportedTypes =
-            Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME"),
-          ctx)
     }
   }
 
@@ -3655,8 +3649,15 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def createString(ctx: StringLiteralContext): String = {
     // visitStringLit already handles coalescing multiple literals and returns
-    // a CoalescedStringToken with the proper escaping applied
-    string(visitStringLit(ctx.stringLit()))
+    // a CoalescedStringToken. We need to unescape based on configuration.
+    val token = visitStringLit(ctx.stringLit())
+    if (conf.escapedStringLiterals) {
+      stringWithoutUnescape(token)
+    } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
+      stringIgnoreQuoteQuote(token)
+    } else {
+      string(token)
+    }
   }
 
   /**
