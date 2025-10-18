@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys.BATCH_ID
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -344,9 +344,40 @@ class MicroBatchExecution(
     setLatestExecutionContext(execCtx)
 
     populateStartOffsets(execCtx, sparkSessionForStream)
+
+    // SPARK-53941: This code path is executed for the first batch, regardless of whether it's a
+    // fresh new run or restart.
+    disableAQESupportInStatelessIfUnappropriated(sparkSessionForStream)
+
     logInfo(log"Stream started from ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)}")
     execCtx
   }
+
+  private def disableAQESupportInStatelessIfUnappropriated(
+      sparkSessionToRunBatches: SparkSession): Unit = {
+    def containsStatefulOperator(p: LogicalPlan): Boolean = {
+      p.exists {
+        case node: Aggregate if node.isStreaming => true
+        case node: Deduplicate if node.isStreaming => true
+        case node: DeduplicateWithinWatermark if node.isStreaming => true
+        case node: Distinct if node.isStreaming => true
+        case node: Join if node.left.isStreaming && node.right.isStreaming => true
+        case node: FlatMapGroupsWithState if node.isStreaming => true
+        case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
+        case node: TransformWithState if node.isStreaming => true
+        case node: TransformWithStateInPySpark if node.isStreaming => true
+        case node: GlobalLimit if node.isStreaming => true
+        case _ => false
+      }
+    }
+
+    if (containsStatefulOperator(analyzedPlan)) {
+      // SPARK-53941: We disable AQE for stateful workloads as of now.
+      logWarning(log"Disabling AQE since AQE is not supported in stateful workloads.")
+      sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+    }
+  }
+
   /**
    * Repeatedly attempts to run batches as data arrives.
    */

@@ -421,19 +421,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  /**
-   * Used to plan streaming aggregation queries that are computed incrementally as part of a
-   * [[org.apache.spark.sql.streaming.StreamingQuery]]. Currently this rule is injected into the
-   * planner on-demand, only when planning in a
-   * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
-   */
-  object StatefulAggregationStrategy extends Strategy {
+  object EventTimeWatermarkStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
       case EventTimeWatermark(nodeId, columnName, delay, child) =>
         EventTimeWatermarkExec(nodeId, columnName, delay, planLater(child)) :: Nil
-
       case UpdateEventTimeWatermarkColumn(columnName, delay, child) =>
         // we expect watermarkDelay to be resolved before physical planning.
         if (delay.isEmpty) {
@@ -445,6 +438,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               "Please report your query to Spark user mailing list.")
         }
         UpdateEventTimeColumnExec(columnName, delay.get, None, planLater(child)) :: Nil
+    }
+  }
+
+  /**
+   * Used to plan streaming aggregation queries that are computed incrementally as part of a
+   * [[org.apache.spark.sql.streaming.StreamingQuery]]. Currently this rule is injected into the
+   * planner on-demand, only when planning in a
+   * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
+   */
+  object StatefulAggregationStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case _ if !plan.isStreaming => Nil
 
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
