@@ -381,6 +381,47 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("SPARK-52588: accumulate and estimate count NULL values") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 2)
+        |FROM VALUES 'a', 'a', 'b', 'b', 'b', NULL, NULL, NULL, NULL AS tab(expr)""".stripMargin)
+    checkAnswer(res, Row(Seq(Row(null, 4), Row("b", 3))))
+  }
+
+  test("SPARK-52588: accumulate and estimate null is not in top k") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 2)
+        |FROM VALUES 'a', 'a', 'b', 'b', 'b', NULL AS tab(expr)""".stripMargin)
+    checkAnswer(res, Row(Seq(Row("b", 3), Row("a", 2))))
+  }
+
+  test("SPARK-52588: accumulate and estimate null is the last in top k") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 3)
+        |FROM VALUES 0, 0, 1, 1, 1, NULL AS tab(expr)""".stripMargin)
+    checkAnswer(res, Row(Seq(Row(1, 3), Row(0, 2), Row(null, 1))))
+  }
+
+  test("SPARK-52588: accumulate and estimate null + frequent items < k") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 5)
+        |FROM VALUES cast(0.0 AS DECIMAL(4, 1)), cast(0.0 AS DECIMAL(4, 1)),
+        |cast(0.1 AS DECIMAL(4, 1)), cast(0.1 AS DECIMAL(4, 1)), cast(0.1 AS DECIMAL(4, 1)),
+        |NULL AS tab(expr)""".stripMargin)
+    checkAnswer(
+      res,
+      Row(Seq(Row(new java.math.BigDecimal("0.1"), 3),
+        Row(new java.math.BigDecimal("0.0"), 2),
+        Row(null, 1))))
+  }
+
+  test("SPARK-52588: accumulate and estimate work on typed column with only NULL values") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(approx_top_k_accumulate(expr))
+        |FROM VALUES cast(NULL AS INT), cast(NULL AS INT) AS tab(expr)""".stripMargin)
+    checkAnswer(res, Row(Seq(Row(null, 2))))
+  }
+
   /////////////////////////////////
   // approx_top_k_combine
   /////////////////////////////////
