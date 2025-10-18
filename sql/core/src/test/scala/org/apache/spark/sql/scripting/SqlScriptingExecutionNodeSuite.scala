@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util.UUID
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
@@ -89,7 +91,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     override def output: Seq[Attribute] = Seq.empty
   }
 
-  case class MockScriptingContext() extends SqlScriptingExecutionContext {
+  case class MockScriptingContext() extends SqlScriptingExecutionContext(UUID.randomUUID()) {
     override def enterScope(
       label: String,
       triggerHandlerMap: TriggerToExceptionHandlerMap
