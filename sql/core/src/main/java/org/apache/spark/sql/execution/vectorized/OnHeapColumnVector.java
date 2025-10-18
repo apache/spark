@@ -646,7 +646,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  protected OnHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+  public OnHeapColumnVector reserveNewColumn(int capacity, DataType type) {
     return new OnHeapColumnVector(capacity, type);
   }
 }
