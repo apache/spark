@@ -534,7 +534,19 @@ abstract class FileStreamSinkSuite extends StreamTest {
         }
 
         import PendingCommitFilesTrackingManifestFileCommitProtocol._
-        val outputFileNames = Files.walk(outputDir.toPath).iterator().asScala
+        val fileIter = Files.walk(outputDir.toPath).iterator().asScala
+        val wrappedIter = new Iterator[java.nio.file.Path] {
+          override def hasNext: Boolean = try {
+            fileIter.hasNext
+          } catch {
+            case e if e.getMessage.contains("NoSuchFileException") =>
+              // Ignore files deleted during the walk
+              hasNext
+            case cause: Throwable => throw cause
+          }
+          override def next(): java.nio.file.Path = fileIter.next()
+        }
+        val outputFileNames = wrappedIter
           .filter(_.toString.endsWith(".parquet"))
           .map(_.getFileName.toString)
           .toSet
