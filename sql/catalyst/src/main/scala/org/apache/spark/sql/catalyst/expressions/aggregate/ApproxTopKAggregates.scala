@@ -374,6 +374,12 @@ object ApproxTopK {
   }
 }
 
+/**
+ * In internal class used as the aggregation buffer for ApproxTopK.
+ *
+ * @param sketch    the ItemsSketch instance for counting not-null items
+ * @param nullCount the count of null items
+ */
 class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullCount: Long) {
   def update(itemExpression: Expression, input: InternalRow): ApproxTopKAggregateBuffer[T] = {
     val v = itemExpression.eval(input)
