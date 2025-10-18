@@ -3752,6 +3752,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYSPARK_BINARY_AS_BYTES =
+    buildConf("spark.sql.execution.pyspark.binaryAsBytes")
+      .doc("When true, BinaryType is consistently mapped to bytes in PySpark. " +
+        "When false, restores the PySpark behavior before 4.1.0. Before 4.1.0, BinaryType is " +
+        "mapped to bytearray for regular UDF and UDTF without Arrow optimization, " +
+        "DataFrame APIs (both Spark Classic and Spark Connect), and data sources; " +
+        "BinaryType is mapped to bytes for Arrow-optimized UDF and UDTF with " +
+        "legacy pandas conversion.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+
   val ARROW_LOCAL_RELATION_THRESHOLD =
     buildConf("spark.sql.execution.arrow.localRelationThreshold")
       .doc(
@@ -7145,6 +7158,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowLocalRelationThreshold: Long = getConf(ARROW_LOCAL_RELATION_THRESHOLD)
 
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
+
+  def pysparkBinaryAsBytes: Boolean = getConf(PYSPARK_BINARY_AS_BYTES)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 

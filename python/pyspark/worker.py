@@ -1347,6 +1347,7 @@ def use_legacy_pandas_udf_conversion(runner_conf):
 def read_udtf(pickleSer, infile, eval_type):
     prefers_large_var_types = False
     legacy_pandas_conversion = False
+    binary_as_bytes = True
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
         runner_conf = {}
@@ -1362,6 +1363,9 @@ def read_udtf(pickleSer, infile, eval_type):
                 "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
             ).lower()
             == "true"
+        )
+        binary_as_bytes = (
+            runner_conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true").lower() == "true"
         )
         input_types = [
             field.dataType for field in _parse_datatype_json_string(utf8_deserializer.loads(infile))
@@ -2307,7 +2311,9 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 converters = [
-                    ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True)
+                    ArrowTableToRowsConversion._create_converter(
+                        dt, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                    )
                     for dt in input_types
                 ]
                 for a in it:
@@ -2605,6 +2611,9 @@ def read_udfs(pickleSer, infile, eval_type):
             ).lower()
             == "true"
         )
+        binary_as_bytes = (
+            runner_conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true").lower() == "true"
+        )
         _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
         if (
@@ -2718,7 +2727,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ]
             ser = ArrowBatchUDFSerializer(
-                timezone, safecheck, input_types, int_to_decimal_coercion_enabled
+                timezone, safecheck, input_types, int_to_decimal_coercion_enabled, binary_as_bytes
             )
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of

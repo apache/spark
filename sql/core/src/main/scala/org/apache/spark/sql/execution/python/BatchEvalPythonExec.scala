@@ -41,6 +41,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
 
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
     val batchSize = conf.getConf(SQLConf.PYTHON_UDF_MAX_RECORDS_PER_BATCH)
+    val binaryAsBytes = conf.pysparkBinaryAsBytes
     new BatchEvalPythonEvaluatorFactory(
       child.output,
       udfs,
@@ -48,7 +49,8 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       batchSize,
       pythonMetrics,
       jobArtifactUUID,
-      conf.pythonUDFProfiler)
+      conf.pythonUDFProfiler,
+      binaryAsBytes)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonExec =
@@ -62,7 +64,8 @@ class BatchEvalPythonEvaluatorFactory(
     batchSize: Int,
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    profiler: Option[String])
+    profiler: Option[String],
+    binaryAsBytes: Boolean)
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
   override def evaluate(
@@ -74,7 +77,7 @@ class BatchEvalPythonEvaluatorFactory(
     EvaluatePython.registerPicklers() // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema, batchSize)
+    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema, batchSize, binaryAsBytes)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -112,7 +115,8 @@ object BatchEvalPythonExec {
   def getInputIterator(
       iter: Iterator[InternalRow],
       schema: StructType,
-      batchSize: Int): Iterator[Array[Byte]] = {
+      batchSize: Int,
+      binaryAsBytes: Boolean): Iterator[Array[Byte]] = {
     val dataTypes = schema.map(_.dataType)
     val needConversion = dataTypes.exists(EvaluatePython.needConversionInPython)
 
@@ -133,14 +137,14 @@ object BatchEvalPythonExec {
     // For each row, add it to the queue.
     iter.map { row =>
       if (needConversion) {
-        EvaluatePython.toJava(row, schema)
+        EvaluatePython.toJava(row, schema, binaryAsBytes)
       } else {
         // fast path for these types that does not need conversion in Python
         val fields = new Array[Any](row.numFields)
         var i = 0
         while (i < row.numFields) {
           val dt = dataTypes(i)
-          fields(i) = EvaluatePython.toJava(row.get(i, dt), dt)
+          fields(i) = EvaluatePython.toJava(row.get(i, dt), dt, binaryAsBytes)
           i += 1
         }
         fields

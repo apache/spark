@@ -89,7 +89,9 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 
   private lazy val inputByteIterator = {
     EvaluatePython.registerPicklers()
-    val objIterator = inputRowIterator.map { row => EvaluatePython.toJava(row, schema) }
+    val objIterator = inputRowIterator.map { row =>
+      EvaluatePython.toJava(row, schema, SQLConf.get.pysparkBinaryAsBytes)
+    }
     new SerDeUtil.AutoBatchedPickler(objIterator)
   }
 

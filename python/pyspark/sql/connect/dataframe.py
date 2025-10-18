@@ -1823,7 +1823,14 @@ class DataFrame(ParentDataFrame):
 
         assert schema is not None and isinstance(schema, StructType)
 
-        return ArrowTableToRowsConversion.convert(table, schema)
+        return ArrowTableToRowsConversion.convert(
+            table, schema, binary_as_bytes=self._get_binary_as_bytes()
+        )
+
+    def _get_binary_as_bytes(self) -> bool:
+        """Get the binary_as_bytes configuration value from Spark session."""
+        conf_value = self._session.conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true")
+        return conf_value is not None and conf_value.lower() == "true"
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
@@ -2075,7 +2082,9 @@ class DataFrame(ParentDataFrame):
                 table = schema_or_table
                 if schema is None:
                     schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
-                yield from ArrowTableToRowsConversion.convert(table, schema)
+                yield from ArrowTableToRowsConversion.convert(
+                    table, schema, binary_as_bytes=self._get_binary_as_bytes()
+                )
 
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -2161,8 +2170,12 @@ class DataFrame(ParentDataFrame):
 
     def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
         schema = self._schema
+        binary_as_bytes = self._get_binary_as_bytes()
         field_converters = [
-            ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
+            ArrowTableToRowsConversion._create_converter(
+                f.dataType, none_on_identity=False, binary_as_bytes=binary_as_bytes
+            )
+            for f in schema.fields
         ]
 
         def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
@@ -2171,7 +2184,7 @@ class DataFrame(ParentDataFrame):
                     columnar_data = [column.to_pylist() for column in table.columns]
                     for i in range(0, table.num_rows):
                         values = [
-                            field_converters[j](columnar_data[j][i])
+                            field_converters[j](columnar_data[j][i])  # type: ignore[misc]
                             for j in range(table.num_columns)
                         ]
                         yield _create_row(fields=schema.fieldNames(), values=values)

@@ -117,7 +117,7 @@ private[sql] object PythonSQLUtils extends Logging {
   def toPyRow(row: Row): Array[Byte] = {
     assert(row.isInstanceOf[GenericRowWithSchema])
     withInternalRowPickler(_.dumps(EvaluatePython.toJava(
-      CatalystTypeConverters.convertToCatalyst(row), row.schema)))
+      CatalystTypeConverters.convertToCatalyst(row), row.schema, SQLConf.get.pysparkBinaryAsBytes)))
   }
 
   def toJVMRow(
