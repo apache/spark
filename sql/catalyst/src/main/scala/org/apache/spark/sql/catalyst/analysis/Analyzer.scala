@@ -229,6 +229,12 @@ object AnalysisContext {
     set(context)
     try f finally { set(originContext) }
   }
+
+  private[sql] def withAnalysisContext[A](context: AnalysisContext)(f: => A): A = {
+    val originContext = value.get()
+    set(context)
+    try f finally { set(originContext) }
+  }
 }
 
 object Analyzer {
