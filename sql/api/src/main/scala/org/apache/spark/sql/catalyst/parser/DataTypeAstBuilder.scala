@@ -98,18 +98,15 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
-   * Visit a singleStringLit rule and return the token (always exactly one token).
+   * Visit singleStringLit alternatives and return the token (always exactly one token).
    */
-  override def visitSingleStringLit(ctx: SingleStringLitContext): Token = {
-    if (ctx == null) {
-      return null
-    }
+  override def visitSingleStringLiteralValue(ctx: SingleStringLiteralValueContext): Token = {
+    ctx.STRING_LITERAL().getSymbol
+  }
 
-    if (ctx.STRING_LITERAL() != null) {
-      ctx.STRING_LITERAL().getSymbol
-    } else {
-      ctx.DOUBLEQUOTED_STRING().getSymbol
-    }
+  override def visitSingleDoubleQuotedStringLiteralValue(
+      ctx: SingleDoubleQuotedStringLiteralValueContext): Token = {
+    ctx.DOUBLEQUOTED_STRING().getSymbol
   }
 
   /**

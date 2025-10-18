@@ -1701,8 +1701,8 @@ stringLitWithoutMarker
     ;
 
 singleStringLit
-    : STRING_LITERAL
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
+    : STRING_LITERAL                                                                           #singleStringLiteralValue
+    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #singleDoubleQuotedStringLiteralValue
     ;
 
 parameterMarker
