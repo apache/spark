@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.UTF8String;
-import org.apache.spark.util.VersionUtils;
 import org.apache.spark.util.random.XORShiftRandom;
 
 /**
@@ -183,7 +182,7 @@ public class ExpressionImplUtils {
    *  Space separated version and revision.
    */
   public static UTF8String getSparkVersion() {
-    String shortVersion = VersionUtils.shortVersion(SparkBuildInfo.spark_version());
+    String shortVersion = SparkBuildInfo.spark_version();
     String revision = SparkBuildInfo.spark_revision();
     return UTF8String.fromString(shortVersion + " " + revision);
   }
