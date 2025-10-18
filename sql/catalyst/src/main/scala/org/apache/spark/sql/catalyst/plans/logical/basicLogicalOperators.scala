@@ -583,8 +583,9 @@ case class Union(
   override def maxRows: Option[Long] = {
     var sum = BigInt(0)
     children.foreach { child =>
-      if (child.maxRows.isDefined) {
-        sum += child.maxRows.get
+      val childMaxRows = child.maxRows
+      if (childMaxRows.isDefined) {
+        sum += childMaxRows.get
         if (!sum.isValidLong) {
           return None
         }
@@ -603,8 +604,9 @@ case class Union(
   override def maxRowsPerPartition: Option[Long] = {
     var sum = BigInt(0)
     children.foreach { child =>
-      if (child.maxRowsPerPartition.isDefined) {
-        sum += child.maxRowsPerPartition.get
+      val childMaxRowsPerPartition = child.maxRowsPerPartition
+      if (childMaxRowsPerPartition.isDefined) {
+        sum += childMaxRowsPerPartition.get
         if (!sum.isValidLong) {
           return None
         }
@@ -668,19 +670,24 @@ case class Join(
 
   override def maxRows: Option[Long] = {
     joinType match {
-      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
-          if left.maxRows.isDefined && right.maxRows.isDefined =>
-        val leftMaxRows = BigInt(left.maxRows.get)
-        val rightMaxRows = BigInt(right.maxRows.get)
-        val minRows = joinType match {
-          case LeftOuter | LeftSingle => leftMaxRows
-          case RightOuter => rightMaxRows
-          case FullOuter => leftMaxRows + rightMaxRows
-          case _ => BigInt(0)
-        }
-        val maxRows = (leftMaxRows * rightMaxRows).max(minRows)
-        if (maxRows.isValidLong) {
-          Some(maxRows.toLong)
+      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle =>
+        val leftMaxRowsOption = left.maxRows
+        val rightMaxRowsOption = if (leftMaxRowsOption.isDefined) right.maxRows else None
+        if (rightMaxRowsOption.isDefined) {
+          val leftMaxRows = BigInt(leftMaxRowsOption.get)
+          val rightMaxRows = BigInt(rightMaxRowsOption.get)
+          val minRows = joinType match {
+            case LeftOuter | LeftSingle => leftMaxRows
+            case RightOuter => rightMaxRows
+            case FullOuter => leftMaxRows + rightMaxRows
+            case _ => BigInt(0)
+          }
+          val maxRows = (leftMaxRows * rightMaxRows).max(minRows)
+          if (maxRows.isValidLong) {
+            Some(maxRows.toLong)
+          } else {
+            None
+          }
         } else {
           None
         }
