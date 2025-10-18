@@ -89,6 +89,18 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_OWNER = "owner";
 
   /**
+   * A reserved property to specify the view text of a general table that represents
+   * a SQL view. The identifiers must be fully qualified in the view text to be
+   * context-independent, otherwise the behavior is undefined.
+   */
+  String PROP_VIEW_TEXT = "view_text";
+
+  /**
+   * A prefix used to specify the Spark SQL configurations for reading this view.
+   */
+  String VIEW_CONF_PREFIX = "view.sqlConfig.";
+
+  /**
    * A prefix used to pass OPTIONS in table properties
    */
   String OPTION_PREFIX = "option.";
