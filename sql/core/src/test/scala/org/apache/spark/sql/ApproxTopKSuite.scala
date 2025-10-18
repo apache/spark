@@ -196,11 +196,60 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("SPARK-52515: does not count NULL values") {
+  test("SPARK-52515: count NULL values") {
     val res = sql(
       "SELECT approx_top_k(expr, 2)" +
-        "FROM VALUES 'a', 'a', 'b', 'b', 'b', NULL, NULL, NULL AS tab(expr);")
+        "FROM VALUES 'a', 'a', 'b', 'b', 'b', NULL, NULL, NULL, NULL AS tab(expr);")
+    checkAnswer(res, Row(Seq(Row(null, 4), Row("b", 3))))
+  }
+
+  test("SPARK-52515: null is not in top k") {
+    val res = sql(
+      "SELECT approx_top_k(expr, 2) FROM VALUES 'a', 'a', 'b', 'b', 'b', NULL AS tab(expr)"
+    )
     checkAnswer(res, Row(Seq(Row("b", 3), Row("a", 2))))
+  }
+
+  test("SPARK-52515: null is the last in top k") {
+    val res = sql(
+      "SELECT approx_top_k(expr, 3) FROM VALUES 0, 0, 1, 1, 1, NULL AS tab(expr)"
+    )
+    checkAnswer(res, Row(Seq(Row(1, 3), Row(0, 2), Row(null, 1))))
+  }
+
+  test("SPARK-52515: null + frequent items < k") {
+    val res = sql(
+      """SELECT approx_top_k(expr, 5)
+        |FROM VALUES cast(0.0 AS DECIMAL(4, 1)), cast(0.0 AS DECIMAL(4, 1)),
+        |cast(0.1 AS DECIMAL(4, 1)), cast(0.1 AS DECIMAL(4, 1)), cast(0.1 AS DECIMAL(4, 1)),
+        |NULL AS tab(expr)""".stripMargin)
+    checkAnswer(
+      res,
+      Row(Seq(Row(new java.math.BigDecimal("0.1"), 3),
+        Row(new java.math.BigDecimal("0.0"), 2),
+        Row(null, 1))))
+  }
+
+  test("SPARK-52515: work on typed column with only NULL values") {
+    val res = sql(
+      "SELECT approx_top_k(expr) FROM VALUES cast(NULL AS INT), cast(NULL AS INT) AS tab(expr)"
+    )
+    checkAnswer(res, Row(Seq(Row(null, 2))))
+  }
+
+  test("SPARK-52515: invalid item void columns") {
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql("SELECT approx_top_k(expr) FROM VALUES (NULL), (NULL), (NULL) AS tab(expr)")
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
+        "msg" -> "void columns are not supported",
+        "hint" -> ""
+      ),
+      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
+    )
   }
 
   /////////////////////////////////
