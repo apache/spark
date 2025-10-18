@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
@@ -1044,6 +1045,69 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("aqe in stateless streaming query") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      withTempView("test") {
+        val input = MemoryStream[Int]
+        val stream = input.toDF().select(col("value"), (col("value") * 3) as "three")
+
+        // join a table with a stream
+        val joined = spark.table("testData").join(stream, Seq("value")).where("three > 40")
+        val query = joined.writeStream.format("memory").queryName("test").start()
+        input.addData(1, 10, 20, 40, 50)
+        try {
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+
+        // aqe should be enabled in a stateless streaming query
+        val plan = query.asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery.lastExecution.executedPlan
+        val ret = plan.find {
+          case _: AdaptiveSparkPlanExec | _: QueryStageExec => true
+          case _ => false
+        }
+        assert(ret.nonEmpty)
+        // aqe config should still be enabled
+        assert(query.sparkSession.sessionState.conf.adaptiveExecutionEnabled)
+      }
+    }
+  }
+
+  test("no aqe in stateful streaming query") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      withTempView("test") {
+        val input = MemoryStream[Int]
+        val stream = input.toDF().select(col("value"), (col("value") * 3) as "three")
+
+        // apply aggregation
+        val agg = stream.groupBy("value").agg(sum("three"))
+        val query = agg.writeStream.format("memory").queryName("test").outputMode("update").start()
+        input.addData(1, 2, 3, 4, 5)
+        try {
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+
+        // aqe should not be enabled in a stateful streaming query
+        val plan = query.asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery.lastExecution.executedPlan
+        val ret = plan.find {
+          case _: AdaptiveSparkPlanExec | _: QueryStageExec => true
+          case _ => false
+        }
+        assert(ret.isEmpty)
+      }
+    }
+  }
+
 
   test("tree string output") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
