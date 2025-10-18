@@ -3489,11 +3489,11 @@ class AstBuilder extends DataTypeAstBuilder
             throw ex
         }
       case _ =>
-        // For unsupported type identifiers (e.g., GEO, GEOMETRY, etc.)
-        val supportedTypes = Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP",
-          "INTERVAL", "X", "TIME")
         throw QueryParsingErrors.literalValueTypeUnsupportedError(
-          ctx.literalType.getText, supportedTypes, ctx)
+          unsupportedType = ctx.literalType.getText,
+          supportedTypes =
+            Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME"),
+          ctx)
     }
   }
 
@@ -3650,12 +3650,11 @@ class AstBuilder extends DataTypeAstBuilder
    *
    * Special characters can be escaped by using Hive/C-style escaping.
    *
-   * Note: With the modified stringLit grammar rule, visitStringLit now returns a Token
-   * that already represents the coalesced value of multiple literals.
+   * Note: visitStringLit now returns a Token that already represents the coalesced value of
+   * multiple literals.
    */
   private def createString(ctx: StringLiteralContext): String = {
-    // visitStringLit already handles coalescing multiple literals and returns
-    // a CoalescedStringToken. We need to unescape based on configuration.
+    // We need to unescape based on configuration.
     val token = visitStringLit(ctx.stringLit())
     if (conf.escapedStringLiterals) {
       stringWithoutUnescape(token)
@@ -4235,14 +4234,14 @@ class AstBuilder extends DataTypeAstBuilder
           val value = visitPropertyValue(p.value)
           key -> value
         case p: PropertyWithStringKeyAndEqualsContext =>
-          // Key uses stringLit (allows coalescing and parameter markers)
+          // Key allows coalescing and parameter markers via stringLit.
           val key = string(visitStringLit(p.key))
           val value = visitPropertyValue(p.value)
           key -> value
         case p: PropertyWithStringKeyNoEqualsContext =>
-          // Key uses propertyKeyNoCoalesce (single token to prevent coalescing with value)
+          // Key is a single token that cannot coalesce with the value.
           val key = visitPropertyKeyNoCoalesce(p.key)
-          // Value uses propertyValue (supports stringLit with coalescing, etc)
+          // Value supports stringLit with coalescing.
           val value = Option(p.value).map(visitPropertyValue).orNull
           key -> value
       }

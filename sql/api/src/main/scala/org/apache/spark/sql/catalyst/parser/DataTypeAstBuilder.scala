@@ -46,14 +46,18 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  // Visit stringLit which can now have multiple stringLitWithoutMarker or parameterMarker children
+  /**
+   * Visits a stringLit context that may contain multiple stringLitWithoutMarker or
+   * parameterMarker children. When multiple children are present, they are coalesced into a
+   * single token.
+   */
   override def visitStringLit(ctx: StringLitContext): Token = {
     if (ctx == null) {
       return null
     }
 
     // Collect all children (could be mix of stringLitWithoutMarker and parameterMarker)
-    val children = scala.collection.mutable.ListBuffer[Token]()
+    val tokens = scala.collection.mutable.ListBuffer[Token]()
     // Visit each child and collect resulting tokens
     val childCount = ctx.getChildCount
     var i = 0
@@ -61,23 +65,26 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       val child = ctx.getChild(i)
       val token = visit(child).asInstanceOf[Token]
       if (token != null) {
-        children += token
+        tokens += token
       }
       i += 1
     }
 
-    if (children.isEmpty) {
+    if (tokens.isEmpty) {
       null
-    } else if (children.size == 1) {
+    } else if (tokens.size == 1) {
       // Fast path: single token, return unchanged
-      children.head
+      tokens.head
     } else {
       // Multiple tokens: create coalesced token
-      createCoalescedStringToken(children.toSeq)
+      createCoalescedStringToken(tokens.toSeq)
     }
   }
 
-  // Visit stringLitWithoutMarker which now supports coalescing with +
+  /**
+   * Visits a stringLitWithoutMarker context that contains one or more string literal terminals.
+   * Multiple literals are automatically coalesced into a single CoalescedStringToken.
+   */
   override def visitStringLitWithoutMarker(ctx: StringLitWithoutMarkerContext): Token = {
     if (ctx == null) {
       return null
@@ -98,7 +105,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
-   * Visit singleStringLit alternatives and return the token (always exactly one token).
+   * Visits singleStringLit alternatives and returns the token. Always returns exactly one token
+   * without coalescing.
    */
   override def visitSingleStringLiteralValue(ctx: SingleStringLiteralValueContext): Token = {
     ctx.STRING_LITERAL().getSymbol
@@ -110,13 +118,30 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
-   * Collect all STRING_LITERAL and DOUBLEQUOTED_STRING terminals from the context. With the
-   * stringLitWithoutMarker+ grammar rule, there can be multiple terminals.
+   * Visits an integerVal alternative and returns the INTEGER_VALUE token.
+   *
+   * @param ctx
+   *   The integerVal context to process.
+   * @return
+   *   The INTEGER_VALUE token, or null if context is null.
+   */
+  override def visitIntegerVal(ctx: IntegerValContext): Token =
+    Option(ctx).map(_.INTEGER_VALUE.getSymbol).orNull
+
+  /**
+   * Collects all string literal terminals from a stringLitWithoutMarker context. The grammar rule
+   * allows one or more consecutive string literals, which are collected in source order for
+   * coalescing.
+   *
+   * @param ctx
+   *   The stringLitWithoutMarker context to process.
+   * @return
+   *   A sequence of terminal nodes representing the string literals.
    */
   private def collectStringTerminals(
       ctx: StringLitWithoutMarkerContext): Seq[org.antlr.v4.runtime.tree.TerminalNode] = {
     val stringLiterals = if (ctx.STRING_LITERAL != null) {
-      // With stringLit+, ANTLR generates a List
+      // ANTLR generates a List when the + quantifier is used in the grammar.
       ctx.STRING_LITERAL
         .asInstanceOf[java.util.List[_]]
         .asScala
@@ -127,7 +152,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
 
     val doubleQuoted = if (ctx.DOUBLEQUOTED_STRING != null) {
-      // With stringLit+, ANTLR generates a List
+      // ANTLR generates a List when the + quantifier is used in the grammar.
       ctx.DOUBLEQUOTED_STRING
         .asInstanceOf[java.util.List[_]]
         .asScala
@@ -137,19 +162,27 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       Seq.empty
     }
 
-    // Combine and sort by position in source
+    // Combine and sort by position in source.
     (stringLiterals ++ doubleQuoted).sortBy(_.getSymbol.getStartIndex)
   }
 
   /**
-   * Create a CoalescedStringToken from multiple string literal tokens. Processes each token
-   * through string() to handle escaping, then concatenates.
+   * Creates a CoalescedStringToken from multiple string literal tokens.
+   *
+   * This method concatenates the raw content of the tokens (with outer quotes removed but escape
+   * sequences preserved). The resulting token preserves R-string status and quote character type
+   * from the original tokens.
+   *
+   * @param tokens
+   *   A sequence of tokens to coalesce (must be non-empty).
+   * @return
+   *   A CoalescedStringToken representing the concatenated value.
    */
   private def createCoalescedStringToken(tokens: Seq[Token]): Token = {
     val firstToken = tokens.head
     val lastToken = tokens.last
 
-    // Check if any of the tokens are R-strings
+    // Check if any of the tokens are R-strings.
     val hasRString = tokens.exists { token =>
       val text = token.getText
       text.length >= 2 &&
@@ -157,7 +190,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       (text.charAt(1) == '\'' || text.charAt(1) == '"')
     }
 
-    // Determine the quote character to use (preserve from first non-R-string token)
+    // Determines the quote character for the coalesced token by finding the first
+    // non-R-string token and extracting its quote type. This preserves the original
+    // quotation style ('single' or "double") in the coalesced result.
     val quoteChar = {
       val firstNonRToken = tokens
         .find { token =>
@@ -177,21 +212,21 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
 
     // Concatenate the raw content of each token (without the outer quotes).
-    // Preserve all inner content including "" or '' sequences - these will be
-    // handled later by unescapeSQLString based on the config.
+    // Preserve all inner content including "" or '' sequences. These will be
+    // handled later by unescapeSQLString based on the configuration.
     val coalescedRawContent = tokens.map { token =>
       val text = token.getText
-      // Check if this is an R-string (raw string literal)
+      // Check if this is an R-string (raw string literal).
       val isRString = text.length >= 2 &&
         (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
         (text.charAt(1) == '\'' || text.charAt(1) == '"')
 
       if (isRString) {
-        // For R-strings: Remove R prefix and outer quotes (first 2 chars and last char)
+        // For R-strings: Remove R prefix and outer quotes (first 2 chars and last char).
         text.substring(2, text.length - 1)
       } else {
-        // For regular strings: Remove only the outer quotes (first and last character)
-        // Keep all inner content including "" or '' which will be processed by unescapeSQLString
+        // For regular strings: Remove only the outer quotes (first and last character).
+        // Keep all inner content including "" or '' which will be processed by unescapeSQLString.
         text.substring(1, text.length - 1)
       }
     }.mkString
@@ -587,11 +622,8 @@ private[parser] class CoalescedStringToken(
     }
   }
 
-  override def toString: String = {
-    if (isRawString) {
-      s"CoalescedStringToken(R$quoteChar$coalescedValue$quoteChar)"
-    } else {
-      s"CoalescedStringToken($quoteChar$coalescedValue$quoteChar)"
-    }
-  }
+  // Returns the same text as getText() to maintain transparency of coalescing.
+  // This ensures that debug output, error messages, and logging show the
+  // actual SQL string literal rather than a debug representation.
+  override def toString: String = getText
 }

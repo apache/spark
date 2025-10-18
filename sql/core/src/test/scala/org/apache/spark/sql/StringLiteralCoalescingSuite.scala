@@ -25,10 +25,14 @@ import org.apache.spark.sql.test.SharedSparkSession
  * String literal coalescing allows multiple consecutive string literals to be
  * automatically concatenated: 'hello' 'world' becomes 'helloworld'.
  *
- * This feature now works in all contexts where string literals are accepted,
+ * This feature works in all contexts where string literals are accepted,
  * not just in expressions.
  */
 class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
+
+  // ========================================================================
+  // Basic String Literal Coalescing Tests
+  // ========================================================================
 
   test("string coalescing in SELECT expressions") {
     checkAnswer(
@@ -53,6 +57,10 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
       Row("helloworld!")
     )
   }
+
+  // ========================================================================
+  // DDL Context Coalescing Tests
+  // ========================================================================
 
   test("string coalescing in DDL LOCATION clause") {
     withTempPath { dir =>
@@ -102,6 +110,10 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
       assert(comment == "User ID number")
     }
   }
+
+  // ========================================================================
+  // LIKE and Pattern Matching Tests
+  // ========================================================================
 
   test("string coalescing in LIKE pattern") {
     checkAnswer(
@@ -191,8 +203,12 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  // ========================================================================
+  // R-String (Raw String) Coalescing Tests
+  // ========================================================================
+
   test("string coalescing with R-strings (raw strings)") {
-    // R-strings don't process escape sequences
+    // R-strings do not process escape sequences.
     checkAnswer(
       sql("""SELECT R'C:\Users\' 'JohnDoe' R'\Documents'"""),
       Row("""C:\Users\JohnDoe\Documents""")
@@ -244,6 +260,10 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
       assert(comment == "Updated comment text")
     }
   }
+
+  // ========================================================================
+  // Property Coalescing Tests
+  // ========================================================================
 
   test("property string coalescing - identifier keys") {
     withTable("t") {
@@ -460,6 +480,10 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  // ========================================================================
+  // Edge Cases and Special Characters
+  // ========================================================================
 
   test("string coalescing preserves whitespace within literals") {
     checkAnswer(

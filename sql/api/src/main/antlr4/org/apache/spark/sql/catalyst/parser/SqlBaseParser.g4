@@ -1696,10 +1696,14 @@ alterColumnAction
     | dropDefault=DROP DEFAULT
     ;
 
+// Matches one or more string literals (single or double-quoted) without parameter markers.
+// Multiple consecutive literals are coalesced into a single string.
 stringLitWithoutMarker
     : (STRING_LITERAL | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING)+
     ;
 
+// Matches exactly one string literal without coalescing or parameter markers.
+// Used in type constructors where coalescing is not allowed.
 singleStringLit
     : STRING_LITERAL                                                                           #singleStringLiteralValue
     | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #singleDoubleQuotedStringLiteralValue
