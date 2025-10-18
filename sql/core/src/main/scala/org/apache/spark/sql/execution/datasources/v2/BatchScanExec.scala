@@ -137,15 +137,21 @@ case class BatchScanExec(
       return partitionGroups
     }
 
-    // Combine all filters into a single predicate
-    val combinedFilter = allFilters.reduce(And)
-
-    // Check if outputPartitioning is KeyGroupedPartitioning and extract attributes
     keyedPartitioning match {
       case Some(keyedPartitioningExprs) =>
+
         val partitionAttrs: Seq[Attribute] = keyedPartitioningExprs.toIndexedSeq.collect {
           case attr: Attribute => attr
         }
+        val partitionAttrsSet = AttributeSet(partitionAttrs)
+        val partitionPruningFilters = allFilters.filter { f =>
+          AttributeSet(f.references).subsetOf(partitionAttrsSet)
+        }
+        if (partitionPruningFilters.isEmpty) {
+          return partitionGroups
+        }
+        val combinedFilter = partitionPruningFilters.reduce(And)
+
         partitionGroups.map { partitionGroup =>
           partitionGroup.filter { partition =>
             partition match {

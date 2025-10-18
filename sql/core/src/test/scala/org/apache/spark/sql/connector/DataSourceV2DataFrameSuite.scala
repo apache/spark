@@ -909,6 +909,44 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("test advanced partition filtering 2") {
+    val t = "testcat.ns1.table"
+    withTable(t) {
+      sql(s"""CREATE table $t (a string, b string, c string) USING foo partitioned by (b)""")
+      sql(s"""ALTER TABLE $t SET TBLPROPERTIES ('use-keyed-partitioning' = 'true')""")
+      val df = Seq(("a", " b ", "c"), ("d", " e ", "f")).toDF("a", "b", "c")
+      val expected = Seq(("a", " b ", "c")).toDF("a", "b", "c")
+      df.write.mode("append").insertInto(t)
+      val query = spark.table(t).filter("trim(b) == \"b\" AND c = 'c'")
+      checkAnswer(query, expected)
+      collectScans(query.queryExecution.executedPlan) match {
+        case Seq(scan: BatchScanExec) =>
+          assert(scan.inputRDD.partitions.length == 1)
+          assert(scan.allFilters.nonEmpty)
+        case _ => fail("Expected a single batch scan")
+      }
+    }
+  }
+
+  test("test advanced partition filtering 3") {
+    val t = "testcat.ns1.table"
+    withTable(t) {
+      sql(s"""CREATE table $t (a string, b string, c string) USING foo partitioned by (b)""")
+      sql(s"""ALTER TABLE $t SET TBLPROPERTIES ('use-keyed-partitioning' = 'true')""")
+      val df = Seq(("a", " b ", "c"), ("d", " e ", "f")).toDF("a", "b", "c")
+      val expected = Seq(("a", " b ", "c")).toDF("a", "b", "c")
+      df.write.mode("append").insertInto(t)
+      val query = spark.table(t).filter("trim(b) == \"b\" OR c = 'c'")
+      checkAnswer(query, expected)
+      collectScans(query.queryExecution.executedPlan) match {
+        case Seq(scan: BatchScanExec) =>
+          assert(scan.inputRDD.partitions.length == 2)
+          assert(scan.allFilters.nonEmpty)
+        case _ => fail("Expected no partition filtering due to OR condition")
+      }
+    }
+  }
+
   private def executeAndKeepPhysicalPlan[T <: SparkPlan](func: => Unit): T = {
     val qe = withQueryExecutionsCaptured(spark) {
       func
