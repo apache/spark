@@ -154,7 +154,7 @@ abstract class StreamExecution(
   protected def sources: Seq[SparkDataStream]
 
   /** Isolated spark session to run the batches with. */
-  protected val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
+  protected[sql] val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
 
   /**
    * Manages the metadata from this checkpoint location.
@@ -314,6 +314,17 @@ abstract class StreamExecution(
         // details.
         sparkSessionForStream.conf.set(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key,
           "false")
+
+        sparkSessionForStream.conf.get(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL) match {
+
+          case Some(_) => // no-op
+          case None =>
+            // Take the default value of `spark.sql.shuffle.partitions`.
+            val shufflePartitionValue = sparkSessionForStream.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+            sparkSessionForStream.conf.set(
+              SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key,
+              shufflePartitionValue)
+        }
 
         getLatestExecutionContext().updateStatusMessage("Initializing sources")
         // force initialization of the logical plan so that the sources can be created
