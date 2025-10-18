@@ -33,6 +33,7 @@ import io.netty.util.internal.OutOfDirectMemoryError
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
+import org.apache.spark.ExecutorDeadException
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
@@ -979,8 +980,49 @@ final class ShuffleBlockFetcherIterator(
               log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
             logError(logMessage)
             errorMsg = logMessage.message
+          } else {
+            logInfo(s"Block $blockId fetch failed for mapIndex $mapIndex from $address")
           }
-          throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
+          // If the fetch has failed due to a dead executor, the block may be available elsewhere
+          // in the event of graceful storage decommissioning / block migration.
+          // Rather than failing and potentially retrying the whole stage,
+          // we can check for a new block location and then re-queue the fetch with updated BM.
+          // TODO: skip this if spark.storage.decommission.enabled = false
+          if (e.isInstanceOf[ExecutorDeadException]) {
+            val newBlocksByAddr = blockId match {
+              case ShuffleBlockId(shuffleId, _, reduceId) =>
+                mapOutputTracker.unregisterShuffle(shuffleId)
+                mapOutputTracker.getMapSizesByExecutorId(
+                  shuffleId,
+                  mapIndex,
+                  mapIndex + 1,
+                  reduceId,
+                  reduceId + 1)
+                  .filter(_._1 != address)
+              case ShuffleBlockBatchId(shuffleId, _, startReduceId, endReduceId) =>
+                mapOutputTracker.unregisterShuffle(shuffleId)
+                mapOutputTracker.getMapSizesByExecutorId(
+                    shuffleId,
+                    mapIndex,
+                    mapIndex + 1,
+                    startReduceId,
+                    endReduceId)
+                  .filter(_._1 != address)
+              case _ =>
+                logInfo(s"Fetching block $blockId failed")
+                Iterator.empty
+            }
+            if (newBlocksByAddr.nonEmpty) {
+              logInfo(s"New addresses found for block $blockId and mapIndex $mapIndex")
+              fallbackFetch(newBlocksByAddr)
+              result = null
+            } else {
+              throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
+            }
+          }
+          else {
+            throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
+          }
 
         case DeferFetchRequestResult(request) =>
           val address = request.address
@@ -1206,6 +1248,7 @@ final class ShuffleBlockFetcherIterator(
     while (isRemoteBlockFetchable(fetchRequests)) {
       val request = fetchRequests.dequeue()
       val remoteAddress = request.address
+      // TODO: check if remote address is dead, schedule to retry migration destination
       if (isRemoteAddressMaxedOut(remoteAddress, request)) {
         logDebug(s"Deferring fetch request for $remoteAddress with ${request.blocks.size} blocks")
         val defReqQueue = deferredFetchRequests.getOrElse(remoteAddress, new Queue[FetchRequest]())
