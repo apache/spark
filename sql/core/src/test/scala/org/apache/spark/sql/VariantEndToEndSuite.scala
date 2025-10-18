@@ -465,4 +465,30 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-52621: Cast TIME to/from VARIANT") {
+    // Basic TIME to VARIANT casting.
+    checkAnswer(sql("SELECT cast(time '00:00:00' as variant)"),
+      Row(Cast(Literal(0L, TimeType()), VariantType).eval()))
+    checkAnswer(sql("SELECT cast(time '12:34:56.789' as variant)"),
+      Row(Cast(Literal(45296789000000L, TimeType()), VariantType).eval()))
+    // Basic VARIANT to TIME casting.
+    checkAnswer(sql("SELECT cast(cast(time '00:00:00' as variant) as time)"),
+      Row(java.time.LocalTime.of(0, 0, 0, 0)))
+    checkAnswer(sql("SELECT cast(cast(time '12:34:56.789' as variant) as time)"),
+      Row(java.time.LocalTime.of(12, 34, 56, 789000000)))
+
+    // Test parse_json with valid TIME.
+    checkAnswer(sql("SELECT cast(parse_json('0') as time)"),
+      Row(java.time.LocalTime.of(0, 0, 0)))
+    checkAnswer(sql("SELECT cast(parse_json('45296789000000') as time)"),
+      Row(java.time.LocalTime.of(12, 34, 56, 789000000)))
+    // Test to_json with valid TIME.
+    checkAnswer(sql("SELECT to_json(cast(time '00:00:00' as variant))"), Row("0"))
+    checkAnswer(sql("SELECT to_json(cast(time '12:34:56.789' as variant))"), Row("45296789000000"))
+
+    // Test schema_of_variant with TIME.
+    checkAnswer(sql("SELECT schema_of_variant(cast(time '00:00:00' as variant))"), Row("BIGINT"))
+    checkAnswer(sql("SELECT schema_of_variant(cast(time '12:34:56.7' as variant))"), Row("BIGINT"))
+  }
 }
