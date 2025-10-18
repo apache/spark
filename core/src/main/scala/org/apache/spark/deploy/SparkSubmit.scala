@@ -1070,7 +1070,7 @@ private[spark] class SparkSubmit extends Logging {
     // Swallow exceptions when storing diagnostics, this shouldn't fail the application.
     try {
       if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass)
-        && !isThriftServer(args.mainClass)) {
+        && !isThriftServer(args.mainClass) && !isConnectServer(args.mainClass)) {
         SparkSubmitUtils.getSparkDiagnosticsSetters(args.master, sparkConf)
           .foreach(_.setDiagnostics(throwable, sparkConf))
       }
@@ -1265,8 +1265,7 @@ private[spark] object SparkSubmitUtils {
 
     serviceLoaders.size match {
       case x if x > 1 =>
-        throw new SparkException(s"Multiple($x) external SparkDiagnosticsSetter" +
-          s"registered for master url $master.")
+        throw new SparkException(s"Multiple($x) external SparkDiagnosticsSetter registered.")
       case 1 =>
         Some(serviceLoaders.headOption.get)
       case _ => None

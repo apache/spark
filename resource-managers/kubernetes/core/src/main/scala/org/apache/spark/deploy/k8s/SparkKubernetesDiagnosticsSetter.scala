@@ -48,9 +48,8 @@ private[spark] class DefaultKubernetesClientProvider extends KubernetesClientPro
   }
 }
 
-private[spark] class SparkKubernetesDiagnosticsSetter(
-  clientProvider: KubernetesClientProvider
-  ) extends SparkDiagnosticsSetter with Logging {
+private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: KubernetesClientProvider)
+  extends SparkDiagnosticsSetter with Logging {
 
   private val KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES = 64 * 1024 // 64 KiB
 
