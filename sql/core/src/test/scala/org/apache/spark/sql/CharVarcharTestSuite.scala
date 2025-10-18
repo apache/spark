@@ -541,6 +541,18 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("char type comparison: nested in struct with multiple fields") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(c1 STRUCT<c: CHAR(2), d: CHAR(3)>, c2 STRUCT<c: CHAR(5), d: CHAR(3)>) " +
+        s"USING $format")
+      sql("INSERT INTO t VALUES (struct('a', 'b'), struct('a', 'b'))")
+      testConditions(spark.table("t"), Seq(
+        ("c1 = c2", true),
+        ("c1 < c2", false),
+        ("c1 IN (c2)", true)))
+    }
+  }
+
   test("char type comparison: nested in array") {
     withTable("t") {
       sql(s"CREATE TABLE t(c1 ARRAY<CHAR(2)>, c2 ARRAY<CHAR(5)>) USING $format")
@@ -573,6 +585,15 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         ("c1 = c2", true),
         ("c1 < c2", false),
         ("c1 IN (c2)", true)))
+    }
+  }
+
+  test("char type comparison: nested in array of struct with nulls") {
+    withTable("t") {
+      sql("CREATE TABLE t(c1 ARRAY<STRUCT<c: CHAR(2)>>, c2 ARRAY<STRUCT<c: CHAR(5)>>) " +
+          s"USING $format")
+      sql("INSERT INTO t VALUES (array(NULL), array(struct(NULL)))")
+      testConditions(spark.table("t"), Seq(("c1 = c2", false)))
     }
   }
 
