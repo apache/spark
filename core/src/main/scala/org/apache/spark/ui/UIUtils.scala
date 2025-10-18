@@ -32,6 +32,7 @@ import scala.xml.transform.{RewriteRule, RuleTransformer}
 
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
+import org.eclipse.jetty.server.Request
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
 import org.apache.spark.internal.Logging
@@ -190,6 +191,16 @@ private[spark] object UIUtils extends Logging {
     // Knox uses X-Forwarded-Context to notify the application the base path
     val knoxBasePath = Option(request.getHeader("X-Forwarded-Context"))
     // SPARK-11484 - Use the proxyBase set by the AM, if not found then use env.
+    sys.props.get("spark.ui.proxyBase")
+      .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
+      .orElse(knoxBasePath)
+      .getOrElse("")
+  }
+
+  def uiRoot(request: Request): String = {
+    // Knox uses X-Forwarded-Context to notify the application of the base path
+    val knoxBasePath = Option(request.getHeaders.get("X-Forwarded-Context"))
+    // SPARK-11484 - Use the proxyBase set by the AM, if not found, then use env.
     sys.props.get("spark.ui.proxyBase")
       .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
       .orElse(knoxBasePath)

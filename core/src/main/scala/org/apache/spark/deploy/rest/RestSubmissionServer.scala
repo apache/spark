@@ -25,8 +25,8 @@ import scala.io.Source
 import com.fasterxml.jackson.core.JsonProcessingException
 import jakarta.servlet.DispatcherType
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import org.eclipse.jetty.ee10.servlet.{FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.server.{HttpConfiguration, HttpConnectionFactory, Server, ServerConnector}
-import org.eclipse.jetty.servlet.{FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._

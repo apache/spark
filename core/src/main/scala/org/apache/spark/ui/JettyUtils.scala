@@ -20,6 +20,8 @@ package org.apache.spark.ui
 import java.net.{URI, URL, URLDecoder}
 import java.util.EnumSet
 
+import scala.jdk.CollectionConverters.IterableHasAsScala
+import scala.jdk.CollectionConverters.SeqHasAsJava
 import scala.language.implicitConversions
 import scala.util.Try
 import scala.xml.Node
@@ -27,13 +29,17 @@ import scala.xml.Node
 import jakarta.servlet.DispatcherType
 import jakarta.servlet.http._
 import org.eclipse.jetty.client.HttpClient
-import org.eclipse.jetty.client.api.Response
-import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP
-import org.eclipse.jetty.proxy.ProxyServlet
+import org.eclipse.jetty.client.Response
+import org.eclipse.jetty.client.transport.HttpClientTransportOverHTTP
+import org.eclipse.jetty.ee10.proxy.ProxyServlet
+import org.eclipse.jetty.ee10.servlet._
+import org.eclipse.jetty.http.HttpHeader
+import org.eclipse.jetty.server
 import org.eclipse.jetty.server._
 import org.eclipse.jetty.server.handler._
+import org.eclipse.jetty.server.handler.ErrorHandler
 import org.eclipse.jetty.server.handler.gzip.GzipHandler
-import org.eclipse.jetty.servlet._
+import org.eclipse.jetty.util.Callback
 import org.eclipse.jetty.util.component.LifeCycle
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.json4s.JValue
@@ -266,7 +272,7 @@ private[spark] object JettyUtils extends Logging {
 
     val errorHandler = new ErrorHandler()
     errorHandler.setShowStacks(true)
-    errorHandler.setServer(server)
+    server.setErrorHandler(errorHandler)
     server.addBean(errorHandler)
 
     val collection = new ContextHandlerCollection
@@ -395,19 +401,18 @@ private[spark] object JettyUtils extends Logging {
     val redirectHandler: ContextHandler = new ContextHandler
     redirectHandler.setContextPath("/")
     redirectHandler.setVirtualHosts(toVirtualHosts(REDIRECT_CONNECTOR_NAME))
-    redirectHandler.setHandler(new AbstractHandler {
+    redirectHandler.setHandler(new Handler.Abstract {
       override def handle(
-          target: String,
-          baseRequest: Request,
-          request: HttpServletRequest,
-          response: HttpServletResponse): Unit = {
-        if (baseRequest.isSecure) {
-          return
+                           request: Request,
+                           response: server.Response,
+                           callback: Callback): Boolean = {
+        if (request.isSecure) {
+          return true
         }
-        val httpsURI = createRedirectURI(scheme, securePort, baseRequest)
-        response.setContentLength(0)
-        response.sendRedirect(response.encodeRedirectURL(httpsURI))
-        baseRequest.setHandled(true)
+        val httpsURI = createRedirectURI(scheme, securePort, request)
+        response.getHeaders.put(HttpHeader.CONTENT_LENGTH, 0)
+        server.Response.sendRedirect(request, response, callback, httpsURI)
+        return true
       }
     })
     redirectHandler
@@ -472,27 +477,28 @@ private[spark] object JettyUtils extends Logging {
 
   // Create a new URI from the arguments, handling IPv6 host encoding and default ports.
   private def createRedirectURI(scheme: String, port: Int, request: Request): String = {
-    val server = request.getServerName
+    val server = Request.getServerName(request)
     val redirectServer = if (server.contains(":") && !server.startsWith("[")) {
       s"[${server}]"
     } else {
       server
     }
     val authority = s"$redirectServer:$port"
-    val queryEncoding = if (request.getQueryEncoding != null) {
-      request.getQueryEncoding
+    val queryEncoding = if (Request.getCharset(request) != null) {
+      Request.getCharset(request).toString
     } else {
-      // By default decoding the URI as "UTF-8" should be enough for SparkUI
+      // By default, decoding the URI as "UTF-8" should be enough for SparkUI
       "UTF-8"
     }
     // The request URL can be raw or encoded here. To avoid the request URL being
     // encoded twice, let's decode it here.
-    val requestURI = decodeURL(request.getRequestURI, queryEncoding)
-    val queryString = decodeURL(request.getQueryString, queryEncoding)
+    val requestURI = decodeURL(request.getHttpURI.getPath, queryEncoding)
+    val queryString = decodeURL(request.getHttpURI.getQuery, queryEncoding)
     new URI(scheme, authority, requestURI, queryString, null).toString
   }
 
-  def toVirtualHosts(connectors: String*): Array[String] = connectors.map("@" + _).toArray
+  def toVirtualHosts(connectors: String*): java.util.List[String] =
+    connectors.map("@" + _).toList.asJava
 
 }
 
@@ -522,7 +528,7 @@ private[spark] case class ServerInfo(
   def removeHandler(handler: ServletContextHandler): Unit = synchronized {
     // Since addHandler() always adds a wrapping gzip handler, find the container handler
     // and remove it.
-    rootHandler.getHandlers()
+    rootHandler.getHandlers.asScala
       .find { h =>
         h.isInstanceOf[GzipHandler] && h.asInstanceOf[GzipHandler].getHandler() == handler
       }
@@ -550,7 +556,7 @@ private[spark] case class ServerInfo(
     }
     server.stop()
     // Stop the ThreadPool if it supports stop() method (through LifeCycle).
-    // It is needed because stopping the Server won't stop the ThreadPool it uses.
+    // It is necessary because stopping the Server won't stop the ThreadPool it uses.
     if (threadPool != null && threadPool.isInstanceOf[LifeCycle]) {
       threadPool.asInstanceOf[LifeCycle].stop
     }
@@ -589,7 +595,7 @@ private[spark] case class ServerInfo(
 }
 
 /**
- * A Jetty handler to handle redirects to a proxy server. It intercepts redirects and rewrites the
+ * A Jetty handler to handle redirects to a proxy server. It intercepts, redirects, and rewrites the
  * location to point to the proxy server.
  *
  * The handler needs to be set as the server's handler, because Jetty sometimes generates redirects
@@ -597,16 +603,12 @@ private[spark] case class ServerInfo(
  * a servlet context without the trailing slash (e.g. "/jobs") - Jetty will send a redirect to the
  * same URL, but with a trailing slash.
  */
-private class ProxyRedirectHandler(_proxyUri: String) extends HandlerWrapper {
+private class ProxyRedirectHandler(_proxyUri: String) extends Handler.Wrapper {
 
   private val proxyUri = _proxyUri.stripSuffix("/")
 
-  override def handle(
-      target: String,
-      baseRequest: Request,
-      request: HttpServletRequest,
-      response: HttpServletResponse): Unit = {
-    super.handle(target, baseRequest, request, new ResponseWrapper(request, response))
+  override def handle(request: Request, response: server.Response, callback: Callback): Boolean = {
+    super.handle(request, response, callback)
   }
 
   private class ResponseWrapper(

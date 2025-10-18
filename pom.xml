@@ -126,7 +126,7 @@
     <slf4j.version>2.0.17</slf4j.version>
     <log4j.version>2.24.3</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.4.2</hadoop.version>
+    <hadoop.version>3.5.0-SNAPSHOT</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>4.29.3</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
@@ -143,7 +143,7 @@
     <parquet.version>1.16.0</parquet.version>
     <orc.version>2.2.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.26</jetty.version>
+    <jetty.version>12.0.12</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -355,6 +355,10 @@
   </properties>
   <repositories>
     <repository>
+      <id>local-git-resources</id>
+      <url>file:${user.dir}/resources/repository</url>
+    </repository>
+    <repository>
       <id>gcs-maven-central-mirror</id>
       <!--
         Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
@@ -552,20 +556,20 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-servlet</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-servlet</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-servlets</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-servlets</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-proxy</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-proxy</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
