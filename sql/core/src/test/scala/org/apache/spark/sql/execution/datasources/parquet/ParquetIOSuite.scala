@@ -38,16 +38,19 @@ import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnVector
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -767,7 +770,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         }
 
         withParquetFile(data) { file =>
-          checkAnswer(spark.read.schema(readSchema).parquet(file), expectedAnswer)
+          val df = spark.read.schema(readSchema).parquet(file)
+          val scanNode = df.queryExecution.executedPlan.collectLeaves().head
+          VerifyNoAdditionalScanOutputExec(scanNode).execute().first()
+          checkAnswer(df, expectedAnswer)
         }
       }
     }
@@ -816,7 +822,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           }
 
           withAllParquetReaders {
-            checkAnswer(spark.read.schema(readSchema).parquet(file), expectedAnswer)
+            val df = spark.read.schema(readSchema).parquet(file)
+            val scanNode = df.queryExecution.executedPlan.collectLeaves().head
+            if (scanNode.supportsColumnar) {
+              VerifyNoAdditionalScanOutputExec(scanNode).execute().first()
+            }
+            checkAnswer(df, expectedAnswer)
           }
         }
       }
@@ -1713,4 +1724,26 @@ class TaskCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAtt
   override def commitTask(context: TaskAttemptContext): Unit = {
     sys.error("Intentional exception for testing purposes")
   }
+}
+
+case class VerifyNoAdditionalScanOutputExec(override val child: SparkPlan) extends UnaryExecNode {
+  override def doExecute(): RDD[InternalRow] = {
+    val childOutputTypes = child.output.map(_.dataType)
+    child.executeColumnar().mapPartitionsInternal { batches =>
+      batches.flatMap { input =>
+        input.rowIterator().asScala
+          .map(row => {
+            val columnsField = row.getClass.getDeclaredField("columns")
+            columnsField.setAccessible(true)
+            val columnVectors = columnsField.get(row).asInstanceOf[Array[ColumnVector]]
+            assert(childOutputTypes.sameElements(columnVectors.map(_.dataType())),
+              "Found additional columns in the ColumnarBatch that are not present in output schema")
+            new GenericInternalRow(0)
+          })
+      }
+    }
+  }
+  override def output: Seq[Attribute] = Nil
+  override def withNewChildInternal(newChild: SparkPlan): VerifyNoAdditionalScanOutputExec =
+    copy(child = newChild)
 }
