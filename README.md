@@ -15,11 +15,33 @@ and Structured Streaming for stream processing.
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/pyspark?period=month&units=international_system&left_color=black&right_color=orange&left_text=PyPI%20downloads)](https://pypi.org/project/pyspark/)
 
 
-## Online Documentation
+## Documentation
 
 You can find the latest Spark documentation, including a programming
 guide, on the [project web page](https://spark.apache.org/documentation.html).
-This README file only contains basic setup instructions.
+
+### Repository Documentation
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Spark architecture overview and component descriptions
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Developer guide with build instructions, testing, and IDE setup
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to Apache Spark
+
+### Module Documentation
+
+- **[core/](core/README.md)** - Spark Core: RDDs, scheduling, memory management, storage
+- **[sql/](sql/README.md)** - Spark SQL: DataFrames, Datasets, SQL engine, data sources
+- **[streaming/](streaming/README.md)** - Spark Streaming: DStreams and Structured Streaming
+- **[mllib/](mllib/README.md)** - MLlib: Machine learning library with algorithms and pipelines
+- **[graphx/](graphx/README.md)** - GraphX: Graph processing framework and algorithms
+- **[examples/](examples/README.md)** - Example programs in Scala, Java, Python, and R
+
+### Tools and Utilities
+
+- **[bin/](bin/README.md)** - User-facing scripts (spark-submit, spark-shell, pyspark, etc.)
+- **[sbin/](sbin/README.md)** - Admin scripts for managing Spark standalone clusters
+- **[launcher/](launcher/README.md)** - Programmatic API for launching Spark applications
+- **[resource-managers/](resource-managers/README.md)** - Integrations with YARN, Kubernetes, and Mesos
+- **[common/](common/README.md)** - Common utilities and libraries shared across modules
 
 ## Build Pipeline Status
 
