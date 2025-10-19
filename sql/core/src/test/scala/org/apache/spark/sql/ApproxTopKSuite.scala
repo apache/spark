@@ -422,6 +422,33 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
     checkAnswer(res, Row(Seq(Row(null, 2))))
   }
 
+  test("SPARK-52588: accumulate a column of all nulls with type - success") {
+    val res = sql(
+      """SELECT approx_top_k_accumulate(expr) AS acc
+        |FROM VALUES cast(NULL AS INT), cast(NULL AS INT) AS tab(expr)""".stripMargin)
+
+    assert(res.collect().length == 1)
+    res.createOrReplaceTempView("accumulation")
+    val est = sql("SELECT approx_top_k_estimate(acc) FROM accumulation;")
+    checkAnswer(est, Row(Seq(Row(null, 2))))
+  }
+
+  test("SPARK-52588: accumulate a column of all nulls without type - fail") {
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql("""SELECT approx_top_k_accumulate(expr)
+            |FROM VALUES (NULL), (NULL), (NULL), (NULL) AS tab(expr)""".stripMargin)
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> "\"approx_top_k_accumulate(expr, 10000)\"",
+        "msg" -> "void columns are not supported",
+        "hint" -> ""
+      ),
+      queryContext = Array(ExpectedContext("approx_top_k_accumulate(expr)", 7, 35))
+    )
+  }
+
   /////////////////////////////////
   // approx_top_k_combine
   /////////////////////////////////
@@ -742,5 +769,77 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       condition = "APPROX_TOP_K_SKETCH_SIZE_NOT_MATCH",
       parameters = Map("size1" -> "10", "size2" -> "20")
     )
+  }
+
+  test("SPARK-52798: combine and estimate count NULL values") {
+    sql(
+      """SELECT approx_top_k_accumulate(expr, 10) as acc
+        |FROM VALUES 'a', 'a', 'b', NULL, NULL AS tab(expr)""".stripMargin)
+      .createOrReplaceTempView("accumulation1")
+
+    sql(
+      """SELECT approx_top_k_accumulate(expr, 10) as acc
+        |FROM VALUES 'b', 'b', NULL, NULL AS tab(expr)""".stripMargin)
+      .createOrReplaceTempView("accumulation2")
+
+    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2")
+      .createOrReplaceTempView("unioned")
+
+    sql("SELECT approx_top_k_combine(acc, 20) as com FROM unioned")
+      .createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com, 2) FROM combined")
+    checkAnswer(est, Row(Seq(Row(null, 4), Row("b", 3))))
+  }
+
+  test("SPARK-52798: combine with a sketch of all nulls") {
+    sql(
+      """SELECT approx_top_k_accumulate(expr, 10) as acc
+        |FROM VALUES cast(NULL AS INT), cast(NULL AS INT), cast(NULL AS INT)
+        |AS tab(expr)""".stripMargin)
+      .createOrReplaceTempView("accumulation1")
+
+    sql(
+      """SELECT approx_top_k_accumulate(expr, 10) as acc
+        |FROM VALUES 1, 1, 2, 2 AS tab(expr)""".stripMargin)
+      .createOrReplaceTempView("accumulation2")
+
+    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2")
+      .createOrReplaceTempView("unioned")
+
+    sql("SELECT approx_top_k_combine(acc, 20) as com FROM unioned")
+      .createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined")
+    checkAnswer(est, Row(Seq(Row(null, 3), Row(2, 2), Row(1, 2))))
+  }
+
+  test("SPARK-52798: combine sketches with nulls from more than 2 sketches") {
+    sql(
+      """SELECT approx_top_k_accumulate(expr, 10) as acc
+        |FROM VALUES 0, 0, 0, 1, 1, NULL AS tab(expr)""".stripMargin)
+      .createOrReplaceTempView("accumulation1")
+
+    sql(
+      """SELECT approx_top_k_accumulate(expr, 10) as acc
+        |FROM VALUES NULL, 1, 1, 2, 2, NULL AS tab(expr)""".stripMargin)
+      .createOrReplaceTempView("accumulation2")
+
+    sql(
+      """SELECT approx_top_k_accumulate(expr, 10) as acc
+        |FROM VALUES 2, 3, 3, NULL AS tab(expr)""".stripMargin)
+      .createOrReplaceTempView("accumulation3")
+
+    sql(
+      """SELECT acc from accumulation1 UNION ALL
+        |SELECT acc FROM accumulation2 UNION ALL
+        |SELECT acc FROM accumulation3""".stripMargin)
+      .createOrReplaceTempView("unioned")
+
+    sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned")
+      .createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com, 2) FROM combined")
+    checkAnswer(est, Row(Seq(Row(1, 4), Row(null, 4))))
   }
 }
