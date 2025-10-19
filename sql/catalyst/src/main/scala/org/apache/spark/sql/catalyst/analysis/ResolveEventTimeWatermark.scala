@@ -56,7 +56,7 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
         // We need to inject projection as we can't find the matching column directly in the
         // child output.
         val proj = Project(Seq(namedExpression, u.child.output), u.child)
-        val attrRef = proj.projectList.head.toAttribute
+        val attrRef = namedExpression.toAttribute
         EventTimeWatermark(uuid, attrRef, u.delay, proj)
       }
     }
