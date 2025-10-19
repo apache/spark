@@ -40,7 +40,7 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  test("event time and watermark metrics with watermark in select DML - case 1") {
+  test("event time and watermark metrics with watermark in select statement - case 1") {
     // All event time metrics where watermarking is set
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
@@ -58,7 +58,7 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
     testWindowedAggregation(inputData, aggWithWatermark)
   }
 
-  test("event time and watermark metrics with watermark in select DML - case 2") {
+  test("event time and watermark metrics with watermark in select statement - case 2") {
     // All event time metrics where watermarking is set
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
@@ -92,7 +92,7 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
     )
   }
 
-  test("stream-stream join with watermark in select DML - case 1") {
+  test("stream-stream join with watermark in select statement - case 1") {
     val leftInput = MemoryStream[(Int, Int)]
     val rightInput = MemoryStream[(Int, Int)]
 
@@ -122,7 +122,7 @@ class EventTimeWatermarkWithWatermarkDefInSelectSuite
     testStreamStreamTimeIntervalJoin(leftInput, rightInput, joined)
   }
 
-  test("stream-stream join with watermark in select DML - case 2") {
+  test("stream-stream join with watermark in select statement - case 2") {
     val leftInput = MemoryStream[(Int, Int)]
     val rightInput = MemoryStream[(Int, Int)]
 
