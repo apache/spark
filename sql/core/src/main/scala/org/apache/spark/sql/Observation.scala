@@ -20,9 +20,12 @@ package org.apache.spark.sql
 import java.util.UUID
 
 import scala.collection.JavaConverters
+import scala.concurrent.{Future, Promise}
+import scala.concurrent.duration.Duration
 
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.util.SparkThreadUtils
 
 
 /**
@@ -58,7 +61,12 @@ class Observation(val name: String) {
 
   @volatile private var sparkSession: Option[SparkSession] = None
 
-  @volatile private var metrics: Option[Map[String, Any]] = None
+  private val promise = Promise[Row]()
+
+  /**
+   * Future holding the (yet to be completed) observation.
+   */
+  val future: Future[Row] = promise.future
 
   /**
    * Attach this observation to the given [[Dataset]] to observe aggregation expressions.
@@ -88,15 +96,8 @@ class Observation(val name: String) {
    */
   @throws[InterruptedException]
   def get: Map[String, _] = {
-    synchronized {
-      // we need to loop as wait might return without us calling notify
-      // https://en.wikipedia.org/w/index.php?title=Spurious_wakeup&oldid=992601610
-      while (this.metrics.isEmpty) {
-        wait()
-      }
-    }
-
-    this.metrics.get
+    val row = getRow
+    row.getValuesMap(row.schema.map(_.name))
   }
 
   /**
@@ -133,18 +134,21 @@ class Observation(val name: String) {
   }
 
   private[spark] def onFinish(qe: QueryExecution): Unit = {
-    synchronized {
-      if (this.metrics.isEmpty) {
-        val row = qe.observedMetrics.get(name)
-        this.metrics = row.map(r => r.getValuesMap[Any](r.schema.fieldNames))
-        if (metrics.isDefined) {
-          notifyAll()
-          unregister()
-        }
-      }
+    qe.observedMetrics.get(name).foreach { metrics =>
+      promise.trySuccess(metrics)
+      unregister()
     }
   }
 
+  /**
+   * Get the observed metrics as a Row.
+   *
+   * @return
+   *   the observed metrics as a `Row`.
+   */
+  private[sql] def getRow: Row = {
+    SparkThreadUtils.awaitResult(future, Duration.Inf)
+  }
 }
 
 private[sql] case class ObservationListener(observation: Observation)
