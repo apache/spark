@@ -260,54 +260,6 @@ object ApproxTopK {
     }
   }
 
-  def updateSketchBuffer(
-      itemExpression: Expression,
-      buffer: ItemsSketch[Any],
-      input: InternalRow): ItemsSketch[Any] = {
-    val v = itemExpression.eval(input)
-    if (v != null) {
-      itemExpression.dataType match {
-        case _: BooleanType => buffer.update(v.asInstanceOf[Boolean])
-        case _: ByteType => buffer.update(v.asInstanceOf[Byte])
-        case _: ShortType => buffer.update(v.asInstanceOf[Short])
-        case _: IntegerType => buffer.update(v.asInstanceOf[Int])
-        case _: LongType => buffer.update(v.asInstanceOf[Long])
-        case _: FloatType => buffer.update(v.asInstanceOf[Float])
-        case _: DoubleType => buffer.update(v.asInstanceOf[Double])
-        case _: DateType => buffer.update(v.asInstanceOf[Int])
-        case _: TimestampType => buffer.update(v.asInstanceOf[Long])
-        case _: TimestampNTZType => buffer.update(v.asInstanceOf[Long])
-        case st: StringType =>
-          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-          buffer.update(cKey.toString)
-        case _: DecimalType => buffer.update(v.asInstanceOf[Decimal])
-      }
-    }
-    buffer
-  }
-
-  def genEvalResult(
-      itemsSketch: ItemsSketch[Any],
-      k: Int,
-      itemDataType: DataType): GenericArrayData = {
-    val items = itemsSketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
-    val resultLength = math.min(items.length, k)
-    val result = new Array[AnyRef](resultLength)
-    for (i <- 0 until resultLength) {
-      val row = items(i)
-      itemDataType match {
-        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
-             _: LongType | _: FloatType | _: DoubleType | _: DecimalType |
-             _: DateType | _: TimestampType | _: TimestampNTZType =>
-          result(i) = InternalRow.apply(row.getItem, row.getEstimate)
-        case _: StringType =>
-          val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
-          result(i) = InternalRow.apply(item, row.getEstimate)
-      }
-    }
-    new GenericArrayData(result)
-  }
-
   def genSketchSerDe(dataType: DataType): ArrayOfItemsSerDe[Any] = {
     dataType match {
       case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
@@ -333,7 +285,7 @@ object ApproxTopK {
 
   def dataTypeToDDL(dataType: DataType): String = dataType match {
     case _: StringType =>
-      // Hide collation information in DDL format
+      // Hide collation information in DDL format, otherwise CollationExpressionWalkerSuite fails
       s"item string not null"
     case other =>
       StructField("item", other, nullable = false).toDDL
