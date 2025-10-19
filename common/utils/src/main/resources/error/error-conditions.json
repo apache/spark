@@ -4991,6 +4991,12 @@
     ],
     "sqlState" : "4274K"
   },
+  "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE" : {
+    "message" : [
+      "The watermark clause requires an explicit name if expression is specified, but got <sqlExpr>."
+    ],
+    "sqlState" : "42000"
+  },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
       "<sessionCatalog> requires a single-part namespace, but got <namespace>."

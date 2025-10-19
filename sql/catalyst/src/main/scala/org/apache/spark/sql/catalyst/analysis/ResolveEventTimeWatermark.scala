@@ -31,8 +31,6 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
     _.containsPattern(TreePattern.UNRESOLVED_EVENT_TIME_WATERMARK), ruleId) {
 
     case u: UnresolvedEventTimeWatermark if u.eventTimeColExpr.resolved && u.childrenResolved =>
-      val uuid = java.util.UUID.randomUUID()
-
       if (u.eventTimeColExpr.isInstanceOf[MultiAlias]) {
         throw new AnalysisException(
           errorClass = "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE",
@@ -40,9 +38,15 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
         )
       }
 
+      val uuid = java.util.UUID.randomUUID()
+
       val namedExpression = u.eventTimeColExpr match {
         case e: NamedExpression => e
-        case e: Expression => UnresolvedAlias(e)
+        case _ =>
+          throw new AnalysisException(
+            errorClass = "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE",
+            messageParameters = Map("sqlExpr" -> u.eventTimeColExpr.sql)
+          )
       }
 
       if (u.child.outputSet.contains(namedExpression)) {
