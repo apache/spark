@@ -603,8 +603,7 @@ propertyList
 
 property
     : key=propertyKeyOrStringLit EQ value=propertyValue               #propertyWithKeyAndEquals
-    | key=propertyKeyNoCoalesce value=propertyValue?                  #propertyWithStringKeyNoEquals
-    | key=propertyKey (EQ? value=propertyValue)?                      #propertyWithIdentifierKey
+    | key=propertyKeyOrStringLitNoCoalesce value=propertyValue?       #propertyWithKeyNoEquals
     ;
 
 propertyKey
@@ -616,9 +615,9 @@ propertyKeyOrStringLit
     | stringLit
     ;
 
-propertyKeyNoCoalesce
-    : singleStringLitWithoutMarker
-    | parameterMarker
+propertyKeyOrStringLitNoCoalesce
+    : propertyKey
+    | singleStringLit
     ;
 
 propertyValue
@@ -634,8 +633,7 @@ expressionPropertyList
 
 expressionProperty
     : key=propertyKeyOrStringLit EQ value=expression                  #expressionPropertyWithKeyAndEquals
-    | key=propertyKeyNoCoalesce value=expression                      #expressionPropertyWithStringKeyNoEquals
-    | key=propertyKey (EQ? value=expression)?                         #expressionPropertyWithIdentifierKey
+    | key=propertyKeyOrStringLitNoCoalesce value=expression           #expressionPropertyWithKeyNoEquals
     ;
 
 constantList
@@ -1708,13 +1706,19 @@ singleStringLitWithoutMarker
     | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #singleDoubleQuotedStringLiteralValue
     ;
 
+// Matches one string literal or parameter marker (no coalescing).
+singleStringLit
+    : singleStringLitWithoutMarker
+    | parameterMarker
+    ;
+
 parameterMarker
     : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule
     | {parameter_substitution_enabled}? QUESTION                                               #positionalParameterMarkerRule
     ;
 
 stringLit
-    : (singleStringLitWithoutMarker | parameterMarker)+
+    : singleStringLit+
     ;
 
 comment

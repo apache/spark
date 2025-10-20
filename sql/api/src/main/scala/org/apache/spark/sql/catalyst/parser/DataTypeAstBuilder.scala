@@ -47,9 +47,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
-   * Visits a stringLit context that may contain multiple singleStringLitWithoutMarker or
-   * parameterMarker children. When multiple children are present, they are coalesced into a
-   * single token.
+   * Visits a stringLit context that may contain multiple singleStringLit children (which can be
+   * either singleStringLitWithoutMarker or parameterMarker). When multiple children are present,
+   * they are coalesced into a single token.
    */
   override def visitStringLit(ctx: StringLitContext): Token = {
     if (ctx == null) {
@@ -58,17 +58,15 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
     import scala.jdk.CollectionConverters._
 
-    // Collect tokens from singleStringLitWithoutMarker and parameterMarker children
-    val singleLits = Option(ctx.singleStringLitWithoutMarker())
-      .map(_.asScala.map(visit(_).asInstanceOf[Token]).toSeq)
-      .getOrElse(Seq.empty)
-
-    val paramMarkers = Option(ctx.parameterMarker())
-      .map(_.asScala.map(visit(_).asInstanceOf[Token]).toSeq)
-      .getOrElse(Seq.empty)
-
-    // Combine and sort by position in source
-    val tokens = (singleLits ++ paramMarkers).sortBy(_.getStartIndex)
+    // Collect tokens from all singleStringLit children.
+    // Each child is either a singleStringLitWithoutMarker or a parameterMarker.
+    val tokens = ctx
+      .singleStringLit()
+      .asScala
+      .map { child =>
+        visit(child).asInstanceOf[Token]
+      }
+      .toSeq
 
     if (tokens.isEmpty) {
       null
