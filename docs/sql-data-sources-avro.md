@@ -417,7 +417,7 @@ applications. Read the [Advanced Dependency Management](https://spark.apache
 Submission Guide for more details.
 
 ## Supported types for Avro -> Spark SQL conversion
-Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.4/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.4/specification/#complex-types) under records of Avro.
+Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.5/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.5/specification/#complex-types) under records of Avro.
 <table>
   <thead><tr><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr></thead>
   <tr>
@@ -481,7 +481,7 @@ In addition to the types listed above, it supports reading `union` types. The fo
 3. `union(something, null)`, where something is any supported Avro type. This will be mapped to the same Spark SQL type as that of something, with nullable set to true.
 All other union types are considered complex. They will be mapped to StructType where field names are member0, member1, etc., in accordance with members of the union. This is consistent with the behavior when converting between Avro and Parquet.
 
-It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.11.4/specification/#logical-types):
+It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.11.5/specification/#logical-types):
 
 <table>
   <thead><tr><th><b>Avro logical type</b></th><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr></thead>
