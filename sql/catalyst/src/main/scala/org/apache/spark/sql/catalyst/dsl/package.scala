@@ -577,6 +577,10 @@ package object dsl extends SQLConfHelper {
 
         EventTimeWatermark(java.util.UUID.randomUUID(), attrRef, delayThreshold, proj)
       }
+
+      def watermarkUnresolved(expr: Expression, delayThreshold: CalendarInterval): LogicalPlan = {
+        UnresolvedEventTimeWatermark(expr, delayThreshold, logicalPlan)
+      }
     }
   }
 }
