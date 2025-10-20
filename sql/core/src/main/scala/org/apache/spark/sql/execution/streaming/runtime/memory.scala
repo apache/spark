@@ -24,7 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Encoder, SQLContext}
+import org.apache.spark.sql.{Encoder, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -43,32 +43,53 @@ import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-object MemoryStream {
+object MemoryStream extends LowPriorityMemoryStreamImplicits {
   protected val currentBlockId = new AtomicInteger(0)
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
-    new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+  def apply[A : Encoder](implicit sparkSession: SparkSession): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
 
-  def apply[A : Encoder](numPartitions: Int)(implicit sqlContext: SQLContext): MemoryStream[A] =
-    new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext, Some(numPartitions))
+  def apply[A : Encoder](numPartitions: Int)(implicit sparkSession: SparkSession): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, Some(numPartitions))
+}
+
+/**
+ * Provides lower-priority implicits for MemoryStream to prevent ambiguity when both
+ * SparkSession and SQLContext are in scope. The implicits in the companion object,
+ * which use SparkSession, take higher precedence.
+ */
+trait LowPriorityMemoryStreamImplicits {
+  this: MemoryStream.type =>
+
+  // Deprecated: Used when an implicit SQLContext is in scope
+  @deprecated("Use MemoryStream.apply with an implicit SparkSession instead of SQLContext", "4.1.0")
+  def apply[A: Encoder]()(implicit sqlContext: SQLContext): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession)
+
+  @deprecated("Use MemoryStream.apply with an implicit SparkSession instead of SQLContext", "4.1.0")
+  def apply[A: Encoder](numPartitions: Int)(implicit sqlContext: SQLContext): MemoryStream[A] =
+    new MemoryStream[A](
+      memoryStreamId.getAndIncrement(),
+      sqlContext.sparkSession,
+      Some(numPartitions))
 }
 
 /**
  * A base class for memory stream implementations. Supports adding data and resetting.
  */
-abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends SparkDataStream {
+abstract class MemoryStreamBase[A : Encoder](sparkSession: SparkSession) extends SparkDataStream {
   val encoder = encoderFor[A]
   protected val attributes = toAttributes(encoder.schema)
 
   protected lazy val toRow: ExpressionEncoder.Serializer[A] = encoder.createSerializer()
 
   def toDS(): Dataset[A] = {
-    Dataset[A](sqlContext.sparkSession, logicalPlan)
+    Dataset[A](sparkSession, logicalPlan)
   }
 
   def toDF(): DataFrame = {
-    Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
+    Dataset.ofRows(sparkSession, logicalPlan)
   }
 
   def addData(data: A*): OffsetV2 = {
@@ -156,16 +177,16 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
  */
 case class MemoryStream[A : Encoder](
     id: Int,
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     numPartitions: Option[Int] = None)
   extends MemoryStreamBaseClass[A](
-    id, sqlContext, numPartitions = numPartitions)
+    id, sparkSession, numPartitions = numPartitions)
 
 abstract class MemoryStreamBaseClass[A: Encoder](
     id: Int,
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     numPartitions: Option[Int] = None)
-  extends MemoryStreamBase[A](sqlContext)
+  extends MemoryStreamBase[A](sparkSession)
   with MicroBatchStream
   with SupportsTriggerAvailableNow
   with Logging {

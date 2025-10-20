@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
@@ -38,6 +39,7 @@ class SystemMetadataSuite
 
       // create a pipeline with only a single ST
       val graph = new TestGraphRegistrationContext(spark) {
+        implicit val sparkSession: SparkSession = spark
         val mem: MemoryStream[Int] = MemoryStream[Int]
         mem.addData(1, 2, 3)
         registerView("a", query = dfFlowFunc(mem.toDF()))
@@ -105,6 +107,7 @@ class SystemMetadataSuite
     import session.implicits._
 
     val graph = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       val mem: MemoryStream[Int] = MemoryStream[Int]
       mem.addData(1, 2, 3)
       registerView("a", query = dfFlowFunc(mem.toDF()))
@@ -169,6 +172,7 @@ class SystemMetadataSuite
     import session.implicits._
 
     val graph = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       val mem: MemoryStream[Int] = MemoryStream[Int]
       mem.addData(1, 2, 3)
       registerView("a", query = dfFlowFunc(mem.toDF()))

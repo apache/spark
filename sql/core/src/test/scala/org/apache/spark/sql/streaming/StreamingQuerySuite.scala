@@ -230,7 +230,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     clock = new StreamManualClock
 
     /** Custom MemoryStream that waits for manual clock to reach a time */
-    val inputData = new MemoryStream[Int](0, sqlContext) {
+    val inputData = new MemoryStream[Int](0, spark) {
 
       private def dataAdded: Boolean = currentOffset.offset != -1
 
