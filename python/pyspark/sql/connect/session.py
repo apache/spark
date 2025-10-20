@@ -578,6 +578,11 @@ class SparkSession:
                             spark_type = from_arrow_type(field_type)
                         struct.add(field.name, spark_type, nullable=field.nullable)
                     schema = struct
+                    if len(schema) == 0:
+                        raise PySparkValueError(
+                            errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                            messageParameters={},
+                        )
             elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
                 assert isinstance(_cols, list)
                 _cols.extend([f"_{i + 1}" for i in range(cast(int, _num_cols), len(data.columns))])
