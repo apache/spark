@@ -646,10 +646,8 @@ class CombineInternal[T](
     }
   }
 
-  def updateSketchWithNullCount(
-      otherSketchWithNullCount: ApproxTopKAggregateBuffer[T]): Unit = {
+  def updateSketchWithNullCount(otherSketchWithNullCount: ApproxTopKAggregateBuffer[T]): Unit =
     sketchWithNullCount.merge(otherSketchWithNullCount)
-  }
 
   /**
    * Serialize the CombineInternal instance to a byte array.
