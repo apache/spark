@@ -144,6 +144,8 @@ FULL	true
 FUNCTION	false
 FUNCTIONS	false
 GENERATED	false
+GEOGRAPHY	false
+GEOMETRY	false
 GLOBAL	false
 GRANT	true
 GROUP	true

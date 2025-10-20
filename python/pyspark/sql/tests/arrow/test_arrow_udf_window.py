@@ -758,6 +758,52 @@ class WindowArrowUDFTestsMixin:
         )
         self.assertEqual(expected.collect(), result.collect())
 
+    def test_arrow_batch_slicing(self):
+        import pyarrow as pa
+
+        df = self.spark.range(1000).select((sf.col("id") % 2).alias("key"), sf.col("id").alias("v"))
+
+        w1 = Window.partitionBy("key").orderBy("v")
+        w2 = (
+            Window.partitionBy("key")
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+            .orderBy("v")
+        )
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_sum(v):
+            return pa.compute.sum(v)
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_sum_unbounded(v):
+            assert len(v) == 1000 / 2, len(v)
+            return pa.compute.sum(v)
+
+        expected1 = df.select("*", sf.sum("v").over(w1).alias("res")).sort("key", "v").collect()
+        expected2 = df.select("*", sf.sum("v").over(w2).alias("res")).sort("key", "v").collect()
+
+        for maxRecords, maxBytes in [(10, 2**31 - 1), (0, 64), (10, 64)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
+                    }
+                ):
+                    result1 = (
+                        df.select("*", arrow_sum("v").over(w1).alias("res"))
+                        .sort("key", "v")
+                        .collect()
+                    )
+                    self.assertEqual(expected1, result1)
+
+                    result2 = (
+                        df.select("*", arrow_sum_unbounded("v").over(w2).alias("res"))
+                        .sort("key", "v")
+                        .collect()
+                    )
+                    self.assertEqual(expected2, result2)
+
 
 class WindowArrowUDFTests(WindowArrowUDFTestsMixin, ReusedSQLTestCase):
     pass

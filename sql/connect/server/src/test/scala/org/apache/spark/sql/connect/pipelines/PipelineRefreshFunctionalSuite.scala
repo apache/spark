@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.pipelines
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.connect.proto.{DatasetType, PipelineCommand, PipelineEvent}
+import org.apache.spark.connect.proto.{OutputType, PipelineCommand, PipelineEvent}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
@@ -57,15 +57,15 @@ class PipelineRefreshFunctionalSuite
       // Create tables that depend on the mv
       createTable(
         name = "a",
-        datasetType = DatasetType.TABLE,
+        outputType = OutputType.TABLE,
         sql = Some(s"SELECT id FROM STREAM $externalSourceTable"))
       createTable(
         name = "b",
-        datasetType = DatasetType.TABLE,
+        outputType = OutputType.TABLE,
         sql = Some(s"SELECT id FROM STREAM $externalSourceTable"))
       createTable(
         name = "mv",
-        datasetType = DatasetType.MATERIALIZED_VIEW,
+        outputType = OutputType.MATERIALIZED_VIEW,
         sql = Some(s"SELECT id FROM a"))
     }
   }
@@ -81,7 +81,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       // First run to populate tables
       startPipelineAndWaitForCompletion(graphId)
@@ -128,6 +128,7 @@ class PipelineRefreshFunctionalSuite
           PipelineCommand.StartRun
             .newBuilder()
             .setDataflowGraphId(graphId)
+            .setStorage(storageRoot)
             .addAllFullRefreshSelection(List("a").asJava)
             .build())
       },
@@ -168,6 +169,7 @@ class PipelineRefreshFunctionalSuite
             .setDataflowGraphId(graphId)
             .addAllFullRefreshSelection(Seq("a", "mv").asJava)
             .addRefreshSelection("b")
+            .setStorage(storageRoot)
             .build())
       },
       expectedContentAfterRefresh = Map(
@@ -211,6 +213,7 @@ class PipelineRefreshFunctionalSuite
           PipelineCommand.StartRun
             .newBuilder()
             .setDataflowGraphId(graphId)
+            .setStorage(storageRoot)
             .setFullRefreshAll(true)
             .build())
       },
@@ -226,11 +229,12 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
         .setFullRefreshAll(true)
         .addRefreshSelection("a")
         .build()
@@ -248,11 +252,12 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
         .setFullRefreshAll(true)
         .addFullRefreshSelection("a")
         .build()
@@ -270,11 +275,12 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
         .addRefreshSelection("a")
         .addFullRefreshSelection("a")
         .build()
@@ -293,11 +299,12 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
         .addRefreshSelection("a")
         .addRefreshSelection("b")
         .addFullRefreshSelection("a")
@@ -317,10 +324,11 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerPipelineOutputs(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
+        .setStorage(storageRoot)
         .setDataflowGraphId(graphId)
         .addRefreshSelection("spark_catalog.default.a")
         .addFullRefreshSelection("a") // This should be treated as the same table

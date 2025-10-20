@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21, MacOS-15)"
+name: "Build / Python-only (master, Python 3.14)"
 
 on:
   schedule:
-    - cron: '0 20 */2 * *'
+    - cron: '0 21 * * *'
   workflow_dispatch:
 
 jobs:
@@ -29,16 +29,19 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/maven_test.yml
+    uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 21
-      os: macos-15
-      arch: arm64
+      java: 17
+      branch: master
+      hadoop: hadoop3
       envs: >-
         {
-          "SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "256",
-          "SPARK_TEST_SQL_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD": "256",
-          "SPARK_TEST_HIVE_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD": "48",
-          "SPARK_TEST_HIVE_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD": "48"
+          "PYSPARK_IMAGE_TO_TEST": "python-314",
+          "PYTHON_TO_TEST": "python3.14"
+        }
+      jobs: >-
+        {
+          "pyspark": "true",
+          "pyspark-pandas": "true"
         }

@@ -36,17 +36,17 @@ sealed trait CatalystIdentifier {
    */
   private def quoteIdentifier(name: String): String = name.replace("`", "``")
 
-  def resolvedId: String = quoteIdentifier(identifier)
-  def resolvedDb: Option[String] = database.map(quoteIdentifier)
-  def resolvedCatalog: Option[String] = catalog.map(quoteIdentifier)
-
   def quotedString: String = {
-    if (resolvedCatalog.isDefined && resolvedDb.isDefined) {
-      s"`${resolvedCatalog.get}`.`${resolvedDb.get}`.`$resolvedId`"
-    } else if (resolvedDb.isDefined) {
-      s"`${resolvedDb.get}`.`$resolvedId`"
+    val replacedId = quoteIdentifier(identifier)
+    val replacedDb = database.map(quoteIdentifier)
+    val replacedCatalog = catalog.map(quoteIdentifier)
+
+    if (replacedCatalog.isDefined && replacedDb.isDefined) {
+      s"`${replacedCatalog.get}`.`${replacedDb.get}`.`$replacedId`"
+    } else if (replacedDb.isDefined) {
+      s"`${replacedDb.get}`.`$replacedId`"
     } else {
-      s"`$resolvedId`"
+      s"`$replacedId`"
     }
   }
 

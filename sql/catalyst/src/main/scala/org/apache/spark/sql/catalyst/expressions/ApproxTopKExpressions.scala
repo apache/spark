@@ -66,8 +66,8 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
   def this(child: Expression) = this(child, Literal(ApproxTopK.DEFAULT_K))
 
   private lazy val itemDataType: DataType = {
-    // itemDataType is the type of the second field of the output of ACCUMULATE or COMBINE
-    state.dataType.asInstanceOf[StructType](1).dataType
+    // itemDataType is the type of the third field of the output of ACCUMULATE or COMBINE
+    state.dataType.asInstanceOf[StructType](2).dataType
   }
 
   override def left: Expression = state
@@ -76,35 +76,12 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
-  private def checkStateFieldAndType(state: Expression): TypeCheckResult = {
-    val stateStructType = state.dataType.asInstanceOf[StructType]
-    if (stateStructType.length != 3) {
-      return TypeCheckFailure("State must be a struct with 3 fields. " +
-        "Expected struct: struct<sketch:binary,itemDataType:any,maxItemsTracked:int>. " +
-        "Got: " + state.dataType.simpleString)
-    }
-
-    if (stateStructType.head.dataType != BinaryType) {
-      TypeCheckFailure("State struct must have the first field to be binary. " +
-        "Got: " + stateStructType.head.dataType.simpleString)
-    } else if (!ApproxTopK.isDataTypeSupported(itemDataType)) {
-      TypeCheckFailure("State struct must have the second field to be a supported data type. " +
-        "Got: " + itemDataType.simpleString)
-    } else if (stateStructType(2).dataType != IntegerType) {
-      TypeCheckFailure("State struct must have the third field to be int. " +
-        "Got: " + stateStructType(2).dataType.simpleString)
-    } else {
-      TypeCheckSuccess
-    }
-  }
-
-
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
     } else {
-      val stateCheck = checkStateFieldAndType(state)
+      val stateCheck = ApproxTopK.checkStateFieldAndType(state)
       if (stateCheck.isFailure) {
         stateCheck
       } else if (!k.foldable) {
@@ -124,7 +101,7 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     val stateEval = left.eval(input)
     val kEval = right.eval(input)
     val dataSketchBytes = stateEval.asInstanceOf[InternalRow].getBinary(0)
-    val maxItemsTrackedVal = stateEval.asInstanceOf[InternalRow].getInt(2)
+    val maxItemsTrackedVal = stateEval.asInstanceOf[InternalRow].getInt(1)
     val kVal = kEval.asInstanceOf[Int]
     ApproxTopK.checkK(kVal)
     ApproxTopK.checkMaxItemsTracked(maxItemsTrackedVal, kVal)

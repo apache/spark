@@ -549,6 +549,8 @@ Below is a list of all the keywords in Spark SQL.
 |FUNCTION|non-reserved|non-reserved|reserved|
 |FUNCTIONS|non-reserved|non-reserved|non-reserved|
 |GENERATED|non-reserved|non-reserved|non-reserved|
+|GEOGRAPHY|non-reserved|non-reserved|non-reserved|
+|GEOMETRY|non-reserved|non-reserved|non-reserved|
 |GLOBAL|non-reserved|non-reserved|reserved|
 |GRANT|reserved|non-reserved|reserved|
 |GROUP|reserved|non-reserved|reserved|

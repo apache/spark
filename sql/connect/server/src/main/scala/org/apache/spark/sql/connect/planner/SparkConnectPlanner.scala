@@ -24,7 +24,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import com.google.common.base.Throwables
 import com.google.common.collect.Lists
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
@@ -42,14 +41,14 @@ import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
-import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Observation, Row}
+import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
+import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParameterContext, ParseException, ParserUtils, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
@@ -143,7 +142,7 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
-    sessionHolder.usePlanCache(rel, cachePlan) { rel =>
+    val plan = sessionHolder.usePlanCache(rel, cachePlan) { rel =>
       val plan = rel.getRelTypeCase match {
         // DataFrame API
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
@@ -239,6 +238,19 @@ class SparkConnectPlanner(
       }
       plan
     }
+
+    if (executeHolderOpt.isDefined) {
+      plan.transformUpWithSubqueriesAndPruning(_.containsPattern(TreePattern.COLLECT_METRICS)) {
+        case collectMetrics: CollectMetrics if !collectMetrics.child.isStreaming =>
+          // TODO this might be too complex for no good reason. It might
+          //  be easier to inspect the plan after it completes.
+          val observation = session.observationManager.getOrNewObservation(
+            collectMetrics.name,
+            collectMetrics.dataframeId)
+          executeHolder.addObservation(collectMetrics.name, observation)
+          collectMetrics
+      }
+    } else plan
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -320,25 +332,51 @@ class SparkConnectPlanner(
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
+    val parameterContext = buildParameterContext(sql)
+    parameterContext match {
+      case Some(ctx) =>
+        // Use parsePlanWithParameters for proper position mapping
+        parser.parsePlanWithParameters(sql.getQuery, ctx)
+      case None =>
+        // No parameters - use regular parsing
+        parser.parsePlan(sql.getQuery)
+    }
+  }
+
+  /**
+   * Build a ParameterContext from the protobuf SQL message. Returns None if no parameters are
+   * present. Resolves and validates parameter expressions to ensure they are all Literals.
+   */
+  private def buildParameterContext(sql: proto.SQL): Option[ParameterContext] = {
     val args = sql.getArgsMap
     val namedArguments = sql.getNamedArgumentsMap
     val posArgs = sql.getPosArgsList
     val posArguments = sql.getPosArgumentsList
-    val parsedPlan = parser.parsePlan(sql.getQuery)
+
     if (!namedArguments.isEmpty) {
-      NameParameterizedQuery(
-        parsedPlan,
-        namedArguments.asScala.toMap.transform((_, v) => transformExpression(v)))
+      // Use named arguments (expressions) - resolve and validate
+      val paramMap = namedArguments.asScala.toMap.transform((_, v) => transformExpression(v))
+      val resolvedParams = session.resolveAndValidateParameters(paramMap)
+      Some(NamedParameterContext(resolvedParams))
     } else if (!posArguments.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
+      // Use positional arguments (expressions) - resolve and validate
+      val paramList = posArguments.asScala.map(transformExpression).toSeq
+      val paramMap = paramList.zipWithIndex.map { case (expr, idx) =>
+        s"_pos_$idx" -> expr
+      }.toMap
+      val resolvedParams = session.resolveAndValidateParameters(paramMap)
+      Some(PositionalParameterContext(resolvedParams.values.toSeq))
     } else if (!args.isEmpty) {
-      NameParameterizedQuery(
-        parsedPlan,
-        args.asScala.toMap.transform((_, v) => transformLiteral(v)))
+      // Use named arguments (literals) - already resolved
+      val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
+      Some(NamedParameterContext(paramMap))
     } else if (!posArgs.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
+      // Use positional arguments (literals) - already resolved
+      val paramList = posArgs.asScala.map(transformLiteral).toSeq
+      Some(PositionalParameterContext(paramList))
     } else {
-      parsedPlan
+      // No parameters
+      None
     }
   }
 
@@ -1375,19 +1413,7 @@ class SparkConnectPlanner(
     val metrics = rel.getMetricsList.asScala.toSeq.map { expr =>
       Column(transformExpression(expr))
     }
-    val name = rel.getName
-    val input = transformRelation(rel.getInput)
-
-    if (input.isStreaming || executeHolderOpt.isEmpty) {
-      CollectMetrics(name, metrics.map(_.named), input, planId)
-    } else {
-      // TODO this might be too complex for no good reason. It might
-      //  be easier to inspect the plan after it completes.
-      val observation = Observation(name)
-      session.observationManager.register(observation, planId)
-      executeHolderOpt.get.addObservation(name, observation)
-      CollectMetrics(name, metrics.map(_.named), input, planId)
-    }
+    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput), planId)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
@@ -1945,7 +1971,7 @@ class SparkConnectPlanner(
       Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
     } catch {
       case t: Throwable =>
-        Throwables.getRootCause(t) match {
+        Utils.getRootCause(t) match {
           case nsm: NoSuchMethodException =>
             throw new SparkClassNotFoundException(
               "INTERNAL_ERROR",

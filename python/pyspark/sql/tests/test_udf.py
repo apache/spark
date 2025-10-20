@@ -193,13 +193,16 @@ class BaseUDFTestsMixin(object):
             df.agg(sum(udf_random_col())).collect()
 
     def test_chained_udf(self):
-        self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())
-        [row] = self.spark.sql("SELECT double(1)").collect()
-        self.assertEqual(row[0], 2)
-        [row] = self.spark.sql("SELECT double(double(1))").collect()
-        self.assertEqual(row[0], 4)
-        [row] = self.spark.sql("SELECT double(double(1) + 1)").collect()
-        self.assertEqual(row[0], 6)
+        self.spark.catalog.registerFunction("double_int", lambda x: x + x, IntegerType())
+        try:
+            [row] = self.spark.sql("SELECT double_int(1)").collect()
+            self.assertEqual(row[0], 2)
+            [row] = self.spark.sql("SELECT double_int(double_int(1))").collect()
+            self.assertEqual(row[0], 4)
+            [row] = self.spark.sql("SELECT double_int(double_int(1) + 1)").collect()
+            self.assertEqual(row[0], 6)
+        finally:
+            self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS double_int")
 
     def test_single_udf_with_repeated_argument(self):
         # regression test for SPARK-20685

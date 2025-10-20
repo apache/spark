@@ -128,7 +128,7 @@ object LiteralValueProtoConverter {
       options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
     val builder = proto.Expression.Literal.newBuilder()
 
-    def arrayBuilder(scalaValue: Any, elementType: DataType, containsNull: Boolean) = {
+    def arrayBuilder(scalaValue: Any, elementType: DataType) = {
       val ab = builder.getArrayBuilder
       scalaValue match {
         case a: Array[_] =>
@@ -148,11 +148,7 @@ object LiteralValueProtoConverter {
       ab
     }
 
-    def mapBuilder(
-        scalaValue: Any,
-        keyType: DataType,
-        valueType: DataType,
-        valueContainsNull: Boolean) = {
+    def mapBuilder(scalaValue: Any, keyType: DataType, valueType: DataType) = {
       val mb = builder.getMapBuilder
       scalaValue match {
         case map: scala.collection.Map[_, _] =>
@@ -214,10 +210,10 @@ object LiteralValueProtoConverter {
         toLiteralProtoBuilderInternal(v.unsafeArray, dataType, options)
       case (v: Array[Byte], ArrayType(_, _)) =>
         toLiteralProtoBuilderInternal(v, options)
-      case (v, ArrayType(elementType, containsNull)) =>
-        builder.setArray(arrayBuilder(v, elementType, containsNull))
-      case (v, MapType(keyType, valueType, valueContainsNull)) =>
-        builder.setMap(mapBuilder(v, keyType, valueType, valueContainsNull))
+      case (v, ArrayType(elementType, _)) =>
+        builder.setArray(arrayBuilder(v, elementType))
+      case (v, MapType(keyType, valueType, _)) =>
+        builder.setMap(mapBuilder(v, keyType, valueType))
       case (v, structType: StructType) =>
         builder.setStruct(structBuilder(v, structType))
       case (v: LocalTime, timeType: TimeType) =>
