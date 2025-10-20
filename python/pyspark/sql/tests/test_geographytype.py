@@ -85,7 +85,7 @@ class GeographyTypeTest(GeographyTypeTestMixin, ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_types import *  # noqa: F401
+    from pyspark.sql.tests.test_geographytype import *  # noqa: F401
 
     try:
         import xmlrunner
