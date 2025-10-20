@@ -348,7 +348,10 @@ class ScalarArrowUDFTestsMixin:
         )
 
     def test_arrow_udf_output_timestamps_ltz(self):
+        from zoneinfo import ZoneInfo
         import pyarrow as pa
+
+        tz = self.spark.conf.get("spark.sql.session.timeZone")
 
         df = self.spark.sql(
             """
@@ -371,18 +374,18 @@ class ScalarArrowUDFTestsMixin:
                     int(h[i].as_py()),
                     int(mi[i].as_py()),
                     int(s[i].as_py()),
-                    tzinfo=datetime.timezone.utc,
-                )
+                    tzinfo=ZoneInfo(tz),
+                ).astimezone(datetime.timezone.utc)
                 for i in range(len(y))
             ]
-            return pa.array(dates, pa.timestamp("us", "UTC"))
+            return pa.array(dates, pa.timestamp("us"))
 
         result = df.select(build_ts("y", "m", "d", "h", "mi", "s").alias("ts"))
         self.assertEqual(
             [
-                Row(ts=datetime.datetime(2022, 1, 5, 7, 0, 1)),
-                Row(ts=datetime.datetime(2023, 2, 6, 8, 1, 2)),
-                Row(ts=datetime.datetime(2024, 3, 7, 9, 2, 3)),
+                Row(ts=datetime.datetime(2022, 1, 5, 15, 0, 1)),
+                Row(ts=datetime.datetime(2023, 2, 6, 16, 1, 2)),
+                Row(ts=datetime.datetime(2024, 3, 7, 17, 2, 3)),
             ],
             result.collect(),
         )
