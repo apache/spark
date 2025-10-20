@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from decimal import Decimal
 import datetime
 import os
 import platform
@@ -3609,6 +3611,19 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             with self.subTest(ret_type=ret_type):
                 with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
                     udtf(TestUDTF, returnType=ret_type)().collect()
+
+    def test_decimal_round(self):
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": False}
+        ):
+
+            @udtf(returnType="a: DOUBLE, d: DECIMAL(38, 18)")
+            class Float2Decimal:
+                def eval(self, v: float):
+                    yield v, Decimal(v)
+
+            rounded = Float2Decimal(lit(1.234)).first().d
+            self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
