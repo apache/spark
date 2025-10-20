@@ -1025,6 +1025,50 @@ class ApplyInPandasTestsMixin:
         )
 
 
+    def test_apply_in_pandas_iterator_basic(self):
+        from typing import Iterator
+        
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+            ("id", "v"))
+
+        def sum_func(
+            batches: Iterator[pd.DataFrame]
+        ) -> Iterator[pd.DataFrame]:
+            total = 0
+            for batch in batches:
+                total += batch['v'].sum()
+            yield pd.DataFrame({"v": [total]})
+
+        result = df.groupby("id").applyInPandas(sum_func, schema="v double").orderBy("v").collect()
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0][0], 3.0)
+        self.assertEqual(result[1][0], 18.0)
+
+    def test_apply_in_pandas_iterator_with_keys(self):
+        from typing import Iterator, Tuple, Any
+        
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+            ("id", "v"))
+
+        def sum_func(
+            key: Tuple[Any, ...], batches: Iterator[pd.DataFrame]
+        ) -> Iterator[pd.DataFrame]:
+            total = 0
+            for batch in batches:
+                total += batch['v'].sum()
+            yield pd.DataFrame({"id": [key[0]], "v": [total]})
+
+        result = df.groupby("id").applyInPandas(
+            sum_func, schema="id long, v double").orderBy("id").collect()
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0][0], 1)
+        self.assertEqual(result[0][1], 3.0)
+        self.assertEqual(result[1][0], 2)
+        self.assertEqual(result[1][1], 18.0)
+
+
 class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
     pass
 

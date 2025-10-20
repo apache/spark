@@ -294,14 +294,26 @@ class GroupedData:
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.pandas.typehints import infer_group_pandas_eval_type_from_func
+        import warnings
 
-        _validate_vectorized_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
+        # Try to infer the eval type from type hints
+        eval_type = None
+        try:
+            eval_type = infer_group_pandas_eval_type_from_func(func)
+        except Exception:
+            warnings.warn("Cannot infer the eval type from type hints.", UserWarning)
+        
+        if eval_type is None:
+            eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
+        _validate_vectorized_udf(func, eval_type)
         if isinstance(schema, str):
             schema = cast(StructType, self._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
-            evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            evalType=eval_type,
         )
 
         res = DataFrame(

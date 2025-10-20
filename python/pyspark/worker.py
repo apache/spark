@@ -748,6 +748,36 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     return lambda k, v: [(wrapped(k, v), arrow_return_type)]
 
 
+def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
+    _use_large_var_types = use_large_var_types(runner_conf)
+    _assign_cols_by_name = assign_cols_by_name(runner_conf)
+
+    def wrapped(key_series, value_series):
+        import pandas as pd
+
+        # Convert the series list into an iterator of DataFrames
+        # For now, we yield a single DataFrame from the group data
+        def dataframe_iter():
+            yield pd.concat(value_series, axis=1)
+
+        if len(argspec.args) == 1:
+            result_iter = f(dataframe_iter())
+        elif len(argspec.args) == 2:
+            key = tuple(s[0] for s in key_series)
+            result_iter = f(key, dataframe_iter())
+
+        def verify_element(df):
+            verify_pandas_result(
+                df, return_type, _assign_cols_by_name, truncate_return_schema=False
+            )
+            return df
+
+        yield from map(verify_element, result_iter)
+
+    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
+    return lambda k, v: (wrapped(k, v), arrow_return_type)
+
+
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
         result_iter = f(stateful_processor_api_client, mode, key, value_series_gen)
@@ -1262,6 +1292,11 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
+        argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
+        return args_offsets, wrap_grouped_map_pandas_iter_udf(
+            func, return_type, argspec, runner_conf
+        )
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_map_arrow_udf(func, return_type, argspec, runner_conf)
@@ -2565,6 +2600,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
@@ -2629,6 +2665,7 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamAggArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
@@ -2889,6 +2926,26 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # Create function like this:
         #   mapper a: f([a[0]], [a[0], a[1]])
+        def mapper(a):
+            keys = [a[o] for o in parsed_offsets[0][0]]
+            vals = [a[o] for o in parsed_offsets[0][1]]
+            return f(keys, vals)
+
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        # See FlatMapGroupsInPandasExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+
+        # Create function like this:
+        #   mapper a: f([a[0]], [a[0], a[1]])
+        # The wrapper will convert the values into an iterator of DataFrames
         def mapper(a):
             keys = [a[o] for o in parsed_offsets[0][0]]
             vals = [a[o] for o in parsed_offsets[0][1]]
