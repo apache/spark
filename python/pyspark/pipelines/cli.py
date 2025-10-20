@@ -327,6 +327,7 @@ def run(
     log_with_curr_timestamp("Registering graph elements...")
     registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
     register_definitions(spec_path, registry, spec)
+    log_with_curr_timestamp("Starting run...")
     result_iter = start_run(
         spark,
         dataflow_graph_id,
