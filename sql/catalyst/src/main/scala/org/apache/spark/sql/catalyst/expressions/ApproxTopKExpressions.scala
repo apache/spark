@@ -108,8 +108,8 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     approxTopKAggregateBuffer.eval(kVal, itemDataType)
   }
 
-  override protected def withNewChildrenInternal(newState: Expression, newK: Expression):
-    Expression = copy(state = newState, k = newK)
+  override protected def withNewChildrenInternal(newState: Expression, newK: Expression)
+  : Expression = copy(state = newState, k = newK)
 
   override def nullable: Boolean = false
 
