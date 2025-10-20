@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
@@ -55,7 +55,7 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
       } else {
         // We need to inject projection as we can't find the matching column directly in the
         // child output.
-        val proj = Project(Seq(namedExpression, u.child.output), u.child)
+        val proj = Project(Seq(namedExpression) ++ u.child.output, u.child)
         val attrRef = namedExpression.toAttribute
         EventTimeWatermark(uuid, attrRef, u.delay, proj)
       }
