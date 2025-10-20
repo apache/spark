@@ -305,6 +305,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_EXECUTOR_ATTRIBUTE_EXECUTOR_ID -> KubernetesTestConf.EXECUTOR_ID))
   }
 
+  test("SPARK-53944: Support spark.kubernetes.executor.useDriverPodIP") {
+    Seq((false, "localhost"), (true, "bindAddress")).foreach {
+      case (flag, address) =>
+        val conf = baseConf.clone()
+          .set(DRIVER_BIND_ADDRESS, "bindAddress")
+          .set(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP, flag)
+        val kconf = KubernetesTestConf.createExecutorConf(sparkConf = conf)
+        val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(conf), defaultProfile)
+        val executor = step.configurePod(SparkPod.initialPod())
+        checkEnv(executor, conf, Map(
+          ENV_DRIVER_URL -> s"spark://CoarseGrainedScheduler@$address:7098"))
+    }
+  }
+
   test("test executor pyspark memory") {
     baseConf.set("spark.kubernetes.resource.type", "python")
     baseConf.set(PYSPARK_EXECUTOR_MEMORY, 42L)

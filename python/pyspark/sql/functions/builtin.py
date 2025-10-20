@@ -13962,12 +13962,12 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     --------
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(0, 1)], ['a', 'b'])
-    >>> df.select('*', sf.assert_true(df.a < df.b)).show() # doctest: +SKIP
-    +------------------------------------------------------+
-    |assert_true((a < b), '(a#788L < b#789L)' is not true!)|
-    +------------------------------------------------------+
-    |                                                  NULL|
-    +------------------------------------------------------+
+    >>> df.select('*', sf.assert_true(df.a < df.b)).show()
+    +---+---+--------------------------------------------+
+    |  a|  b|assert_true((a < b), '(a < b)' is not true!)|
+    +---+---+--------------------------------------------+
+    |  0|  1|                                        NULL|
+    +---+---+--------------------------------------------+
 
     >>> df.select('*', sf.assert_true(df.a < df.b, df.a)).show()
     +---+---+-----------------------+
@@ -25765,9 +25765,54 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    Notes
-    -----
-    Supports Spark Connect.
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The underlying representation.
+
+    Examples
+    --------
+    Example 1: Unwrap ML-specific UDT - VectorUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.ml.linalg import Vectors
+    >>> vec1 = Vectors.dense(1, 2, 3)
+    >>> vec2 = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+    >>> df = spark.createDataFrame([(vec1,), (vec2,)], ["vec"])
+    >>> df.select(sf.unwrap_udt("vec")).printSchema()
+    root
+     |-- unwrap_udt(vec): struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- size: integer (nullable = true)
+     |    |-- indices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+
+    Example 2: Unwrap ML-specific UDT - MatrixUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.ml.linalg import Matrices
+    >>> mat1 = Matrices.dense(2, 2, range(4))
+    >>> mat2 = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+    >>> df = spark.createDataFrame([(mat1,), (mat2,)], ["mat"])
+    >>> df.select(sf.unwrap_udt("mat")).printSchema()
+    root
+     |-- unwrap_udt(mat): struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- numRows: integer (nullable = false)
+     |    |-- numCols: integer (nullable = false)
+     |    |-- colPtrs: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- rowIndices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+     |    |-- isTransposed: boolean (nullable = false)
     """
     from pyspark.sql.classic.column import _to_java_column
 

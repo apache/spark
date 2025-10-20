@@ -39,7 +39,7 @@ libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.8"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
-addSbtPlugin("com.github.sbt" % "sbt-pom-reader" % "2.4.0")
+addSbtPlugin("com.github.sbt" % "sbt-pom-reader" % "2.5.0")
 
 addSbtPlugin("com.github.sbt.junit" % "sbt-jupiter-interface" % "0.17.0")
 

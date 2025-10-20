@@ -127,6 +127,7 @@ object TreePattern extends Enumeration  {
   val AGGREGATE: Value = Value
   val APPEND_COLUMNS: Value = Value
   val AS_OF_JOIN: Value = Value
+  val COLLECT_METRICS: Value = Value
   val COMMAND: Value = Value
   val CTE: Value = Value
   val DESERIALIZE_TO_OBJECT: Value = Value
