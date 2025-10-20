@@ -144,13 +144,13 @@ case class ApproxTopK(
   }
 
   override def update(buffer: ApproxTopKAggregateBuffer[Any], input: InternalRow):
-  ApproxTopKAggregateBuffer[Any] =
+    ApproxTopKAggregateBuffer[Any] =
     buffer.update(expr, input)
 
   override def merge(
-    buffer: ApproxTopKAggregateBuffer[Any],
-    input: ApproxTopKAggregateBuffer[Any]):
-  ApproxTopKAggregateBuffer[Any] =
+      buffer: ApproxTopKAggregateBuffer[Any],
+      input: ApproxTopKAggregateBuffer[Any]):
+    ApproxTopKAggregateBuffer[Any] =
     buffer.merge(input)
 
   override def eval(buffer: ApproxTopKAggregateBuffer[Any]): GenericArrayData =
