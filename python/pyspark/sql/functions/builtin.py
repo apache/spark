@@ -24798,17 +24798,31 @@ def make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-    timezone: Optional["ColumnOrName"] = None
 ) -> Column:
     ...
 
 
 @overload
 def make_timestamp(
-    *,
-    date: "ColumnOrName",
-    time: "ColumnOrName",
-    timezone: Optional["ColumnOrName"] = None
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
 ) -> Column:
     ...
 
@@ -24820,14 +24834,14 @@ def make_timestamp(
     hours: Optional["ColumnOrName"] = None,
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
+    timezone: Optional["ColumnOrName"] = None,
     *,
     date: Optional["ColumnOrName"] = None,
     time: Optional["ColumnOrName"] = None,
-    timezone: Optional["ColumnOrName"] = None
 ) -> Column:
     """
-    Create timestamp from years, months, days, hours, mins, secs, and timezone fields.
-    Alternatively, create timestamp from date, time, and timezone fields.
+    Create timestamp from years, months, days, hours, mins, secs, and (optional) timezone fields.
+    Alternatively, create timestamp from date, time, and (optional) timezone fields.
     The result data type is consistent with the value of configuration `spark.sql.timestampType`.
     If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
     on invalid inputs. Otherwise, it will throw an error instead.
@@ -24960,14 +24974,50 @@ def make_timestamp(
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    if timezone is not None:
-        return _invoke_function_over_columns(
-            "make_timestamp", years, months, days, hours, mins, secs, timezone
-        )
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+            )
     else:
-        return _invoke_function_over_columns(
-            "make_timestamp", years, months, days, hours, mins, secs
-        )
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            )
 
 
 @_try_remote_functions

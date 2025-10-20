@@ -3953,17 +3953,31 @@ def make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-    timezone: Optional["ColumnOrName"] = None
 ) -> Column:
     ...
 
 
 @overload
 def make_timestamp(
-    *,
-    date: "ColumnOrName",
-    time: "ColumnOrName",
-    timezone: Optional["ColumnOrName"] = None
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
 ) -> Column:
     ...
 
@@ -3975,10 +3989,10 @@ def make_timestamp(
     hours: Optional["ColumnOrName"] = None,
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
+    timezone: Optional["ColumnOrName"] = None,
     *,
     date: Optional["ColumnOrName"] = None,
     time: Optional["ColumnOrName"] = None,
-    timezone: Optional["ColumnOrName"] = None
 ) -> Column:
     if years is not None:
         if any(arg is not None for arg in [date, time]):
@@ -3995,7 +4009,7 @@ def make_timestamp(
                 cast("ColumnOrName", hours),
                 cast("ColumnOrName", mins),
                 cast("ColumnOrName", secs),
-                cast("ColumnOrName", timezone)
+                cast("ColumnOrName", timezone),
             )
         else:
             return _invoke_function_over_columns(
@@ -4005,7 +4019,7 @@ def make_timestamp(
                 cast("ColumnOrName", days),
                 cast("ColumnOrName", hours),
                 cast("ColumnOrName", mins),
-                cast("ColumnOrName", secs)
+                cast("ColumnOrName", secs),
             )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -4018,13 +4032,11 @@ def make_timestamp(
                 "make_timestamp",
                 cast("ColumnOrName", date),
                 cast("ColumnOrName", time),
-                cast("ColumnOrName", timezone)
+                cast("ColumnOrName", timezone),
             )
         else:
             return _invoke_function_over_columns(
-                "make_timestamp",
-                cast("ColumnOrName", date),
-                cast("ColumnOrName", time)
+                "make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
             )
 
 
