@@ -491,6 +491,12 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   }
 
   private def getNumSourceRows(query: SparkPlan): Long = {
+    def isTargetTableScan(plan: SparkPlan): Boolean = {
+      collectFirst(plan) {
+        case scan: BatchScanExec if scan.table.isInstanceOf[RowLevelOperationTable] => true
+      }.getOrElse(false)
+    }
+
     collectFirst(query) { case m: MergeRowsExec => m }
       .flatMap { mergeRowsExec =>
         val joinOpt = collectFirst(mergeRowsExec.child) { case j: BinaryExecNode => j }
@@ -515,12 +521,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       }
       .getOrElse(-1L)
-  }
-
-  private def isTargetTableScan(plan: SparkPlan): Boolean = {
-    collectFirst(plan) {
-      case scan: BatchScanExec if scan.table.isInstanceOf[RowLevelOperationTable] => true
-    }.getOrElse(false)
   }
 }
 
