@@ -476,7 +476,9 @@ class FunctionsTestsMixin:
 
         # Test 1B: Basic 7 positional arguments (years, months, days, hours, mins, secs, timezone).
         actual = df.select(
-            F.try_make_timestamp(df.year, df.month, df.day, df.hour, df.minute, df.second, df.timezone)
+            F.try_make_timestamp(
+                df.year, df.month, df.day, df.hour, df.minute, df.second, df.timezone
+            )
         )
         assertDataFrameEqual(actual, [Row(result_with_tz)])
 
@@ -669,7 +671,9 @@ class FunctionsTestsMixin:
         with self.assertRaises(Exception):
             F.try_make_timestamp(days=df.day, timezone=df.timezone)
         with self.assertRaises(Exception):
-            F.try_make_timestamp(hours=df.hour, mins=df.minute, secs=df.second, timezone=df.timezone)
+            F.try_make_timestamp(
+                hours=df.hour, mins=df.minute, secs=df.second, timezone=df.timezone
+            )
         with self.assertRaises(Exception):
             F.try_make_timestamp(date=df_dt.date)
         with self.assertRaises(Exception):

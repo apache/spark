@@ -4058,9 +4058,7 @@ def try_make_timestamp(
             )
         else:
             return _invoke_function_over_columns(
-                "try_make_timestamp",
-                cast("ColumnOrName", date),
-                cast("ColumnOrName", time)
+                "try_make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
             )
 
 
