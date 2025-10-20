@@ -429,7 +429,6 @@ class ArrowPythonUDFLegacyTestsMixin(ArrowPythonUDFTestsMixin):
             [Row(m={"key": b"value"})],
             schema=StructType([StructField("m", MapType(StringType(), BinaryType()))]),
         )
-        expected = self.spark.createDataFrame([Row(type_name="bytes")])
         for conf_val in ["true", "false"]:
             with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_val}):
                 result = df_map.select(map_udf(col("m")).alias("type_name"))
@@ -456,7 +455,6 @@ class ArrowPythonUDFLegacyTestsMixin(ArrowPythonUDFTestsMixin):
                 ]
             ),
         )
-        expected = self.spark.createDataFrame([Row(type_name="bytes")])
         for conf_val in ["true", "false"]:
             with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_val}):
                 result = df_struct.select(struct_udf(col("s")).alias("type_name"))
