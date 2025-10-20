@@ -128,9 +128,9 @@ class SerdeTestsMixin:
         # The empty bytearray is test for SPARK-21534.
         schema = StructType([StructField("mybytes", BinaryType())])
         data = [
-            [bytearray(b"here is my data")],
-            [bytearray(b"and here is some more")],
-            [bytearray(b"")],
+            [bytes(b"here is my data")],
+            [bytes(b"and here is some more")],
+            [bytes(b"")],
         ]
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
@@ -143,7 +143,7 @@ class SerdeTestsMixin:
 
     def test_bytes_as_binary_type(self):
         df = self.spark.createDataFrame([[b"abcd"]], "col binary")
-        self.assertEqual(df.first().col, bytearray(b"abcd"))
+        self.assertEqual(df.first().col, bytes(b"abcd"))
 
 
 class SerdeTests(SerdeTestsMixin, ReusedSQLTestCase):
