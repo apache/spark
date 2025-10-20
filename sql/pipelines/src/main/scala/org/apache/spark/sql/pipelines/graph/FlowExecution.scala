@@ -52,7 +52,7 @@ trait FlowExecution {
   def identifier: TableIdentifier
 
   /**
-   * Returns a user-visible name of this flow.
+   * Returns the user-visible name of this flow.
    */
   final def displayName: String = identifier.unquotedString
 
