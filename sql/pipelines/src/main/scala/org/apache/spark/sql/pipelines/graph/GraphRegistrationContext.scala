@@ -54,7 +54,9 @@ class GraphRegistrationContext(
     views.toSeq
   }
 
-  def getSinks: Seq[Sink] = sinks.toSeq
+  def getSinks: Seq[Sink] = {
+    sinks.toSeq
+  }
 
   def registerFlow(flowDef: UnresolvedFlow): Unit = {
     flows += flowDef.copy(sqlConf = defaultSqlConf ++ flowDef.sqlConf)

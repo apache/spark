@@ -83,9 +83,7 @@ private[connect] object PipelinesHandler extends Logging {
           defineOutput(cmd.getDefineOutput, sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
         resolvedDataset.catalog.foreach(identifierBuilder.setCatalogName)
-        resolvedDataset.database.foreach { ns =>
-          identifierBuilder.addNamespace(ns)
-        }
+        resolvedDataset.database.foreach(identifierBuilder.addNamespace)
         identifierBuilder.setTableName(resolvedDataset.identifier)
         val identifier = identifierBuilder.build()
         PipelineCommandResult
@@ -112,7 +110,7 @@ private[connect] object PipelinesHandler extends Logging {
           .setDefineFlowResult(
             PipelineCommandResult.DefineFlowResult
               .newBuilder()
-              .setResolvedIdentifier(identifierBuilder)
+              .setResolvedIdentifier(identifier)
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
@@ -222,8 +220,9 @@ private[connect] object PipelinesHandler extends Logging {
         qualifiedIdentifier
       case proto.OutputType.TEMPORARY_VIEW =>
         val viewIdentifier = GraphIdentifierManager
-          .parseAndValidateTemporaryViewIdentifier(rawViewIdentifier = GraphIdentifierManager
-            .parseTableIdentifier(output.getOutputName, sessionHolder.session))
+          .parseAndValidateTemporaryViewIdentifier(
+            rawViewIdentifier = GraphIdentifierManager
+              .parseTableIdentifier(output.getOutputName, sessionHolder.session))
         graphElementRegistry.registerView(
           TemporaryView(
             identifier = viewIdentifier,
@@ -240,11 +239,8 @@ private[connect] object PipelinesHandler extends Logging {
             sqlText = None))
         viewIdentifier
       case proto.OutputType.SINK =>
-        val dataflowGraphId = output.getDataflowGraphId
-        val graphElementRegistry =
-          sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
         val identifier = GraphIdentifierManager
-          .parseTableIdentifier(name = output.getOutputName, spark = sessionHolder.session)
+          .parseTableIdentifier(output.getOutputName, sessionHolder.session)
         val sinkDetails = output.getSinkDetails
         graphElementRegistry.registerSink(
           SinkImpl(
@@ -258,7 +254,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Sink.toString),
               objectName = Option(identifier.unquotedString),
-              language = Option(Python()))))
+              language = Some(Python()))))
         identifier
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
