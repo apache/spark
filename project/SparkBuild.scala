@@ -1099,7 +1099,8 @@ object DependencyOverrides {
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.0")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.0",
+    dependencyOverrides += "org.slf4j" % "slf4j-api" % "2.0.17")
 }
 
 /**
