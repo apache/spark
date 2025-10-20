@@ -481,46 +481,45 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   }
 
   private def getOperationMetrics(query: SparkPlan): util.Map[String, lang.Long] = {
-    val mergeMetrics = collectFirst(query) { case m: MergeRowsExec => m }
-      .map { n =>
-        n.metrics.map { case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value) }
-      }
-      .getOrElse(Map.empty[String, lang.Long])
-    val numSourceRows = getNumSourceRows(query)
-    (mergeMetrics + ("merge.numSourceRows" -> lang.Long.valueOf(numSourceRows))).asJava
+    collectFirst(query) { case m: MergeRowsExec => m } match {
+      case Some(mergeRowsExec) =>
+        val mergeMetrics = mergeRowsExec.metrics.map {
+          case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value)
+        }
+        val numSourceRows = getNumSourceRows(mergeRowsExec)
+        (mergeMetrics + ("merge.numSourceRows" -> lang.Long.valueOf(numSourceRows))).asJava
+      case None =>
+        Map.empty[String, lang.Long].asJava
+    }
   }
 
-  private def getNumSourceRows(query: SparkPlan): Long = {
+  private def getNumSourceRows(mergeRowsExec: MergeRowsExec): Long = {
     def isTargetTableScan(plan: SparkPlan): Boolean = {
       collectFirst(plan) {
         case scan: BatchScanExec if scan.table.isInstanceOf[RowLevelOperationTable] => true
       }.getOrElse(false)
     }
 
-    collectFirst(query) { case m: MergeRowsExec => m }
-      .flatMap { mergeRowsExec =>
-        val joinOpt = collectFirst(mergeRowsExec.child) { case j: BinaryExecNode => j }
+    val joinOpt = collectFirst(mergeRowsExec.child) { case j: BinaryExecNode => j }
 
-        joinOpt.flatMap { join =>
-          val leftIsTarget = isTargetTableScan(join.left)
-          val rightIsTarget = isTargetTableScan(join.right)
+    joinOpt.flatMap { join =>
+      val leftIsTarget = isTargetTableScan(join.left)
+      val rightIsTarget = isTargetTableScan(join.right)
 
-          val sourceChild = if (leftIsTarget) {
-            Some(join.right)
-          } else if (rightIsTarget) {
-            Some(join.left)
-          } else {
-            None
-          }
-
-          sourceChild.flatMap { child =>
-            collectFirst(child) {
-              case plan if plan.metrics.contains("numOutputRows") => plan
-            }.flatMap(_.metrics.get("numOutputRows").map(_.value))
-          }
-        }
+      val sourceChild = if (leftIsTarget) {
+        Some(join.right)
+      } else if (rightIsTarget) {
+        Some(join.left)
+      } else {
+        None
       }
-      .getOrElse(-1L)
+
+      sourceChild.flatMap { child =>
+        collectFirst(child) {
+          case plan if plan.metrics.contains("numOutputRows") => plan
+        }.flatMap(_.metrics.get("numOutputRows").map(_.value))
+      }
+    }.getOrElse(-1L)
   }
 }
 
