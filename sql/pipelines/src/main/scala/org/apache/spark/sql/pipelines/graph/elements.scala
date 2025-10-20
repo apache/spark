@@ -203,7 +203,7 @@ case class VirtualTableInput(
     // create empty streaming/batch df based on input type.
     def createEmptyDF(schema: StructType): DataFrame = readOptions match {
       case _: StreamingReadOptions =>
-        MemoryStream[Row](ExpressionEncoder(schema, lenient = false), spark.sqlContext)
+        MemoryStream[Row](ExpressionEncoder(schema, lenient = false), spark)
           .toDF()
       case _ => spark.createDataFrame(new util.ArrayList[Row](), schema)
     }

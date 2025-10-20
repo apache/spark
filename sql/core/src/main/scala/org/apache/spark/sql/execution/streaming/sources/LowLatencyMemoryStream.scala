@@ -27,7 +27,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
-import org.apache.spark.sql.{Encoder, SQLContext}
+import org.apache.spark.sql.{Encoder, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
@@ -60,10 +60,10 @@ import org.apache.spark.util.{Clock, RpcUtils}
  */
 class LowLatencyMemoryStream[A: Encoder](
     id: Int,
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     numPartitions: Int = 2,
     clock: Clock = LowLatencyClock.getClock)
-    extends MemoryStreamBaseClass[A](0, sqlContext)
+    extends MemoryStreamBaseClass[A](0, sparkSession)
     with SupportsRealTimeMode {
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
@@ -172,23 +172,53 @@ class LowLatencyMemoryStream[A: Encoder](
   }
 }
 
-object LowLatencyMemoryStream {
+object LowLatencyMemoryStream extends LowPriorityLowLatencyMemoryStreamImplicits {
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A: Encoder](implicit sqlContext: SQLContext): LowLatencyMemoryStream[A] =
-    new LowLatencyMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+  def apply[A: Encoder](implicit sparkSession: SparkSession): LowLatencyMemoryStream[A] =
+    new LowLatencyMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
 
   def apply[A: Encoder](numPartitions: Int)(
       implicit
-      sqlContext: SQLContext): LowLatencyMemoryStream[A] =
+      sparkSession: SparkSession): LowLatencyMemoryStream[A] =
     new LowLatencyMemoryStream[A](
       memoryStreamId.getAndIncrement(),
-      sqlContext,
+      sparkSession,
       numPartitions = numPartitions
     )
 
-  def singlePartition[A: Encoder](implicit sqlContext: SQLContext): LowLatencyMemoryStream[A] =
-    new LowLatencyMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext, 1)
+  def singlePartition[A: Encoder](implicit sparkSession: SparkSession): LowLatencyMemoryStream[A] =
+    new LowLatencyMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, 1)
+}
+
+/**
+ * Provides lower-priority implicits for LowLatencyMemoryStream to prevent ambiguity when both
+ * SparkSession and SQLContext are in scope. The implicits in the companion object,
+ * which use SparkSession, take higher precedence.
+ */
+trait LowPriorityLowLatencyMemoryStreamImplicits {
+  this: LowLatencyMemoryStream.type =>
+
+  // Deprecated: Used when an implicit SQLContext is in scope
+  @deprecated("Use LowLatencyMemoryStream with an implicit SparkSession " +
+    "instead of SQLContext", "4.1.0")
+  def apply[A: Encoder]()(implicit sqlContext: SQLContext): LowLatencyMemoryStream[A] =
+    new LowLatencyMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession)
+
+  @deprecated("Use LowLatencyMemoryStream with an implicit SparkSession " +
+    "instead of SQLContext", "4.1.0")
+  def apply[A: Encoder](numPartitions: Int)(implicit sqlContext: SQLContext):
+  LowLatencyMemoryStream[A] =
+    new LowLatencyMemoryStream[A](
+      memoryStreamId.getAndIncrement(),
+      sqlContext.sparkSession,
+      numPartitions = numPartitions
+    )
+
+  @deprecated("Use LowLatencyMemoryStream.singlePartition with an implicit SparkSession " +
+    "instead of SQLContext", "4.1.0")
+  def singlePartition[A: Encoder]()(implicit sqlContext: SQLContext): LowLatencyMemoryStream[A] =
+    new LowLatencyMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession, 1)
 }
 
 /**
