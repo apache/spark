@@ -543,7 +543,7 @@ class GeographyType(SpatialType):
     DEFAULT_CRS = "OGC:CRS84"
     DEFAULT_ALG = "SPHERICAL"
 
-    def __init__(self, srid):
+    def __init__(self, srid: int | str):
         # Special string value "ANY" is used to represent the mixed SRID GEOGRAPHY type.
         if srid == "ANY":
             self.srid = GeographyType.MIXED_SRID
@@ -562,7 +562,7 @@ class GeographyType(SpatialType):
         self._alg = GeographyType.DEFAULT_ALG
 
     @classmethod
-    def _from_crs(cls, crs, alg) -> "GeographyType":
+    def _from_crs(cls, crs: str, alg: str) -> "GeographyType":
         # Algorithm value must be validated, although only SPHERICAL is supported currently.
         if alg != cls.DEFAULT_ALG:
             raise IllegalArgumentException(
@@ -631,7 +631,7 @@ class GeometryType(SpatialType):
     """ The constructor for the GEOMETRY type can accept either a single valid geometric integer
     SRID value, or a special string value "ANY" used to represent a mixed SRID GEOMETRY type."""
 
-    def __init__(self, srid):
+    def __init__(self, srid: int | str):
         # Special string value "ANY" is used to represent the mixed SRID GEOMETRY type.
         if srid == "ANY":
             self.srid = GeometryType.MIXED_SRID
@@ -654,7 +654,7 @@ class GeometryType(SpatialType):
     insensitive string value "SRID:ANY" used to represent a mixed SRID GEOMETRY type."""
 
     @classmethod
-    def _from_crs(cls, crs) -> "GeometryType":
+    def _from_crs(cls, crs: str) -> "GeometryType":
         # Special CRS value "SRID:ANY" is used to represent the mixed SRID GEOMETRY type.
         # Note: unlike the actual CRS values, the special "SRID:ANY" value is case-insensitive.
         if crs.lower() == cls.MIXED_CRS.lower():
@@ -2275,18 +2275,22 @@ def _parse_datatype_json_value(
             return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
         elif _GEOMETRY_CRS.match(json_value):
             crs = _GEOMETRY_CRS.match(json_value)
-            return GeometryType._from_crs(crs.group(1))
+            if crs is not None:
+                return GeometryType._from_crs(crs.group(1))
         elif _GEOGRAPHY.match(json_value):
             return GeographyType._from_crs(GeographyType.DEFAULT_CRS, GeographyType.DEFAULT_ALG)
         elif _GEOGRAPHY_CRS.match(json_value):
             crs = _GEOGRAPHY_CRS.match(json_value)
-            return GeographyType._from_crs(crs.group(1), GeographyType.DEFAULT_ALG)
+            if crs is not None:
+                return GeographyType._from_crs(crs.group(1), GeographyType.DEFAULT_ALG)
         elif _GEOGRAPHY_CRS_ALG.match(json_value):
             crs_alg = _GEOGRAPHY_CRS_ALG.match(json_value)
-            return GeographyType._from_crs(crs_alg.group(1), crs_alg.group(2))
+            if crs_alg is not None:
+                return GeographyType._from_crs(crs_alg.group(1), crs_alg.group(2))
         elif _GEOGRAPHY_ALG.match(json_value):
             alg = _GEOGRAPHY_ALG.match(json_value)
-            return GeographyType._from_crs(GeographyType.DEFAULT_CRS, alg.group(1))
+            if alg is not None:
+                return GeographyType._from_crs(GeographyType.DEFAULT_CRS, alg.group(1))
         else:
             raise PySparkValueError(
                 errorClass="CANNOT_PARSE_DATATYPE",
