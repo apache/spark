@@ -873,9 +873,9 @@ class FunctionsTestsMixin:
         )
         # Expected results for comparison in different scenarios.
         result_no_tz = datetime.datetime(2024, 5, 22, 10, 30)
-        result_with_tz = datetime.datetime(2024, 5, 22, 10, 30)
+        result_with_tz = datetime.datetime(2024, 5, 22, 8, 30)
         result_frac_no_tz = datetime.datetime(2024, 5, 22, 10, 30, 45, 123000)
-        result_frac_with_tz = datetime.datetime(2024, 5, 22, 10, 30, 45, 123000)
+        result_frac_with_tz = datetime.datetime(2024, 5, 22, 8, 30, 45, 123000)
 
         # Test 1A: Basic 6 positional arguments (years, months, days, hours, mins, secs).
         actual = df.select(
