@@ -34,67 +34,92 @@ class SparkOptimizer(
     experimentalMethods: ExperimentalMethods)
   extends Optimizer(catalogManager) {
 
+  // SPARK-47230: Exclude schema pruning batch from idempotence checking because
+  // SchemaPruning with NestedColumnAliasing creates new objects on second pass for chained
+  // generators, breaking fastEquals even though the plans are semantically identical
+  override protected val excludedOnceBatches: Set[String] =
+    Set(
+      "PartitionPruning",
+      "RewriteSubquery",
+      "Extract Python UDFs",
+      "Schema Pruning")
+
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
-    // TODO: move SchemaPruning into catalyst
-    // SPARK-47230: GeneratorOrdinalRewriting must run IMMEDIATELY AFTER SchemaPruning
-    // to fix ordinals before other optimizer rules transform the plan
-    Seq(SchemaPruning, GeneratorOrdinalRewriting) :+
-      GroupBasedRowLevelOperationScanPlanning :+
-      V1Writes :+
-      V2ScanRelationPushDown :+
-      V2ScanPartitioningAndOrdering :+
-      V2Writes :+
-      PruneFileSourcePartitions
+    // SPARK-47230: SchemaPruning moved to separate batch
+    Seq(
+      GroupBasedRowLevelOperationScanPlanning,
+      V1Writes,
+      V2ScanRelationPushDown,
+      V2ScanPartitioningAndOrdering,
+      V2Writes,
+      PruneFileSourcePartitions)
 
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     OptimizeMetadataOnlyDeleteFromTable :: Nil
 
-  override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
-    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
-    Batch("PartitionPruning", Once,
-      PartitionPruning,
-      // We can't run `OptimizeSubqueries` in this batch, as it will optimize the subqueries
-      // twice which may break some optimizer rules that can only be applied once. The rule below
-      // only invokes `OptimizeSubqueries` to optimize newly added subqueries.
-      new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)) :+
-    Batch("InjectRuntimeFilter", FixedPoint(1),
-      InjectRuntimeFilter) :+
-    Batch("MergeScalarSubqueries", Once,
-      MergeScalarSubqueries,
-      RewriteDistinctAggregates) :+
-    Batch("Pushdown Filters from PartitionPruning", fixedPoint,
-      PushDownPredicates) :+
-    Batch("Cleanup filters that cannot be pushed down", Once,
-      CleanupDynamicPruningFilters,
-      // cleanup the unnecessary TrueLiteral predicates
-      BooleanSimplification,
-      PruneFilters)) ++
-    postHocOptimizationBatches :+
-    Batch("Extract Python UDFs", Once,
-      ExtractPythonUDFFromJoinCondition,
-      // `ExtractPythonUDFFromJoinCondition` can convert a join to a cartesian product.
-      // Here, we rerun cartesian product check.
-      CheckCartesianProducts,
-      ExtractPythonUDFFromAggregate,
-      // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
-      ExtractGroupingPythonUDFFromAggregate,
-      ExtractPythonUDFs,
-      ExtractPythonUDTFs,
-      // The eval-python node may be between Project/Filter and the scan node, which breaks
-      // column pruning and filter push-down. Here we rerun the related optimizer rules.
-      ColumnPruning,
-      LimitPushDown,
-      PushPredicateThroughNonJoin,
-      PushProjectionThroughLimit,
-      RemoveNoopOperators) :+
-    Batch("Infer window group limit", Once,
-      InferWindowGroupLimit,
-      LimitPushDown,
-      LimitPushDownThroughWindow,
-      EliminateLimits,
-      ConstantFolding) :+
-    Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
+  override def defaultBatches: Seq[Batch] = {
+    val earlyBatches = super.defaultBatches.takeWhile(
+      _.name != "Early Filter and Projection Push-Down")
+    val laterBatches = super.defaultBatches.dropWhile(
+      _.name != "Early Filter and Projection Push-Down")
+
+    ((preOptimizationBatches ++ earlyBatches :+
+      // SPARK-47230: Separate batch for SchemaPruning + GeneratorOrdinalRewriting
+      // GeneratorOrdinalRewriting must run IMMEDIATELY AFTER SchemaPruning
+      Batch("Schema Pruning", Once,
+        SchemaPruning, GeneratorOrdinalRewriting)) ++
+      laterBatches :+
+      Batch("Optimize Metadata Only Query", Once,
+        OptimizeMetadataOnlyQuery(catalog)) :+
+      Batch("PartitionPruning", Once,
+        PartitionPruning,
+        // We can't run `OptimizeSubqueries` in this batch, as it will optimize the
+        // subqueries twice which may break some optimizer rules that can only be applied
+        // once. The rule below only invokes `OptimizeSubqueries` to optimize newly added
+        // subqueries.
+        new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)) :+
+      Batch("InjectRuntimeFilter", FixedPoint(1),
+        InjectRuntimeFilter) :+
+      Batch("MergeScalarSubqueries", Once,
+        MergeScalarSubqueries,
+        RewriteDistinctAggregates) :+
+      Batch("Pushdown Filters from PartitionPruning", fixedPoint,
+        PushDownPredicates) :+
+      Batch("Cleanup filters that cannot be pushed down", Once,
+        CleanupDynamicPruningFilters,
+        // cleanup the unnecessary TrueLiteral predicates
+        BooleanSimplification,
+        PruneFilters)) ++
+      postHocOptimizationBatches :+
+      Batch("Extract Python UDFs", Once,
+        ExtractPythonUDFFromJoinCondition,
+        // `ExtractPythonUDFFromJoinCondition` can convert a join to a cartesian product.
+        // Here, we rerun cartesian product check.
+        CheckCartesianProducts,
+        ExtractPythonUDFFromAggregate,
+        // This must be executed after `ExtractPythonUDFFromAggregate` and before
+        // `ExtractPythonUDFs`.
+        ExtractGroupingPythonUDFFromAggregate,
+        ExtractPythonUDFs,
+        ExtractPythonUDTFs,
+        // The eval-python node may be between Project/Filter and the scan node, which
+        // breaks column pruning and filter push-down. Here we rerun the related
+        // optimizer rules.
+        ColumnPruning,
+        LimitPushDown,
+        PushPredicateThroughNonJoin,
+        PushProjectionThroughLimit,
+        RemoveNoopOperators) :+
+      Batch("Infer window group limit", Once,
+        InferWindowGroupLimit,
+        LimitPushDown,
+        LimitPushDownThroughWindow,
+        EliminateLimits,
+        ConstantFolding) :+
+      Batch("User Provided Optimizers", fixedPoint,
+        experimentalMethods.extraOptimizations: _*) :+
+      Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
+  }
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
     ExtractPythonUDFFromJoinCondition.ruleName :+

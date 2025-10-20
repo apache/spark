@@ -463,10 +463,9 @@ object GeneratorNestedColumnAliasing {
 
     case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
       canPruneGenerator(g.generator) =>
-      // If any child output is required by higher projection, we cannot prune on it even we
-      // only use part of nested column of it. A required child output means it is referred
-      // as a whole or partially by higher projection, pruning it here will cause unresolved
-      // query plan.
+      // SPARK-47230: Enable nested column aliasing for generator children.
+      // We pass g.requiredChildOutput to preserve generator outputs while still
+      // allowing nested field access aliasing where possible.
       NestedColumnAliasing.rewritePlanIfSubsetFieldsUsed(
         plan, g.generator.children, g.requiredChildOutput)
 
