@@ -50,7 +50,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ColumnVector
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -772,7 +771,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         withParquetFile(data) { file =>
           val df = spark.read.schema(readSchema).parquet(file)
           val scanNode = df.queryExecution.executedPlan.collectLeaves().head
-          VerifyNoAdditionalScanOutputExec(scanNode).execute().first()
+          VerifyNoAdditionalScanOutputExec(scanNode).execute().collect()
           checkAnswer(df, expectedAnswer)
         }
       }
@@ -825,7 +824,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             val df = spark.read.schema(readSchema).parquet(file)
             val scanNode = df.queryExecution.executedPlan.collectLeaves().head
             if (scanNode.supportsColumnar) {
-              VerifyNoAdditionalScanOutputExec(scanNode).execute().first()
+              VerifyNoAdditionalScanOutputExec(scanNode).execute().collect()
             }
             checkAnswer(df, expectedAnswer)
           }
@@ -1729,19 +1728,15 @@ class TaskCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAtt
 case class VerifyNoAdditionalScanOutputExec(override val child: SparkPlan) extends UnaryExecNode {
   override def doExecute(): RDD[InternalRow] = {
     val childOutputTypes = child.output.map(_.dataType)
-    child.executeColumnar().mapPartitionsInternal { batches =>
-      batches.flatMap { input =>
-        input.rowIterator().asScala
-          .map(row => {
-            val columnsField = row.getClass.getDeclaredField("columns")
-            columnsField.setAccessible(true)
-            val columnVectors = columnsField.get(row).asInstanceOf[Array[ColumnVector]]
-            assert(childOutputTypes.sameElements(columnVectors.map(_.dataType())),
-              "Found additional columns in the ColumnarBatch that are not present in output schema")
-            new GenericInternalRow(0)
-          })
+    child.executeColumnar().foreachPartition { batches =>
+      batches.foreach { input =>
+        0.until(input.numCols).foreach { index =>
+          assert(childOutputTypes(index) == input.column(index).dataType,
+            "Found additional columns in the ColumnarBatch that are not present in output schema")
+        }
       }
     }
+    sparkContext.emptyRDD[InternalRow]
   }
   override def output: Seq[Attribute] = Nil
   override def withNewChildInternal(newChild: SparkPlan): VerifyNoAdditionalScanOutputExec =
