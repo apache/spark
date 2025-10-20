@@ -3967,6 +3967,7 @@ def make_timestamp(
 make_timestamp.__doc__ = pysparkfuncs.make_timestamp.__doc__
 
 
+@overload
 def try_make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -3974,16 +3975,93 @@ def try_make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-    timezone: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if timezone is not None:
-        return _invoke_function_over_columns(
-            "try_make_timestamp", years, months, days, hours, mins, secs, timezone
-        )
+    ...
+
+
+@overload
+def try_make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+) -> Column:
+    ...
+
+
+def try_make_timestamp(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    timezone: Optional["ColumnOrName"] = None,
+    *,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+            )
     else:
-        return _invoke_function_over_columns(
-            "try_make_timestamp", years, months, days, hours, mins, secs
-        )
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time)
+            )
 
 
 try_make_timestamp.__doc__ = pysparkfuncs.try_make_timestamp.__doc__

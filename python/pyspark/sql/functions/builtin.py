@@ -24888,7 +24888,7 @@ def make_timestamp(
         )
 
 
-@_try_remote_functions
+@overload
 def try_make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -24896,32 +24896,96 @@ def try_make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+) -> Column:
+    ...
+
+
+@_try_remote_functions
+def try_make_timestamp(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
     timezone: Optional["ColumnOrName"] = None,
+    *,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    Try to create timestamp from years, months, days, hours, mins, secs and timezone fields.
+    Try to create timestamp from years, months, days, hours, mins, secs and (optional) timezone
+    fields. Alternatively, try to create timestamp from date, time, and (optional) timezone fields.
     The result data type is consistent with the value of configuration `spark.sql.timestampType`.
     The function returns NULL on invalid inputs.
 
     .. versionadded:: 4.0.0
 
+    .. versionchanged:: 4.1.0
+        Added support for creating timestamps from date and time.
+
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or column name
-        The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or column name
-        The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or column name
-        The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or column name
-        The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or column name
-        The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or column name
+    years : :class:`~pyspark.sql.Column` or column name, optional
+        The year to represent, from 1 to 9999.
+        Required when creating timestamps from individual components.
+        Must be used with months, days, hours, mins, and secs.
+    months : :class:`~pyspark.sql.Column` or column name, optional
+        The month-of-year to represent, from 1 (January) to 12 (December).
+        Required when creating timestamps from individual components.
+        Must be used with years, days, hours, mins, and secs.
+    days : :class:`~pyspark.sql.Column` or column name, optional
+        The day-of-month to represent, from 1 to 31.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, hours, mins, and secs.
+    hours : :class:`~pyspark.sql.Column` or column name, optional
+        The hour-of-day to represent, from 0 to 23.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, mins, and secs.
+    mins : :class:`~pyspark.sql.Column` or column name, optional
+        The minute-of-hour to represent, from 0 to 59.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and secs.
+    secs : :class:`~pyspark.sql.Column` or column name, optional
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
-        The value can be either an integer like 13 , or a fraction like 13.123.
+        The value can be either an integer like 13, or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and mins.
+    date : :class:`~pyspark.sql.Column` or column name, optional
+        The date to represent, in valid DATE format.
+        Required when creating timestamps from date and time components.
+        Must be used with time parameter only.
+    time : :class:`~pyspark.sql.Column` or column name, optional
+        The time to represent, in valid TIME format.
+        Required when creating timestamps from date and time components.
+        Must be used with date parameter only.
     timezone : :class:`~pyspark.sql.Column` or column name, optional
         The time zone identifier. For example, CET, UTC and etc.
 
@@ -24945,7 +25009,7 @@ def try_make_timestamp(
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
-    Example 1: Make timestamp from years, months, days, hours, mins and secs.
+    Example 1: Make timestamp from years, months, days, hours, mins, secs, and timezone.
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
@@ -24959,7 +25023,7 @@ def try_make_timestamp(
     |2014-12-27 21:30:45.887                             |
     +----------------------------------------------------+
 
-    Example 2: Make timestamp without timezone.
+    Example 2: Make timestamp from years, months, days, hours, mins, and secs (without timezone).
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
@@ -24972,7 +25036,6 @@ def try_make_timestamp(
     +----------------------------------------------------+
     |2014-12-28 06:30:45.887                             |
     +----------------------------------------------------+
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
     Example 3: Make timestamp with invalid input.
 
@@ -24988,16 +25051,87 @@ def try_make_timestamp(
     |NULL                                                |
     +----------------------------------------------------+
 
+    Example 4: Make timestamp from date, time, and timezone.
+
+    >>> import pyspark.sql.functions as sf
+    >>> from datetime import date, time
+    >>> df = spark.range(1).select(
+    ...     sf.lit(date(2014, 12, 28)).alias("date"),
+    ...     sf.lit(time(6, 30, 45, 887000)).alias("time"),
+    ...     sf.lit("CET").alias("tz")
+    ... )
+    >>> df.select(
+    ...     sf.try_make_timestamp(date=df.date, time=df.time, timezone=df.tz)
+    ... ).show(truncate=False)
+    +----------------------------------+
+    |try_make_timestamp(date, time, tz)|
+    +----------------------------------+
+    |2014-12-27 21:30:45.887           |
+    +----------------------------------+
+
+    Example 5: Make timestamp from date and time (without timezone).
+
+    >>> import pyspark.sql.functions as sf
+    >>> from datetime import date, time
+    >>> df = spark.range(1).select(
+    ...     sf.lit(date(2014, 12, 28)).alias("date"),
+    ...     sf.lit(time(6, 30, 45, 887000)).alias("time")
+    ... )
+    >>> df.select(sf.try_make_timestamp(date=df.date, time=df.time)).show(truncate=False)
+    +------------------------------+
+    |try_make_timestamp(date, time)|
+    +------------------------------+
+    |2014-12-28 06:30:45.887       |
+    +------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    if timezone is not None:
-        return _invoke_function_over_columns(
-            "try_make_timestamp", years, months, days, hours, mins, secs, timezone
-        )
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+            )
     else:
-        return _invoke_function_over_columns(
-            "try_make_timestamp", years, months, days, hours, mins, secs
-        )
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time)
+            )
 
 
 @_try_remote_functions
