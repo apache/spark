@@ -522,13 +522,13 @@ class ArrowTableToRowsConversion:
     @overload
     @staticmethod
     def _create_converter(
-        dataType: DataType, *, none_on_identity: bool = True
+        dataType: DataType, *, none_on_identity: bool = True, binary_as_bytes: bool = True
     ) -> Optional[Callable]:
         pass
 
     @staticmethod
     def _create_converter(
-        dataType: DataType, *, none_on_identity: bool = False
+        dataType: DataType, *, none_on_identity: bool = False, binary_as_bytes: bool = True
     ) -> Optional[Callable]:
         assert dataType is not None and isinstance(dataType, DataType)
 
@@ -546,7 +546,9 @@ class ArrowTableToRowsConversion:
             dedup_field_names = _dedup_names(field_names)
 
             field_convs = [
-                ArrowTableToRowsConversion._create_converter(f.dataType, none_on_identity=True)
+                ArrowTableToRowsConversion._create_converter(
+                    f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                )
                 for f in dataType.fields
             ]
 
@@ -568,7 +570,7 @@ class ArrowTableToRowsConversion:
 
         elif isinstance(dataType, ArrayType):
             element_conv = ArrowTableToRowsConversion._create_converter(
-                dataType.elementType, none_on_identity=True
+                dataType.elementType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
             if element_conv is None:
@@ -593,10 +595,10 @@ class ArrowTableToRowsConversion:
 
         elif isinstance(dataType, MapType):
             key_conv = ArrowTableToRowsConversion._create_converter(
-                dataType.keyType, none_on_identity=True
+                dataType.keyType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
             value_conv = ArrowTableToRowsConversion._create_converter(
-                dataType.valueType, none_on_identity=True
+                dataType.valueType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
             if key_conv is None:
@@ -650,7 +652,7 @@ class ArrowTableToRowsConversion:
                     return None
                 else:
                     assert isinstance(value, bytes)
-                    return bytearray(value)
+                    return value if binary_as_bytes else bytearray(value)
 
             return convert_binary
 
@@ -680,7 +682,7 @@ class ArrowTableToRowsConversion:
             udt: UserDefinedType = dataType
 
             conv = ArrowTableToRowsConversion._create_converter(
-                udt.sqlType(), none_on_identity=True
+                udt.sqlType(), none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
             if conv is None:
@@ -725,21 +727,26 @@ class ArrowTableToRowsConversion:
 
     @overload
     @staticmethod
-    def convert(  # type: ignore[overload-overlap]
-        table: "pa.Table", schema: StructType
-    ) -> List[Row]:
+    def convert(table: "pa.Table", schema: StructType) -> List[Row]:
         pass
 
     @overload
     @staticmethod
-    def convert(
-        table: "pa.Table", schema: StructType, *, return_as_tuples: bool = True
-    ) -> List[tuple]:
+    def convert(table: "pa.Table", schema: StructType, *, binary_as_bytes: bool) -> List[Row]:
+        pass
+
+    @overload
+    @staticmethod
+    def convert(table: "pa.Table", schema: StructType, *, return_as_tuples: bool) -> List[tuple]:
         pass
 
     @staticmethod  # type: ignore[misc]
     def convert(
-        table: "pa.Table", schema: StructType, *, return_as_tuples: bool = False
+        table: "pa.Table",
+        schema: StructType,
+        *,
+        return_as_tuples: bool = False,
+        binary_as_bytes: bool = True,
     ) -> List[Union[Row, tuple]]:
         require_minimum_pyarrow_version()
         import pyarrow as pa
@@ -752,7 +759,9 @@ class ArrowTableToRowsConversion:
 
         if len(fields) > 0:
             field_converters = [
-                ArrowTableToRowsConversion._create_converter(f.dataType, none_on_identity=True)
+                ArrowTableToRowsConversion._create_converter(
+                    f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                )
                 for f in schema.fields
             ]
 

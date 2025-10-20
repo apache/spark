@@ -257,3 +257,35 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
     def test_assert_remote_mode(self):
         # no need to test this in mixed mode
         pass
+
+    def connect_conf(self, conf_dict):
+        """Context manager to set configuration on Spark Connect session"""
+
+        @contextlib.contextmanager
+        def _connect_conf():
+            old_values = {}
+            for key, value in conf_dict.items():
+                old_values[key] = self.connect.conf.get(key, None)
+                self.connect.conf.set(key, value)
+            try:
+                yield
+            finally:
+                for key, old_value in old_values.items():
+                    if old_value is None:
+                        self.connect.conf.unset(key)
+                    else:
+                        self.connect.conf.set(key, old_value)
+
+        return _connect_conf()
+
+    def both_conf(self, conf_dict):
+        """Context manager to set configuration on both classic and Connect sessions"""
+
+        @contextlib.contextmanager
+        def _both_conf():
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(self.sql_conf(conf_dict))
+                stack.enter_context(self.connect_conf(conf_dict))
+                yield
+
+        return _both_conf()
