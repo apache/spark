@@ -36,8 +36,9 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan, SQLExecution, UnaryExecNode}
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -500,7 +501,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
       }.getOrElse(false)
     }
 
-    val joinOpt = collectFirst(mergeRowsExec.child) { case j: BinaryExecNode => j }
+    val joinOpt = collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
 
     joinOpt.flatMap { join =>
       val leftIsTarget = isTargetTableScan(join.left)
