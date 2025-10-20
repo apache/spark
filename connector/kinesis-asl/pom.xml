@@ -75,13 +75,6 @@
         </exclusion>
       </exclusions>
     </dependency>
-    <!-- manage this up explicitly to match Spark; com.amazonaws:aws-java-sdk-pom specifies
-      2.6.7 but says we can manage it up -->
-    <dependency>
-      <groupId>com.fasterxml.jackson.dataformat</groupId>
-      <artifactId>jackson-dataformat-cbor</artifactId>
-      <version>${fasterxml.jackson.version}</version>
-    </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>

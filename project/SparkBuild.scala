@@ -31,6 +31,7 @@ import sbt.Classpaths.publishOrSkip
 import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
+import com.here.bom.Bom
 import com.simplytyped.Antlr4Plugin._
 import sbtpomreader.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
@@ -1096,8 +1097,11 @@ object KubernetesIntegrationTests {
  */
 object DependencyOverrides {
   lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.4.0-jre")
-  lazy val settings = Seq(
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.19.2")
+  lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
+  lazy val settings = jacksonDeps ++ Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
+    dependencyOverrides ++= jacksonDeps.key.value,
     dependencyOverrides += "jline" % "jline" % "2.14.6",
     dependencyOverrides += "org.apache.avro" % "avro" % "1.12.0")
 }
