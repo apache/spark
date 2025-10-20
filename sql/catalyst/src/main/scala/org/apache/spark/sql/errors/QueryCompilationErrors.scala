@@ -1511,8 +1511,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "continuousSources" -> continuousSources.mkString(", ")))
   }
 
-  def noSuchTableError(ident: Identifier): NoSuchTableException = {
-    new NoSuchTableException(ident.asMultipartIdentifier)
+  def noSuchTableError(catalogName: String, ident: Identifier): NoSuchTableException = {
+    new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
   }
 
   def noSuchTableError(nameParts: Seq[String]): Throwable = {
@@ -3348,6 +3348,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
+  def unsupportedTableChangesInAutoSchemaEvolutionError(
+      changes: Array[TableChange], tableName: Seq[String]): Throwable = {
+    val sanitizedTableName = tableName.map(_.replaceAll("\"", ""))
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION",
+      messageParameters = Map(
+        "changes" -> changes.mkString(","), "tableName" -> toSQLId(sanitizedTableName)))
+  }
+
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1306",
@@ -3464,19 +3473,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "pivotColumn" -> pivotColumn,
         "maxValues" -> maxValues.toString,
         "config" -> SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key))
-  }
-
-  def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> SPARK_DOC_ROOT)
-    )
-  }
-
-  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
@@ -3751,13 +3747,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "explicitTypes" -> explicitTypes.map(toSQLType).mkString(", ")
       )
-    )
-  }
-
-  def indeterminateCollationInExpressionError(expr: Expression): Throwable = {
-    new AnalysisException(
-      errorClass = "INDETERMINATE_COLLATION",
-      messageParameters = Map("expr" -> toSQLExpr(expr))
     )
   }
 
@@ -4085,12 +4074,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def foundMultipleDataSources(provider: String): Throwable = {
-    new AnalysisException(
-      errorClass = "FOUND_MULTIPLE_DATA_SOURCES",
-      messageParameters = Map("provider" -> provider))
-  }
-
   def foundMultipleXMLDataSourceError(provider: String,
       sourceNames: Seq[String],
       externalSource: String): Throwable = {
@@ -4135,10 +4118,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def invalidExecuteImmediateVariableType(dataType: DataType): Throwable = {
+  def invalidExecuteImmediateExpressionType(dataType: DataType): Throwable = {
     throw new AnalysisException(
-      errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
-      messageParameters = Map("varType" -> toSQLType(dataType)))
+      errorClass = "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      messageParameters = Map("exprType" -> toSQLType(dataType)))
   }
 
   def nullSQLStringExecuteImmediate(varName: String): Throwable = {
@@ -4150,12 +4133,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidStatementForExecuteInto(queryString: String): Throwable = {
     throw new AnalysisException(
       errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
-      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
-  }
-
-  def nestedExecuteImmediate(queryString: String): Throwable = {
-    throw new AnalysisException(
-      errorClass = "NESTED_EXECUTE_IMMEDIATE",
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
   }
 
@@ -4387,11 +4364,5 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ),
       origin = origin
     )
-  }
-
-  def unsupportedStreamingTVF(funcName: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION",
-      messageParameters = Map("funcName" -> toSQLId(funcName)))
   }
 }

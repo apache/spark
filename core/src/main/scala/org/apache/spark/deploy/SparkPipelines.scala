@@ -18,12 +18,14 @@
 package org.apache.spark.deploy
 
 import java.util
+import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUserAppException
 import org.apache.spark.internal.Logging
+import org.apache.spark.launcher.SparkLauncher.SPARK_API_MODE
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.util.SparkExitCode
 
@@ -34,15 +36,16 @@ import org.apache.spark.util.SparkExitCode
  */
 object SparkPipelines extends Logging {
   def main(args: Array[String]): Unit = {
-    val sparkHome = sys.env("SPARK_HOME")
-    SparkSubmit.main(constructSparkSubmitArgs(args, sparkHome).toArray)
+    val pipelinesCliFile = args(0)
+    val sparkSubmitAndPipelinesArgs = args.slice(1, args.length)
+    SparkSubmit.main(
+      constructSparkSubmitArgs(pipelinesCliFile, sparkSubmitAndPipelinesArgs).toArray)
   }
 
   protected[deploy] def constructSparkSubmitArgs(
-      args: Array[String],
-      sparkHome: String): Seq[String] = {
+      pipelinesCliFile: String,
+      args: Array[String]): Seq[String] = {
     val (sparkSubmitArgs, pipelinesArgs) = splitArgs(args)
-    val pipelinesCliFile = s"$sparkHome/python/pyspark/pipelines/cli.py"
     (sparkSubmitArgs ++ Seq(pipelinesCliFile) ++ pipelinesArgs)
   }
 
@@ -62,16 +65,17 @@ object SparkPipelines extends Logging {
         if (opt == "--remote") {
           remote = value
         } else if (opt == "--class") {
-          logInfo("--class argument not supported.")
+          logError("--class argument not supported.")
           throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
-        } else if (opt == "--conf" &&
-          value.startsWith("spark.api.mode=") &&
-          value != "spark.api.mode=connect") {
-          logInfo(
-            "--spark.api.mode must be 'connect'. " +
-            "Declarative Pipelines currently only supports Spark Connect."
-          )
-          throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
+        } else if ((opt == "--conf" || opt == "-c") && value.startsWith(s"$SPARK_API_MODE=")) {
+          val apiMode = value.stripPrefix(s"$SPARK_API_MODE=").trim
+          if (apiMode.toLowerCase(Locale.ROOT) != "connect") {
+            logError(
+              s"$SPARK_API_MODE must be 'connect' (was '$apiMode'). " +
+                "Declarative Pipelines currently only supports Spark Connect."
+            )
+            throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
+          }
         } else if (Seq("--name", "-h", "--help").contains(opt)) {
           pipelinesArgs += opt
           if (value != null && value.nonEmpty) {
@@ -98,7 +102,7 @@ object SparkPipelines extends Logging {
     }
 
     sparkSubmitArgs += "--conf"
-    sparkSubmitArgs += "spark.api.mode=connect"
+    sparkSubmitArgs += s"$SPARK_API_MODE=connect"
     sparkSubmitArgs += "--remote"
     sparkSubmitArgs += remote
     (sparkSubmitArgs.toSeq, pipelinesArgs.toSeq)

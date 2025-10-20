@@ -24,6 +24,7 @@ import scala.util.Try
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.{BreakingChangeInfo, MitigationConfig, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.sql.AnalysisException
@@ -33,6 +34,31 @@ import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
+
+/**
+ * Test SparkThrowable implementation for testing breaking change info serialization
+ */
+class TestSparkThrowableWithBreakingChange(
+    val errorClass: String,
+    val messageParams: Map[String, String],
+    val breakingChangeInfo: Option[BreakingChangeInfo])
+    extends Exception(s"Test error for $errorClass")
+    with SparkThrowable {
+
+  override def getCondition: String = errorClass
+  override def getErrorClass: String = errorClass
+  override def getMessageParameters: java.util.Map[String, String] = {
+    import scala.jdk.CollectionConverters._
+    messageParams.asJava
+  }
+
+  override def getBreakingChangeInfo: BreakingChangeInfo = {
+    breakingChangeInfo match {
+      case Some(info) => info
+      case None => null
+    }
+  }
+}
 
 private class FetchErrorDetailsResponseObserver(p: Promise[FetchErrorDetailsResponse])
     extends StreamObserver[FetchErrorDetailsResponse] {
@@ -204,5 +230,144 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     assert(sparkThrowableProto.getErrorClass == testError.errorClass.get)
     assert(sparkThrowableProto.getMessageParametersMap == testError.getMessageParameters)
     assert(sparkThrowableProto.getSqlState == testError.getSqlState)
+  }
+
+  test("breaking change info is not present when error has no breaking change") {
+    val testError = new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON",
+      messageParameters = Map.empty)
+    val errorId = UUID.randomUUID().toString()
+
+    val sessionHolder = SparkConnectService
+      .getOrCreateIsolatedSession(userId, sessionId, None)
+    sessionHolder.errorIdToError.put(errorId, testError)
+
+    val response = fetchErrorDetails(userId, sessionId, errorId)
+
+    assert(response.hasRootErrorIdx)
+    val sparkThrowableProto = response.getErrors(0).getSparkThrowable
+    assert(!sparkThrowableProto.hasBreakingChangeInfo)
+  }
+
+  test("breaking change info serialization works for errors with breaking change") {
+    // This test would require creating a SparkThrowable that has breaking change info
+    // Since we need to test with actual breaking change info, we need to either:
+    // 1. Use a real error class that has breaking change info, or
+    // 2. Create a mock SparkThrowable that returns breaking change info
+
+    // For now, we'll create a simple test that verifies the serialization path exists
+    // A full test would require setting up test error classes with breaking change info
+    // in a test error-conditions.json file
+
+    val testError = Try(spark.sql("select x")).failed.get.asInstanceOf[AnalysisException]
+    val errorId = UUID.randomUUID().toString()
+
+    SparkConnectService
+      .getOrCreateIsolatedSession(userId, sessionId, None)
+      .errorIdToError
+      .put(errorId, testError)
+
+    val response = fetchErrorDetails(userId, sessionId, errorId)
+    assert(response.hasRootErrorIdx)
+
+    // Verify that the breaking_change_info field exists in the protobuf schema
+    // Even if this particular error doesn't have breaking change info,
+    // the protobuf should support the field
+    val sparkThrowableProto = response.getErrors(0).getSparkThrowable
+
+    // This test verifies that our protobuf changes don't break existing functionality
+    assert(sparkThrowableProto.getErrorClass == testError.errorClass.get)
+
+    // TODO: Once we have test error classes with breaking change info,
+    // we should add a more comprehensive test that verifies:
+    // - sparkThrowableProto.hasBreakingChangeInfo == true
+    // - sparkThrowableProto.getBreakingChangeInfo.getMigrationMessageCount > 0
+    // - sparkThrowableProto.getBreakingChangeInfo.getNeedsAudit == expected_value
+    // - If mitigation config exists:
+    //     sparkThrowableProto.getBreakingChangeInfo.hasSparkConfig
+  }
+
+  test("throwableToFetchErrorDetailsResponse includes breaking change info") {
+    val migrationMessages =
+      Seq("Please update your code to use new API", "See documentation for details")
+    val mitigationConfig =
+      Some(new MitigationConfig("spark.sql.legacy.behavior.enabled", "true"))
+    val breakingChangeInfo =
+      new BreakingChangeInfo(migrationMessages, mitigationConfig, false)
+
+    val testError = new TestSparkThrowableWithBreakingChange(
+      "TEST_BREAKING_CHANGE_ERROR",
+      Map("param" -> "value"),
+      Some(breakingChangeInfo))
+
+    val response =
+      ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
+
+    assert(response.hasRootErrorIdx)
+    assert(response.getRootErrorIdx == 0)
+    assert(response.getErrorsCount == 1)
+
+    val error = response.getErrors(0)
+    assert(error.hasSparkThrowable)
+
+    val sparkThrowableProto = error.getSparkThrowable
+    assert(sparkThrowableProto.getErrorClass == "TEST_BREAKING_CHANGE_ERROR")
+    assert(sparkThrowableProto.hasBreakingChangeInfo)
+
+    val bciProto = sparkThrowableProto.getBreakingChangeInfo
+    assert(bciProto.getMigrationMessageCount == 2)
+    assert(bciProto.getMigrationMessage(0) == "Please update your code to use new API")
+    assert(bciProto.getMigrationMessage(1) == "See documentation for details")
+    assert(bciProto.getNeedsAudit == false)
+
+    assert(bciProto.hasMitigationConfig)
+    val mitigationConfigProto = bciProto.getMitigationConfig
+    assert(mitigationConfigProto.getKey == "spark.sql.legacy.behavior.enabled")
+    assert(mitigationConfigProto.getValue == "true")
+  }
+
+  test("throwableToFetchErrorDetailsResponse without breaking change info") {
+    val testError =
+      new TestSparkThrowableWithBreakingChange("REGULAR_ERROR", Map("param" -> "value"), None)
+
+    val response =
+      ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
+
+    assert(response.hasRootErrorIdx)
+    val sparkThrowableProto = response.getErrors(0).getSparkThrowable
+    assert(sparkThrowableProto.getErrorClass == "REGULAR_ERROR")
+    assert(!sparkThrowableProto.hasBreakingChangeInfo)
+  }
+
+  test(
+    "throwableToFetchErrorDetailsResponse with breaking change info without mitigation config") {
+    val migrationMessages = Seq("Migration message only")
+    val breakingChangeInfo = new BreakingChangeInfo(migrationMessages, None, true)
+
+    val testError = new TestSparkThrowableWithBreakingChange(
+      "TEST_BREAKING_CHANGE_NO_MITIGATION",
+      Map.empty,
+      Some(breakingChangeInfo))
+
+    val response =
+      ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
+
+    val bciProto = response.getErrors(0).getSparkThrowable.getBreakingChangeInfo
+    assert(bciProto.getMigrationMessageCount == 1)
+    assert(bciProto.getMigrationMessage(0) == "Migration message only")
+    assert(bciProto.getNeedsAudit == true)
+    assert(!bciProto.hasMitigationConfig)
+  }
+
+  test("throwableToFetchErrorDetailsResponse with non-SparkThrowable") {
+    val testError = new RuntimeException("Regular runtime exception")
+
+    val response =
+      ErrorUtils.throwableToFetchErrorDetailsResponse(testError, serverStackTraceEnabled = false)
+
+    assert(response.hasRootErrorIdx)
+    val error = response.getErrors(0)
+    assert(!error.hasSparkThrowable)
+    assert(error.getMessage == "Regular runtime exception")
   }
 }

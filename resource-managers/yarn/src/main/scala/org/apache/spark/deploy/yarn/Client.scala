@@ -332,7 +332,7 @@ private[spark] class Client(
         appContext.setLogAggregationContext(logAggregationContext)
       } catch {
         case NonFatal(e) =>
-          logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, ROLLED_LOG_INCLUDE_PATTERN.key)}} " +
+          logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, ROLLED_LOG_INCLUDE_PATTERN.key)} " +
             log"because the version of YARN does not support it", e)
       }
     }
@@ -705,7 +705,7 @@ private[spark] class Client(
           // No configuration, so fall back to uploading local jar files.
           logWarning(
             log"Neither ${MDC(LogKeys.CONFIG, SPARK_JARS.key)} nor " +
-              log"${MDC(LogKeys.CONFIG2, SPARK_ARCHIVE.key)}} is set, falling back to uploading " +
+              log"${MDC(LogKeys.CONFIG2, SPARK_ARCHIVE.key)} is set, falling back to uploading " +
               log"libraries under SPARK_HOME.")
           val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
             sparkConf.getenv("SPARK_HOME")))

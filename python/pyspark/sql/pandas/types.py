@@ -305,7 +305,7 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
-    elif types.is_time(at):
+    elif types.is_time64(at):
         spark_type = TimeType()
     elif types.is_timestamp(at) and prefer_timestamp_ntz and at.tz is None:
         spark_type = TimestampNTZType()
@@ -314,15 +314,25 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+        spark_type = ArrayType(
+            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            containsNull=at.value_field.nullable,
+        )
     elif types.is_fixed_size_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+        spark_type = ArrayType(
+            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            containsNull=at.value_field.nullable,
+        )
     elif types.is_large_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+        spark_type = ArrayType(
+            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            containsNull=at.value_field.nullable,
+        )
     elif types.is_map(at):
         spark_type = MapType(
-            from_arrow_type(at.key_type, prefer_timestamp_ntz),
-            from_arrow_type(at.item_type, prefer_timestamp_ntz),
+            keyType=from_arrow_type(at.key_type, prefer_timestamp_ntz),
+            valueType=from_arrow_type(at.item_type, prefer_timestamp_ntz),
+            valueContainsNull=at.item_field.nullable,
         )
     elif types.is_struct(at):
         if is_variant(at):

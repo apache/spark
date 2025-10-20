@@ -93,8 +93,19 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Setting it to -1 indicated forever.
   @volatile private var customInactiveTimeoutMs: Option[Long] = None
 
-  private val operationIds: ConcurrentMap[String, Boolean] =
-    new ConcurrentHashMap[String, Boolean]()
+  // Set of active operation IDs for this session.
+  private val activeOperationIds: mutable.Set[String] = mutable.Set.empty
+
+  // Cache of inactive operation IDs for this session, either completed, interrupted or abandoned.
+  // The Boolean is just a placeholder since Guava needs a <K, V> pair.
+  private lazy val inactiveOperationIds: Cache[String, Boolean] =
+    CacheBuilder
+      .newBuilder()
+      .ticker(Ticker.systemTicker())
+      .expireAfterAccess(
+        SparkEnv.get.conf.get(Connect.CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS),
+        TimeUnit.MINUTES)
+      .build[String, Boolean]()
 
   // The cache that maps an error id to a throwable. The throwable in cache is independent to
   // each other.
@@ -163,20 +174,45 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         messageParameters = Map("handle" -> sessionId))
     }
 
-    val alreadyExists = operationIds.putIfAbsent(operationId, true)
-    if (alreadyExists) {
-      // The existence of it should have been checked by SparkConnectExecutionManager.
-      throw new IllegalStateException(s"ExecuteHolder with opId=${operationId} already exists!")
+    activeOperationIds.synchronized {
+      if (activeOperationIds.contains(operationId)) {
+        throw new IllegalStateException(s"ExecuteHolder with opId=${operationId} already exists!")
+      }
+      activeOperationIds.add(operationId)
     }
   }
 
   /**
-   * Remove an operation ID from this session.
+   * Returns the status of the operation in this session given the operation id. Operations are
+   * cached for when they are inactive (completed, interrupted or abandoned). Cache expiration is
+   * configured with CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS.
+   *
+   * @param operationId
+   * @return
+   *   Some(true) if the operation is currently active, Some(false) if the operation was
+   *   completed, interrupted or abandoned recently, None if no operation with this id is found in
+   *   this session.
+   */
+  private[service] def getOperationStatus(operationId: String): Option[Boolean] = {
+    if (activeOperationIds.contains(operationId)) {
+      return Some(true)
+    }
+    Option(inactiveOperationIds.getIfPresent(operationId)) match {
+      case Some(_) =>
+        return Some(false)
+      case None =>
+        return None
+    }
+  }
+
+  /**
+   * Close an operation in this session by removing its operation ID.
    *
    * Called only by SparkConnectExecutionManager when an execution is ended.
    */
-  private[service] def removeOperationId(operationId: String): Unit = {
-    operationIds.remove(operationId)
+  private[service] def closeOperation(operationId: String): Unit = {
+    inactiveOperationIds.put(operationId, true)
+    activeOperationIds.remove(operationId)
   }
 
   /**
@@ -188,7 +224,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     val interruptedIds = new mutable.ArrayBuffer[String]()
     val operationsIds =
       SparkConnectService.streamingSessionManager.cleanupRunningQueries(this, blocking = false)
-    operationIds.asScala.foreach { case (operationId, _) =>
+    activeOperationIds.foreach { operationId =>
       val executeKey = ExecuteKey(userId, sessionId, operationId)
       SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
         if (executeHolder.interrupt()) {
@@ -208,11 +244,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     val interruptedIds = new mutable.ArrayBuffer[String]()
     val queries = SparkConnectService.streamingSessionManager.getTaggedQuery(tag, session)
     queries.foreach(q => Future(q.query.stop())(ExecutionContext.global))
-    operationIds.asScala.foreach { case (operationId, _) =>
+    activeOperationIds.foreach { operationId =>
       val executeKey = ExecuteKey(userId, sessionId, operationId)
       SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
         if (executeHolder.sparkSessionTags.contains(tag)) {
           if (executeHolder.interrupt()) {
+            closeOperation(operationId)
             interruptedIds += operationId
           }
         }
@@ -231,6 +268,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     val executeKey = ExecuteKey(userId, sessionId, operationId)
     SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
       if (executeHolder.interrupt()) {
+        closeOperation(operationId)
         interruptedIds += operationId
       }
     }
@@ -262,8 +300,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     lastAccessTimeMs = System.currentTimeMillis()
     logInfo(
       log"Session with userId: ${MDC(LogKeys.USER_ID, userId)} and " +
-        log"sessionId: ${MDC(LogKeys.SESSION_ID, sessionId)} accessed," +
-        log"time ${MDC(LogKeys.LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
+        log"sessionId: ${MDC(LogKeys.SESSION_ID, sessionId)} accessed at " +
+        log"timestamp ${MDC(LogKeys.LAST_ACCESS_TIME, lastAccessTimeMs)}.")
   }
 
   private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {

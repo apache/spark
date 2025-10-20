@@ -268,7 +268,8 @@ class SessionCatalog(
 
   private def requireTableExists(name: TableIdentifier): Unit = {
     if (!tableExists(name)) {
-      throw new NoSuchTableException(db = name.database.get, table = name.table)
+      throw new NoSuchTableException(
+        Seq(name.catalog.get, name.database.get, name.table))
     }
   }
 
@@ -1002,7 +1003,13 @@ class SessionCatalog(
       objectType = Some("VIEW"),
       objectName = Some(metadata.qualifiedName)
     )
-    val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
+    val parsedPlan = SQLConf.withExistingConf(
+      View.effectiveSQLConf(
+        configs = viewConfigs,
+        isTempView = isTempView,
+        createSparkVersion = metadata.createVersion
+      )
+    ) {
         CurrentOrigin.withOrigin(origin) {
           parser.parseQuery(viewText)
         }
@@ -1030,7 +1037,11 @@ class SessionCatalog(
         // Note that, the column names may have duplication, e.g. `CREATE VIEW v(x, y) AS
         // SELECT 1 col, 2 col`. We need to make sure that the matching attributes have the same
         // number of duplications, and pick the corresponding attribute by ordinal.
-        val viewConf = View.effectiveSQLConf(metadata.viewSQLConfigs, isTempView)
+        val viewConf = View.effectiveSQLConf(
+          configs = metadata.viewSQLConfigs,
+          isTempView = isTempView,
+          createSparkVersion = metadata.createVersion
+        )
         val normalizeColName: String => String = if (viewConf.caseSensitiveAnalysis) {
           identity
         } else {
@@ -1642,6 +1653,7 @@ class SessionCatalog(
     // Use captured SQL configs when parsing a SQL function.
     val conf = new SQLConf()
     function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
+    Analyzer.trySetAnsiValue(conf)
     SQLConf.withExistingConf(conf) {
       val inputParam = function.inputParam
       val returnType = function.getScalarFuncReturnType
@@ -1925,7 +1937,7 @@ class SessionCatalog(
       }
 
     NamedParametersSupport.defaultRearrange(
-      FunctionSignature(paramNames), expressions, functionName)
+      FunctionSignature(paramNames), expressions, functionName, SQLConf.get.resolver)
   }
 
   /**

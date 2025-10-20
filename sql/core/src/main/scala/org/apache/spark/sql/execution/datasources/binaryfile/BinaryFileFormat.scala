@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
 import org.apache.spark.sql.types._
@@ -55,7 +56,8 @@ import org.apache.spark.util.SerializableConfiguration
  *     .load("/path/to/fileDir");
  * }}}
  */
-case class BinaryFileFormat() extends FileFormat with DataSourceRegister {
+case class BinaryFileFormat() extends FileFormat
+  with DataSourceRegister with SessionStateHelper {
 
   import BinaryFileFormat._
 
@@ -98,7 +100,7 @@ case class BinaryFileFormat() extends FileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val filterFuncs = filters.flatMap(filter => createFilterFunction(filter))
-    val maxLength = sparkSession.sessionState.conf.getConf(SOURCES_BINARY_FILE_MAX_LENGTH)
+    val maxLength = getSqlConf(sparkSession).getConf(SOURCES_BINARY_FILE_MAX_LENGTH)
 
     file: PartitionedFile => {
       val path = file.toPath

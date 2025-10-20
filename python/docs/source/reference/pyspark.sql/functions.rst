@@ -299,6 +299,7 @@ Date and Timestamp Functions
     timestamp_micros
     timestamp_millis
     timestamp_seconds
+    time_diff
     time_trunc
     to_date
     to_time
@@ -491,6 +492,9 @@ Aggregate Functions
     string_agg_distinct
     sum
     sum_distinct
+    theta_intersection_agg
+    theta_sketch_agg
+    theta_union_agg
     try_avg
     try_sum
     var_pop
@@ -636,6 +640,10 @@ Misc Functions
     reflect
     session_user
     spark_partition_id
+    theta_difference
+    theta_intersection
+    theta_sketch_estimate
+    theta_union
     try_aes_decrypt
     try_reflect
     typeof
@@ -650,6 +658,7 @@ UDF, UDTF and UDT
     :toctree: api/
 
     arrow_udf
+    arrow_udtf
     call_udf
     pandas_udf
     udf

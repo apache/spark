@@ -342,6 +342,63 @@ class RocksDB(
     currLineage
   }
 
+  /**
+   * Construct the full lineage from startVersion to endVersion (inclusive) by
+   * walking backwards using lineage information embedded in changelog files.
+   */
+  def getFullLineage(
+      startVersion: Long,
+      endVersion: Long,
+      endVersionStateStoreCkptId: Option[String]): Array[LineageItem] = {
+    assert(startVersion <= endVersion,
+      s"startVersion $startVersion should be less than or equal to endVersion $endVersion")
+    assert(endVersionStateStoreCkptId.isDefined,
+      "endVersionStateStoreCkptId should be defined")
+
+    // A buffer to collect the lineage information, the entries should be decreasing in version
+    val buf = mutable.ArrayBuffer[LineageItem]()
+    buf.append(LineageItem(endVersion, endVersionStateStoreCkptId.get))
+
+    while (buf.last.version > startVersion) {
+      val prevSmallestVersion = buf.last.version
+      val lineage = getLineageFromChangelogFile(buf.last.version, Some(buf.last.checkpointUniqueId))
+      // lineage array is sorted in increasing order, we need to make it decreasing
+      val lineageSortedDecreasing = lineage.filter(_.version >= startVersion).sortBy(-_.version)
+      // append to the buffer in reverse order, so the buffer is always decreasing in version
+      buf.appendAll(lineageSortedDecreasing)
+
+      // to prevent infinite loop if we make no progress, throw an exception
+      if (buf.last.version == prevSmallestVersion) {
+        throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(buf.reverse.toArray),
+          s"Cannot find version smaller than ${buf.last.version} in lineage.")
+      }
+    }
+
+    // we return the lineage in increasing order
+    val ret = buf.reverse.toArray
+
+    // Sanity checks
+    if (ret.head.version != startVersion) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        s"Lineage does not start with startVersion: $startVersion.")
+    }
+    if (ret.last.version != endVersion) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        s"Lineage does not end with endVersion: $endVersion.")
+    }
+    // Verify that the lineage versions are increasing by one
+    // We do this by checking that each entry is one version higher than the previous one
+    val increasingByOne = ret.sliding(2).forall {
+      case Array(prev, next) => prev.version + 1 == next.version
+      case _ => true
+    }
+    if (!increasingByOne) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        "Lineage versions are not increasing by one.")
+    }
+
+    ret
+  }
 
   /**
    * Load the given version of data in a native RocksDB instance.
@@ -620,13 +677,20 @@ class RocksDB(
    *
    * @param snapshotVersion version of the snapshot to start with
    * @param endVersion end version
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return A RocksDB instance loaded with the state endVersion replayed from snapshotVersion.
    *         Note that the instance will be read-only since this method is only used in State Data
    *         Source.
    */
-  def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
+  def loadFromSnapshot(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): RocksDB = {
     val startTime = System.currentTimeMillis()
 
+    assert(snapshotVersionStateStoreCkptId.isDefined == endVersionStateStoreCkptId.isDefined)
     assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
     recordedMetrics = None
     loadMetrics.clear()
@@ -635,7 +699,11 @@ class RocksDB(
       log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
       log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
     try {
-      replayFromCheckpoint(snapshotVersion, endVersion)
+      replayFromCheckpoint(
+        snapshotVersion,
+        endVersion,
+        snapshotVersionStateStoreCkptId,
+        endVersionStateStoreCkptId)
 
       logInfo(
         log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
@@ -663,11 +731,19 @@ class RocksDB(
    *
    * @param snapshotVersion start checkpoint version
    * @param endVersion end version
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    */
-  private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
+  private def replayFromCheckpoint(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): Any = {
+    assert(snapshotVersionStateStoreCkptId.isDefined == endVersionStateStoreCkptId.isDefined)
+
     closeDB()
     val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion,
-      workingDir, rocksDBFileMapping)
+      workingDir, rocksDBFileMapping, snapshotVersionStateStoreCkptId)
     loadedVersion = snapshotVersion
     lastSnapshotVersion = snapshotVersion
 
@@ -699,7 +775,17 @@ class RocksDB(
 
     if (loadedVersion != endVersion) {
       val versionsAndUniqueIds: Array[(Long, Option[String])] =
+      if (endVersionStateStoreCkptId.isDefined) {
+        val fullVersionLineage = getFullLineage(
+          loadedVersion + 1,
+          endVersion,
+          endVersionStateStoreCkptId)
+        fullVersionLineage
+          .sortBy(_.version)
+          .map(item => (item.version, Some(item.checkpointUniqueId)))
+      } else {
         (loadedVersion + 1 to endVersion).map((_, None)).toArray
+      }
       replayChangelog(versionsAndUniqueIds)
       loadedVersion = endVersion
     }
@@ -1310,6 +1396,7 @@ class RocksDB(
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(
         numVersionsToRetain = conf.minVersionsToRetain,
+        maxVersionsToDeletePerMaintenance = conf.maxVersionsToDeletePerMaintenance,
         minVersionsToDelete = conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
@@ -1374,7 +1461,6 @@ class RocksDB(
   private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
-    val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
       "put" -> DB_WRITE,
@@ -1409,6 +1495,10 @@ class RocksDB(
 
     // Use RocksDBMemoryManager to calculate the memory usage accounting
     val memoryUsage = RocksDBMemoryManager.getInstanceMemoryUsage(instanceUniqueId, getMemoryUsage)
+
+    val totalPinnedBlocksMemUsage = lruCache.getPinnedUsage()
+    val pinnedBlocksMemUsage = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+      instanceUniqueId, totalPinnedBlocksMemUsage)
 
     RocksDBMetrics(
       numKeysOnLoadedVersion,
@@ -1867,7 +1957,8 @@ case class RocksDBConf(
     compressionCodec: String,
     allowFAllocate: Boolean,
     compression: String,
-    reportSnapshotUploadLag: Boolean)
+    reportSnapshotUploadLag: Boolean,
+    maxVersionsToDeletePerMaintenance: Int)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -2058,7 +2149,8 @@ object RocksDBConf {
       storeConf.compressionCodec,
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
-      storeConf.reportSnapshotUploadLag)
+      storeConf.reportSnapshotUploadLag,
+      storeConf.maxVersionsToDeletePerMaintenance)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

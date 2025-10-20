@@ -384,6 +384,11 @@
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
     ]
   },
+  "INVALID_ARROW_UDTF_TABLE_ARGUMENT": {
+    "message": [
+      "Arrow UDTFs with PARTITION BY must have a TABLE argument that results in a PyArrow RecordBatch, but got <actual_type>."
+    ]
+  },
   "INVALID_ARROW_UDTF_WITH_ANALYZE": {
     "message": [
       "The arrow UDTF '<name>' is invalid. Arrow UDTFs do not support the 'analyze' method. Please remove the 'analyze' method from '<name>' and specify a returnType instead."
@@ -896,6 +901,11 @@
       "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
     ]
   },
+  "PIPELINE_SPEC_INVALID_GLOB_PATTERN": {
+    "message": [
+      "Invalid glob pattern `<glob_pattern>` in libraries. Only file paths, or folder paths ending with /** are allowed."
+    ]
+  },
   "PIPELINE_SPEC_MISSING_REQUIRED_FIELD": {
     "message": [
       "Pipeline spec missing required field `<field_name>`."
@@ -967,6 +977,11 @@
       "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
     ]
   },
+  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF": {
+    "message": [
+      "Column names of the returned pyarrow.Table or pyarrow.RecordBatch do not match specified schema. Expected: <expected> Actual: <actual>"
+    ]
+  },
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF": {
     "message": [
       "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>"
@@ -985,11 +1000,6 @@
   "RESULT_TYPE_MISMATCH_FOR_ARROW_UDF": {
     "message": [
       "Columns do not match in their data type: <mismatch>."
-    ]
-  },
-  "RETRIES_EXCEEDED": {
-    "message": [
-      "The maximum number of retries has been exceeded."
     ]
   },
   "REUSE_OBSERVATION": {
@@ -1151,7 +1161,7 @@
   },
   "UDTF_ARROW_TYPE_CONVERSION_ERROR": {
     "message": [
-      "Cannot convert the output value of the input '<data>' with type '<schema>' to the specified return type of the column: '<arrow_schema>'. Please check if the data types match and try again."
+      "PyArrow UDTF must return an iterator of pyarrow.Table or pyarrow.RecordBatch objects."
     ]
   },
   "UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD": {

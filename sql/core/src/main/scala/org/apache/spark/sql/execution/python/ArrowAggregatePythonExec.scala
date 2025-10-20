@@ -180,7 +180,7 @@ case class ArrowAggregatePythonExec(
         rows
       }
 
-      val columnarBatchIter = new ArrowPythonWithNamedArgumentRunner(
+      val runner = new ArrowPythonWithNamedArgumentRunner(
         pyFuncs,
         evalType,
         argMetas,
@@ -190,7 +190,9 @@ case class ArrowAggregatePythonExec(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        conf.pythonUDFProfiler).compute(projectedRowIter, context.partitionId(), context)
+        conf.pythonUDFProfiler) with GroupedPythonArrowInput
+
+      val columnarBatchIter = runner.compute(projectedRowIter, context.partitionId(), context)
 
       val joinedAttributes =
         groupingExpressions.map(_.toAttribute) ++ aggExpressions.map(_.resultAttribute)
@@ -215,10 +217,10 @@ case class ArrowAggregatePythonExec(
       case Some(sessionExpression) =>
         val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
         val spillThreshold = conf.windowExecBufferSpillThreshold
-        val spillSizeThreshold = conf.windowExecBufferSpillSizeThreshold
+        val sizeInBytesSpillThreshold = conf.windowExecBufferSpillSizeThreshold
 
         new UpdatingSessionsIterator(iter, groupingWithoutSessionExpressions, sessionExpression,
-          child.output, inMemoryThreshold, spillThreshold, spillSizeThreshold)
+          child.output, inMemoryThreshold, spillThreshold, sizeInBytesSpillThreshold)
 
       case None => iter
     }

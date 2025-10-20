@@ -154,7 +154,6 @@ case class TransformWithStateInPySparkExec(
     val runner = new TransformWithStateInPySparkPythonPreInitRunner(
       pythonFunction,
       "pyspark.sql.streaming.transform_with_state_driver_worker",
-      sessionLocalTimeZone,
       groupingKeySchema,
       driverProcessorHandle
     )
@@ -389,7 +388,7 @@ case class TransformWithStateInPySparkExec(
           store.abort()
         }
       }
-      setStoreMetrics(store)
+      setStoreMetrics(store, isStreaming)
       setOperatorMetrics()
     }).map { row =>
       numOutputRows += 1

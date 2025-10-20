@@ -632,37 +632,14 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     pyspark.sql.UDFRegistration.register
     """
 
-    # The following table shows most of Pandas data and SQL type conversions in Pandas UDFs that
-    # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
-    # future. The table might have to be eventually documented externally.
-    # Please see SPARK-52943's PR to see the codes in order to generate the table below.
-    #
-    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+------------------+--------------------+-----------------------------+--------------+-----------------+------------------+---------------+--------------------------------+  # noqa
-    # |SQL Type \ Pandas Value(Type)|None(object(NoneType))|        True(bool)|           1(int8)|          1(int16)|            1(int32)|            1(int64)|          1(uint8)|         1(uint16)|         1(uint32)|         1(uint64)|  1.0(float16)|  1.0(float32)|  1.0(float64)|1970-01-01 00:00:00(datetime64[ns])|1970-01-01 00:00:00-05:00(datetime64[ns, US/Eastern])|a(object(string))|12(object(string))|  1(object(Decimal))|[1 2 3](object(array[int32]))| 1.0(float128)|(1+0j)(complex64)|(1+0j)(complex128)|    A(category)|1 days 00:00:00(timedelta64[ns])|  # noqa
-    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+------------------+--------------------+-----------------------------+--------------+-----------------+------------------+---------------+--------------------------------+  # noqa
-    # |                      boolean|                  None|              True|              True|              True|                True|                True|              True|              True|              True|              True|          True|          True|          True|                                  X|                                                    X|                X|                 X|                   X|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                      tinyint|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  X|                                                    X|                X|                12|                   1|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                     smallint|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  X|                                                    X|                X|                12|                   1|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                          int|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  X|                                                    X|                X|                12|                   1|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                       bigint|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  0|                                       18000000000000|                X|                12|                   1|                            X|             X|                X|                 X|              X|                  86400000000000|  # noqa
-    # |                        float|                  None|               1.0|               1.0|               1.0|                 1.0|                 1.0|               1.0|               1.0|               1.0|               1.0|           1.0|           1.0|           1.0|                                  X|                                                    X|                X|              12.0|                 1.0|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                       double|                  None|               1.0|               1.0|               1.0|                 1.0|                 1.0|               1.0|               1.0|               1.0|               1.0|           1.0|           1.0|           1.0|                                  X|                                                    X|                X|              12.0|                 1.0|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                         date|                  None|                 X|                 X|                 X|datetime.date(197...|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|               datetime.date(197...|                                 datetime.date(197...|                X|                 X|datetime.date(197...|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                    timestamp|                  None|                 X|                 X|                 X|                   X|datetime.datetime...|                 X|                 X|                 X|                 X|             X|             X|             X|               datetime.datetime...|                                 datetime.datetime...|                X|                 X|datetime.datetime...|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                       string|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|              'a'|              '12'|                   X|                            X|             X|                X|                 X|            'A'|                               X|  # noqa
-    # |                decimal(10,0)|                  None|                 X|      Decimal('1')|      Decimal('1')|        Decimal('1')|                   X|      Decimal('1')|      Decimal('1')|      Decimal('1')|                 X|  Decimal('1')|  Decimal('1')|  Decimal('1')|                                  X|                                                    X|                X|                 X|        Decimal('1')|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                   array<int>|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|            [1, 2]|                   X|                    [1, 2, 3]|             X|                X|                 X|              X|                               X|  # noqa
-    # |              map<string,int>|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                 X|                   X|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |               struct<_1:int>|                     X|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                 X|                   X|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                       binary|                  None|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|  bytearray(b'\x01')|  bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'')|bytearray(b'')|bytearray(b'')|                     bytearray(b'')|                                       bytearray(b'')|  bytearray(b'a')|  bytearray(b'12')|                   X|                            X|bytearray(b'')|   bytearray(b'')|    bytearray(b'')|bytearray(b'A')|                  bytearray(b'')|  # noqa
-    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+------------------+--------------------+-----------------------------+--------------+-----------------+------------------+---------------+--------------------------------+  # noqa
-    #
-    # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
-    #       used in `returnType`.
-    # Note: The values inside of the table are generated by `repr`.
-    # Note: Python 3.11.9, Pandas 2.2.3 and PyArrow 17.0.0 are used.
-    # Note: Timezone is KST.
-    # Note: 'X' means it throws an exception during the conversion.
+    # The return type and input type behavior of pandas_udfs is documented in
+    # python/pyspark/sql/tests/udf_type_tests.
+    # It shows most of Pandas data and SQL type conversions in Pandas UDFs that are not
+    # yet visible to the user.
+    # Some of behaviors are buggy and might be changed in the near future. The table might
+    # have to be eventually documented externally.
+    # The folder python/pyspark/sql/tests/udf_type_tests contains type tests and golden
+    # files, as well as the code to regenerate the tables.
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
 
@@ -723,6 +700,7 @@ def vectorized_udf(
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         None,
     ]:  # None means it should infer the type from type hints.
@@ -782,6 +760,16 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             UserWarning,
         )
     elif evalType in [
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+    ]:
+        warnings.warn(
+            "It is preferred to specify type hints for "
+            "arrow UDF instead of specifying arrow UDF type.",
+            UserWarning,
+        )
+    elif evalType in [
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
@@ -792,6 +780,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
     ]:
@@ -807,7 +796,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             type_hints = get_type_hints(f)
         except NameError:
             type_hints = {}
-        evalType = infer_eval_type(signature(f), type_hints)
+        evalType = infer_eval_type(signature(f), type_hints, kind)
         assert evalType is not None
 
     if evalType is None:
@@ -824,6 +813,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
             or evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
             or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
         )
         and len(argspec.args) == 0
         and argspec.varargs is None
@@ -832,7 +822,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             errorClass="INVALID_PANDAS_UDF",
             messageParameters={
                 "detail": f"0-arg {kind_str} are not supported. "
-                "Instead, create a 1-arg pandas_udf and ignore the arg in your function.",
+                f"Instead, create a 1-arg {kind_str} and ignore the arg in your function.",
             },
         )
 
@@ -892,8 +882,16 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.functions
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.column.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.pandas.functions.pandas_udf.__doc__
+
+    if not have_pyarrow:
+        del pyspark.sql.pandas.functions.arrow_udf.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.sql.pandas.functions tests")

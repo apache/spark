@@ -19,7 +19,7 @@ import unittest
 from typing import cast
 
 from pyspark.util import PythonEvalType
-from pyspark.sql import Row
+from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import (
     array,
     explode,
@@ -760,6 +760,65 @@ class GroupedAggPandasUDFTestsMixin:
 
                 row = df.groupby("id").agg(test(df.id)).first()
                 self.assertEqual(row[1], 123)
+
+    def test_0_args(self):
+        df = self.spark.range(10).withColumn("k", sf.col("id") % 3)
+
+        @pandas_udf("long", PandasUDFType.GROUPED_AGG)
+        def pandas_max(v) -> int:
+            return v.max()
+
+        @pandas_udf("long", PandasUDFType.GROUPED_AGG)
+        def pandas_lit_1() -> int:
+            return 1
+
+        expected1 = df.select(sf.max("id").alias("res1"), sf.lit(1).alias("res1"))
+        result1 = df.select(pandas_max("id").alias("res1"), pandas_lit_1().alias("res1"))
+        self.assertEqual(expected1.collect(), result1.collect())
+
+        expected2 = (
+            df.groupby("k")
+            .agg(
+                sf.max("id").alias("res1"),
+                sf.lit(1).alias("res1"),
+            )
+            .sort("k")
+        )
+        result2 = (
+            df.groupby("k")
+            .agg(
+                pandas_max("id").alias("res1"),
+                pandas_lit_1().alias("res1"),
+            )
+            .sort("k")
+        )
+        self.assertEqual(expected2.collect(), result2.collect())
+
+    def test_arrow_batch_slicing(self):
+        df = self.spark.range(10000000).select(
+            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+        )
+
+        @pandas_udf("long", PandasUDFType.GROUPED_AGG)
+        def pandas_max(v):
+            assert len(v) == 10000000 / 2, len(v)
+            return v.max()
+
+        expected = (df.groupby("key").agg(sf.max("v").alias("res")).sort("key")).collect()
+
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
+                    }
+                ):
+                    result = (
+                        df.groupBy("key").agg(pandas_max("v").alias("res")).sort("key")
+                    ).collect()
+
+                    self.assertEqual(expected, result)
 
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):

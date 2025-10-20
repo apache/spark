@@ -831,6 +831,20 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-53474: Check failure when datasourceV2ExprFolding = false") {
+    // when spark.sql.optimizer.datasourceV2ExprFolding = true
+    // expression will first convert to V2 expressions, then fold to constant
+    val expr = Abs(Literal(-5), failOnError = true)
+    checkV2Conversion(expr, LiteralValue(5, IntegerType))
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING.key -> "false") {
+      // when spark.sql.optimizer.datasourceV2ExprFolding = false
+      // expression will be converted to V2 expressions, but not folded
+      checkV2Conversion(expr,
+        new GeneralScalarExpression("ABS", Array(LiteralValue(-5, IntegerType))))
+    }
+  }
+
   /**
    * Translate the given Catalyst [[Expression]] into data source V2 [[Predicate]]
    * then verify against the given [[Predicate]].

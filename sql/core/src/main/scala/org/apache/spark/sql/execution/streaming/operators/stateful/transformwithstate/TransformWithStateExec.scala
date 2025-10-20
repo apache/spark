@@ -346,7 +346,7 @@ case class TransformWithStateExec(
           store.abort()
         }
       }
-      setStoreMetrics(store)
+      setStoreMetrics(store, isStreaming)
       setOperatorMetrics()
       closeStatefulProcessor()
       statefulProcessor.setHandle(null)

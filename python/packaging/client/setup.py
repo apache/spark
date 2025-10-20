@@ -202,7 +202,7 @@ try:
         url="https://github.com/apache/spark/tree/master/python",
         packages=connect_packages + test_packages,
         include_package_data=True,
-        license="http://www.apache.org/licenses/LICENSE-2.0",
+        license="Apache-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=[
@@ -217,7 +217,6 @@ try:
         python_requires=">=3.10",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
-            "License :: OSI Approved :: Apache Software License",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",

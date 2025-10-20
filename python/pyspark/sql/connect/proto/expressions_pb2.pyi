@@ -307,6 +307,28 @@ class Expression(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class DirectShufflePartitionID(google.protobuf.message.Message):
+        """Expression that takes a partition ID value and passes it through directly for use in
+        shuffle partitioning. This is used with RepartitionByExpression to allow users to
+        directly specify target partition IDs.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        CHILD_FIELD_NUMBER: builtins.int
+        @property
+        def child(self) -> global___Expression:
+            """(Required) The expression that evaluates to the partition ID."""
+        def __init__(
+            self,
+            *,
+            child: global___Expression | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["child", b"child"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["child", b"child"]) -> None: ...
+
     class Cast(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -475,13 +497,18 @@ class Expression(google.protobuf.message.Message):
             ELEMENT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
             @property
-            def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Deprecated) The element type of the array.
+
+                This field is deprecated since Spark 4.1+. Use data_type field instead.
+                """
             @property
             def elements(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
-            ]: ...
+            ]:
+                """The literal values that make up the array elements."""
             def __init__(
                 self,
                 *,
@@ -506,21 +533,32 @@ class Expression(google.protobuf.message.Message):
             KEYS_FIELD_NUMBER: builtins.int
             VALUES_FIELD_NUMBER: builtins.int
             @property
-            def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Deprecated) The key type of the map.
+
+                This field is deprecated since Spark 4.1+. Use data_type field instead.
+                """
             @property
-            def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Deprecated) The value type of the map.
+
+                This field is deprecated since Spark 4.1+ and should only be set
+                if the data_type field is not set. Use data_type field instead.
+                """
             @property
             def keys(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
-            ]: ...
+            ]:
+                """The literal keys that make up the map."""
             @property
             def values(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
-            ]: ...
+            ]:
+                """The literal values that make up the map."""
             def __init__(
                 self,
                 *,
@@ -554,14 +592,12 @@ class Expression(google.protobuf.message.Message):
 
             STRUCT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
-            DATA_TYPE_STRUCT_FIELD_NUMBER: builtins.int
             @property
             def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
                 """(Deprecated) The type of the struct.
 
                 This field is deprecated since Spark 4.1+ because using DataType as the type of a struct
-                is ambiguous. This field should only be set if the data_type_struct field is not set.
-                Use data_type_struct field instead.
+                is ambiguous. Use data_type field instead.
                 """
             @property
             def elements(
@@ -569,36 +605,20 @@ class Expression(google.protobuf.message.Message):
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
             ]:
-                """(Required) The literal values that make up the struct elements."""
-            @property
-            def data_type_struct(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Struct:
-                """The type of the struct.
-
-                Whether data_type_struct.fields.data_type should be set depends on
-                whether each field's type can be inferred from the elements field.
-                """
+                """The literal values that make up the struct elements."""
             def __init__(
                 self,
                 *,
                 struct_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
                 elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
-                data_type_struct: pyspark.sql.connect.proto.types_pb2.DataType.Struct | None = ...,
             ) -> None: ...
             def HasField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "data_type_struct", b"data_type_struct", "struct_type", b"struct_type"
-                ],
+                self, field_name: typing_extensions.Literal["struct_type", b"struct_type"]
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "data_type_struct",
-                    b"data_type_struct",
-                    "elements",
-                    b"elements",
-                    "struct_type",
-                    b"struct_type",
+                    "elements", b"elements", "struct_type", b"struct_type"
                 ],
             ) -> None: ...
 
@@ -730,6 +750,7 @@ class Expression(google.protobuf.message.Message):
         STRUCT_FIELD_NUMBER: builtins.int
         SPECIALIZED_ARRAY_FIELD_NUMBER: builtins.int
         TIME_FIELD_NUMBER: builtins.int
+        DATA_TYPE_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -763,6 +784,14 @@ class Expression(google.protobuf.message.Message):
         def specialized_array(self) -> global___Expression.Literal.SpecializedArray: ...
         @property
         def time(self) -> global___Expression.Literal.Time: ...
+        @property
+        def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+            """Data type information for the literal.
+            This field is required only in the root literal message for null values or
+            for data types (e.g., array, map, or struct) with non-trivial information.
+            If the data_type field is not set at the root level, the data type will be
+            inferred or retrieved from the deprecated data type fields using best efforts.
+            """
         def __init__(
             self,
             *,
@@ -788,6 +817,7 @@ class Expression(google.protobuf.message.Message):
             struct: global___Expression.Literal.Struct | None = ...,
             specialized_array: global___Expression.Literal.SpecializedArray | None = ...,
             time: global___Expression.Literal.Time | None = ...,
+            data_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -802,6 +832,8 @@ class Expression(google.protobuf.message.Message):
                 b"byte",
                 "calendar_interval",
                 b"calendar_interval",
+                "data_type",
+                b"data_type",
                 "date",
                 b"date",
                 "day_time_interval",
@@ -853,6 +885,8 @@ class Expression(google.protobuf.message.Message):
                 b"byte",
                 "calendar_interval",
                 b"calendar_interval",
+                "data_type",
+                b"data_type",
                 "date",
                 b"date",
                 "day_time_interval",
@@ -1353,6 +1387,7 @@ class Expression(google.protobuf.message.Message):
     MERGE_ACTION_FIELD_NUMBER: builtins.int
     TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: builtins.int
     SUBQUERY_EXPRESSION_FIELD_NUMBER: builtins.int
+    DIRECT_SHUFFLE_PARTITION_ID_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___ExpressionCommon: ...
@@ -1399,6 +1434,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def subquery_expression(self) -> global___SubqueryExpression: ...
     @property
+    def direct_shuffle_partition_id(self) -> global___Expression.DirectShufflePartitionID: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1428,6 +1465,7 @@ class Expression(google.protobuf.message.Message):
         merge_action: global___MergeAction | None = ...,
         typed_aggregate_expression: global___TypedAggregateExpression | None = ...,
         subquery_expression: global___SubqueryExpression | None = ...,
+        direct_shuffle_partition_id: global___Expression.DirectShufflePartitionID | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1443,6 +1481,8 @@ class Expression(google.protobuf.message.Message):
             b"common",
             "common_inline_user_defined_function",
             b"common_inline_user_defined_function",
+            "direct_shuffle_partition_id",
+            b"direct_shuffle_partition_id",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -1494,6 +1534,8 @@ class Expression(google.protobuf.message.Message):
             b"common",
             "common_inline_user_defined_function",
             b"common_inline_user_defined_function",
+            "direct_shuffle_partition_id",
+            b"direct_shuffle_partition_id",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -1556,6 +1598,7 @@ class Expression(google.protobuf.message.Message):
             "merge_action",
             "typed_aggregate_expression",
             "subquery_expression",
+            "direct_shuffle_partition_id",
             "extension",
         ]
         | None

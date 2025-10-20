@@ -856,6 +856,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
               "CAST(CURRENT_TIMESTAMP AS BIGINT)")
             .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
               "CAST(CURRENT_TIMESTAMP AS BIGINT)")
+            .build()),
+        StructField("c3", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "CONCAT(YEAR(CURRENT_DATE), LPAD(WEEKOFYEAR(CURRENT_DATE), 2, '0'))")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "CONCAT(YEAR(CURRENT_DATE), LPAD(WEEKOFYEAR(CURRENT_DATE), 2, '0'))")
             .build())))
     val res = ResolveDefaultColumns.existenceDefaultValues(source)
     assert(res(0) == null)
@@ -864,5 +871,9 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val res2Wrapper = new LongWrapper
     assert(res(2).asInstanceOf[UTF8String].toLong(res2Wrapper))
     assert(res2Wrapper.value > 0)
+
+    val res3Wrapper = new LongWrapper
+    assert(res(3).asInstanceOf[UTF8String].toLong(res3Wrapper))
+    assert(res3Wrapper.value > 0)
   }
 }

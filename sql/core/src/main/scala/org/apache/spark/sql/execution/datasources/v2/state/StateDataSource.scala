@@ -370,7 +370,9 @@ case class StateSourceOptions(
     readChangeFeedOptions: Option[ReadChangeFeedOptions],
     stateVarName: Option[String],
     readRegisteredTimers: Boolean,
-    flattenCollectionTypes: Boolean) {
+    flattenCollectionTypes: Boolean,
+    startOperatorStateUniqueIds: Option[Array[Array[String]]] = None,
+    endOperatorStateUniqueIds: Option[Array[Array[String]]] = None) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
@@ -567,10 +569,52 @@ object StateSourceOptions extends DataSourceOptions {
       }
     }
 
+    val startBatchId = if (fromSnapshotOptions.isDefined) {
+      fromSnapshotOptions.get.snapshotStartBatchId
+    } else if (readChangeFeedOptions.isDefined) {
+      readChangeFeedOptions.get.changeStartBatchId
+    } else {
+      batchId.get
+    }
+
+    val endBatchId = if (readChangeFeedOptions.isDefined) {
+      readChangeFeedOptions.get.changeEndBatchId
+    } else {
+      batchId.get
+    }
+
+    val startOperatorStateUniqueIds = getOperatorStateUniqueIds(
+      sparkSession,
+      startBatchId,
+      operatorId,
+      resolvedCpLocation)
+
+    val endOperatorStateUniqueIds = if (startBatchId == endBatchId) {
+      startOperatorStateUniqueIds
+    } else {
+      getOperatorStateUniqueIds(
+        sparkSession,
+        endBatchId,
+        operatorId,
+        resolvedCpLocation)
+    }
+
+    if (startOperatorStateUniqueIds.isDefined != endOperatorStateUniqueIds.isDefined) {
+      val startFormatVersion = if (startOperatorStateUniqueIds.isDefined) 2 else 1
+      val endFormatVersion = if (endOperatorStateUniqueIds.isDefined) 2 else 1
+      throw StateDataSourceErrors.mixedCheckpointFormatVersionsNotSupported(
+        startBatchId,
+        endBatchId,
+        startFormatVersion,
+        endFormatVersion
+      )
+    }
+
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
-      stateVarName, readRegisteredTimers, flattenCollectionTypes)
+      stateVarName, readRegisteredTimers, flattenCollectionTypes,
+      startOperatorStateUniqueIds, endOperatorStateUniqueIds)
   }
 
   private def resolvedCheckpointLocation(
@@ -587,6 +631,20 @@ object StateSourceOptions extends DataSourceOptions {
       case Some((lastId, _)) => lastId
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
     }
+  }
+
+  private def getOperatorStateUniqueIds(
+    session: SparkSession,
+    batchId: Long,
+    operatorId: Long,
+    checkpointLocation: String): Option[Array[Array[String]]] = {
+    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
+    val commitMetadata = commitLog.get(batchId) match {
+      case Some(commitMetadata) => commitMetadata
+      case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
+    }
+
+    commitMetadata.stateUniqueIds.flatMap(_.get(operatorId))
   }
 
   // Modifies options due to external data. Returns modified options.

@@ -48,6 +48,13 @@ private[spark] class Heartbeater(
     heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
 
+  /**
+   * Reports a heartbeat.
+   */
+  def doReportHeartbeat(): Unit = {
+    reportHeartbeat()
+  }
+
   /** Stops the heartbeat thread. */
   def stop(): Unit = {
     heartbeater.shutdown()

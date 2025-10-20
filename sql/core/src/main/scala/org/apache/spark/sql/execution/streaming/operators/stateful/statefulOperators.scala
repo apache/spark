@@ -324,8 +324,11 @@ trait StateStoreWriter
       .map(_._2)
       .toArray
     assert(
-      ret.length == getStateInfo.numPartitions,
-      s"ChekpointInfo length: ${ret.length}, numPartitions: ${getStateInfo.numPartitions}")
+      // Normally, we should have checkpoint info for all partitions.
+      // However, for globalLimit operator, there is only one partition (0) that has state.
+      ret.length == getStateInfo.numPartitions
+        || (outputPartitioning.numPartitions == 1 && ret.length == 1),
+      s"CheckpointInfo length: ${ret.length}, numPartitions: ${getStateInfo.numPartitions}")
     ret
   }
 
@@ -427,14 +430,14 @@ trait StateStoreWriter
    * Set the SQL metrics related to the state store.
    * This should be called in that task after the store has been updated.
    */
-  protected def setStoreMetrics(store: StateStore): Unit = {
+  protected def setStoreMetrics(store: StateStore, setCheckpointInfo: Boolean = true): Unit = {
     val storeMetrics = store.metrics
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
     setStoreCustomMetrics(storeMetrics.customMetrics)
     setStoreInstanceMetrics(storeMetrics.instanceMetrics)
 
-    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
+    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf) && setCheckpointInfo) {
       // Set the state store checkpoint information for the driver to collect
       val ssInfo = store.getStateStoreCheckpointInfo()
       setStateStoreCheckpointInfo(

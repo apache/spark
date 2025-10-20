@@ -90,6 +90,24 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   /** Gets a Metadata array. */
   def getMetadataArray(key: String): Array[Metadata] = get(key)
 
+  /** Return a copy with the keys removed */
+  def withKeysRemoved(keysToRemove: Seq[String]): Metadata = {
+    if (keysToRemove.isEmpty) {
+      this
+    } else {
+      new Metadata(this.map -- keysToRemove)
+    }
+  }
+
+  /** Return a copy with a key removed */
+  def withKeyRemoved(keyToRemove: String): Metadata = {
+    if (map.contains(keyToRemove)) {
+      new Metadata(map - keyToRemove)
+    } else {
+      this
+    }
+  }
+
   /** Converts to its JSON representation. */
   def json: String = compact(render(jsonValue))
 

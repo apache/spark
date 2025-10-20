@@ -32,7 +32,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  ARRAYS_ZIP,
+  CONCAT,
+  MAP_FROM_ENTRIES,
+  TreePattern
+}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -895,6 +900,8 @@ case class MapFromEntries(child: Expression)
 
   override protected def withNewChildInternal(newChild: Expression): MapFromEntries =
     copy(child = newChild)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MAP_FROM_ENTRIES)
 }
 
 case class MapSort(base: Expression)
@@ -2561,20 +2568,26 @@ case class ArrayPosition(left: Expression, right: Expression)
   """,
   since = "3.4.0",
   group = "array_funcs")
-case class Get(
-    left: Expression,
-    right: Expression,
-    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
+case class Get(left: Expression, right: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
-  def this(left: Expression, right: Expression) =
-    this(left, right, GetArrayItem(left, right, failOnError = false))
+  override def inputTypes: Seq[AbstractDataType] = left.dataType match {
+    case _: ArrayType => Seq(ArrayType, IntegerType)
+    // Do not apply implicit cast if the first arguement is not array type.
+    case _ => Nil
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    ExpectsInputTypes.checkInputDataTypes(Seq(left, right), Seq(ArrayType, IntegerType))
+  }
+
+  override lazy val replacement: Expression = GetArrayItem(left, right, failOnError = false)
 
   override def prettyName: String = "get"
 
-  override def parameters: Seq[Expression] = Seq(left, right)
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    this.copy(replacement = newChild)
+  override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
 }
 
 /**
