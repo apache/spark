@@ -1534,6 +1534,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING =
+    buildConf("spark.sql.legacy.parquet.returnNullStructIfAllFieldsMissing")
+      .internal()
+      .doc("When true, if all requested fields of a struct are missing in a parquet file, assume " +
+        "the struct is always null, even if other fields are present. The default behavior is " +
+        "to fetch and read an arbitrary non-requested field present in the file to determine " +
+        "struct nullness. If enabled, schema pruning may cause non-null structs to be read as " +
+        "null.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
       "filters. " +

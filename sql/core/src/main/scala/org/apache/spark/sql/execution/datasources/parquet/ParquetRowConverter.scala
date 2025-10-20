@@ -249,18 +249,24 @@ private[parquet] class ParquetRowConverter(
       }
     }
     parquetType.getFields.asScala.map { parquetField =>
-      val catalystFieldIndex = Option(parquetField.getId).flatMap { fieldId =>
+      Option(parquetField.getId).flatMap { fieldId =>
         // field has id, try to match by id first before falling back to match by name
         catalystFieldIdxByFieldId.get(fieldId.intValue())
-      }.getOrElse {
+      }.orElse {
         // field doesn't have id, just match by name
-        catalystFieldIdxByName(parquetField.getName)
+        catalystFieldIdxByName.get(parquetField.getName)
+      }.map { catalystFieldIndex =>
+        val catalystField = catalystType(catalystFieldIndex)
+        // Create a RowUpdater instance for converting Parquet objects to Catalyst rows.
+        val rowUpdater: RowUpdater = new RowUpdater(currentRow, catalystFieldIndex)
+        // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
+        newConverter(parquetField, catalystField.dataType, rowUpdater)
+      }.getOrElse {
+        // This should only happen if we are reading an arbitrary field from a struct for its levels
+        // that is not otherwise requested.
+        val catalystType = SparkShreddingUtils.parquetTypeToSparkType(parquetField)
+        newConverter(parquetField, catalystType, NoopUpdater)
       }
-      val catalystField = catalystType(catalystFieldIndex)
-      // Create a RowUpdater instance for converting Parquet objects to Catalyst rows.
-      val rowUpdater: RowUpdater = new RowUpdater(currentRow, catalystFieldIndex)
-      // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
-      newConverter(parquetField, catalystField.dataType, rowUpdater)
     }.toArray
   }
 
