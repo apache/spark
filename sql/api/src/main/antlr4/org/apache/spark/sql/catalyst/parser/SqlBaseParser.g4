@@ -602,9 +602,9 @@ propertyList
     ;
 
 property
-    : key=propertyKey (EQ? value=propertyValue)?                      #propertyWithIdentifierKey
-    | key=stringLit EQ value=propertyValue                            #propertyWithStringKeyAndEquals
+    : key=propertyKeyOrStringLit EQ value=propertyValue               #propertyWithKeyAndEquals
     | key=propertyKeyNoCoalesce value=propertyValue?                  #propertyWithStringKeyNoEquals
+    | key=propertyKey (EQ? value=propertyValue)?                      #propertyWithIdentifierKey
     ;
 
 propertyKey
@@ -617,8 +617,7 @@ propertyKeyOrStringLit
     ;
 
 propertyKeyNoCoalesce
-    : STRING_LITERAL
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
+    : singleStringLitWithoutMarker
     | parameterMarker
     ;
 
@@ -634,9 +633,9 @@ expressionPropertyList
     ;
 
 expressionProperty
-    : key=propertyKey (EQ? value=expression)?                         #expressionPropertyWithIdentifierKey
-    | key=stringLit EQ value=expression                               #expressionPropertyWithStringKeyAndEquals
+    : key=propertyKeyOrStringLit EQ value=expression                  #expressionPropertyWithKeyAndEquals
     | key=propertyKeyNoCoalesce value=expression                      #expressionPropertyWithStringKeyNoEquals
+    | key=propertyKey (EQ? value=expression)?                         #expressionPropertyWithIdentifierKey
     ;
 
 constantList
@@ -1280,7 +1279,7 @@ constant
     | QUESTION                                                                                 #posParameterLiteral
     | namedParameterMarker                                                                     #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
-    | literalType singleStringLit                                                               #typeConstructor
+    | literalType singleStringLitWithoutMarker                                                     #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit                                                                                #stringLiteral
@@ -1699,12 +1698,12 @@ alterColumnAction
 // Matches one or more string literals (single or double-quoted) without parameter markers.
 // Multiple consecutive literals are coalesced into a single string.
 stringLitWithoutMarker
-    : (STRING_LITERAL | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING)+
+    : singleStringLitWithoutMarker+
     ;
 
 // Matches exactly one string literal without coalescing or parameter markers.
 // Used in type constructors where coalescing is not allowed.
-singleStringLit
+singleStringLitWithoutMarker
     : STRING_LITERAL                                                                           #singleStringLiteralValue
     | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #singleDoubleQuotedStringLiteralValue
     ;
@@ -1715,7 +1714,7 @@ parameterMarker
     ;
 
 stringLit
-    : (stringLitWithoutMarker | parameterMarker)+
+    : (singleStringLitWithoutMarker | parameterMarker)+
     ;
 
 comment

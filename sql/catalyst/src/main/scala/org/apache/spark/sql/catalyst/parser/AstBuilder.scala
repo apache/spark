@@ -3412,7 +3412,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     // Type constructor uses a single string literal (no coalescing, no parameter markers)
-    val value = string(visit(ctx.singleStringLit).asInstanceOf[Token])
+    val value = string(visit(ctx.singleStringLitWithoutMarker).asInstanceOf[Token])
     val valueType = ctx.literalType.start.getType
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
@@ -4233,9 +4233,9 @@ class AstBuilder extends DataTypeAstBuilder
           val key = visitPropertyKey(p.key)
           val value = visitPropertyValue(p.value)
           key -> value
-        case p: PropertyWithStringKeyAndEqualsContext =>
-          // Key allows coalescing and parameter markers via stringLit.
-          val key = string(visitStringLit(p.key))
+        case p: PropertyWithKeyAndEqualsContext =>
+          // Key can be identifier or coalesced string literal (via propertyKeyOrStringLit).
+          val key = visitPropertyKeyOrStringLit(p.key)
           val value = visitPropertyValue(p.value)
           key -> value
         case p: PropertyWithStringKeyNoEqualsContext =>
@@ -4304,10 +4304,9 @@ class AstBuilder extends DataTypeAstBuilder
    * Can be a stringLitWithoutMarker or a parameterMarker.
    */
   override def visitPropertyKeyNoCoalesce(key: PropertyKeyNoCoalesceContext): String = {
-    if (key.STRING_LITERAL() != null) {
-      string(key.STRING_LITERAL().getSymbol)
-    } else if (key.DOUBLEQUOTED_STRING() != null) {
-      string(key.DOUBLEQUOTED_STRING().getSymbol)
+    if (key.singleStringLitWithoutMarker() != null) {
+      // Single string literal (no coalescing)
+      string(visit(key.singleStringLitWithoutMarker()).asInstanceOf[Token])
     } else {
       // parameterMarker - will be substituted before this code runs
       string(visit(key.parameterMarker()).asInstanceOf[Token])
@@ -4344,8 +4343,8 @@ class AstBuilder extends DataTypeAstBuilder
             operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
           }
           (k, v)
-        case p: ExpressionPropertyWithStringKeyAndEqualsContext =>
-          val k = string(visitStringLit(p.key))
+        case p: ExpressionPropertyWithKeyAndEqualsContext =>
+          val k = visitPropertyKeyOrStringLit(p.key)
           val v = Option(p.value).map(expression).getOrElse {
             operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
           }

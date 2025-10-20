@@ -47,7 +47,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
-   * Visits a stringLit context that may contain multiple stringLitWithoutMarker or
+   * Visits a stringLit context that may contain multiple singleStringLitWithoutMarker or
    * parameterMarker children. When multiple children are present, they are coalesced into a
    * single token.
    */
@@ -56,19 +56,19 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       return null
     }
 
-    // Collect all children (could be mix of stringLitWithoutMarker and parameterMarker)
-    val tokens = scala.collection.mutable.ListBuffer[Token]()
-    // Visit each child and collect resulting tokens
-    val childCount = ctx.getChildCount
-    var i = 0
-    while (i < childCount) {
-      val child = ctx.getChild(i)
-      val token = visit(child).asInstanceOf[Token]
-      if (token != null) {
-        tokens += token
-      }
-      i += 1
-    }
+    import scala.jdk.CollectionConverters._
+
+    // Collect tokens from singleStringLitWithoutMarker and parameterMarker children
+    val singleLits = Option(ctx.singleStringLitWithoutMarker())
+      .map(_.asScala.map(visit(_).asInstanceOf[Token]).toSeq)
+      .getOrElse(Seq.empty)
+
+    val paramMarkers = Option(ctx.parameterMarker())
+      .map(_.asScala.map(visit(_).asInstanceOf[Token]).toSeq)
+      .getOrElse(Seq.empty)
+
+    // Combine and sort by position in source
+    val tokens = (singleLits ++ paramMarkers).sortBy(_.getStartIndex)
 
     if (tokens.isEmpty) {
       null
@@ -77,7 +77,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       tokens.head
     } else {
       // Multiple tokens: create coalesced token
-      createCoalescedStringToken(tokens.toSeq)
+      createCoalescedStringToken(tokens)
     }
   }
 
@@ -105,8 +105,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
-   * Visits singleStringLit alternatives and returns the token. Always returns exactly one token
-   * without coalescing.
+   * Visits singleStringLitWithoutMarker alternatives and returns the token. Always returns
+   * exactly one token without coalescing.
    */
   override def visitSingleStringLiteralValue(ctx: SingleStringLiteralValueContext): Token = {
     ctx.STRING_LITERAL().getSymbol
@@ -129,27 +129,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     Option(ctx).map(_.INTEGER_VALUE.getSymbol).orNull
 
   /**
-   * Helper method to convert ANTLR's terminal node accessor to a Scala sequence. ANTLR generates
-   * a List when the + quantifier is used in the grammar.
-   *
-   * @param accessor
-   *   The terminal node accessor that may return a List or null.
-   * @return
-   *   A sequence of terminal nodes, or empty sequence if null.
-   */
-  private def getTerminals(accessor: Any): Seq[org.antlr.v4.runtime.tree.TerminalNode] = {
-    if (accessor != null) {
-      accessor
-        .asInstanceOf[java.util.List[_]]
-        .asScala
-        .map(_.asInstanceOf[org.antlr.v4.runtime.tree.TerminalNode])
-        .toSeq
-    } else {
-      Seq.empty
-    }
-  }
-
-  /**
    * Collects all string literal terminals from a stringLitWithoutMarker context. The grammar rule
    * allows one or more consecutive string literals, which are collected in source order for
    * coalescing.
@@ -161,9 +140,20 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   private def collectStringTerminals(
       ctx: StringLitWithoutMarkerContext): Seq[org.antlr.v4.runtime.tree.TerminalNode] = {
-    // Combine and sort by position in source.
-    (getTerminals(ctx.STRING_LITERAL) ++ getTerminals(ctx.DOUBLEQUOTED_STRING))
-      .sortBy(_.getSymbol.getStartIndex)
+    // With the grammar change to singleStringLitWithoutMarker+, we visit each child context.
+    // Each singleStringLitWithoutMarker has labeled alternatives that we need to handle.
+    import scala.jdk.CollectionConverters._
+    ctx
+      .singleStringLitWithoutMarker()
+      .asScala
+      .map { child =>
+        // Visit the child to get its token (handled by visitSingleStringLiteralValue or
+        // visitSingleDoubleQuotedStringLiteralValue)
+        val token = visit(child).asInstanceOf[Token]
+        // Get the terminal node from the parse tree
+        child.getChild(0).asInstanceOf[org.antlr.v4.runtime.tree.TerminalNode]
+      }
+      .toSeq
   }
 
   /**
