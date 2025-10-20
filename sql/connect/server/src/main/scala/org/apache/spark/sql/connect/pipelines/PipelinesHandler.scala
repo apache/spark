@@ -220,9 +220,8 @@ private[connect] object PipelinesHandler extends Logging {
         qualifiedIdentifier
       case proto.OutputType.TEMPORARY_VIEW =>
         val viewIdentifier = GraphIdentifierManager
-          .parseAndValidateTemporaryViewIdentifier(
-            rawViewIdentifier = GraphIdentifierManager
-              .parseTableIdentifier(output.getOutputName, sessionHolder.session))
+          .parseAndValidateTemporaryViewIdentifier(rawViewIdentifier = GraphIdentifierManager
+            .parseTableIdentifier(output.getOutputName, sessionHolder.session))
         graphElementRegistry.registerView(
           TemporaryView(
             identifier = viewIdentifier,
@@ -232,9 +231,9 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getFileName),
               line = Option.when(output.getSourceCodeLocation.hasLineNumber)(
                 output.getSourceCodeLocation.getLineNumber),
-              objectType = Option(QueryOriginType.View.toString),
+              objectType = Some(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
-              language = Option(Python())),
+              language = Some(Python())),
             properties = Map.empty,
             sqlText = None))
         viewIdentifier
@@ -326,7 +325,7 @@ private[connect] object PipelinesHandler extends Logging {
             flow.getSourceCodeLocation.getFileName),
           line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
             flow.getSourceCodeLocation.getLineNumber),
-          objectType = Option(QueryOriginType.Flow.toString),
+          objectType = Some(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
           language = Some(Python()))))
     flowIdentifier
