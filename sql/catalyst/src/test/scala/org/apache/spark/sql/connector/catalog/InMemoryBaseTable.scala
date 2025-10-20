@@ -655,8 +655,6 @@ abstract class InMemoryBaseTable(
 
   protected abstract class TestBatchWrite extends BatchWrite {
 
-    var commitProperties: mutable.Map[String, String] = mutable.Map.empty[String, String]
-
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       new BufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
@@ -668,8 +666,7 @@ abstract class InMemoryBaseTable(
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       withData(messages.map(_.asInstanceOf[BufferedRows]))
-      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
-      commitProperties.clear()
+      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
@@ -678,8 +675,7 @@ abstract class InMemoryBaseTable(
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       dataMap --= newData.flatMap(_.rows.map(getKey))
       withData(newData)
-      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
-      commitProperties.clear()
+      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
@@ -687,8 +683,7 @@ abstract class InMemoryBaseTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
-      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
-      commitProperties.clear()
+      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
@@ -1045,7 +1040,7 @@ class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
   override def value(): Long = value
 }
 
-case class Commit(id: Long, properties: Map[String, String])
+case class Commit(id: Long, metrics: Option[WriterMetrics] = None)
 
 sealed trait Operation
 case object Write extends Operation
