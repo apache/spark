@@ -323,7 +323,6 @@ def run(
         default_database=spec.database,
         sql_conf=spec.configuration,
     )
-    log_with_curr_timestamp(f"Dataflow graph created (ID: {dataflow_graph_id}).")
 
     log_with_curr_timestamp("Registering graph elements...")
     registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
