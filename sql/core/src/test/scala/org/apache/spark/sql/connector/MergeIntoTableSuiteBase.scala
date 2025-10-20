@@ -2170,7 +2170,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           |{ "pk": 3, "salary": 300, "dep": "hr" }
           |""".stripMargin)
 
-      // Empty source
+      // source is empty
       Seq.empty[Int].toDF("pk").createOrReplaceTempView("source")
 
       sql(s"""MERGE INTO $tableNameAsString t
