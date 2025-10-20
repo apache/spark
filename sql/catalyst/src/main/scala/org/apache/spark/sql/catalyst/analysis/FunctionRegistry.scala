@@ -530,7 +530,11 @@ object FunctionRegistry {
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
     expression[ApproxTopK]("approx_top_k"),
+    expression[ThetaSketchAgg]("theta_sketch_agg"),
+    expression[ThetaUnionAgg]("theta_union_agg"),
+    expression[ThetaIntersectionAgg]("theta_intersection_agg"),
     expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
+    expression[ApproxTopKCombine]("approx_top_k_combine"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -791,6 +795,10 @@ object FunctionRegistry {
     expression[EqualNull]("equal_null"),
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
+    expression[ThetaSketchEstimate]("theta_sketch_estimate"),
+    expression[ThetaUnion]("theta_union"),
+    expression[ThetaDifference]("theta_difference"),
+    expression[ThetaIntersection]("theta_intersection"),
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
 
     // grouping sets
@@ -846,6 +854,7 @@ object FunctionRegistry {
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
     expression[BitmapCount]("bitmap_count"),
     expression[BitmapOrAgg]("bitmap_or_agg"),
+    expression[BitmapAndAgg]("bitmap_and_agg"),
 
     // json
     expression[StructsToJson]("to_json"),

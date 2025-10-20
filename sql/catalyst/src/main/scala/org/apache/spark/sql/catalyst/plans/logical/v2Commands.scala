@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowL
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -263,7 +263,7 @@ case class ReplaceData(
 
   lazy val operation: RowLevelOperation = {
     EliminateSubqueryAliases(table) match {
-      case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
+      case ExtractV2Table(RowLevelOperationTable(_, operation)) =>
         operation
       case _ =>
         throw new AnalysisException(
@@ -345,7 +345,7 @@ case class WriteDelta(
 
   lazy val operation: SupportsDelta = {
     EliminateSubqueryAliases(table) match {
-      case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
+      case ExtractV2Table(RowLevelOperationTable(_, operation)) =>
         operation.asInstanceOf[SupportsDelta]
       case _ =>
         throw new AnalysisException(
@@ -834,7 +834,7 @@ case class UpdateTable(
 
   lazy val rewritable: Boolean = {
     EliminateSubqueryAliases(table) match {
-      case DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _) => true
+      case ExtractV2Table(_: SupportsRowLevelOperations) => true
       case _ => false
     }
   }
@@ -878,7 +878,7 @@ case class MergeIntoTable(
 
   lazy val rewritable: Boolean = {
     EliminateSubqueryAliases(targetTable) match {
-      case DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _) => true
+      case ExtractV2Table(_: SupportsRowLevelOperations) => true
       case _ => false
     }
   }
@@ -915,13 +915,14 @@ object MergeIntoTable {
       matchedActions: Iterable[MergeAction],
       notMatchedActions: Iterable[MergeAction],
       notMatchedBySourceActions: Iterable[MergeAction]): Seq[TableWritePrivilege] = {
-    val privileges = scala.collection.mutable.HashSet.empty[TableWritePrivilege]
-    (matchedActions.iterator ++ notMatchedActions ++ notMatchedBySourceActions).foreach {
-      case _: DeleteAction => privileges.add(TableWritePrivilege.DELETE)
-      case _: UpdateAction | _: UpdateStarAction => privileges.add(TableWritePrivilege.UPDATE)
-      case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
-    }
-    privileges.toSeq
+    (matchedActions ++ notMatchedActions ++ notMatchedBySourceActions)
+      .collect {
+        case _: DeleteAction => TableWritePrivilege.DELETE
+        case _: UpdateAction | _: UpdateStarAction => TableWritePrivilege.UPDATE
+        case _: InsertAction | _: InsertStarAction => TableWritePrivilege.INSERT
+      }
+      .toSet
+      .toSeq
   }
 
   def schemaChanges(
@@ -1837,12 +1838,19 @@ case class Call(
   }
 
   override def simpleString(maxFields: Int): String = {
-    val name = procedure match {
+    procedure match {
       case ResolvedProcedure(catalog, ident, _) =>
-        s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
+        val name = s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
+        simpleString(name, maxFields)
       case UnresolvedProcedure(nameParts) =>
-        nameParts.quoted
+        val name = nameParts.quoted
+        simpleString(name, maxFields)
+      case _ =>
+        super.simpleString(maxFields)
     }
+  }
+
+  private def simpleString(name: String, maxFields: Int): String = {
     val argsString = truncatedString(args, ", ", maxFields)
     s"Call $name($argsString)"
   }

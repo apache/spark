@@ -20,19 +20,7 @@ package org.apache.spark.sql.pipelines.utils
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{LocalTempView, PersistedView => PersistedViewType, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.pipelines.graph.{
-  DataflowGraph,
-  FlowAnalysis,
-  FlowFunction,
-  GraphIdentifierManager,
-  GraphRegistrationContext,
-  PersistedView,
-  QueryContext,
-  QueryOrigin,
-  Table,
-  TemporaryView,
-  UnresolvedFlow
-}
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, FlowAnalysis, FlowFunction, GraphIdentifierManager, GraphRegistrationContext, PersistedView, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, Table, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -78,6 +66,26 @@ class TestGraphRegistrationContext(
     isStreamingTable = true
   )
   // scalastyle:on
+
+  def registerTemporaryView(
+       name: String,
+       query: FlowFunction,
+       sqlConf: Map[String, String] = Map.empty,
+       comment: Option[String] = None,
+       origin: QueryOrigin = QueryOrigin.empty,
+       catalog: Option[String] = None,
+       database: Option[String] = None): Unit = {
+    registerView(
+      name = name,
+      query = query,
+      sqlConf = sqlConf,
+      comment = comment,
+      origin = origin,
+      viewType = LocalTempView,
+      catalog = catalog,
+      database = database
+    )
+  }
 
   // scalastyle:off
   // Disable scalastyle to ignore argument count.
@@ -129,15 +137,26 @@ class TestGraphRegistrationContext(
       isStreamingTable: Boolean
   ): Unit = {
     // scalastyle:on
-    val tableIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
+    val qualifiedIdentifier = GraphIdentifierManager
+          .parseAndQualifyTableIdentifier(
+            rawTableIdentifier = GraphIdentifierManager
+              .parseTableIdentifier(name, spark),
+            currentCatalog = catalog.orElse(Some(defaultCatalog)),
+            currentDatabase = database.orElse(Some(defaultDatabase)))
+          .identifier
     registerTable(
       Table(
-        identifier = GraphIdentifierManager.parseTableIdentifier(name, spark),
+        identifier = qualifiedIdentifier,
         comment = comment,
         specifiedSchema = specifiedSchema,
         partitionCols = partitionCols,
         properties = properties,
-        baseOrigin = baseOrigin,
+        origin = baseOrigin.merge(
+          QueryOrigin(
+            objectName = Option(qualifiedIdentifier.unquotedString),
+            objectType = Option(QueryOriginType.Table.toString)
+          )
+        ),
         format = format.orElse(Some("parquet")),
         normalizedPath = None,
         isStreamingTable = isStreamingTable
@@ -147,8 +166,8 @@ class TestGraphRegistrationContext(
     if (query.isDefined) {
       registerFlow(
         new UnresolvedFlow(
-          identifier = tableIdentifier,
-          destinationIdentifier = tableIdentifier,
+          identifier = qualifiedIdentifier,
+          destinationIdentifier = qualifiedIdentifier,
           func = query.get,
           queryContext = QueryContext(
             currentCatalog = catalog.orElse(Some(defaultCatalog)),
@@ -193,8 +212,27 @@ class TestGraphRegistrationContext(
       sqlText: Option[String] = None
   ): Unit = {
 
-    val viewIdentifier = GraphIdentifierManager
+    val tempViewIdentifier = GraphIdentifierManager
       .parseAndValidateTemporaryViewIdentifier(rawViewIdentifier = TableIdentifier(name))
+
+    val persistedViewIdentifier = GraphIdentifierManager
+      .parseAndValidatePersistedViewIdentifier(
+        rawViewIdentifier = TableIdentifier(name),
+        currentCatalog = catalog.orElse(Some(defaultCatalog)),
+        currentDatabase = database.orElse(Some(defaultDatabase))
+      )
+
+    val viewIdentifier: TableIdentifier = viewType match {
+      case LocalTempView => tempViewIdentifier
+      case _ => persistedViewIdentifier
+    }
+
+    val viewOrigin: QueryOrigin = origin.merge(
+      QueryOrigin(
+        objectName = Option(viewIdentifier.unquotedString),
+        objectType = Option(QueryOriginType.View.toString)
+      )
+    )
 
     registerView(
       viewType match {
@@ -202,7 +240,7 @@ class TestGraphRegistrationContext(
           TemporaryView(
             identifier = viewIdentifier,
             comment = comment,
-            origin = origin,
+            origin = viewOrigin,
             properties = Map.empty,
             sqlText = sqlText
           )
@@ -210,7 +248,7 @@ class TestGraphRegistrationContext(
           PersistedView(
             identifier = viewIdentifier,
             comment = comment,
-            origin = origin,
+            origin = viewOrigin,
             properties = Map.empty,
             sqlText = sqlText
           )
@@ -233,6 +271,25 @@ class TestGraphRegistrationContext(
     )
   }
 
+  def registerSink(
+    name: String,
+    format: String,
+    options: Map[String, String] = Map.empty,
+    origin: QueryOrigin = QueryOrigin.empty
+  ): Unit = {
+    val sinkIdentifier = GraphIdentifierManager
+      .parseAndValidateSinkIdentifier(rawSinkIdentifier = TableIdentifier(name))
+
+    registerSink(
+      SinkImpl(
+        identifier = sinkIdentifier,
+        format = format,
+        origin = origin,
+        options = options
+      )
+    )
+  }
+
   def registerFlow(
       destinationName: String,
       name: String,
@@ -241,9 +298,34 @@ class TestGraphRegistrationContext(
       catalog: Option[String] = None,
       database: Option[String] = None
   ): Unit = {
-    val flowIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
-    val flowDestinationIdentifier =
+    val rawFlowIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
+    val rawDestinationIdentifier =
       GraphIdentifierManager.parseTableIdentifier(destinationName, spark)
+
+    val flowWritesToView = getViews()
+        .filter(_.isInstanceOf[TemporaryView])
+        .exists(_.identifier == rawDestinationIdentifier)
+    val flowWritesToSink = getSinks
+        .filter(_.isInstanceOf[Sink])
+        .exists(_.identifier == rawDestinationIdentifier)
+    // If the flow is created implicitly as part of defining a view or that it writes to a sink,
+    // then we do not qualify the flow identifier and the flow destination. This is because
+    // views and sinks are not permitted to have multipart
+    val isImplicitFlow = rawFlowIdentifier == rawDestinationIdentifier
+    val isImplicitFlowForTempView = isImplicitFlow && flowWritesToView
+    val Seq(flowIdentifier, flowDestinationIdentifier) =
+      Seq(rawFlowIdentifier, rawDestinationIdentifier).map { rawIdentifier =>
+        if (isImplicitFlowForTempView || flowWritesToSink) {
+          rawIdentifier
+        } else {
+          GraphIdentifierManager
+            .parseAndQualifyFlowIdentifier(
+              rawFlowIdentifier = rawIdentifier,
+              currentCatalog = catalog.orElse(Some(defaultCatalog)),
+              currentDatabase = database.orElse(Some(defaultDatabase)))
+            .identifier
+        }
+      }
 
     registerFlow(
       new UnresolvedFlow(
@@ -256,7 +338,10 @@ class TestGraphRegistrationContext(
         ),
         sqlConf = Map.empty,
         once = once,
-        origin = QueryOrigin()
+        origin = QueryOrigin(
+          objectName = Option(flowIdentifier.unquotedString),
+          objectType = Option(QueryOriginType.Flow.toString)
+        )
       )
     )
   }

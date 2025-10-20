@@ -135,6 +135,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         cdf2 = loads(data)
         self.assertEqual(cdf.collect(), cdf2.collect())
 
+    def test_window_spec_serialization(self):
+        from pyspark.sql.connect.window import Window
+        from pyspark.serializers import CPickleSerializer
+
+        pickle_ser = CPickleSerializer()
+        w = Window.partitionBy("some_string").orderBy("value")
+        b = pickle_ser.dumps(w)
+        w2 = pickle_ser.loads(b)
+        self.assertEqual(str(w), str(w2))
+
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
         sdf = self.spark.range(10)
@@ -1116,6 +1126,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(SparkConnectException) as exc:
             self.connect.range(1, 10).select(CF.col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
+
+    def test_alias_metadata(self):
+        df = self.connect.createDataFrame([("",)], ["a"])
+        df = df.withMetadata("a", {"foo": "bar"})
+        self.assertEqual(df.schema["a"].metadata, {"foo": "bar"})
+
+        # SPARK-51426: Ensure setting metadata to `{}` clears it
+        df = df.select([CF.col("a").alias("a", metadata={})])
+        self.assertEqual(df.schema["a"].metadata, {})
+
+        df = df.withMetadata("a", {"baz": "burr"})
+        self.assertEqual(df.schema["a"].metadata, {"baz": "burr"})
+
+        df = df.withMetadata("a", {})
+        self.assertEqual(df.schema["a"].metadata, {})
 
     def test_column_regexp(self) -> None:
         # SPARK-41438: test dataframe.colRegex()

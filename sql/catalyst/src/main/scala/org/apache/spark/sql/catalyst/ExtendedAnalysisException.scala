@@ -32,7 +32,9 @@ class ExtendedAnalysisException private(
     cause: Option[Throwable] = None,
     errorClass: Option[String] = None,
     messageParameters: Map[String, String] = Map.empty,
-    context: Array[QueryContext] = Array.empty)
+    context: Array[QueryContext] = Array.empty,
+    sqlState: Option[String] = None,
+    messageTemplate: Option[String] = None)
   extends AnalysisException(
     message,
     line,
@@ -40,7 +42,9 @@ class ExtendedAnalysisException private(
     cause,
     errorClass,
     messageParameters,
-    context) {
+    context,
+    sqlState,
+    messageTemplate) {
 
   def this(e: AnalysisException, plan: LogicalPlan) = {
     this(
@@ -62,9 +66,11 @@ class ExtendedAnalysisException private(
       cause: Option[Throwable],
       errorClass: Option[String],
       messageParameters: Map[String, String],
-      context: Array[QueryContext]): ExtendedAnalysisException = {
+      context: Array[QueryContext],
+      sqlState: Option[String] = this.sqlState,
+      messageTemplate: Option[String] = this.messageTemplate): ExtendedAnalysisException = {
     new ExtendedAnalysisException(message, line, startPosition, plan, cause, errorClass,
-      messageParameters, context)
+      messageParameters, context, sqlState, messageTemplate)
   }
 
   override def getMessage: String = {

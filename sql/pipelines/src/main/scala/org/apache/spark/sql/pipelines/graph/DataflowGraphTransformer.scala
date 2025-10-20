@@ -61,6 +61,8 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
   private var flowsTo: Map[TableIdentifier, Seq[Flow]] = computeFlowsTo()
   private var views: Seq[View] = graph.views
   private var viewMap: Map[TableIdentifier, View] = computeViewMap()
+  private var sinks: Seq[Sink] = graph.sinks
+  private var sinkMap: Map[TableIdentifier, Sink] = computeSinkMap()
 
   // Fail analysis nodes
   // Failed flows are flows that are failed to resolve or its inputs are not available or its
@@ -68,6 +70,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
   private var failedFlows: Seq[ResolutionCompletedFlow] = Seq.empty
   // We define a dataset is failed to resolve if it is a destination of a flow that is unresolved.
   private var failedTables: Seq[Table] = Seq.empty
+  private var failedSinks: Seq[Sink] = Seq.empty
 
   private val parallelism = 10
 
@@ -90,6 +93,10 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
 
   private def computeViewMap(): Map[TableIdentifier, View] = synchronized {
     views.map(view => view.identifier -> view).toMap
+  }
+
+  private def computeSinkMap(): Map[TableIdentifier, Sink] = synchronized {
+    sinks.map(sink => sink.identifier -> sink).toMap
   }
 
   private def computeFlowsTo(): Map[TableIdentifier, Seq[Flow]] = synchronized {
@@ -128,6 +135,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     val resolvedFlows = new ConcurrentLinkedQueue[ResolutionCompletedFlow]()
     val resolvedTables = new ConcurrentLinkedQueue[Table]()
     val resolvedViews = new ConcurrentLinkedQueue[View]()
+    val resolvedSinks = new ConcurrentLinkedQueue[Sink]()
     // Flow identifier to a list of transformed flows mapping to track resolved flows
     val resolvedFlowsMap = new ConcurrentHashMap[TableIdentifier, Seq[Flow]]()
     val resolvedFlowDestinationsMap = new ConcurrentHashMap[TableIdentifier, Boolean]()
@@ -238,22 +246,32 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
                       resolvedFlows.addAll(
                         transformed.collect { case f: ResolvedFlow => f }.asJava
                       )
-                    } else {
-                      if (viewMap.contains(flow.destinationIdentifier)) {
-                        resolvedViews.addAll {
-                          val transformed =
-                            transformer(
-                              viewMap(flow.destinationIdentifier),
-                              flowsTo(flow.destinationIdentifier)
-                            )
-                          transformed.map(_.asInstanceOf[View]).asJava
-                        }
-                      } else {
-                        throw new IllegalArgumentException(
-                          s"Unsupported destination ${flow.destinationIdentifier.unquotedString}" +
-                          s" in flow: ${flow.displayName} at transformDownNodes"
-                        )
+                    } else if (viewMap.contains(flow.destinationIdentifier)) {
+                      resolvedViews.addAll {
+                        val transformed =
+                          transformer(
+                            viewMap(flow.destinationIdentifier),
+                            flowsTo(flow.destinationIdentifier)
+                          )
+                        transformed.map(_.asInstanceOf[View]).asJava
                       }
+                    } else if (sinkMap.contains(flow.destinationIdentifier)) {
+                      resolvedSinks.addAll {
+                        val transformed =
+                          transformer(
+                            sinkMap(flow.destinationIdentifier), flowsTo(flow.destinationIdentifier)
+                          )
+                        require(
+                          transformed.forall(_.isInstanceOf[Sink]),
+                          "transformer must return a Seq[Sink]"
+                        )
+                        transformed.map(_.asInstanceOf[Sink]).asJava
+                      }
+                    } else {
+                      throw new IllegalArgumentException(
+                        s"Unsupported destination ${flow.destinationIdentifier.unquotedString}" +
+                        s" in flow: ${flow.displayName} at transformDownNodes"
+                      )
                     }
                     // Set flow destination as resolved now.
                     resolvedFlowDestinationsMap.computeIfPresent(
@@ -287,6 +305,11 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     failedTables = tables.filterNot { table =>
       resolvedFlowDestinationsMap.getOrDefault(table.identifier, false)
     }
+    // A sink is failed to analyze if:
+    // - It does not exist in the resolvedFlowDestinationsMap
+    failedSinks = sinks.filterNot { sink =>
+      resolvedFlowDestinationsMap.getOrDefault(sink.identifier, false)
+    }
 
     // We maintain the topological sort order of successful flows always
     val (resolvedFlowsWithResolvedDest, resolvedFlowsWithFailedDest) =
@@ -313,8 +336,10 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     flowsTo = computeFlowsTo()
     tables = resolvedTables.asScala.toSeq
     views = resolvedViews.asScala.toSeq
+    sinks = resolvedSinks.asScala.toSeq
     tableMap = computeTableMap()
     viewMap = computeViewMap()
+    sinkMap = computeSinkMap()
     this
   }
 
@@ -326,7 +351,8 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
       // they will be front of the list in failedFlows and thus by definition topologically sorted
       // in the combined sequence too.
       flows = flows ++ failedFlows,
-      tables = tables ++ failedTables
+      tables = tables ++ failedTables,
+      sinks = sinks ++ failedSinks
     )
   }
 

@@ -12711,6 +12711,49 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    """
+    Returns the difference between two times, measured in specified units.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : :class:`~pyspark.sql.Column` or column name
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    start : :class:`~pyspark.sql.Column` or column name
+        A starting time.
+    end : :class:`~pyspark.sql.Column` or column name
+        An ending time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The difference between two times, in the specified units.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.timestamp_diff`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("HOUR", "13:08:15", "21:30:28")], ['unit', 'start', 'end']).withColumn("start",
+    ...     sf.col("start").cast("time")).withColumn("end", sf.col("end").cast("time"))
+    >>> df.select('*', sf.time_diff('unit', 'start', 'end')).show()
+    +----+--------+--------+---------------------------+
+    |unit|   start|     end|time_diff(unit, start, end)|
+    +----+--------+--------+---------------------------+
+    |HOUR|13:08:15|21:30:28|                          8|
+    +----+--------+--------+---------------------------+
+    """
+    return _invoke_function_over_columns("time_diff", unit, start, end)
+
+
+@_try_remote_functions
 def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     """
     Returns `time` truncated to the `unit`.
@@ -13919,12 +13962,12 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     --------
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(0, 1)], ['a', 'b'])
-    >>> df.select('*', sf.assert_true(df.a < df.b)).show() # doctest: +SKIP
-    +------------------------------------------------------+
-    |assert_true((a < b), '(a#788L < b#789L)' is not true!)|
-    +------------------------------------------------------+
-    |                                                  NULL|
-    +------------------------------------------------------+
+    >>> df.select('*', sf.assert_true(df.a < df.b)).show()
+    +---+---+--------------------------------------------+
+    |  a|  b|assert_true((a < b), '(a < b)' is not true!)|
+    +---+---+--------------------------------------------+
+    |  0|  1|                                        NULL|
+    +---+---+--------------------------------------------+
 
     >>> df.select('*', sf.assert_true(df.a < df.b, df.a)).show()
     +---+---+-----------------------+
@@ -25165,7 +25208,7 @@ def try_make_timestamp_ltz(
         )
 
 
-@_try_remote_functions
+@overload
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -25174,30 +25217,76 @@ def make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
+    ...
+
+
+@overload
+def make_timestamp_ntz(
+    *,
+    date: "ColumnOrName",
+    time: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@_try_remote_functions
+def make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
     """
-    Create local date-time from years, months, days, hours, mins, secs fields.
-    If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
-    on invalid inputs. Otherwise, it will throw an error instead.
+    Create local date-time from years, months, days, hours, mins, secs fields. Alternatively, try to
+    create local date-time from date and time fields. If the configuration `spark.sql.ansi.enabled`
+    is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error.
 
     .. versionadded:: 3.5.0
 
+    .. versionchanged:: 4.1.0
+        Added support for creating timestamps from date and time.
+
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or column name
-        The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or column name
-        The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or column name
-        The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or column name
-        The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or column name
-        The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or column name
+    years : :class:`~pyspark.sql.Column` or column name, optional
+        The year to represent, from 1 to 9999.
+        Required when creating timestamps from individual components.
+        Must be used with months, days, hours, mins, and secs.
+    months : :class:`~pyspark.sql.Column` or column name, optional
+        The month-of-year to represent, from 1 (January) to 12 (December).
+        Required when creating timestamps from individual components.
+        Must be used with years, days, hours, mins, and secs.
+    days : :class:`~pyspark.sql.Column` or column name, optional
+        The day-of-month to represent, from 1 to 31.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, hours, mins, and secs.
+    hours : :class:`~pyspark.sql.Column` or column name, optional
+        The hour-of-day to represent, from 0 to 23.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, mins, and secs.
+    mins : :class:`~pyspark.sql.Column` or column name, optional
+        The minute-of-hour to represent, from 0 to 59.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and secs.
+    secs : :class:`~pyspark.sql.Column` or column name, optional
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
-        The value can be either an integer like 13 , or a fraction like 13.123.
+        The value can be either an integer like 13, or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and mins.
+    date : :class:`~pyspark.sql.Column` or column name, optional
+        The date to represent, in valid DATE format.
+        Required when creating timestamps from date and time components.
+        Must be used with time parameter only.
+    time : :class:`~pyspark.sql.Column` or column name, optional
+        The time to represent, in valid TIME format.
+        Required when creating timestamps from date and time components.
+        Must be used with date parameter only.
 
     Returns
     -------
@@ -25219,6 +25308,8 @@ def make_timestamp_ntz(
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
+    Example 1: Make local date-time from years, months, days, hours, mins, secs.
+
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
     ...     ['year', 'month', 'day', 'hour', 'min', 'sec'])
@@ -25231,14 +25322,50 @@ def make_timestamp_ntz(
     |2014-12-28 06:30:45.887                             |
     +----------------------------------------------------+
 
+    Example 2: Make local date-time from date and time.
+
+    >>> import pyspark.sql.functions as sf
+    >>> from datetime import date, time
+    >>> df = spark.range(1).select(
+    ...     sf.lit(date(2014, 12, 28)).alias("date"),
+    ...     sf.lit(time(6, 30, 45, 887000)).alias("time")
+    ... )
+    >>> df.select(sf.make_timestamp_ntz(date=df.date, time=df.time)).show(truncate=False)
+    +------------------------------+
+    |make_timestamp_ntz(date, time)|
+    +------------------------------+
+    |2014-12-28 06:30:45.887       |
+    +------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    return _invoke_function_over_columns(
-        "make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
+        )
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
 
-@_try_remote_functions
+@overload
 def try_make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -25247,29 +25374,76 @@ def try_make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp_ntz(
+    *,
+    date: "ColumnOrName",
+    time: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@_try_remote_functions
+def try_make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
     """
-    Try to create local date-time from years, months, days, hours, mins, secs fields.
-    The function returns NULL on invalid inputs.
+    Try to create local date-time from years, months, days, hours, mins, secs fields. Alternatively,
+    try to create local date-time from date and time fields. The function returns NULL on invalid
+    inputs.
 
     .. versionadded:: 4.0.0
 
+    .. versionchanged:: 4.1.0
+        Added support for creating timestamps from date and time.
+
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or column name
-        The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or column name
-        The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or column name
-        The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or column name
-        The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or column name
-        The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or column name
+    years : :class:`~pyspark.sql.Column` or column name, optional
+        The year to represent, from 1 to 9999.
+        Required when creating timestamps from individual components.
+        Must be used with months, days, hours, mins, and secs.
+    months : :class:`~pyspark.sql.Column` or column name, optional
+        The month-of-year to represent, from 1 (January) to 12 (December).
+        Required when creating timestamps from individual components.
+        Must be used with years, days, hours, mins, and secs.
+    days : :class:`~pyspark.sql.Column` or column name, optional
+        The day-of-month to represent, from 1 to 31.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, hours, mins, and secs.
+    hours : :class:`~pyspark.sql.Column` or column name, optional
+        The hour-of-day to represent, from 0 to 23.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, mins, and secs.
+    mins : :class:`~pyspark.sql.Column` or column name, optional
+        The minute-of-hour to represent, from 0 to 59.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and secs.
+    secs : :class:`~pyspark.sql.Column` or column name, optional
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
-        The value can be either an integer like 13 , or a fraction like 13.123.
+        The value can be either an integer like 13, or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and mins.
+    date : :class:`~pyspark.sql.Column` or column name, optional
+        The date to represent, in valid DATE format.
+        Required when creating timestamps from date and time components.
+        Must be used with time parameter only.
+    time : :class:`~pyspark.sql.Column` or column name, optional
+        The time to represent, in valid TIME format.
+        Required when creating timestamps from date and time components.
+        Must be used with date parameter only.
 
     Returns
     -------
@@ -25321,9 +25495,30 @@ def try_make_timestamp_ntz(
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    return _invoke_function_over_columns(
-        "try_make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
+        )
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
 
 @_try_remote_functions
@@ -25570,9 +25765,54 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    Notes
-    -----
-    Supports Spark Connect.
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The underlying representation.
+
+    Examples
+    --------
+    Example 1: Unwrap ML-specific UDT - VectorUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.ml.linalg import Vectors
+    >>> vec1 = Vectors.dense(1, 2, 3)
+    >>> vec2 = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+    >>> df = spark.createDataFrame([(vec1,), (vec2,)], ["vec"])
+    >>> df.select(sf.unwrap_udt("vec")).printSchema()
+    root
+     |-- unwrap_udt(vec): struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- size: integer (nullable = true)
+     |    |-- indices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+
+    Example 2: Unwrap ML-specific UDT - MatrixUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.ml.linalg import Matrices
+    >>> mat1 = Matrices.dense(2, 2, range(4))
+    >>> mat2 = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+    >>> df = spark.createDataFrame([(mat1,), (mat2,)], ["mat"])
+    >>> df.select(sf.unwrap_udt("mat")).printSchema()
+    root
+     |-- unwrap_udt(mat): struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- numRows: integer (nullable = false)
+     |    |-- numCols: integer (nullable = false)
+     |    |-- colPtrs: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- rowIndices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+     |    |-- isTransposed: boolean (nullable = false)
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -25783,6 +26023,344 @@ def hll_union(
         )
     else:
         return _invoke_function("hll_union", _to_java_column(col1), _to_java_column(col2))
+
+
+@_try_remote_functions
+def theta_sketch_agg(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    ThetaSketch with the values in the input column configured with lgNomEntries nominal entries.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries, where nominal entries is the size of the sketch
+        (must be between 4 and 26, defaults to 12)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the ThetaSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.theta_union`
+    :meth:`pyspark.sql.functions.theta_intersection`
+    :meth:`pyspark.sql.functions.theta_difference`
+    :meth:`pyspark.sql.functions.theta_union_agg`
+    :meth:`pyspark.sql.functions.theta_intersection_agg`
+    :meth:`pyspark.sql.functions.theta_sketch_estimate`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,2,3], "INT")
+    >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value"))).show()
+    +--------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 12))|
+    +--------------------------------------------------+
+    |                                                 3|
+    +--------------------------------------------------+
+
+    >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value", 15))).show()
+    +--------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 15))|
+    +--------------------------------------------------+
+    |                                                 3|
+    +--------------------------------------------------+
+    """
+    fn = "theta_sketch_agg"
+    if lgNomEntries is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
+
+
+@_try_remote_functions
+def theta_union_agg(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    ThetaSketch that is the union of the Theta sketches in the input column.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries for the union operation
+        (must be between 4 and 26, defaults to 12)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged ThetaSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.theta_union`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.theta_sketch_estimate`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([1,2,2,3], "INT")
+    >>> df1 = df1.agg(sf.theta_sketch_agg("value").alias("sketch"))
+    >>> df2 = spark.createDataFrame([4,5,5,6], "INT")
+    >>> df2 = df2.agg(sf.theta_sketch_agg("value").alias("sketch"))
+    >>> df3 = df1.union(df2)
+    >>> df3.agg(sf.theta_sketch_estimate(sf.theta_union_agg("sketch"))).show()
+    +--------------------------------------------------+
+    |theta_sketch_estimate(theta_union_agg(sketch, 12))|
+    +--------------------------------------------------+
+    |                                                 6|
+    +--------------------------------------------------+
+    """
+    fn = "theta_union_agg"
+    if lgNomEntries is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
+
+
+@_try_remote_functions
+def theta_intersection_agg(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    ThetaSketch that is the intersection of the Theta sketches in the input column
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected ThetaSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.theta_intersection`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.theta_sketch_estimate`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df1 = spark.createDataFrame([1,2,2,3], "INT")
+    >>> df1 = df1.agg(sf.theta_sketch_agg("value").alias("sketch"))
+    >>> df2 = spark.createDataFrame([2,3,3,4], "INT")
+    >>> df2 = df2.agg(sf.theta_sketch_agg("value").alias("sketch"))
+    >>> df3 = df1.union(df2)
+    >>> df3.agg(sf.theta_sketch_estimate(sf.theta_intersection_agg("sketch"))).show()
+    +-----------------------------------------------------+
+    |theta_sketch_estimate(theta_intersection_agg(sketch))|
+    +-----------------------------------------------------+
+    |                                                    2|
+    +-----------------------------------------------------+
+    """
+    fn = "theta_intersection_agg"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def theta_sketch_estimate(col: "ColumnOrName") -> Column:
+    """
+    Returns the estimated number of unique values given the binary representation
+    of a Datasketches ThetaSketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The estimated number of unique values for the ThetaSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.theta_union`
+    :meth:`pyspark.sql.functions.theta_intersection`
+    :meth:`pyspark.sql.functions.theta_difference`
+    :meth:`pyspark.sql.functions.theta_union_agg`
+    :meth:`pyspark.sql.functions.theta_intersection_agg`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,2,3], "INT")
+    >>> df.agg(sf.theta_sketch_estimate(sf.theta_sketch_agg("value"))).show()
+    +--------------------------------------------------+
+    |theta_sketch_estimate(theta_sketch_agg(value, 12))|
+    +--------------------------------------------------+
+    |                                                 3|
+    +--------------------------------------------------+
+    """
+
+    fn = "theta_sketch_estimate"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def theta_union(
+    col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[Union[int, Column]] = None
+) -> Column:
+    """
+    Merges two binary representations of Datasketches ThetaSketch objects, using a
+    Datasketches Union object.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
+    lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
+        The log-base-2 of nominal entries for the union operation
+        (must be between 4 and 26, defaults to 12)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the merged ThetaSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.theta_union_agg`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.theta_sketch_estimate`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,4),(2,5),(2,5),(3,6)], "struct<v1:int,v2:int>")
+    >>> df = df.agg(
+    ...     sf.theta_sketch_agg("v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.theta_sketch_estimate(sf.theta_union(df.sketch1, "sketch2"))).show()
+    +--------------------------------------------------------+
+    |theta_sketch_estimate(theta_union(sketch1, sketch2, 12))|
+    +--------------------------------------------------------+
+    |                                                       6|
+    +--------------------------------------------------------+
+    """
+
+    fn = "theta_union"
+    if lgNomEntries is not None:
+        return _invoke_function_over_columns(
+            fn,
+            col1,
+            col2,
+            lit(lgNomEntries),
+        )
+    else:
+        return _invoke_function_over_columns(fn, col1, col2)
+
+
+@_try_remote_functions
+def theta_intersection(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Returns the intersection of two binary representations of Datasketches ThetaSketch
+    objects, using a Datasketches Intersection object.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the intersected ThetaSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.theta_intersection_agg`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.theta_sketch_estimate`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,1),(2,2),(3,2),(3,3)], "struct<v1:int,v2:int>")
+    >>> df = df.agg(
+    ...     sf.theta_sketch_agg("v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.theta_sketch_estimate(sf.theta_intersection(df.sketch1, "sketch2"))).show()
+    +-----------------------------------------------------------+
+    |theta_sketch_estimate(theta_intersection(sketch1, sketch2))|
+    +-----------------------------------------------------------+
+    |                                                          3|
+    +-----------------------------------------------------------+
+    """
+
+    fn = "theta_intersection"
+    return _invoke_function_over_columns(fn, col1, col2)
+
+
+@_try_remote_functions
+def theta_difference(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Returns the set difference of two binary representations of Datasketches ThetaSketch
+    objects (elements in first sketch but not in second), using a Datasketches ANotB object.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the difference ThetaSketch.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.theta_union`
+    :meth:`pyspark.sql.functions.theta_intersection`
+    :meth:`pyspark.sql.functions.theta_sketch_agg`
+    :meth:`pyspark.sql.functions.theta_sketch_estimate`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,4),(2,4),(3,5),(4,5)], "struct<v1:int,v2:int>")
+    >>> df = df.agg(
+    ...     sf.theta_sketch_agg("v1").alias("sketch1"),
+    ...     sf.theta_sketch_agg("v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.theta_sketch_estimate(sf.theta_difference(df.sketch1, "sketch2"))).show()
+    +---------------------------------------------------------+
+    |theta_sketch_estimate(theta_difference(sketch1, sketch2))|
+    +---------------------------------------------------------+
+    |                                                        3|
+    +---------------------------------------------------------+
+    """
+
+    fn = "theta_difference"
+    return _invoke_function_over_columns(fn, col1, col2)
 
 
 # ---------------------- Predicates functions ------------------------------
@@ -26951,6 +27529,7 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.bitmap_bucket_number`
     :meth:`pyspark.sql.functions.bitmap_construct_agg`
     :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_and_agg`
 
     Parameters
     ----------
@@ -26969,6 +27548,41 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
     +--------------------------------+
     """
     return _invoke_function_over_columns("bitmap_or_agg", col)
+
+
+@_try_remote_functions
+def bitmap_and_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND of all of the bitmaps from the input column.
+    The input column should be bitmaps created from bitmap_construct_agg().
+
+    .. versionadded:: 4.1.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0",),("70",),("30",)], ["a"])
+    >>> df.select(sf.bitmap_and_agg(sf.to_binary(df.a, sf.lit("hex")))).show()
+    +---------------------------------+
+    |bitmap_and_agg(to_binary(a, hex))|
+    +---------------------------------+
+    |             [30 00 00 00 00 0...|
+    +---------------------------------+
+    """
+    return _invoke_function_over_columns("bitmap_and_agg", col)
 
 
 # ---------------------------- User Defined Function ----------------------------------
@@ -27023,6 +27637,10 @@ def udf(
     ----------
     f : function, optional
         python function if used as a standalone function
+
+        .. versionchanged:: 4.1.0
+           Supports vectorized function by specifiying the type hints.
+
     returnType : :class:`pyspark.sql.types.DataType` or str, optional
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
@@ -27066,6 +27684,61 @@ def udf(
     |                            0|
     |                          101|
     +-----------------------------+
+
+    Support vectorized function by specifiying the type hints.
+
+    To define a vectorized function, the function should meet following requirements:
+
+    1, have at least 1 argument. 0-arg is not supported;
+
+    2, the type hints should match one of the patterns of pandas UDFs and arrow UDFs;
+
+    3, argument `useArrow` should not be explictly set;
+
+    If a function doesn't meet the requirements, the function should be treated as a
+    vanilla python UDF or arrow-optimized python UDF (depending on argument `useArrow`,
+    configuration `spark.sql.execution.pythonUDF.arrow.enabled`, and dependency installations)
+
+    For example, define a 'Series to Series' type pandas UDF.
+
+    >>> from pyspark.sql.functions import udf, PandasUDFType
+    >>> import pandas as pd
+    >>> @udf(returnType=IntegerType())
+    ... def pd_calc(a: pd.Series, b: pd.Series) -> pd.Series:
+    ...     return a + 10 * b
+    ...
+    >>> pd_calc.evalType == PandasUDFType.SCALAR
+    True
+    >>> spark.range(2).select(pd_calc(b=col("id") * 10, a="id")).show()
+    +--------------------------------+
+    |pd_calc(b => (id * 10), a => id)|
+    +--------------------------------+
+    |                               0|
+    |                             101|
+    +--------------------------------+
+
+    For another example, define a 'Array to Array' type arrow UDF.
+
+    >>> from pyspark.sql.functions import udf, ArrowUDFType
+    >>> import pyarrow as pa
+    >>> @udf(returnType=IntegerType())
+    ... def pa_calc(a: pa.Array, b: pa.Array) -> pa.Array:
+    ...     return pa.compute.add(a, pa.compute.multiply(b, 10))
+    ...
+    >>> pa_calc.evalType == ArrowUDFType.SCALAR
+    True
+    >>> spark.range(2).select(pa_calc(b=col("id") * 10, a="id")).show()
+    +--------------------------------+
+    |pa_calc(b => (id * 10), a => id)|
+    +--------------------------------+
+    |                               0|
+    |                             101|
+    +--------------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.pandas_udf`
+    :meth:`pyspark.sql.functions.arrow_udf`
 
     Notes
     -----
@@ -27346,8 +28019,14 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.functions.builtin
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.functions.builtin.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.functions.builtin.udf.__doc__
+        del pyspark.sql.functions.builtin.arrow_udtf.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()
     )
