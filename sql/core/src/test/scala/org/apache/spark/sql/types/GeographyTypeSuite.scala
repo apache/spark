@@ -141,13 +141,13 @@ class GeographyTypeSuite extends SparkFunSuite {
     val validGeographies = Seq(
       "\"geography\"",
       "\"geography(OGC:CRS84)\"",
-      "\"geography(ogc:CRS84)\"",
-      "\"geography( ogc:CRS84  )\"",
-      "\"geography(EPSG:4326)\"",
+      "\"geography(   OGC:CRS84 )\"",
       "\"geography(spherical)\"",
+      "\"geography(SPHERICAL)\"",
       "\"geography(  spherical)\"",
       "\"geography(OGC:CRS84,    spherical    )\"",
-      "\"geography( OGC:CRS84   , spherical )\""
+      "\"geography( OGC:CRS84   , spherical )\"",
+      "\"geography( OGC:CRS84   , SPHERICAL )\""
     )
     validGeographies.foreach { geog =>
       DataType.fromJson(geog).isInstanceOf[GeographyType]

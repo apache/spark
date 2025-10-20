@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal.types;
 
 import java.util.HashMap;
+import java.util.HashSet;
 
 /*
  * Class for maintaining mappings between supported SRID values and the string ID of the
@@ -35,20 +36,38 @@ public class SpatialReferenceSystemMapper {
     return Instance;
   }
 
-  // Hash maps defining the mappings to/from SRID and string ID for a CRS.
+  // The `SpatialReferenceSystemMapper` class can be used for both GEOGRAPHY and GEOMETRY types.
+  // This enumeration defines the two spatial type options, in the context of SRS mapping.
+  public enum Type {
+    GEOGRAPHY,
+    GEOMETRY
+  }
+
+  // Hash maps for defining the mappings to/from SRID and string ID for a CRS.
   private static final HashMap<Integer, String> sridToStringId = buildSridToStringIdMap();
   private static final HashMap<String, Integer> stringIdToSrid = buildStringIdToSridMap();
 
+  // Hash set for keeping track of the supported SRID values for geographic CRS.
+  public static final HashSet<Integer> geographicSrids = buildGeographicSridSet();
+
   // Returns the string ID corresponding to the input SRID. If the input SRID is not supported,
   // `null` is returned.
-  public String getStringId(int srid) {
-    return sridToStringId.get(srid);
+  public String getStringId(int srid, Type type) {
+    String stringId = sridToStringId.get(srid);
+    return switch (type) {
+      case GEOGRAPHY -> geographicSrids.contains(srid) ? stringId : null;
+      case GEOMETRY -> stringId;
+    };
   }
 
   // Returns the SRID corresponding to the input string ID. If the input string ID is not
   // supported, `null` is returned.
-  public Integer getSrid(String stringId) {
-    return stringIdToSrid.get(stringId);
+  public Integer getSrid(String stringId, Type type) {
+    Integer srid = stringIdToSrid.get(stringId);
+      return switch (type) {
+        case GEOGRAPHY -> geographicSrids.contains(srid) ? srid : null;
+        case GEOMETRY -> srid;
+      };
   }
 
   // Currently, we only support a limited set of SRID / CRS mappings. However, we will soon extend
@@ -71,5 +90,12 @@ public class SpatialReferenceSystemMapper {
     map.put("EPSG:3857", 3857); // Web Mercator
     map.put("OGC:CRS84", 4326); // WGS84
     return map;
+  }
+
+  // Helper method for building the set of supported geographic SRID values.
+  private static HashSet<Integer> buildGeographicSridSet() {
+    HashSet<Integer> set = new HashSet<>();
+    set.add(4326); // WGS84
+    return set;
   }
 }

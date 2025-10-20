@@ -22,33 +22,62 @@ import org.junit.jupiter.api.Test;
 
 public class SpatialReferenceSystemMapperSuite {
 
+  // Singleton instance of the SpatialReferenceSystemMapper to use across tests.
+  private final SpatialReferenceSystemMapper srsMapper = SpatialReferenceSystemMapper.get();
+
+  // Spatial types for GEOMETRY and GEOGRAPHY reference system mapping.
+  private final SpatialReferenceSystemMapper.Type GEOM =
+    SpatialReferenceSystemMapper.Type.GEOMETRY;
+  private final SpatialReferenceSystemMapper.Type GEOG =
+    SpatialReferenceSystemMapper.Type.GEOGRAPHY;
+
   @Test
   public void getStringIdReturnsCorrectStringIdForValidSrid() {
-    SpatialReferenceSystemMapper srMapper = SpatialReferenceSystemMapper.get();
-    Assertions.assertEquals("SRID:0", srMapper.getStringId(0));
-    Assertions.assertEquals("EPSG:3857", srMapper.getStringId(3857));
-    Assertions.assertEquals("OGC:CRS84", srMapper.getStringId(4326));
+    // GEOMETRY.
+    Assertions.assertEquals("SRID:0", srsMapper.getStringId(0, GEOM));
+    Assertions.assertEquals("EPSG:3857", srsMapper.getStringId(3857, GEOM));
+    Assertions.assertEquals("OGC:CRS84", srsMapper.getStringId(4326, GEOM));
+    // GEOGRAPHY.
+    Assertions.assertEquals("OGC:CRS84", srsMapper.getStringId(4326, GEOG));
   }
 
   @Test
   public void getStringIdReturnsNullForInvalidSrid() {
-    SpatialReferenceSystemMapper srMapper = SpatialReferenceSystemMapper.get();
-    Assertions.assertNull(srMapper.getStringId(-1));
-    Assertions.assertNull(srMapper.getStringId(9999));
+    // GEOMETRY.
+    Assertions.assertNull(srsMapper.getStringId(-2, GEOM));
+    Assertions.assertNull(srsMapper.getStringId(-1, GEOM));
+    Assertions.assertNull(srsMapper.getStringId(1, GEOM));
+    Assertions.assertNull(srsMapper.getStringId(2, GEOM));
+    Assertions.assertNull(srsMapper.getStringId(9999, GEOM));
+    // GEOGRAPHY.
+    Assertions.assertNull(srsMapper.getStringId(-2, GEOG));
+    Assertions.assertNull(srsMapper.getStringId(-1, GEOG));
+    Assertions.assertNull(srsMapper.getStringId(0, GEOG));
+    Assertions.assertNull(srsMapper.getStringId(1, GEOG));
+    Assertions.assertNull(srsMapper.getStringId(2, GEOG));
+    Assertions.assertNull(srsMapper.getStringId(3857, GEOG));
+    Assertions.assertNull(srsMapper.getStringId(9999, GEOG));
   }
 
   @Test
   public void getSridReturnsCorrectSridForValidStringId() {
-    SpatialReferenceSystemMapper srMapper = SpatialReferenceSystemMapper.get();
-    Assertions.assertEquals(0, srMapper.getSrid("SRID:0"));
-    Assertions.assertEquals(3857, srMapper.getSrid("EPSG:3857"));
-    Assertions.assertEquals(4326, srMapper.getSrid("OGC:CRS84"));
+    // GEOMETRY.
+    Assertions.assertEquals(0, srsMapper.getSrid("SRID:0", GEOM));
+    Assertions.assertEquals(3857, srsMapper.getSrid("EPSG:3857", GEOM));
+    Assertions.assertEquals(4326, srsMapper.getSrid("OGC:CRS84", GEOM));
+    // GEOGRAPHY.
+    Assertions.assertEquals(4326, srsMapper.getSrid("OGC:CRS84", GEOG));
   }
 
   @Test
   public void getSridReturnsNullForInvalidStringId() {
-    SpatialReferenceSystemMapper srMapper = SpatialReferenceSystemMapper.get();
-    Assertions.assertNull(srMapper.getSrid("INVALID:ID"));
-    Assertions.assertNull(srMapper.getSrid("EPSG:9999"));
+    // GEOMETRY.
+    Assertions.assertNull(srsMapper.getSrid("INVALID:ID", GEOM));
+    Assertions.assertNull(srsMapper.getSrid("EPSG:9999", GEOM));
+    // GEOGRAPHY.
+    Assertions.assertNull(srsMapper.getSrid("INVALID:ID", GEOG));
+    Assertions.assertNull(srsMapper.getSrid("EPSG:9999", GEOG));
+    Assertions.assertNull(srsMapper.getSrid("SRID:0", GEOG));
+    Assertions.assertNull(srsMapper.getSrid("EPSG:3857", GEOG));
   }
 }
