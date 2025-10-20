@@ -2184,7 +2184,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       val table = catalog.loadTable(ident)
       val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("numSourceRows") === "-1") // if no numOutputRows, should be -1
+      assert(commitProps("merge.numSourceRows") === "-1") // if no numOutputRows, should be -1
       assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "0"))
       assert(commitProps("merge.numTargetRowsInserted") === "0")
       assert(commitProps("merge.numTargetRowsUpdated") === "0")

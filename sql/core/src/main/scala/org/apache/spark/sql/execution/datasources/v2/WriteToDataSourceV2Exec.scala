@@ -481,16 +481,13 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   }
 
   private def getOperationMetrics(query: SparkPlan): util.Map[String, lang.Long] = {
-    collectFirst(query) { case m: MergeRowsExec => m } match {
-      case Some(mergeRowsExec) =>
-        val mergeMetrics = mergeRowsExec.metrics.map {
-          case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value)
-        }
-        val numSourceRows = getNumSourceRows(query)
-        (mergeMetrics + ("merge.numSourceRows" -> lang.Long.valueOf(numSourceRows))).asJava
-      case None =>
-        Map.empty[String, lang.Long].asJava
-    }
+    val mergeMetrics = collectFirst(query) { case m: MergeRowsExec => m }
+      .map { n =>
+        n.metrics.map { case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value) }
+      }
+      .getOrElse(Map.empty[String, lang.Long])
+    val numSourceRows = getNumSourceRows(query)
+    (mergeMetrics + ("merge.numSourceRows" -> lang.Long.valueOf(numSourceRows))).asJava
   }
 
   private def getNumSourceRows(query: SparkPlan): Long = {
