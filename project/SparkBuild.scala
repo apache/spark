@@ -458,8 +458,6 @@ object SparkBuild extends PomBuild {
 
   enable(YARN.settings)(yarn)
 
-  enable(MLlibLocal.settings)(mllibLocal)
-
   if (profiles.contains("sparkr")) {
     enable(SparkR.settings)(core)
   }
@@ -1252,13 +1250,6 @@ object HiveThriftServer {
     excludeDependencies ++= Seq(
       ExclusionRule("org.apache.hive", "hive-llap-common"),
       ExclusionRule("org.apache.hive", "hive-llap-client"))
-  )
-}
-
-object MLlibLocal {
-  lazy val settings = Seq(
-    excludeDependencies ++= Seq(
-      ExclusionRule("org.slf4j", "slf4j-api"))
   )
 }
 
