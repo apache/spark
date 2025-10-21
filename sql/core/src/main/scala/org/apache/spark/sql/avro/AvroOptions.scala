@@ -41,6 +41,21 @@ private[sql] class AvroOptions(
 
   import AvroOptions._
 
+  private def parseBoolean(optionName: String, value: String): Boolean = {
+    try {
+      value.toBoolean
+    } catch {
+      case _: IllegalArgumentException =>
+        throw QueryCompilationErrors.avroOptionsException(
+          optionName,
+          s"Cannot cast value '$value' to Boolean.")
+    }
+  }
+
+  private def getBoolean(optionName: String, defaultValue: => Boolean): Boolean = {
+    parameters.get(optionName).map(v => parseBoolean(optionName, v)).getOrElse(defaultValue)
+  }
+
   def this(parameters: Map[String, String], conf: Configuration) = {
     this(CaseInsensitiveMap(parameters), conf)
   }
@@ -78,17 +93,7 @@ private[sql] class AvroOptions(
    * name. This allows for a structurally equivalent Catalyst schema to be used with an Avro schema
    * whose field names do not match. Defaults to false.
    */
-  val positionalFieldMatching: Boolean =
-    parameters.get(POSITIONAL_FIELD_MATCHING).map { value =>
-      try {
-        value.toBoolean
-      } catch {
-        case _: IllegalArgumentException =>
-          throw QueryCompilationErrors.avroOptionsException(
-            POSITIONAL_FIELD_MATCHING,
-            s"Cannot cast value '$value' to Boolean.")
-      }
-    }.getOrElse(false)
+  val positionalFieldMatching: Boolean = getBoolean(POSITIONAL_FIELD_MATCHING, defaultValue = false)
 
   /**
    * Top level record name in write result, which is required in Avro spec.
@@ -116,16 +121,7 @@ private[sql] class AvroOptions(
       AvroFileFormat.IgnoreFilesWithoutExtensionProperty,
       ignoreFilesWithoutExtensionByDefault)
 
-    parameters.get(IGNORE_EXTENSION).map { value =>
-      try {
-        value.toBoolean
-      } catch {
-        case _: IllegalArgumentException =>
-          throw QueryCompilationErrors.avroOptionsException(
-            IGNORE_EXTENSION,
-            s"Cannot cast value '$value' to Boolean.")
-      }
-    }.getOrElse(!ignoreFilesWithoutExtension)
+    getBoolean(IGNORE_EXTENSION, defaultValue = !ignoreFilesWithoutExtension)
   }
 
   /**
@@ -149,16 +145,7 @@ private[sql] class AvroOptions(
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ).toString)
 
   val useStableIdForUnionType: Boolean =
-    parameters.get(STABLE_ID_FOR_UNION_TYPE).map { value =>
-      try {
-        value.toBoolean
-      } catch {
-        case _: IllegalArgumentException =>
-          throw QueryCompilationErrors.avroOptionsException(
-            STABLE_ID_FOR_UNION_TYPE,
-            s"Cannot cast value '$value' to Boolean.")
-      }
-    }.getOrElse(false)
+    getBoolean(STABLE_ID_FOR_UNION_TYPE, defaultValue = false)
 
   val stableIdPrefixForUnionType: String = parameters
     .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
