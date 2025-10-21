@@ -185,7 +185,7 @@
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
-    <fasterxml.jackson.version>2.19.2</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.20.0</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.0.4</netlib.ludovic.dev.version>

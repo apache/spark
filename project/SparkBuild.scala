@@ -1187,7 +1187,7 @@ object KubernetesIntegrationTests {
  */
 object DependencyOverrides {
   lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.4.0-jre")
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.19.2")
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.20.0")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val settings = jacksonDeps ++ Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
