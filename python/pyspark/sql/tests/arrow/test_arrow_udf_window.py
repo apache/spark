@@ -404,7 +404,7 @@ class WindowArrowUDFTestsMixin:
                         windowed.collect(), df.withColumn("wm", sf.mean(df.v).over(w)).collect()
                     )
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -435,7 +435,7 @@ class WindowArrowUDFTestsMixin:
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -505,7 +505,7 @@ class WindowArrowUDFTestsMixin:
                         windowed.collect(), df.withColumn("wm", sf.mean(df.v).over(w)).collect()
                     )
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
