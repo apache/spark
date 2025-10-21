@@ -80,7 +80,9 @@ class PandasConversionMixin:
                 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
                 require_minimum_pyarrow_version()
-                to_arrow_schema(self.schema, prefers_large_types=jconf.arrowUseLargeVarTypes())
+                arrow_schema = to_arrow_schema(
+                    self.schema, prefers_large_types=jconf.arrowUseLargeVarTypes()
+                )
             except Exception as e:
                 if jconf.arrowPySparkFallbackEnabled():
                     msg = (
@@ -113,31 +115,37 @@ class PandasConversionMixin:
                     self_destruct = jconf.arrowPySparkSelfDestructEnabled()
                     batches = self._collect_as_arrow(split_batches=self_destruct)
 
-                    if len(batches) > 0 and len(self.columns) > 0:
+                    if len(batches) > 0:
                         table = pa.Table.from_batches(batches)
-                        # Ensure only the table has a reference to the batches, so that
-                        # self_destruct (if enabled) is effective
-                        del batches
-                        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
-                        # values, but we should use datetime.date to match the behavior with when
-                        # Arrow optimization is disabled.
-                        pandas_options = {
-                            "date_as_object": True,
-                            "coerce_temporal_nanoseconds": True,
-                        }
-                        if self_destruct:
-                            # Configure PyArrow to use as little memory as possible:
-                            # self_destruct - free columns as they are converted
-                            # split_blocks - create a separate Pandas block for each column
-                            # use_threads - convert one column at a time
-                            pandas_options.update(
-                                {
-                                    "self_destruct": True,
-                                    "split_blocks": True,
-                                    "use_threads": False,
-                                }
-                            )
+                    else:
+                        # empty dataset
+                        table = arrow_schema.empty_table()
 
+                    # Ensure only the table has a reference to the batches, so that
+                    # self_destruct (if enabled) is effective
+                    del batches
+
+                    # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
+                    # values, but we should use datetime.date to match the behavior with when
+                    # Arrow optimization is disabled.
+                    pandas_options = {
+                        "date_as_object": True,
+                        "coerce_temporal_nanoseconds": True,
+                    }
+                    if self_destruct:
+                        # Configure PyArrow to use as little memory as possible:
+                        # self_destruct - free columns as they are converted
+                        # split_blocks - create a separate Pandas block for each column
+                        # use_threads - convert one column at a time
+                        pandas_options.update(
+                            {
+                                "self_destruct": True,
+                                "split_blocks": True,
+                                "use_threads": False,
+                            }
+                        )
+
+                    if len(self.columns) > 0:
                         timezone = jconf.sessionLocalTimeZone()
                         struct_in_pandas = jconf.pandasStructHandlingMode()
 
@@ -159,10 +167,12 @@ class PandasConversionMixin:
                             ],
                             axis="columns",
                         )
-                        pdf.columns = self.names
-                        return pdf
                     else:
-                        return pd.DataFrame(columns=self.columns)
+                        # empty columns
+                        pdf = table.to_pandas(**pandas_options)
+
+                    pdf.columns = self.columns
+                    return pdf
 
                 except Exception as e:
                     # We might have to allow fallback here as well but multiple Spark jobs can
