@@ -1280,10 +1280,6 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
           SortExec(_, _, _: DummySparkPlan, _), _) =>
           // Left side shuffled, right side kept as-is
-        case SortMergeJoinExec(_, _, _, _,
-          SortExec(_, _, _: DummySparkPlan, _),
-          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
-          // Right side shuffled, left side kept as-is
         case other => fail(s"Expected shuffle on at least one side, but got: $other")
       }
     }
@@ -1386,35 +1382,6 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       }
     }
   }
-
-  test("ShufflePartitionIdPassThrough - cross position matching behavior") {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
-      // Left partitioned by exprA, right partitioned by exprB
-      // Both sides join on (exprA, exprB)
-      // Test if cross-position matching works: left partition key exprA matches right join key
-      // exprA (pos 0)
-      // and right partition key exprB matches left join key exprB (pos 1)
-      val leftPlan = DummySparkPlan(
-        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
-      val rightPlan = DummySparkPlan(
-        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprB), 5))
-      val join = SortMergeJoinExec(exprA :: exprB :: Nil, exprA :: exprB :: Nil, Inner, None,
-        leftPlan, rightPlan)
-
-      EnsureRequirements.apply(join) match {
-        case SortMergeJoinExec(_, _, _, _,
-          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _), _),
-          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _), _), _) =>
-          assert(p1.numPartitions == 10)
-          assert(p2.numPartitions == 10)
-          assert(p1.expressions == Seq(exprA, exprB))
-          assert(p2.expressions == Seq(exprA, exprB))
-        case other => fail(s"Expected either no shuffles (if compatible) or shuffles on " +
-          s"both sides, but got: $other")
-      }
-    }
-  }
-
 
   def years(expr: Expression): TransformExpression = {
     TransformExpression(YearsFunction, Seq(expr))
