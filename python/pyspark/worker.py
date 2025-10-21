@@ -18,6 +18,8 @@
 """
 Worker that receives input from Piped RDD.
 """
+import pickle
+import threading
 import itertools
 import os
 import sys
@@ -45,6 +47,7 @@ from pyspark.serializers import (
     read_bool,
     write_long,
     read_int,
+    write_with_length,
     SpecialLengths,
     CPickleSerializer,
     BatchedSerializer,
@@ -3167,7 +3170,27 @@ def read_udfs(pickleSer, infile, eval_type):
     return func, None, ser, ser
 
 
+def write_profile(outfile):
+    import yappi
+
+    while True:
+        stats = []
+        for thread in yappi.get_thread_stats():
+            data = list(yappi.get_func_stats(ctx_id=thread.id))
+            stats.extend([{str(k): str(v) for k, v in d.items()} for d in data])
+        pickled = pickle.dumps(stats)
+        write_with_length(pickled, outfile)
+        time.sleep(1)
+
+
 def main(infile, outfile):
+    if isinstance(outfile, tuple):
+        import yappi
+
+        outfile, outfile2 = outfile
+        yappi.start()
+        threading.Thread(target=write_profile, args=(outfile2,), daemon=True).start()
+
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
     try:

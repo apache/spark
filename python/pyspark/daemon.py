@@ -47,7 +47,7 @@ def compute_real_exit_code(exit_code):
         return 1
 
 
-def worker(sock, authenticated):
+def worker(sock, sock2, authenticated):
     """
     Called by a worker process after the fork().
     """
@@ -64,6 +64,9 @@ def worker(sock, authenticated):
     buffer_size = int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
     infile = os.fdopen(os.dup(sock.fileno()), "rb", buffer_size)
     outfile = os.fdopen(os.dup(sock.fileno()), "wb", buffer_size)
+    outfile2 = None
+    if sock2 is not None:
+        outfile2 = os.fdopen(os.dup(sock2.fileno()), "wb", buffer_size)
 
     if not authenticated:
         client_secret = UTF8Deserializer().loads(infile)
@@ -74,11 +77,16 @@ def worker(sock, authenticated):
             write_with_length("err".encode("utf-8"), outfile)
             outfile.flush()
             sock.close()
+            if sock2 is not None:
+                sock2.close()
             return 1
 
     exit_code = 0
     try:
-        worker_main(infile, outfile)
+        if sock2 is not None:
+            worker_main(infile, (outfile, outfile2))
+        else:
+            worker_main(infile, outfile)
     except SystemExit as exc:
         exit_code = compute_real_exit_code(exc.code)
     finally:
@@ -94,6 +102,7 @@ def manager():
     os.setpgid(0, 0)
 
     is_unix_domain_sock = os.environ.get("PYTHON_UNIX_DOMAIN_ENABLED", "false").lower() == "true"
+    is_python_runtime_profile = os.environ.get("PYSPARK_RUNTIME_PROFILE", "false").lower() == "true"
     socket_path = None
 
     # Create a listening socket on the loopback interface
@@ -173,6 +182,15 @@ def manager():
                         continue
                     raise
 
+                sock2 = None
+                if is_python_runtime_profile:
+                    try:
+                        sock2, _ = listen_sock.accept()
+                    except OSError as e:
+                        if e.errno == EINTR:
+                            continue
+                        raise
+
                 # Launch a worker process
                 try:
                     pid = os.fork()
@@ -186,6 +204,13 @@ def manager():
                         outfile.flush()
                         outfile.close()
                         sock.close()
+
+                        if sock2 is not None:
+                            outfile = sock2.makefile(mode="wb")
+                            write_int(e.errno, outfile)  # Signal that the fork failed
+                            outfile.flush()
+                            outfile.close()
+                            sock2.close()
                         continue
 
                 if pid == 0:
@@ -217,13 +242,15 @@ def manager():
                             or False
                         )
                         while True:
-                            code = worker(sock, authenticated)
+                            code = worker(sock, sock2, authenticated)
                             if code == 0:
                                 authenticated = True
                             if not reuse or code:
                                 # wait for closing
                                 try:
                                     while sock.recv(1024):
+                                        pass
+                                    while sock2 is not None and sock2.recv(1024):
                                         pass
                                 except Exception:
                                     pass

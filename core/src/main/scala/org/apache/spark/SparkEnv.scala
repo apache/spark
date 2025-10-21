@@ -94,7 +94,7 @@ class SparkEnv (
    */
   private case class PythonWorkersKey(
       pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
-  private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
+  private[sql] val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
