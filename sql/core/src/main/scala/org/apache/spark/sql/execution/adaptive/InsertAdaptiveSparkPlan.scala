@@ -124,9 +124,7 @@ case class InsertAdaptiveSparkPlan(
   }
 
   private def supportAdaptive(plan: SparkPlan): Boolean = {
-    sanityCheck(plan) &&
-      !plan.logicalLink.exists(_.isStreaming) &&
-    plan.children.forall(supportAdaptive)
+    sanityCheck(plan) && plan.children.forall(supportAdaptive)
   }
 
   private def sanityCheck(plan: SparkPlan): Boolean =

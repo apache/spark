@@ -1071,7 +1071,8 @@ class AdaptiveQueryExecSuite
           case _: AdaptiveSparkPlanExec | _: QueryStageExec => true
           case _ => false
         }
-        assert(ret.nonEmpty)
+        assert(ret.nonEmpty,
+          s"expected AQE to take effect but can't find AQE node, plan: $plan")
         // aqe config should still be enabled
         assert(query.sparkSession.sessionState.conf.adaptiveExecutionEnabled)
       }
