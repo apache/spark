@@ -106,11 +106,13 @@ object BinaryArithmeticWithDatetimeResolver {
           DateAdd(l, UnaryMinus(ExtractANSIIntervalDays(r), context.evalMode == EvalMode.ANSI))
         case (DateType, _: DayTimeIntervalType) =>
           DatetimeSub(l, r,
-            TimestampAddInterval(Cast(l, TimestampType), UnaryMinus(r, context.evalMode == EvalMode.ANSI)))
+            TimestampAddInterval(Cast(l, TimestampType),
+              UnaryMinus(r, context.evalMode == EvalMode.ANSI)))
         case (DateType, _: YearMonthIntervalType) =>
           DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, context.evalMode == EvalMode.ANSI)))
         case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
-          DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, context.evalMode == EvalMode.ANSI)))
+          DatetimeSub(l, r, TimestampAddYMInterval(l,
+            UnaryMinus(r, context.evalMode == EvalMode.ANSI)))
         case (CalendarIntervalType, CalendarIntervalType) |
              (_: DayTimeIntervalType, _: DayTimeIntervalType) =>
           s
