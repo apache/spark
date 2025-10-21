@@ -1037,7 +1037,8 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
         )
 
         val updateContext = new PipelineUpdateContextImpl(
-          unresolvedDataflowGraph, eventCallback = _ => ())
+          unresolvedDataflowGraph, eventCallback = _ => (),
+          storageRoot = storageRoot)
         updateContext.pipelineExecution.runPipeline()
         updateContext.pipelineExecution.awaitCompletion()
 
