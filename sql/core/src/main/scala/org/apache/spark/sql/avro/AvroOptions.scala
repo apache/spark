@@ -79,7 +79,16 @@ private[sql] class AvroOptions(
    * whose field names do not match. Defaults to false.
    */
   val positionalFieldMatching: Boolean =
-    parameters.get(POSITIONAL_FIELD_MATCHING).exists(_.toBoolean)
+    parameters.get(POSITIONAL_FIELD_MATCHING).map { value =>
+      try {
+        value.toBoolean
+      } catch {
+        case _: IllegalArgumentException =>
+          throw QueryCompilationErrors.avroOptionsException(
+            POSITIONAL_FIELD_MATCHING,
+            s"Cannot cast value '$value' to Boolean.")
+      }
+    }.getOrElse(false)
 
   /**
    * Top level record name in write result, which is required in Avro spec.
@@ -107,10 +116,16 @@ private[sql] class AvroOptions(
       AvroFileFormat.IgnoreFilesWithoutExtensionProperty,
       ignoreFilesWithoutExtensionByDefault)
 
-    parameters
-      .get(IGNORE_EXTENSION)
-      .map(_.toBoolean)
-      .getOrElse(!ignoreFilesWithoutExtension)
+    parameters.get(IGNORE_EXTENSION).map { value =>
+      try {
+        value.toBoolean
+      } catch {
+        case _: IllegalArgumentException =>
+          throw QueryCompilationErrors.avroOptionsException(
+            IGNORE_EXTENSION,
+            s"Cannot cast value '$value' to Boolean.")
+      }
+    }.getOrElse(!ignoreFilesWithoutExtension)
   }
 
   /**
@@ -134,7 +149,16 @@ private[sql] class AvroOptions(
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ).toString)
 
   val useStableIdForUnionType: Boolean =
-    parameters.get(STABLE_ID_FOR_UNION_TYPE).map(_.toBoolean).getOrElse(false)
+    parameters.get(STABLE_ID_FOR_UNION_TYPE).map { value =>
+      try {
+        value.toBoolean
+      } catch {
+        case _: IllegalArgumentException =>
+          throw QueryCompilationErrors.avroOptionsException(
+            STABLE_ID_FOR_UNION_TYPE,
+            s"Cannot cast value '$value' to Boolean.")
+      }
+    }.getOrElse(false)
 
   val stableIdPrefixForUnionType: String = parameters
     .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
