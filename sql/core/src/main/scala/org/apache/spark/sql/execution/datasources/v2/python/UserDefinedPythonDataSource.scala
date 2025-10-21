@@ -143,7 +143,8 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       inputSchema: StructType,
       outputSchema: StructType,
       metrics: Map[String, SQLMetric],
-      jobArtifactUUID: Option[String]): MapInBatchEvaluatorFactory = {
+      jobArtifactUUID: Option[String],
+      sessionUUID: Option[String]): MapInBatchEvaluatorFactory = {
     val pythonFunc = createPythonFunction(pickledFunc)
 
     val pythonEvalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
@@ -171,7 +172,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       pythonRunnerConf,
       metrics,
       jobArtifactUUID,
-      None) // TODO: Python worker logging
+      sessionUUID)
   }
 
   def createPythonMetrics(): Array[CustomMetric] = {
