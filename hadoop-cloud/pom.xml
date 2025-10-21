@@ -146,6 +146,7 @@
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
       <artifactId>jackson-dataformat-cbor</artifactId>
+      <version>${fasterxml.jackson.version}</version>
     </dependency>
     <!--Explicit declaration to force in Spark version into transitive dependencies -->
     <dependency>
