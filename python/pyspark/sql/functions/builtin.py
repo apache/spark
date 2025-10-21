@@ -24914,13 +24914,13 @@ def try_make_timestamp(
 
 
 @overload
-def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+def try_make_timestamp(date: "ColumnOrName", time: "ColumnOrName") -> Column:
     ...
 
 
 @overload
 def try_make_timestamp(
-    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+    date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
 ) -> Column:
     ...
 
@@ -24934,7 +24934,6 @@ def try_make_timestamp(
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
     timezone: Optional["ColumnOrName"] = None,
-    *,
     date: Optional["ColumnOrName"] = None,
     time: Optional["ColumnOrName"] = None,
 ) -> Column:
@@ -24978,6 +24977,8 @@ def try_make_timestamp(
         to 0 and 1 minute is added to the final timestamp.
         Required when creating timestamps from individual components.
         Must be used with years, months, days, hours, and mins.
+    timezone : :class:`~pyspark.sql.Column` or column name, optional
+        The time zone identifier. For example, CET, UTC, and etc.
     date : :class:`~pyspark.sql.Column` or column name, optional
         The date to represent, in valid DATE format.
         Required when creating timestamps from date and time components.
@@ -24986,8 +24987,6 @@ def try_make_timestamp(
         The time to represent, in valid TIME format.
         Required when creating timestamps from date and time components.
         Must be used with date parameter only.
-    timezone : :class:`~pyspark.sql.Column` or column name, optional
-        The time zone identifier. For example, CET, UTC and etc.
 
     Returns
     -------
