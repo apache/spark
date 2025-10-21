@@ -18,42 +18,30 @@
 import unittest
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
-    TransformWithStateInPandasTestsMixin,
-    TransformWithStateInPySparkTestsMixin,
+from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable import (
+    TransformWithStateInPandasStateVariableTestsMixin,
 )
 
 
-class TransformWithStateInPandasWithCheckpointV2TestsMixin(TransformWithStateInPandasTestsMixin):
-    @classmethod
-    def conf(cls):
-        cfg = super().conf()
-        cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
-        return cfg
-
-
-class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateInPySparkTestsMixin):
-    @classmethod
-    def conf(cls):
-        cfg = super().conf()
-        cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
-        return cfg
-
-
-class TransformWithStateInPandasWithCheckpointV2Tests(
-    TransformWithStateInPandasWithCheckpointV2TestsMixin, ReusedSQLTestCase
+class TransformWithStateInPandasStateVariableWithCheckpointV2TestsMixin(
+    TransformWithStateInPandasStateVariableTestsMixin
 ):
-    pass
+    @classmethod
+    def conf(cls):
+        cfg = super().conf()
+        cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
+        return cfg
 
 
-class TransformWithStateInPySparkWithCheckpointV2Tests(
-    TransformWithStateInPySparkWithCheckpointV2TestsMixin, ReusedSQLTestCase
+class TransformWithStateInPandasStateVariableWithCheckpointV2Tests(
+    TransformWithStateInPandasStateVariableWithCheckpointV2TestsMixin,
+    ReusedSQLTestCase
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_transform_with_state_checkpoint_v2 import *  # noqa: F401,E501
+    from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable_checkpoint_v2 import *  # noqa: F401,E501
 
     try:
         import xmlrunner

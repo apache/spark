@@ -16,7 +16,7 @@
 #
 import unittest
 
-from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
+from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import (
     TransformWithStateInPySparkTestsMixin,
 )
 from pyspark import SparkConf

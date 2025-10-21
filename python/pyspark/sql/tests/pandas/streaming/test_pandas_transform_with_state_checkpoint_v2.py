@@ -14,47 +14,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import unittest
 
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import (
     TransformWithStateInPandasTestsMixin,
 )
-from pyspark import SparkConf
-from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class TransformWithStateInPandasParityTests(
-    TransformWithStateInPandasTestsMixin, ReusedConnectTestCase
-):
-    """
-    Spark connect parity tests for TransformWithStateInPandas. Run every test case in
-     `TransformWithStateInPandasTestsMixin` in spark connect mode.
-    """
-
+class TransformWithStateInPandasWithCheckpointV2TestsMixin(TransformWithStateInPandasTestsMixin):
     @classmethod
     def conf(cls):
-        # Due to multiple inheritance from the same level, we need to explicitly setting configs in
-        # both TransformWithStateInPandasTestsMixin and ReusedConnectTestCase here
-        cfg = SparkConf(loadDefaults=False)
-        for base in cls.__bases__:
-            if hasattr(base, "conf"):
-                parent_cfg = base.conf()
-                for k, v in parent_cfg.getAll():
-                    cfg.set(k, v)
-
-        # Extra removing config for connect suites
-        if cfg._jconf is not None:
-            cfg._jconf.remove("spark.master")
-
+        cfg = super().conf()
+        cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
         return cfg
 
-    @unittest.skip("Flaky in spark connect on CI. Skip for now. See SPARK-51368 for details.")
-    def test_schema_evolution_scenarios(self):
-        pass
+
+class TransformWithStateInPandasWithCheckpointV2Tests(
+    TransformWithStateInPandasWithCheckpointV2TestsMixin, ReusedSQLTestCase
+):
+    pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state import *  # noqa: F401,E501
+    from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_checkpoint_v2 import *  # noqa: F401,E501
 
     try:
         import xmlrunner

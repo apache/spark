@@ -660,8 +660,14 @@ pyspark_structured_streaming = Module(
         "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
         "pyspark.sql.tests.streaming.test_streaming_listener",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
-        "pyspark.sql.tests.pandas.test_pandas_transform_with_state",
-        "pyspark.sql.tests.pandas.test_pandas_transform_with_state_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable_checkpoint_v2",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
