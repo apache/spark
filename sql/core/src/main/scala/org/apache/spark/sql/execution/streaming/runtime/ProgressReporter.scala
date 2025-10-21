@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSinkMetrics, ReportsSourceMetrics, SparkDataStream}
 import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
+import org.apache.spark.sql.execution.streaming.StreamingQueryPlanTraverseHelper
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
@@ -443,8 +444,8 @@ abstract class ProgressContext(
 
     val sources = newData.keys.toSet
 
-    val sourceToInputRowsTuples = lastExecution.executedPlan
-      .collect {
+    val sourceToInputRowsTuples = StreamingQueryPlanTraverseHelper
+      .collectFromUnfoldedPlan(lastExecution.executedPlan) {
         case node: StreamSourceAwareSparkPlan if node.getStream.isDefined =>
           val numRows = node.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
           node.getStream.get -> numRows
@@ -502,12 +503,13 @@ abstract class ProgressContext(
       // It's possible that multiple DataSourceV2ScanExec instances may refer to the same source
       // (can happen with self-unions or self-joins). This means the source is scanned multiple
       // times in the query, we should count the numRows for each scan.
-      val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
-        case s: MicroBatchScanExec =>
-          val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          val source = s.stream
-          source -> numRows
-      }
+      val sourceToInputRowsTuples = StreamingQueryPlanTraverseHelper
+        .collectFromUnfoldedPlan(lastExecution.executedPlan) {
+          case s: MicroBatchScanExec =>
+            val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+            val source = s.stream
+            source -> numRows
+        }
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
       sumRows(sourceToInputRowsTuples)
     } else {
@@ -544,7 +546,10 @@ abstract class ProgressContext(
       val finalLogicalPlan = unrollCTE(lastExecution.logical)
 
       val allLogicalPlanLeaves = finalLogicalPlan.collectLeaves() // includes non-streaming
-      val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()
+      val allExecPlanLeaves = StreamingQueryPlanTraverseHelper
+        .collectFromUnfoldedPlan(lastExecution.executedPlan) {
+          case p if p.children.isEmpty => p
+        }
       if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
         val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
           case (_, ep: MicroBatchScanExec) =>
@@ -580,10 +585,11 @@ abstract class ProgressContext(
   private def extractStateOperatorMetrics(
       lastExecution: IncrementalExecution): Seq[StateOperatorProgress] = {
     assert(lastExecution != null, "lastExecution is not available")
-    lastExecution.executedPlan.collect {
-      case p if p.isInstanceOf[StateStoreWriter] =>
-        p.asInstanceOf[StateStoreWriter].getProgress()
-    }
+    StreamingQueryPlanTraverseHelper
+      .collectFromUnfoldedPlan(lastExecution.executedPlan) {
+        case p if p.isInstanceOf[StateStoreWriter] =>
+          p.asInstanceOf[StateStoreWriter].getProgress()
+      }
   }
 
   /** Extracts statistics from the most recent query execution. */
@@ -609,8 +615,8 @@ abstract class ProgressContext(
       return ExecutionStats(Map.empty, stateOperators, watermarkTimestamp, sinkOutput)
     }
 
-    val eventTimeStats = lastExecution.executedPlan
-      .collect {
+    val eventTimeStats = StreamingQueryPlanTraverseHelper
+      .collectFromUnfoldedPlan(lastExecution.executedPlan) {
         case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
           val stats = e.eventTimeStats.value
           Map(
