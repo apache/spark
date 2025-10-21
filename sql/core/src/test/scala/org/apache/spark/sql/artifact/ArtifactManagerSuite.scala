@@ -503,15 +503,8 @@ class ArtifactManagerSuite extends SharedSparkSession {
       assert(newArtifactManager.artifactPath !== artifactManager.artifactPath)
 
       // Load the cached artifact
-      val blockManager = newSession.sparkContext.env.blockManager
-      for (sessionId <- Seq(spark.sessionUUID, newSession.sessionUUID)) {
-        val cacheId = CacheId(sessionId, "test")
-        try {
-          assert(blockManager.getLocalBytes(cacheId).get.toByteBuffer().array() === testBytes)
-        } finally {
-          blockManager.releaseLock(cacheId)
-        }
-      }
+      assert(spark.artifactManager.getCachedBlockId("test")
+        == newArtifactManager.getCachedBlockId("test"))
 
       val allFiles = Utils.listFiles(newArtifactManager.artifactPath.toFile)
       assert(allFiles.size() === 3)
