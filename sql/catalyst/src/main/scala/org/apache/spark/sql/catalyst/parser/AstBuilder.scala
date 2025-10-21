@@ -2086,6 +2086,12 @@ class AstBuilder extends DataTypeAstBuilder
     val expression = visitNamedExpression(ctx.namedExpression())
 
     val namedExpression = expression match {
+      // Need to check this earlier since MultiAlias is also a NamedExpression
+      case _: MultiAlias =>
+        throw new AnalysisException(
+          errorClass = "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE",
+          messageParameters = Map()
+        )
       case e: NamedExpression => e
       case _ =>
         throw new AnalysisException(

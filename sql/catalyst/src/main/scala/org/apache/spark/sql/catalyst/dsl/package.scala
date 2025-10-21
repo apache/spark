@@ -567,18 +567,14 @@ package object dsl extends SQLConfHelper {
 
       def deduplicate(colNames: Attribute*): LogicalPlan = Deduplicate(colNames, logicalPlan)
 
-      def watermark(expr: Expression, delayThreshold: CalendarInterval): LogicalPlan = {
-        val namedExpression = expr match {
-          case e: NamedExpression => e
-          case e: Expression => UnresolvedAlias(e)
-        }
-        val proj = Project(Seq(namedExpression, UnresolvedStar(None)), logicalPlan)
-        val attrRef = proj.projectList.head.toAttribute
-
-        EventTimeWatermark(java.util.UUID.randomUUID(), attrRef, delayThreshold, proj)
+      def withWatermark(
+          uuid: java.util.UUID,
+          expr: NamedExpression,
+          delayThreshold: CalendarInterval): LogicalPlan = {
+        EventTimeWatermark(uuid, expr.toAttribute, delayThreshold, logicalPlan)
       }
 
-      def watermarkUnresolved(
+      def unresolvedWithWatermark(
           expr: NamedExpression,
           delayThreshold: CalendarInterval): LogicalPlan = {
         UnresolvedEventTimeWatermark(expr, delayThreshold, logicalPlan)

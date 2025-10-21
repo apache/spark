@@ -2028,7 +2028,7 @@ class PlanParserSuite extends AnalysisTest {
         |""".stripMargin,
       table("testData")
         .as("tbl")
-        .watermarkUnresolved(
+        .unresolvedWithWatermark(
           UnresolvedAttribute("ts"),
           IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
         .where($"a" > 1)
@@ -2046,7 +2046,7 @@ class PlanParserSuite extends AnalysisTest {
         |""".stripMargin,
       table("testData")
         .as("tbl")
-        .watermarkUnresolved(
+        .unresolvedWithWatermark(
           Alias(
             UnresolvedFunction(
               Seq("timestamp_seconds"), Seq(UnresolvedAttribute("value")), isDistinct = false),
@@ -2088,7 +2088,7 @@ class PlanParserSuite extends AnalysisTest {
       table("testData")
         .select(UnresolvedStar(None))
         .as("tbl")
-        .watermarkUnresolved(
+        .unresolvedWithWatermark(
           UnresolvedAttribute("ts"),
           IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
         .where($"a" > 1)
@@ -2111,7 +2111,7 @@ class PlanParserSuite extends AnalysisTest {
         |WHERE key = 'a'
         |""".stripMargin,
       table("testData")
-        .watermarkUnresolved(
+        .unresolvedWithWatermark(
           Alias(
             UnresolvedFunction(
               Seq("timestamp_seconds"), Seq(UnresolvedAttribute("ts")), isDistinct = false),
@@ -2136,7 +2136,7 @@ class PlanParserSuite extends AnalysisTest {
         |WHERE a > 1
         |""".stripMargin,
       src1.join(src2, Inner, Option($"s1.id" === $"s2.id"))
-        .watermarkUnresolved(
+        .unresolvedWithWatermark(
           UnresolvedAttribute("ts"),
           IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
         .as("dst")
@@ -2155,7 +2155,7 @@ class PlanParserSuite extends AnalysisTest {
         |WHERE a > 1
         |""".stripMargin,
       UnresolvedTableValuedFunction("mock_tvf", Seq(Literal(1), Literal("a")))
-        .watermarkUnresolved(
+        .unresolvedWithWatermark(
           UnresolvedAttribute("ts"),
           IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
         .as("dst")

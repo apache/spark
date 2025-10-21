@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
@@ -30,23 +29,16 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
     _.containsPattern(TreePattern.UNRESOLVED_EVENT_TIME_WATERMARK), ruleId) {
 
     case u: UnresolvedEventTimeWatermark if u.eventTimeColExpr.resolved && u.childrenResolved =>
-      if (u.eventTimeColExpr.isInstanceOf[MultiAlias]) {
-        throw new AnalysisException(
-          errorClass = "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE",
-          messageParameters = Map()
-        )
-      }
-
       val uuid = java.util.UUID.randomUUID()
 
+      val attrRef = u.eventTimeColExpr.toAttribute
       if (u.child.outputSet.contains(u.eventTimeColExpr)) {
         // We don't need to have projection since the attribute being referenced will be available.
-        EventTimeWatermark(uuid, u.eventTimeColExpr.toAttribute, u.delay, u.child)
+        EventTimeWatermark(uuid, attrRef, u.delay, u.child)
       } else {
         // We need to inject projection as we can't find the matching column directly in the
         // child output.
         val proj = Project(Seq(u.eventTimeColExpr) ++ u.child.output, u.child)
-        val attrRef = u.eventTimeColExpr.toAttribute
         EventTimeWatermark(uuid, attrRef, u.delay, proj)
       }
     }

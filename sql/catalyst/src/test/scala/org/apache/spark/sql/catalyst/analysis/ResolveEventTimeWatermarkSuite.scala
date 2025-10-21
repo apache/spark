@@ -32,7 +32,7 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
 
   test("event time column expr refers to the column in child") {
     val planBeforeRule = streamingRelation
-      .watermarkUnresolved($"ts", new CalendarInterval(0, 0, 1000))
+      .unresolvedWithWatermark($"ts", new CalendarInterval(0, 0, 1000))
 
     val analyzed = getAnalyzer.execute(planBeforeRule)
 
@@ -46,18 +46,18 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
 
     comparePlans(
       uuidInjectedAnalyzed,
-      EventTimeWatermark(
-        uuid,
-        streamingRelation.output.find(_.name == "ts").head,
-        new CalendarInterval(0, 0, 1000),
-        streamingRelation
-      )
+      streamingRelation
+        .withWatermark(
+          uuid,
+          $"ts",
+          new CalendarInterval(0, 0, 1000)
+        ).analyze
     )
   }
 
   test("event time column expr deduces a new column from alias") {
     val planBeforeRule = streamingRelation
-      .watermarkUnresolved(
+      .unresolvedWithWatermark(
         Alias(
           UnresolvedFunction(
             Seq("timestamp_seconds"), Seq(UnresolvedAttribute("a")), isDistinct = false),
@@ -75,7 +75,8 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
       case e: EventTimeWatermark => e.copy(nodeId = uuid)
     }
 
-    val selectAsResolved = getAnalyzer.execute(
+    comparePlans(
+      uuidInjectedAnalyzed,
       streamingRelation
         .select(
           Alias(
@@ -84,22 +85,14 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
             "event_time"
           )(),
           // `*` will be resolved to `a`, `ts`
-          streamingRelation.output.head,
-          streamingRelation.output(1)
+          $"a",
+          $"ts"
         )
-    )
-
-    val expectedLogicalPlan = EventTimeWatermark(
-      uuid,
-      selectAsResolved.output.find(_.name == "event_time").head,
-      new CalendarInterval(0, 0, 1000),
-      selectAsResolved
-    )
-    val expectedAnalyzed = getAnalyzer.execute(expectedLogicalPlan)
-
-    comparePlans(
-      uuidInjectedAnalyzed,
-      expectedAnalyzed
+        .withWatermark(
+          uuid,
+          $"event_time",
+          new CalendarInterval(0, 0, 1000)
+        ).analyze
     )
   }
 }
