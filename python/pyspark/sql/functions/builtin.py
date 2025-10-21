@@ -12711,6 +12711,49 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    """
+    Returns the difference between two times, measured in specified units.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : :class:`~pyspark.sql.Column` or column name
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    start : :class:`~pyspark.sql.Column` or column name
+        A starting time.
+    end : :class:`~pyspark.sql.Column` or column name
+        An ending time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The difference between two times, in the specified units.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.timestamp_diff`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("HOUR", "13:08:15", "21:30:28")], ['unit', 'start', 'end']).withColumn("start",
+    ...     sf.col("start").cast("time")).withColumn("end", sf.col("end").cast("time"))
+    >>> df.select('*', sf.time_diff('unit', 'start', 'end')).show()
+    +----+--------+--------+---------------------------+
+    |unit|   start|     end|time_diff(unit, start, end)|
+    +----+--------+--------+---------------------------+
+    |HOUR|13:08:15|21:30:28|                          8|
+    +----+--------+--------+---------------------------+
+    """
+    return _invoke_function_over_columns("time_diff", unit, start, end)
+
+
+@_try_remote_functions
 def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     """
     Returns `time` truncated to the `unit`.
@@ -13919,12 +13962,12 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     --------
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(0, 1)], ['a', 'b'])
-    >>> df.select('*', sf.assert_true(df.a < df.b)).show() # doctest: +SKIP
-    +------------------------------------------------------+
-    |assert_true((a < b), '(a#788L < b#789L)' is not true!)|
-    +------------------------------------------------------+
-    |                                                  NULL|
-    +------------------------------------------------------+
+    >>> df.select('*', sf.assert_true(df.a < df.b)).show()
+    +---+---+--------------------------------------------+
+    |  a|  b|assert_true((a < b), '(a < b)' is not true!)|
+    +---+---+--------------------------------------------+
+    |  0|  1|                                        NULL|
+    +---+---+--------------------------------------------+
 
     >>> df.select('*', sf.assert_true(df.a < df.b, df.a)).show()
     +---+---+-----------------------+
@@ -16627,14 +16670,14 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("abc",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e, sf.lit("utf-8")).alias('r')).collect()
-    [Row(r=bytearray(b'abc'))]
+    [Row(r=b'abc')]
 
     Example 2: Convert string to a timestamp without encoding specified
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("414243",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e).alias('r')).collect()
-    [Row(r=bytearray(b'ABC'))]
+    [Row(r=b'ABC')]
     """
     if format is not None:
         return _invoke_function_over_columns("to_binary", col, format)
@@ -17650,14 +17693,14 @@ def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("abc",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e, sf.lit("utf-8")).alias('r')).collect()
-    [Row(r=bytearray(b'abc'))]
+    [Row(r=b'abc')]
 
     Example 2: Convert string to a timestamp without encoding specified
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("414243",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e).alias('r')).collect()
-    [Row(r=bytearray(b'ABC'))]
+    [Row(r=b'ABC')]
 
     Example 3: Converion failure results in NULL when ANSI mode is on
 
@@ -25722,9 +25765,54 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    Notes
-    -----
-    Supports Spark Connect.
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The underlying representation.
+
+    Examples
+    --------
+    Example 1: Unwrap ML-specific UDT - VectorUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.ml.linalg import Vectors
+    >>> vec1 = Vectors.dense(1, 2, 3)
+    >>> vec2 = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+    >>> df = spark.createDataFrame([(vec1,), (vec2,)], ["vec"])
+    >>> df.select(sf.unwrap_udt("vec")).printSchema()
+    root
+     |-- unwrap_udt(vec): struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- size: integer (nullable = true)
+     |    |-- indices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+
+    Example 2: Unwrap ML-specific UDT - MatrixUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.ml.linalg import Matrices
+    >>> mat1 = Matrices.dense(2, 2, range(4))
+    >>> mat2 = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+    >>> df = spark.createDataFrame([(mat1,), (mat2,)], ["mat"])
+    >>> df.select(sf.unwrap_udt("mat")).printSchema()
+    root
+     |-- unwrap_udt(mat): struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- numRows: integer (nullable = false)
+     |    |-- numCols: integer (nullable = false)
+     |    |-- colPtrs: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- rowIndices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+     |    |-- isTransposed: boolean (nullable = false)
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -27441,6 +27529,7 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.bitmap_bucket_number`
     :meth:`pyspark.sql.functions.bitmap_construct_agg`
     :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_and_agg`
 
     Parameters
     ----------
@@ -27459,6 +27548,41 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
     +--------------------------------+
     """
     return _invoke_function_over_columns("bitmap_or_agg", col)
+
+
+@_try_remote_functions
+def bitmap_and_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND of all of the bitmaps from the input column.
+    The input column should be bitmaps created from bitmap_construct_agg().
+
+    .. versionadded:: 4.1.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0",),("70",),("30",)], ["a"])
+    >>> df.select(sf.bitmap_and_agg(sf.to_binary(df.a, sf.lit("hex")))).show()
+    +---------------------------------+
+    |bitmap_and_agg(to_binary(a, hex))|
+    +---------------------------------+
+    |             [30 00 00 00 00 0...|
+    +---------------------------------+
+    """
+    return _invoke_function_over_columns("bitmap_and_agg", col)
 
 
 # ---------------------------- User Defined Function ----------------------------------
@@ -27895,8 +28019,14 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.functions.builtin
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.functions.builtin.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.functions.builtin.udf.__doc__
+        del pyspark.sql.functions.builtin.arrow_udtf.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()
     )

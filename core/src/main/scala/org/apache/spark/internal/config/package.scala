@@ -942,7 +942,6 @@ package object config {
   private[spark] val EXCLUDE_ON_FAILURE_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.enabled")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.enabled")
       .booleanConf
       .createOptional
 
@@ -961,56 +960,48 @@ package object config {
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerExecutor")
       .intConf
       .createWithDefault(1)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerNode")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerNode")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC =
     ConfigBuilder("spark.excludeOnFailure.application.maxFailedTasksPerExecutor")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.application.maxFailedTasksPerExecutor")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
     ConfigBuilder("spark.excludeOnFailure.stage.maxFailedTasksPerExecutor")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.stage.maxFailedTasksPerExecutor")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
     ConfigBuilder("spark.excludeOnFailure.application.maxFailedExecutorsPerNode")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.application.maxFailedExecutorsPerNode")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
     ConfigBuilder("spark.excludeOnFailure.stage.maxFailedExecutorsPerNode")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.stage.maxFailedExecutorsPerNode")
       .intConf
       .createWithDefault(2)
 
   private[spark] val EXCLUDE_ON_FAILURE_TIMEOUT_CONF =
     ConfigBuilder("spark.excludeOnFailure.timeout")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.timeout")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val EXCLUDE_ON_FAILURE_KILL_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.killBlacklistedExecutors")
       .booleanConf
       .createWithDefault(false)
 
@@ -1025,14 +1016,12 @@ package object config {
     ConfigBuilder("spark.scheduler.executorTaskExcludeOnFailureTime")
       .internal()
       .version("3.1.0")
-      .withAlternative("spark.scheduler.executorTaskBlacklistTime")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.application.fetchFailure.enabled")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.application.fetchFailure.enabled")
       .booleanConf
       .createWithDefault(false)
 
@@ -1866,7 +1855,6 @@ package object config {
         "before aborting a TaskSet which is unschedulable because all executors are " +
         "excluded due to failures.")
       .version("3.1.0")
-      .withAlternative("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
       .createWithDefault(120)
@@ -2149,7 +2137,7 @@ package object config {
       .doc("When true, LZF compression will use multiple threads to compress data in parallel.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val IO_WARNING_LARGEFILETHRESHOLD =
     ConfigBuilder("spark.io.warning.largeFileThreshold")
@@ -2901,7 +2889,7 @@ package object config {
       .createWithDefault(Seq("stdout", "stderr"))
 
   private[spark] val EXEC_REDIRECT_CONSOLE_OUTPUTS =
-    ConfigBuilder("spark.executor.log.redirectConsoleOutputs")
+    ConfigBuilder("spark.executor.logs.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for executor that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
         s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")

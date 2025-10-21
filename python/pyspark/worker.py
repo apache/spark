@@ -66,6 +66,7 @@ from pyspark.sql.pandas.serializers import (
     TransformWithStateInPySparkRowSerializer,
     TransformWithStateInPySparkRowInitStateSerializer,
     ArrowStreamArrowUDFSerializer,
+    ArrowStreamAggArrowUDFSerializer,
     ArrowBatchUDFSerializer,
     ArrowStreamUDTFSerializer,
     ArrowStreamArrowUDTFSerializer,
@@ -1346,6 +1347,7 @@ def use_legacy_pandas_udf_conversion(runner_conf):
 def read_udtf(pickleSer, infile, eval_type):
     prefers_large_var_types = False
     legacy_pandas_conversion = False
+    binary_as_bytes = True
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
         runner_conf = {}
@@ -1361,6 +1363,9 @@ def read_udtf(pickleSer, infile, eval_type):
                 "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
             ).lower()
             == "true"
+        )
+        binary_as_bytes = (
+            runner_conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true").lower() == "true"
         )
         input_types = [
             field.dataType for field in _parse_datatype_json_string(utf8_deserializer.loads(infile))
@@ -2306,7 +2311,9 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 converters = [
-                    ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True)
+                    ArrowTableToRowsConversion._create_converter(
+                        dt, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                    )
                     for dt in input_types
                 ]
                 for a in it:
@@ -2604,6 +2611,9 @@ def read_udfs(pickleSer, infile, eval_type):
             ).lower()
             == "true"
         )
+        binary_as_bytes = (
+            runner_conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true").lower() == "true"
+        )
         _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
         if (
@@ -2611,7 +2621,16 @@ def read_udfs(pickleSer, infile, eval_type):
             or eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
         ):
             ser = GroupArrowUDFSerializer(_assign_cols_by_name)
-        elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+        elif eval_type in (
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+        ):
+            ser = ArrowStreamAggArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
+        elif eval_type in (
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        ):
             ser = GroupPandasUDFSerializer(
                 timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
             )
@@ -2646,11 +2665,17 @@ def read_udfs(pickleSer, infile, eval_type):
             )
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
+            arrow_max_bytes_per_batch = runner_conf.get(
+                "spark.sql.execution.arrow.maxBytesPerBatch", 2**31 - 1
+            )
+            arrow_max_bytes_per_batch = int(arrow_max_bytes_per_batch)
+
             ser = TransformWithStateInPandasSerializer(
                 timezone,
                 safecheck,
                 _assign_cols_by_name,
                 arrow_max_records_per_batch,
+                arrow_max_bytes_per_batch,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
@@ -2659,11 +2684,17 @@ def read_udfs(pickleSer, infile, eval_type):
             )
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
+            arrow_max_bytes_per_batch = runner_conf.get(
+                "spark.sql.execution.arrow.maxBytesPerBatch", 2**31 - 1
+            )
+            arrow_max_bytes_per_batch = int(arrow_max_bytes_per_batch)
+
             ser = TransformWithStateInPandasInitStateSerializer(
                 timezone,
                 safecheck,
                 _assign_cols_by_name,
                 arrow_max_records_per_batch,
+                arrow_max_bytes_per_batch,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
@@ -2685,8 +2716,6 @@ def read_udfs(pickleSer, infile, eval_type):
         elif eval_type in (
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
-            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
             # Arrow cast and safe check are always enabled
             ser = ArrowStreamArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
@@ -2698,7 +2727,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ]
             ser = ArrowBatchUDFSerializer(
-                timezone, safecheck, input_types, int_to_decimal_coercion_enabled
+                timezone, safecheck, input_types, int_to_decimal_coercion_enabled, binary_as_bytes
             )
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of

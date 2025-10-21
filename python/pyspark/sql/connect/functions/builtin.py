@@ -3650,6 +3650,13 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
 
 
+def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_diff", unit, start, end)
+
+
+time_diff.__doc__ = pysparkfuncs.time_diff.__doc__
+
+
 def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("time_trunc", unit, time)
 
@@ -4619,6 +4626,13 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
 bitmap_or_agg.__doc__ = pysparkfuncs.bitmap_or_agg.__doc__
 
 
+def bitmap_and_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_and_agg", col)
+
+
+bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
+
+
 # Call Functions
 
 
@@ -4703,8 +4717,13 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.functions.builtin
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.connect.functions.builtin.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.connect.functions.builtin.udf.__doc__
+        del pyspark.sql.connect.functions.builtin.arrow_udtf.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

@@ -6,35 +6,35 @@ OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Empty Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.3        3145.0       1.0X
-Utils.cloneProperties                                 0              0           0         11.1          90.0      34.9X
+SerializationUtils.clone                              0              0           0          0.3        3166.0       1.0X
+Utils.cloneProperties                                 0              0           0         11.2          89.0      35.6X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 System Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.0      166011.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.2        4758.0      34.9X
+SerializationUtils.clone                              0              0           0          0.0      163897.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.2        4909.0      33.4X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Small Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.0      241673.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.2        5450.0      44.3X
+SerializationUtils.clone                              0              0           0          0.0      239028.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.2        6011.0      39.8X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Medium Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              1              1           0          0.0      855822.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.0       27581.0      31.0X
+SerializationUtils.clone                              1              1           0          0.0      840785.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.0       30567.0      27.5X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Large Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              2              2           0          0.0     1611288.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.0       55464.0      29.1X
+SerializationUtils.clone                              2              2           0          0.0     1587893.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.0       60934.0      26.1X
 
 

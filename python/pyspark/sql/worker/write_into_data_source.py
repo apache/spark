@@ -171,6 +171,7 @@ def main(infile: IO, outfile: IO) -> None:
         overwrite = read_bool(infile)
 
         is_streaming = read_bool(infile)
+        binary_as_bytes = read_bool(infile)
 
         # Instantiate a data source.
         data_source = data_source_cls(options=options)  # type: ignore
@@ -205,7 +206,10 @@ def main(infile: IO, outfile: IO) -> None:
         import pyarrow as pa
 
         converters = [
-            ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
+            ArrowTableToRowsConversion._create_converter(
+                f.dataType, none_on_identity=False, binary_as_bytes=binary_as_bytes
+            )
+            for f in schema.fields
         ]
         fields = schema.fieldNames()
 
@@ -215,7 +219,8 @@ def main(infile: IO, outfile: IO) -> None:
                     columns = [column.to_pylist() for column in batch.columns]
                     for row in range(0, batch.num_rows):
                         values = [
-                            converters[col](columns[col][row]) for col in range(batch.num_columns)
+                            converters[col](columns[col][row])  # type: ignore[misc]
+                            for col in range(batch.num_columns)
                         ]
                         yield _create_row(fields=fields, values=values)
 

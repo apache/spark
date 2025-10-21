@@ -32,6 +32,7 @@ from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import (
     StringType,
     IntegerType,
+    BinaryType,
     BooleanType,
     DoubleType,
     LongType,
@@ -193,13 +194,16 @@ class BaseUDFTestsMixin(object):
             df.agg(sum(udf_random_col())).collect()
 
     def test_chained_udf(self):
-        self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())
-        [row] = self.spark.sql("SELECT double(1)").collect()
-        self.assertEqual(row[0], 2)
-        [row] = self.spark.sql("SELECT double(double(1))").collect()
-        self.assertEqual(row[0], 4)
-        [row] = self.spark.sql("SELECT double(double(1) + 1)").collect()
-        self.assertEqual(row[0], 6)
+        self.spark.catalog.registerFunction("double_int", lambda x: x + x, IntegerType())
+        try:
+            [row] = self.spark.sql("SELECT double_int(1)").collect()
+            self.assertEqual(row[0], 2)
+            [row] = self.spark.sql("SELECT double_int(double_int(1))").collect()
+            self.assertEqual(row[0], 4)
+            [row] = self.spark.sql("SELECT double_int(double_int(1) + 1)").collect()
+            self.assertEqual(row[0], 6)
+        finally:
+            self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS double_int")
 
     def test_single_udf_with_repeated_argument(self):
         # regression test for SPARK-20685
@@ -1445,6 +1449,89 @@ class BaseUDFTestsMixin(object):
                     return return_value
 
                 self.spark.range(1).select(my_udf().alias("result")).show()
+
+    def test_udf_binary_type(self):
+        def get_binary_type(x):
+            return type(x).__name__
+
+        binary_udf = udf(get_binary_type, returnType="string")
+
+        df = self.spark.createDataFrame(
+            [Row(b=b"hello world")], schema=StructType([StructField("b", BinaryType())])
+        )
+
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = df.select(binary_udf(col("b")).alias("type_name"))
+                expected = self.spark.createDataFrame([Row(type_name=expected_type)])
+                assertDataFrameEqual(result, expected)
+
+    def test_udf_binary_type_in_nested_structures(self):
+        """Test that binary type in arrays, maps, and structs respects binaryAsBytes config"""
+
+        # Test binary in array
+        def check_array_binary_type(arr):
+            return type(arr[0]).__name__
+
+        array_udf = udf(check_array_binary_type, returnType="string")
+        df_array = self.spark.createDataFrame(
+            [Row(arr=[b"hello world"])],
+            schema=StructType([StructField("arr", ArrayType(BinaryType()))]),
+        )
+
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = df_array.select(array_udf(col("arr")).alias("type_name"))
+                expected = self.spark.createDataFrame([Row(type_name=expected_type)])
+                assertDataFrameEqual(result, expected)
+
+        # Test binary in map value
+        def check_map_binary_type(m):
+            return type(list(m.values())[0]).__name__
+
+        map_udf = udf(check_map_binary_type, returnType="string")
+        df_map = self.spark.createDataFrame(
+            [Row(m={"key": b"value"})],
+            schema=StructType([StructField("m", MapType(StringType(), BinaryType()))]),
+        )
+
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = df_map.select(map_udf(col("m")).alias("type_name"))
+                expected = self.spark.createDataFrame([Row(type_name=expected_type)])
+                assertDataFrameEqual(result, expected)
+
+        # Test binary in struct
+        def check_struct_binary_type(s):
+            return type(s.binary_field).__name__
+
+        struct_udf = udf(check_struct_binary_type, returnType="string")
+        df_struct = self.spark.createDataFrame(
+            [Row(s=Row(binary_field=b"test", other_field="value"))],
+            schema=StructType(
+                [
+                    StructField(
+                        "s",
+                        StructType(
+                            [
+                                StructField("binary_field", BinaryType()),
+                                StructField("other_field", StringType()),
+                            ]
+                        ),
+                    )
+                ]
+            ),
+        )
+
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = df_struct.select(struct_udf(col("s")).alias("type_name"))
+                expected = self.spark.createDataFrame([Row(type_name=expected_type)])
+                assertDataFrameEqual(result, expected)
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
