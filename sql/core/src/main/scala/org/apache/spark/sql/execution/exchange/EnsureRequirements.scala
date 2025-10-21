@@ -165,7 +165,8 @@ case class EnsureRequirements(
       // Check if the following conditions are satisfied:
       //   1. There are exactly two children (e.g., join). Note that Spark doesn't support
       //      multi-way join at the moment, so this check should be sufficient.
-      //   2. All children are of the same partitioning, and they are compatible with each other
+      //   2. All children are of the compatible key group partitioning or 
+      //    compatible shuffle partition id pass through partitioning
       // If both are true, skip shuffle.
       val areChildrenCompatible = parent.isDefined &&
           children.length == 2 && childrenIndexes.length == 2 && {

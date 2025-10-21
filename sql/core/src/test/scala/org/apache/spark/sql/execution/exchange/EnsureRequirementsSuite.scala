@@ -1332,7 +1332,6 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           s"clustering keys, but got: $other")
       }
 
-      // Test case 2: partition key matches at position 1
       // Both sides partitioned by exprB and join on (exprA, exprB)
       // Should be compatible because partition key exprB matches at position 1 in join keys
       val leftPlanB = DummySparkPlan(outputPartitioning = passThrough_b_5)
