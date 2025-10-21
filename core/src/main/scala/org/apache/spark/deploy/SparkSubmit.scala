@@ -1036,7 +1036,9 @@ private[spark] class SparkSubmit extends Logging {
           case _ =>
         }
         // Store the diagnostics externally if enabled, but still throw to complete the application.
-        storeDiagnostics(args, sparkConf, cause)
+        if (sparkConf.getBoolean("spark.kubernetes.storeDiagnostics", false)) {
+          storeDiagnostics(args, sparkConf, cause)
+        }
         throw cause
     } finally {
       if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
@@ -1070,12 +1072,12 @@ private[spark] class SparkSubmit extends Logging {
     // Swallow exceptions when storing diagnostics, this shouldn't fail the application.
     try {
       if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass)
-        && !isThriftServer(args.mainClass) && !isConnectServer(args.mainClass)) {
+          && !isThriftServer(args.mainClass) && !isConnectServer(args.mainClass)) {
         SparkSubmitUtils.getSparkDiagnosticsSetters(args.master, sparkConf)
           .foreach(_.setDiagnostics(throwable, sparkConf))
       }
     } catch {
-      case e: Throwable => logWarning(s"Failed to set diagnostics: $e")
+      case e: Throwable => logDebug(s"Failed to set diagnostics: $e")
     }
   }
 }

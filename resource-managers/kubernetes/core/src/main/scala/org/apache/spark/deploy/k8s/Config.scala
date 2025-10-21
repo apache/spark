@@ -787,7 +787,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_STORE_DIAGNOSTICS =
     ConfigBuilder("spark.kubernetes.storeDiagnostics")
       .doc("If set to true, Spark will store diagnostics information for failed applications in" +
-        s" the Kubernetes API server using the ${DIAGNOSTICS_ANNOTATION} annotation.")
+        s" the Kubernetes API server using the $DIAGNOSTICS_ANNOTATION annotation.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
