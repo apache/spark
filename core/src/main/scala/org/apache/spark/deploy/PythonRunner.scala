@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.File
+import java.io.OutputStream
 import java.net.URI
 import java.nio.file.Files
 
@@ -28,7 +29,7 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkUserAppException}
 import org.apache.spark.api.python.{Py4JServer, PythonUtils}
 import org.apache.spark.internal.config._
-import org.apache.spark.util.{RedirectThread, Utils}
+import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
 
 /**
  * A main class used to launch Python applications. It executes python as a
@@ -40,6 +41,10 @@ object PythonRunner {
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
     val sparkConf = new SparkConf()
+    val redirectJoinTimeoutMs = sparkConf
+      .getOption("spark.python.redirectOutputJoinTimeoutMs")
+      .flatMap(v => Try(v.toLong).toOption)
+      .getOrElse(1000L)
     val pythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
       .orElse(sparkConf.get(PYSPARK_PYTHON))
       .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
@@ -96,16 +101,39 @@ object PythonRunner {
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
       val process = builder.start()
-
-      new RedirectThread(process.getInputStream, System.out, "redirect output").start()
+      val pythonOutputBuffer = new CircularBuffer()
+      val outputRedirectThread = createLogOutputRedirectThread(process, pythonOutputBuffer)
+      outputRedirectThread.start()
 
       val exitCode = process.waitFor()
+      scala.util.control.Exception.ignoring(classOf[Throwable]) {
+        outputRedirectThread.join(redirectJoinTimeoutMs)
+      }
       if (exitCode != 0) {
-        throw new SparkUserAppException(exitCode)
+        val tail = Option(pythonOutputBuffer.toString).map(_.trim).getOrElse("")
+        throw new SparkUserAppException(exitCode) {
+          override def getMessage: String = s"${super.getMessage}: \n$tail"
+        }
       }
     } finally {
       gatewayServer.shutdown()
     }
+  }
+
+  private def createLogOutputRedirectThread(
+      process: Process,
+      buffer: CircularBuffer): RedirectThread = {
+    // Tee merged stdout+stderr to System.out and capture the tail for diagnostics
+    val teeOut = new OutputStream() {
+      override def write(b: Int): Unit = {
+        System.out.write(b)
+        buffer.write(b)
+      }
+      override def flush(): Unit = System.out.flush()
+      override def close(): Unit = System.out.close()
+    }
+    new RedirectThread(process.getInputStream,
+      teeOut, "redirect output")
   }
 
   /**
