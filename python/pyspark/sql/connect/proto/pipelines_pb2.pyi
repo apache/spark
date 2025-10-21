@@ -1445,3 +1445,34 @@ class PipelineQueryFunctionExecutionSignal(google.protobuf.message.Message):
     ) -> None: ...
 
 global___PipelineQueryFunctionExecutionSignal = PipelineQueryFunctionExecutionSignal
+
+class PipelineAnalysisContext(google.protobuf.message.Message):
+    """Provides context for pipeline analysis during Spark Connect query execution."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DEFINITION_PATH_FIELD_NUMBER: builtins.int
+    definition_path: builtins.str
+    """Defines the path assigned at runtime when the pipeline initializes"""
+    def __init__(
+        self,
+        *,
+        definition_path: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_definition_path", b"_definition_path", "definition_path", b"definition_path"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_definition_path", b"_definition_path", "definition_path", b"definition_path"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_definition_path", b"_definition_path"]
+    ) -> typing_extensions.Literal["definition_path"] | None: ...
+
+global___PipelineAnalysisContext = PipelineAnalysisContext
