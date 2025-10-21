@@ -542,6 +542,7 @@ class GeographyType(SpatialType):
     # specifications. If CRS or algorithm values are omitted, they should default to these.
     DEFAULT_CRS = "OGC:CRS84"
     DEFAULT_ALG = "SPHERICAL"
+    DEFAULT_SRID = 4326
 
     def __init__(self, srid: int | str):
         # Special string value "ANY" is used to represent the mixed SRID GEOGRAPHY type.
@@ -549,7 +550,7 @@ class GeographyType(SpatialType):
             self.srid = GeographyType.MIXED_SRID
             self._crs = GeographyType.MIXED_CRS
         # Otherwise, the parameterized GEOMETRY type syntax requires a valid SRID value.
-        elif not isinstance(srid, int) or srid != 4326:
+        elif not isinstance(srid, int) or srid != GeographyType.DEFAULT_SRID:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_SRID_VALUE",
                 messageParameters={
@@ -576,7 +577,7 @@ class GeographyType(SpatialType):
         if crs.lower() == cls.MIXED_CRS.lower():
             return GeographyType("ANY")
         # Otherwise, JSON parsing for the GEOGRAPHY type requires a valid CRS value.
-        srid = 4326 if crs == "OGC:CRS84" else None
+        srid = GeographyType.DEFAULT_SRID if crs == "OGC:CRS84" else None
         if srid is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_CRS_VALUE",
@@ -627,6 +628,7 @@ class GeometryType(SpatialType):
     # The default coordinate reference system (CRS) value used for geometries, as specified by the
     # Parquet, Delta, and Iceberg specifications. If CRS is omitted, it should default to this.
     DEFAULT_CRS = "OGC:CRS84"
+    DEFAULT_SRID = 4326
 
     """ The constructor for the GEOMETRY type can accept either a single valid geometric integer
     SRID value, or a special string value "ANY" used to represent a mixed SRID GEOMETRY type."""
@@ -637,7 +639,7 @@ class GeometryType(SpatialType):
             self.srid = GeometryType.MIXED_SRID
             self._crs = GeometryType.MIXED_CRS
         # Otherwise, the parameterized GEOMETRY type syntax requires a valid SRID value.
-        elif not isinstance(srid, int) or srid != 4326:
+        elif not isinstance(srid, int) or srid != GeometryType.DEFAULT_SRID:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_SRID_VALUE",
                 messageParameters={
@@ -660,7 +662,7 @@ class GeometryType(SpatialType):
         if crs.lower() == cls.MIXED_CRS.lower():
             return GeometryType("ANY")
         # Otherwise, JSON parsing for the GEOMETRY type requires a valid CRS value.
-        srid = 4326 if crs == "OGC:CRS84" else None
+        srid = GeometryType.DEFAULT_SRID if crs == "OGC:CRS84" else None
         if srid is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_CRS_VALUE",
@@ -2228,7 +2230,7 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     return _parse_datatype_json_value(json.loads(json_string))
 
 
-def _parse_datatype_json_value(
+def _parse_datatype_json_value(  # type: ignore[return]
     json_value: Union[dict, str],
     fieldPath: str = "",
     collationsMap: Optional[Dict[str, str]] = None,
