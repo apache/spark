@@ -60,11 +60,15 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
     def test_register_java_udaf(self):
         super(ArrowPythonUDFTests, self).test_register_java_udaf()
 
-    @unittest.skip("TODO: Python worker logging is not supported for Arrow Python UDFs.")
+    @unittest.skip(
+        "TODO(SPARK-53976): Python worker logging is not supported for Arrow Python UDFs."
+    )
     def test_udf_with_logging(self):
         super().test_udf_with_logging()
 
-    @unittest.skip("TODO: Python worker logging is not supported for Arrow Python UDFs.")
+    @unittest.skip(
+        "TODO(SPARK-53976): Python worker logging is not supported for Arrow Python UDFs."
+    )
     def test_multiple_udfs_with_logging(self):
         super().test_multiple_udfs_with_logging()
 
