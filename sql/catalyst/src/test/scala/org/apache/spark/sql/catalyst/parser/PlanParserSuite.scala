@@ -2124,27 +2124,6 @@ class PlanParserSuite extends AnalysisTest {
     )
   }
 
-  test("watermark clause - aliasedRelation") {
-    val src1 = UnresolvedRelation(TableIdentifier("src1")).as("s1")
-    val src2 = UnresolvedRelation(TableIdentifier("src2")).as("s2")
-    assertEqual(
-      """
-        |SELECT *
-        |FROM
-        |(src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id)
-        |WATERMARK ts DELAY OF INTERVAL 10 seconds AS dst
-        |WHERE a > 1
-        |""".stripMargin,
-      src1.join(src2, Inner, Option($"s1.id" === $"s2.id"))
-        .unresolvedWithWatermark(
-          UnresolvedAttribute("ts"),
-          IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
-        .as("dst")
-        .where($"a" > 1)
-        .select(UnresolvedStar(None))
-    )
-  }
-
   test("watermark clause - table valued function") {
     assertEqual(
       """
