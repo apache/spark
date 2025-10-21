@@ -112,7 +112,8 @@ class PandasConversionMixin:
 
                     self_destruct = jconf.arrowPySparkSelfDestructEnabled()
                     batches = self._collect_as_arrow(split_batches=self_destruct)
-                    if len(batches) > 0:
+
+                    if len(batches) > 0 and len(self.columns) > 0:
                         table = pa.Table.from_batches(batches)
                         # Ensure only the table has a reference to the batches, so that
                         # self_destruct (if enabled) is effective
@@ -136,17 +137,7 @@ class PandasConversionMixin:
                                     "use_threads": False,
                                 }
                             )
-                        # Rename columns to avoid duplicated column names.
-                        pdf = table.rename_columns(
-                            [f"col_{i}" for i in range(table.num_columns)]
-                        ).to_pandas(**pandas_options)
 
-                        # Rename back to the original column names.
-                        pdf.columns = self.columns
-                    else:
-                        pdf = pd.DataFrame(columns=self.columns)
-
-                    if len(pdf.columns) > 0:
                         timezone = jconf.sessionLocalTimeZone()
                         struct_in_pandas = jconf.pandasStructHandlingMode()
 
@@ -155,7 +146,7 @@ class PandasConversionMixin:
                             error_on_duplicated_field_names = True
                             struct_in_pandas = "dict"
 
-                        return pd.concat(
+                        pdf = pd.concat(
                             [
                                 _create_converter_to_pandas(
                                     field.dataType,
@@ -163,13 +154,16 @@ class PandasConversionMixin:
                                     timezone=timezone,
                                     struct_in_pandas=struct_in_pandas,
                                     error_on_duplicated_field_names=error_on_duplicated_field_names,
-                                )(pser)
-                                for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                                )(arrow_col.to_pandas(**pandas_options))
+                                for arrow_col, field in zip(table.columns, self.schema.fields)
                             ],
                             axis="columns",
                         )
-                    else:
+                        pdf.columns = self.names
                         return pdf
+                    else:
+                        return pd.DataFrame(columns=self.columns)
+
                 except Exception as e:
                     # We might have to allow fallback here as well but multiple Spark jobs can
                     # be executed. So, simply fail in this case for now.
