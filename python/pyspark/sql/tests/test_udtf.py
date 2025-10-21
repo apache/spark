@@ -3046,6 +3046,19 @@ class BaseUDTFTestsMixin:
         for idx, field in enumerate(result_df.schema.fields):
             self.assertEqual(field.dataType, expected_output_types[idx])
 
+    def test_udtf_binary_type(self):
+        @udtf(returnType="type_name: string")
+        class BinaryTypeUDTF:
+            def eval(self, b):
+                # Check the type of the binary input and return type name as string
+                yield (type(b).__name__,)
+
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = BinaryTypeUDTF(lit(b"test")).collect()
+                self.assertEqual(result[0]["type_name"], expected_type)
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -3065,6 +3078,19 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
 class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
+    def test_udtf_binary_type(self):
+        @udtf(returnType="type_name: string")
+        class BinaryTypeUDTF:
+            def eval(self, b):
+                # Check the type of the binary input and return type name as string
+                yield (type(b).__name__,)
+
+        # For Arrow Python UDTF with legacy conversion BinaryType is always mapped to bytes
+        for conf_value in ["true", "false"]:
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = BinaryTypeUDTF(lit(b"test")).collect()
+                self.assertEqual(result[0]["type_name"], "bytes")
+
     def test_eval_type(self):
         def upper(x: str):
             return upper(x)
@@ -3391,6 +3417,11 @@ class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
 
 
 class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
+    def test_udtf_binary_type(self):
+        # For Arrow Python UDTF with non-legacy conversionBinaryType is mapped to
+        # bytes or bytearray consistently with non-Arrow Python UDTF behavior.
+        BaseUDTFTestsMixin.test_udtf_binary_type(self)
+
     def test_numeric_output_type_casting(self):
         class TestUDTF:
             def eval(self):

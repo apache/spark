@@ -65,7 +65,8 @@ case class BatchEvalPythonUDTFExec(
 
     // Input iterator to Python.
     // For Python UDTF, we don't have a separate configuration for the batch size yet.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema, 100)
+    val inputIterator = BatchEvalPythonExec.getInputIterator(
+      iter, schema, 100, conf.pysparkBinaryAsBytes)
 
     // Output iterator for results from Python.
     val outputIterator =

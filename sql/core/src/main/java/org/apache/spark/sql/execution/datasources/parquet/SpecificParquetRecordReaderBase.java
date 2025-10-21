@@ -87,6 +87,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected ParquetRowGroupReader reader;
 
+  protected Configuration configuration;
+
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
@@ -99,7 +101,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       Option<HadoopInputFile> inputFile,
       Option<SeekableInputStream> inputStream,
       Option<ParquetMetadata> fileFooter) throws IOException, InterruptedException {
-    Configuration configuration = taskAttemptContext.getConfiguration();
+    this.configuration = taskAttemptContext.getConfiguration();
     FileSplit split = (FileSplit) inputSplit;
     this.file = split.getPath();
     ParquetReadOptions options = HadoopReadOptions
@@ -164,22 +166,22 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    * configurations.
    */
   protected void initialize(String path, List<String> columns) throws IOException {
-    Configuration config = new Configuration();
-    config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
-    config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
-    config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
-    config.setBoolean(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED().key(), false);
-    config.setBoolean(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG().key(), false);
+    this.configuration = new Configuration();
+    this.configuration.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
+    this.configuration.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
+    this.configuration.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
+    this.configuration.setBoolean(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED().key(), false);
+    this.configuration.setBoolean(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG().key(), false);
 
     this.file = new Path(path);
-    long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
+    long length = this.file.getFileSystem(configuration).getFileStatus(this.file).getLen();
 
     ParquetReadOptions options = HadoopReadOptions
-      .builder(config, file)
+      .builder(configuration, file)
       .withRange(0, length)
       .build();
     ParquetFileReader fileReader = ParquetFileReader.open(
-      HadoopInputFile.fromPath(file, config), options);
+      HadoopInputFile.fromPath(file, configuration), options);
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFooter().getFileMetaData().getSchema();
 
@@ -201,9 +203,10 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       }
     }
     fileReader.setRequestedSchema(requestedSchema);
-    this.parquetColumn = new ParquetToSparkSchemaConverter(config)
+    this.parquetColumn = new ParquetToSparkSchemaConverter(configuration)
       .convertParquetColumn(requestedSchema, Option.empty());
     this.sparkSchema = (StructType) parquetColumn.sparkType();
+    this.sparkRequestedSchema = this.sparkSchema;
     this.totalRowCount = fileReader.getFilteredRecordCount();
   }
 
@@ -216,15 +219,16 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.reader = rowGroupReader;
     this.fileSchema = fileSchema;
     this.requestedSchema = requestedSchema;
-    Configuration config = new Configuration();
-    config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
-    config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
-    config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
-    config.setBoolean(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED().key(), false);
-    config.setBoolean(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG().key(), false);
-    this.parquetColumn = new ParquetToSparkSchemaConverter(config)
+    this.configuration = new Configuration();
+    this.configuration.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
+    this.configuration.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
+    this.configuration.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
+    this.configuration.setBoolean(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED().key(), false);
+    this.configuration.setBoolean(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG().key(), false);
+    this.parquetColumn = new ParquetToSparkSchemaConverter(configuration)
       .convertParquetColumn(requestedSchema, Option.empty());
     this.sparkSchema = (StructType) parquetColumn.sparkType();
+    this.sparkRequestedSchema = this.sparkSchema;
     this.totalRowCount = totalRowCount;
   }
 

@@ -109,6 +109,43 @@ class ConversionTests(unittest.TestCase):
             with self.subTest(expected=e):
                 self.assertEqual(a, e)
 
+    def test_binary_as_bytes_conversion(self):
+        data = [
+            (
+                str(i).encode(),  # simple binary
+                [str(j).encode() for j in range(3)],  # array of binary
+                {str(j): str(j).encode() for j in range(2)},  # map with binary values
+                {"b": str(i).encode()},  # struct with binary
+            )
+            for i in range(2)
+        ]
+        schema = (
+            StructType()
+            .add("b", BinaryType())
+            .add("arr_b", ArrayType(BinaryType()))
+            .add("map_b", MapType(StringType(), BinaryType()))
+            .add("struct_b", StructType().add("b", BinaryType()))
+        )
+
+        tbl = LocalDataToArrowConversion.convert(data, schema, use_large_var_types=False)
+
+        for binary_as_bytes, expected_type in [(True, bytes), (False, bytearray)]:
+            actual = ArrowTableToRowsConversion.convert(
+                tbl, schema, binary_as_bytes=binary_as_bytes
+            )
+
+            for row in actual:
+                # Simple binary field
+                self.assertIsInstance(row.b, expected_type)
+                # Array elements
+                for elem in row.arr_b:
+                    self.assertIsInstance(elem, expected_type)
+                # Map values
+                for value in row.map_b.values():
+                    self.assertIsInstance(value, expected_type)
+                # Struct field
+                self.assertIsInstance(row.struct_b.b, expected_type)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_conversion import *  # noqa: F401
