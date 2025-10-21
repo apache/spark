@@ -115,11 +115,13 @@ class PandasConversionMixin:
                     self_destruct = jconf.arrowPySparkSelfDestructEnabled()
                     batches = self._collect_as_arrow(split_batches=self_destruct)
 
+                    # Rename columns to avoid duplicated column names.
+                    temp_col_names = [f"col_{i}" for i in range(len(self.columns))]
                     if len(batches) > 0:
-                        table = pa.Table.from_batches(batches)
+                        table = pa.Table.from_batches(batches).rename_columns(temp_col_names)
                     else:
                         # empty dataset
-                        table = arrow_schema.empty_table()
+                        table = arrow_schema.empty_table().rename_columns(temp_col_names)
 
                     # Ensure only the table has a reference to the batches, so that
                     # self_destruct (if enabled) is effective
