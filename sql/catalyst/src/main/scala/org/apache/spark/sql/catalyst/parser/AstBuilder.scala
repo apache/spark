@@ -29,6 +29,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
@@ -2083,13 +2084,23 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: WatermarkClauseContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val expression = visitNamedExpression(ctx.namedExpression())
+
+    val namedExpression = expression match {
+      case e: NamedExpression => e
+      case _ =>
+        throw new AnalysisException(
+          errorClass = "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE",
+          messageParameters = Map("sqlExpr" -> expression.sql)
+        )
+    }
+
     val delayInterval = visitInterval(ctx.delay)
 
     val delay = IntervalUtils.fromIntervalString(delayInterval.toString)
     require(!IntervalUtils.isNegative(delay),
       s"delay threshold (${delayInterval.toString}) should not be negative.")
 
-    UnresolvedEventTimeWatermark(expression, delay, query)
+    UnresolvedEventTimeWatermark(namedExpression, delay, query)
   }
 
   /**

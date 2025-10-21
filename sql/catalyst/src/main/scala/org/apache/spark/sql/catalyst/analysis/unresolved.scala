@@ -1231,7 +1231,7 @@ case class UnresolvedExecuteImmediate(
 }
 
 case class UnresolvedEventTimeWatermark(
-    eventTimeColExpr: Expression,
+    eventTimeColExpr: NamedExpression,
     delay: CalendarInterval,
     child: LogicalPlan)
   extends UnresolvedUnaryNode {

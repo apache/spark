@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
@@ -40,23 +39,14 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
 
       val uuid = java.util.UUID.randomUUID()
 
-      val namedExpression = u.eventTimeColExpr match {
-        case e: NamedExpression => e
-        case _ =>
-          throw new AnalysisException(
-            errorClass = "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE",
-            messageParameters = Map("sqlExpr" -> u.eventTimeColExpr.sql)
-          )
-      }
-
-      if (u.child.outputSet.contains(namedExpression)) {
+      if (u.child.outputSet.contains(u.eventTimeColExpr)) {
         // We don't need to have projection since the attribute being referenced will be available.
-        EventTimeWatermark(uuid, namedExpression.toAttribute, u.delay, u.child)
+        EventTimeWatermark(uuid, u.eventTimeColExpr.toAttribute, u.delay, u.child)
       } else {
         // We need to inject projection as we can't find the matching column directly in the
         // child output.
-        val proj = Project(Seq(namedExpression) ++ u.child.output, u.child)
-        val attrRef = namedExpression.toAttribute
+        val proj = Project(Seq(u.eventTimeColExpr) ++ u.child.output, u.child)
+        val attrRef = u.eventTimeColExpr.toAttribute
         EventTimeWatermark(uuid, attrRef, u.delay, proj)
       }
     }
