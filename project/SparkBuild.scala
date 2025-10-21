@@ -1193,7 +1193,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides ++= jacksonDeps.key.value,
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.0",
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.1",
     dependencyOverrides += "org.slf4j" % "slf4j-api" % "2.0.17")
 }
 
