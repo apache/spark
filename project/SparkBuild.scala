@@ -293,7 +293,7 @@ object SparkBuild extends PomBuild {
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
-      .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
+      .orElse(sys.props.get("java.home"))
       .map(file),
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.19",
