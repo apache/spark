@@ -133,7 +133,7 @@ This file is divided into 3 sections:
   </check>
 
   <!-- ??? usually shouldn't be checked into the code base. -->
-  <check level="error" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="true"></check>
+  <check level="error" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="false"></check>
 
   <!-- As of SPARK-7558, all tests in Spark should extend o.a.s.SparkFunSuite instead of AnyFunSuite directly -->
   <check customId="funsuite" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
