@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import java.util.{HashMap, Properties, UUID}
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -42,7 +43,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
@@ -195,6 +196,8 @@ class SparkConnectPlanner(
           transformWithWatermark(rel.getWithWatermark)
         case proto.Relation.RelTypeCase.CACHED_LOCAL_RELATION =>
           transformCachedLocalRelation(rel.getCachedLocalRelation)
+        case proto.Relation.RelTypeCase.CHUNKED_CACHED_LOCAL_RELATION =>
+          transformChunkedCachedLocalRelation(rel.getChunkedCachedLocalRelation)
         case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
         case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
         case proto.Relation.RelTypeCase.TRANSPOSE => transformTranspose(rel.getTranspose)
@@ -1482,25 +1485,128 @@ class SparkConnectPlanner(
         rel.getSchema,
         parseDatatypeString,
         fallbackParser = DataType.fromJson)
-      schema = schemaType match {
-        case s: StructType => s
-        case d => StructType(Seq(StructField("value", d)))
-      }
+      schema = toStructTypeOrWrap(schemaType)
     }
 
     if (rel.hasData) {
       val (rows, structType) =
         ArrowConverters.fromIPCStream(rel.getData.toByteArray, TaskContext.get())
-      if (structType == null) {
-        throw InvalidInputErrors.inputDataForLocalRelationNoSchema()
-      }
-      val attributes = DataTypeUtils.toAttributes(structType)
-      val proj = UnsafeProjection.create(attributes, attributes)
-      val data = rows.map(proj)
-
+      buildLocalRelationFromRows(rows, structType, Option(schema))
+    } else {
       if (schema == null) {
-        logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
+        throw InvalidInputErrors.schemaRequiredForLocalRelation()
+      }
+      LocalRelation(schema)
+    }
+  }
+
+  private def readChunkedCachedLocalRelationBlock(hash: String): Array[Byte] = {
+    val blockManager = session.sparkContext.env.blockManager
+    val blockId = CacheId(sessionHolder.session.sessionUUID, hash)
+    val bytes = blockManager.getLocalBytes(blockId)
+    bytes
+      .map { blockData =>
+        try {
+          blockData.toInputStream().readAllBytes()
+        } finally {
+          blockManager.releaseLock(blockId)
+        }
+      }
+      .getOrElse {
+        throw InvalidInputErrors.notFoundChunkedCachedLocalRelationBlock(
+          blockId.hash,
+          blockId.sessionUUID)
+      }
+  }
+
+  private def getBlockSize(hash: String): Long = {
+    val blockManager = session.sparkContext.env.blockManager
+    val blockId = CacheId(sessionHolder.session.sessionUUID, hash)
+    blockManager.getStatus(blockId).map(status => status.memSize + status.diskSize).getOrElse(0L)
+  }
+
+  private def transformChunkedCachedLocalRelation(
+      rel: proto.ChunkedCachedLocalRelation): LogicalPlan = {
+    if (rel.getDataHashesCount == 0) {
+      throw InvalidInputErrors.chunkedCachedLocalRelationWithoutData()
+    }
+    val dataHashes = rel.getDataHashesList.asScala
+    val allHashes = dataHashes ++ (
+      if (rel.hasSchemaHash) {
+        Seq(rel.getSchemaHash)
       } else {
+        Seq.empty
+      }
+    )
+    val allSizes = allHashes.map(hash => getBlockSize(hash))
+    val totalSize = allSizes.sum
+
+    val relationSizeLimit = session.sessionState.conf.localRelationSizeLimit
+    val chunkSizeLimit = session.sessionState.conf.localRelationChunkSizeLimit
+    if (totalSize > relationSizeLimit) {
+      throw InvalidInputErrors.localRelationSizeLimitExceeded(totalSize, relationSizeLimit)
+    }
+    if (allSizes.exists(_ > chunkSizeLimit)) {
+      throw InvalidInputErrors.localRelationChunkSizeLimitExceeded(chunkSizeLimit)
+    }
+
+    var schema: StructType = null
+    if (rel.hasSchemaHash) {
+      val schemaBytes = readChunkedCachedLocalRelationBlock(rel.getSchemaHash)
+      val schemaString = new String(schemaBytes)
+      val schemaType = DataType.parseTypeWithFallback(
+        schemaString,
+        parseDatatypeString,
+        fallbackParser = DataType.fromJson)
+      schema = toStructTypeOrWrap(schemaType)
+    }
+
+    // Load and combine all batches
+    var combinedRows: Iterator[InternalRow] = Iterator.empty
+    var structType: StructType = null
+
+    for ((dataHash, batchIndex) <- dataHashes.zipWithIndex) {
+      val dataBytes = readChunkedCachedLocalRelationBlock(dataHash)
+      val (batchRows, batchStructType) =
+        ArrowConverters.fromIPCStream(dataBytes, TaskContext.get())
+
+      // For the first batch, set the schema; for subsequent batches, verify compatibility
+      if (batchIndex == 0) {
+        structType = batchStructType
+        combinedRows = batchRows
+
+      } else {
+        if (batchStructType != structType) {
+          throw InvalidInputErrors.chunkedCachedLocalRelationChunksWithDifferentSchema()
+        }
+        combinedRows = combinedRows ++ batchRows
+      }
+    }
+
+    buildLocalRelationFromRows(combinedRows, structType, Option(schema))
+  }
+
+  private def toStructTypeOrWrap(dt: DataType): StructType = dt match {
+    case s: StructType => s
+    case d => StructType(Seq(StructField("value", d)))
+  }
+
+  private def buildLocalRelationFromRows(
+      rows: Iterator[InternalRow],
+      structType: StructType,
+      schemaOpt: Option[StructType]): LogicalPlan = {
+    if (structType == null) {
+      throw InvalidInputErrors.inputDataForLocalRelationNoSchema()
+    }
+
+    val attributes = DataTypeUtils.toAttributes(structType)
+    val initialProjection = UnsafeProjection.create(attributes, attributes)
+    val data = rows.map(initialProjection)
+
+    schemaOpt match {
+      case None =>
+        logical.LocalRelation(attributes, ArraySeq.unsafeWrapArray(data.map(_.copy()).toArray))
+      case Some(schema) =>
         def normalize(dt: DataType): DataType = dt match {
           case udt: UserDefinedType[_] => normalize(udt.sqlType)
           case StructType(fields) =>
@@ -1532,12 +1638,6 @@ class SparkConnectPlanner(
         logical.LocalRelation(
           DataTypeUtils.toAttributes(schema),
           data.map(proj).map(_.copy()).toSeq)
-      }
-    } else {
-      if (schema == null) {
-        throw InvalidInputErrors.schemaRequiredForLocalRelation()
-      }
-      LocalRelation(schema)
     }
   }
 
