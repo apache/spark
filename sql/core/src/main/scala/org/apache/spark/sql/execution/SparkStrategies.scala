@@ -427,6 +427,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case EventTimeWatermark(nodeId, columnName, delay, child) =>
         EventTimeWatermarkExec(nodeId, columnName, delay, planLater(child)) :: Nil
+
       case UpdateEventTimeWatermarkColumn(columnName, delay, child) =>
         // we expect watermarkDelay to be resolved before physical planning.
         if (delay.isEmpty) {

@@ -44,11 +44,13 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_RE
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeMode, TimerValues, TTLConfig, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -1079,36 +1081,97 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("no aqe in stateful streaming query") {
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
-      withTempView("test") {
-        val input = MemoryStream[Int]
-        val stream = input.toDF().select(col("value"), (col("value") * 3) as "three")
-
-        // apply aggregation
-        val agg = stream.groupBy("value").agg(sum("three"))
-        val query = agg.writeStream.format("memory").queryName("test").outputMode("update").start()
-        input.addData(1, 2, 3, 4, 5)
-        try {
-          query.processAllAvailable()
-        } finally {
-          query.stop()
-        }
-
-        // aqe should not be enabled in a stateful streaming query
-        val plan = query.asInstanceOf[StreamingQueryWrapper]
-          .streamingQuery.lastExecution.executedPlan
-        val ret = plan.find {
-          case _: AdaptiveSparkPlanExec | _: QueryStageExec => true
-          case _ => false
-        }
-        assert(ret.isEmpty)
-      }
+  test("no aqe in stateful streaming query - aggregation") {
+    testNoAqeInStatefulStreamingQuery(OutputMode.Update()) { input =>
+      val stream = input.toDF().select(col("value"), (col("value") * 3) as "three")
+      stream.groupBy("value").agg(sum("three"))
     }
   }
 
+  test("no aqe in stateful streaming query - deduplication") {
+    testNoAqeInStatefulStreamingQuery(OutputMode.Append()) { input =>
+      val stream = input.toDF().select(col("value"), (col("value") * 3) as "three")
+      stream.dropDuplicates("value", "three")
+    }
+  }
+
+  test("no aqe in stateful streaming query - stream-stream join") {
+    testNoAqeInStatefulStreamingQuery(OutputMode.Append()) { input =>
+      val inputDf = input.toDF()
+      val stream1 = inputDf.select(col("value") as "left", (col("value") * 2) as "two")
+      val stream2 = inputDf.select(col("value") as "right", (col("value") * 3) as "three")
+
+      stream1.join(stream2, expr("left = right"))
+    }
+  }
+
+  test("no aqe in stateful streaming query - transformWithState") {
+    class RunningCountStatefulProcessorInt
+      extends StatefulProcessor[Int, Int, (Int, Long)] {
+
+      import implicits._
+      @transient protected var _countState: ValueState[Long] = _
+
+      override def init(
+          outputMode: OutputMode,
+          timeMode: TimeMode): Unit = {
+        _countState = getHandle.getValueState[Long]("countState", TTLConfig.NONE)
+      }
+
+      override def handleInputRows(
+          key: Int,
+          inputRows: Iterator[Int],
+          timerValues: TimerValues): Iterator[(Int, Long)] = {
+        val count = Option(_countState.get()).getOrElse(0L) + 1
+
+        if (count == 3) {
+          _countState.clear()
+          Iterator.empty
+        } else {
+          _countState.update(count)
+          Iterator((key, count))
+        }
+      }
+    }
+
+    testNoAqeInStatefulStreamingQuery(OutputMode.Append()) { input =>
+      input.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessorInt,
+          TimeMode.None(),
+          OutputMode.Append()
+        ).toDF()
+    }
+  }
+
+  private def testNoAqeInStatefulStreamingQuery(
+      outputMode: OutputMode)(fn: MemoryStream[Int] => DataFrame): Unit = {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+
+      val input = MemoryStream[Int]
+
+      val df = fn(input)
+      val query = df.writeStream.format("noop").outputMode(outputMode).start()
+      input.addData(1, 2, 3, 4, 5)
+      try {
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+
+      // aqe should not be enabled in a stateful streaming query
+      val plan = query.asInstanceOf[StreamingQueryWrapper]
+        .streamingQuery.lastExecution.executedPlan
+      val ret = plan.find {
+        case _: AdaptiveSparkPlanExec | _: QueryStageExec => true
+        case _ => false
+      }
+      assert(ret.isEmpty)
+    }
+  }
 
   test("tree string output") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
