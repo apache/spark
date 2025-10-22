@@ -170,6 +170,7 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
 
       val numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
         arrowWriter, writer, nextBatchStart, maxBytesPerBatch, maxRecordsPerBatch)
+      assert(0 < numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
 
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
@@ -219,12 +220,8 @@ private[python] object BatchedPythonArrowInput {
       arrowWriter.write(rowIter.next())
       numRowsInBatch += 1
     }
-
-    assert(numRowsInBatch > 0)
-    assert(numRowsInBatch <= maxRecordsPerBatch)
     arrowWriter.finish()
     writer.writeBatch()
-
     arrowWriter.reset()
     numRowsInBatch
   }
@@ -271,8 +268,7 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             // the TaskCompletionListener.
             writer.close()
           }
-          assert(numRowsInBatch > 0)
-          assert(numRowsInBatch <= maxRecordsPerBatch)
+          assert(0 < numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
           val deltaData = dataOut.size() - startData
           pythonMetrics("pythonDataSent") += deltaData
           true
