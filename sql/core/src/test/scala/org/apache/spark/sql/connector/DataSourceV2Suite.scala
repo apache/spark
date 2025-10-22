@@ -26,7 +26,6 @@ import test.org.apache.spark.sql.connector._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.And
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
@@ -36,7 +35,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.execution.SortExec
+import org.apache.spark.sql.execution.{SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
@@ -992,9 +991,11 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     // Create a rule that reverses the order of DataSourceV2ScanRelation output
     val reverseOutputRule = new Rule[LogicalPlan] {
       def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-        case dsv2 @ DataSourceV2ScanRelation(relation, scan: Scan, output, _, _) =>
+        case dsv2 @ DataSourceV2ScanRelation(relation, _, output, _, _) =>
           val reversedOutput = output.reverse
+          val reversedRelationOutput = relation.output.reverse
           dsv2.copy(
+            relation = relation.copy(output = reversedRelationOutput),
             output = reversedOutput
           )
       }
@@ -1003,25 +1004,38 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     // Apply the rule to both queries to ensure they go through different optimization paths
     val optimized1Reversed = reverseOutputRule(optimized1)
 
-//    val executed1 = q1.queryExecution.executedPlan
-//    val executed2 = q2.queryExecution.executedPlan
-//    val dsv2ScanRelation1 = optimized1.collect {
-//      case d: DataSourceV2ScanRelation => d
-//    }.head
-//    val dsv2ScanRelation2 = optimized2.collect {
-//      case d: DataSourceV2ScanRelation => d
-//    }.head
-//    val batchScanExec1 = executed1.collect {
-//      case b: BatchScanExec => b
-//    }.head
-//    val batchScanExec2 = executed2.collect {
-//      case b: BatchScanExec => b
-//    }.head
-
     assert(!optimized1Reversed.equals(optimized2))
     assert(optimized1.canonicalized == optimized2.canonicalized)
-//    assert(executed1.equals(executed2))
-//    assert(executed1.canonicalized == executed2.canonicalized)
+
+
+    val executed1 = q1.queryExecution.executedPlan
+    val executed2 = q2.queryExecution.executedPlan
+
+    val reverseOutputInSparkPlan = new Rule[SparkPlan] {
+      def apply(plan: SparkPlan): SparkPlan = plan transform {
+        case dsv2 @ BatchScanExec(output, _, _, _, _, _) =>
+          val reversedOutput = output.reverse
+          dsv2.copy(output = reversedOutput)
+      }
+    }
+
+    val executed1Reversed = reverseOutputInSparkPlan(executed1)
+    assert(!executed1Reversed.equals(executed2))
+    assert(executed1Reversed.canonicalized == executed2.canonicalized)
+
+
+    //    val dsv2ScanRelation1 = optimized1.collect {
+    //      case d: DataSourceV2ScanRelation => d
+    //    }.head
+    //    val dsv2ScanRelation2 = optimized2.collect {
+    //      case d: DataSourceV2ScanRelation => d
+    //    }.head
+    //    val batchScanExec1 = executed1.collect {
+    //      case b: BatchScanExec => b
+    //    }.head
+    //    val batchScanExec2 = executed2.collect {
+    //      case b: BatchScanExec => b
+    //    }.head
 //    assert(dsv2ScanRelation1.equals(dsv2ScanRelation2))
 //    assert(dsv2ScanRelation1.canonicalized == dsv2ScanRelation2.canonicalized)
 //    assert(batchScanExec1.equals(batchScanExec2))
