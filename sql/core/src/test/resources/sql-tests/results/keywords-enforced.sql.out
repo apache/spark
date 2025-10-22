@@ -92,6 +92,7 @@ DECLARE	false
 DEFAULT	false
 DEFINED	false
 DEFINER	false
+DELAY	false
 DELETE	false
 DELIMITED	false
 DESC	false
@@ -384,6 +385,7 @@ VERSION	false
 VIEW	false
 VIEWS	false
 VOID	false
+WATERMARK	false
 WEEK	false
 WEEKS	false
 WHEN	true
