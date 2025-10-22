@@ -138,9 +138,10 @@ class DelegatingTextIOWrapper(TextIO):
 class JSONFormatterWithMarker(JSONFormatter):
     default_microsec_format = "%s.%06d"
 
-    def __init__(self, marker: str, context_provider: Callable[[], dict[str, str]]):
+    def __init__(self, marker: str, worker_id: str, context_provider: Callable[[], dict[str, str]]):
         super().__init__(ensure_ascii=True)
         self._marker = marker
+        self._worker_id = worker_id
         self._context_provider = context_provider
 
     def format(self, record: logging.LogRecord) -> str:
@@ -148,7 +149,7 @@ class JSONFormatterWithMarker(JSONFormatter):
         if context:
             context.update(record.__dict__.get("context", {}))
             record.__dict__["context"] = context
-        return f"{self._marker}:{os.getpid()}:{super().format(record)}"
+        return f"{self._marker}:{self._worker_id}:{super().format(record)}"
 
     def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
         ct = self.converter(record.created)
@@ -174,13 +175,14 @@ class JsonOutput(DelegatingTextIOWrapper):
         logger_name: str,
         log_level: int,
         marker: str,
+        worker_id: str,
         context_provider: Callable[[], dict[str, str]],
     ):
         super().__init__(delegate)
         self._json_out = json_out
         self._logger_name = logger_name
         self._log_level = log_level
-        self._formatter = JSONFormatterWithMarker(marker, context_provider)
+        self._formatter = JSONFormatterWithMarker(marker, worker_id, context_provider)
 
     def write(self, s: str) -> int:
         if s.strip():
@@ -264,25 +266,26 @@ def capture_outputs(
 ) -> Generator[None, None, None]:
     if "SPARK_SESSION_UUID" in os.environ:
         marker: str = "PYTHON_WORKER_LOGGING"
+        worker_id: str = str(os.getpid())
         json_out = original_stdout = sys.stdout
         delegate = original_stderr = sys.stderr
 
         handler = logging.StreamHandler(json_out)
-        handler.setFormatter(JSONFormatterWithMarker(marker, context_provider))
+        handler.setFormatter(JSONFormatterWithMarker(marker, worker_id, context_provider))
         logger = logging.getLogger()
         try:
             sys.stdout = JsonOutput(
-                delegate, json_out, "stdout", logging.INFO, marker, context_provider
+                delegate, json_out, "stdout", logging.INFO, marker, worker_id, context_provider
             )
             sys.stderr = JsonOutput(
-                delegate, json_out, "stderr", logging.ERROR, marker, context_provider
+                delegate, json_out, "stderr", logging.ERROR, marker, worker_id, context_provider
             )
             logger.addHandler(handler)
             try:
                 yield
             finally:
                 # Send an empty line to indicate the end of the outputs.
-                json_out.write(f"{marker}:{os.getpid()}:\n")
+                json_out.write(f"{marker}:{worker_id}:\n")
                 json_out.flush()
         finally:
             sys.stdout = original_stdout

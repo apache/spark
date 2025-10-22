@@ -214,6 +214,15 @@ case class TestLogBlockId(lastLogTime: Long, executorId: String)
   override def logBlockType: LogBlockType = LogBlockType.TEST
 }
 
+/**
+ * Identifies a block of Python worker log data.
+ *
+ * @param lastLogTime the timestamp of the last log entry in this block, used for filtering
+ *                    and log management.
+ * @param executorId the ID of the executor that produced this log block.
+ * @param sessionId the session ID to isolate the logs.
+ * @param workerId the worker ID to distinguish the Python worker process.
+ */
 @DeveloperApi
 case class PythonWorkerLogBlockId(
     lastLogTime: Long,
