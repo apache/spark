@@ -1338,7 +1338,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     import org.apache.spark.sql.internal.SQLConf
     val partsTableName = "parts_tbl"
     val ordersTableName = "orders_tbl"
-    val viewName = "view_es_1600586"
+    val viewName = "view_spark_53968"
     withTable(partsTableName, ordersTableName) {
       spark.sql(s"""CREATE TABLE $partsTableName (
            | part_number STRING
