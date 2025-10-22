@@ -29,7 +29,7 @@ class GroupedApplyInPandasWithStateTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map_with_state import *  # noqa: F401,E501
+    from pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_grouped_map_with_state import *  # noqa: F401,E501
 
     try:
         import xmlrunner

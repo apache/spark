@@ -1186,7 +1186,7 @@ pyspark_structured_streaming_connect = Module(
         "pyspark.sql.tests.connect.streaming.test_parity_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach_batch",
-        "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_grouped_map_with_state",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state_state_variable",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state",
