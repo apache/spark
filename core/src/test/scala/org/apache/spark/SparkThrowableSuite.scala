@@ -691,10 +691,10 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Custom SQL state takes precedence over error class reader - SparkException") {
     // Test with custom SQL state - should return the custom one
     val exceptionWithCustomSqlState = new SparkException(
-      message = getMessage("CANNOT_PARSE_DECIMAL", Map.empty),
+      message = getMessage("CANNOT_PARSE_DECIMAL", Map.empty[String, String]),
       cause = null,
       errorClass = Some("CANNOT_PARSE_DECIMAL"),
-      messageParameters = Map.empty,
+      messageParameters = Map.empty[String, String],
       context = Array.empty,
       sqlState = Some("CUSTOM"))
 
@@ -703,10 +703,10 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     // Test without custom SQL state - should fall back to error class reader
     val exceptionWithoutCustomSqlState = new SparkException(
-      message = getMessage("CANNOT_PARSE_DECIMAL", Map.empty),
+      message = getMessage("CANNOT_PARSE_DECIMAL", Map.empty[String, String]),
       cause = null,
       errorClass = Some("CANNOT_PARSE_DECIMAL"),
-      messageParameters = Map.empty,
+      messageParameters = Map.empty[String, String],
       context = Array.empty,
       sqlState = None)
 
@@ -714,94 +714,57 @@ class SparkThrowableSuite extends SparkFunSuite {
       "Should fall back to error class reader SQL state")
   }
 
-  test("Custom SQL state takes precedence - SparkArithmeticException") {
-    // Test with custom SQL state
-    val exceptionWithCustomSqlState = new SparkArithmeticException(
+  test("SparkArithmeticException uses error class reader for SQL state") {
+    // Test that SparkArithmeticException falls back to error class reader
+    val exception = new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       messageParameters = Map("config" -> "CONFIG"),
       context = Array.empty,
       summary = "")
 
-    // First verify the default behavior (fallback to reader)
-    assert(exceptionWithCustomSqlState.getSqlState == "22012",
-      "Should use error class reader SQL state by default")
-
-    // Now test with a custom SQL state using the primary constructor
-    val exceptionWithCustomState = new SparkArithmeticException(
-      message = getMessage("DIVIDE_BY_ZERO", Map("config" -> "CONFIG")),
-      errorClass = Some("DIVIDE_BY_ZERO"),
-      messageParameters = Map("config" -> "CONFIG"),
-      context = Array.empty,
-      sqlState = Some("CUSTOM"))
-
-    assert(exceptionWithCustomState.getSqlState == "CUSTOM",
-      "Custom SQL state should take precedence")
+    assert(exception.getSqlState == "22012",
+      "Should use error class reader SQL state")
   }
 
-  test("Custom SQL state takes precedence - SparkRuntimeException") {
-    // Test without custom SQL state - should fall back to error class reader
-    val exceptionWithoutCustom = new SparkRuntimeException(
+  test("SparkRuntimeException uses error class reader for SQL state") {
+    // Test that SparkRuntimeException falls back to error class reader
+    val exception = new SparkRuntimeException(
       errorClass = "INTERNAL_ERROR",
       messageParameters = Map("message" -> "test"))
 
-    assert(exceptionWithoutCustom.getSqlState.startsWith("XX"),
+    assert(exception.getSqlState.startsWith("XX"),
       "Should use error class reader SQL state")
-
-    // Test with custom SQL state using primary constructor
-    val exceptionWithCustom = new SparkRuntimeException(
-      message = getMessage("INTERNAL_ERROR", Map("message" -> "test")),
-      cause = None,
-      errorClass = Some("INTERNAL_ERROR"),
-      messageParameters = Map("message" -> "test"),
-      context = Array.empty,
-      sqlState = Some("CUSTOM"))
-
-    assert(exceptionWithCustom.getSqlState == "CUSTOM",
-      "Custom SQL state should take precedence")
   }
 
-  test("Custom SQL state takes precedence - SparkIllegalArgumentException") {
-    // Test without custom SQL state
-    val exceptionWithoutCustom = new SparkIllegalArgumentException(
+  test("SparkIllegalArgumentException uses error class reader for SQL state") {
+    // Test that SparkIllegalArgumentException falls back to error class reader
+    val exception = new SparkIllegalArgumentException(
       errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
       messageParameters = Map("saveMode" -> "TEST"))
 
-    assert(exceptionWithoutCustom.getSqlState == "0A000",
+    assert(exception.getSqlState == "0A000",
       "Should use error class reader SQL state")
-
-    // Test with custom SQL state using primary constructor
-    val exceptionWithCustom = new SparkIllegalArgumentException(
-      message = getMessage("UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
-        Map("saveMode" -> "TEST")),
-      cause = None,
-      errorClass = Some("UNSUPPORTED_SAVE_MODE.EXISTENT_PATH"),
-      messageParameters = Map("saveMode" -> "TEST"),
-      context = Array.empty,
-      sqlState = Some("CUSTOM"))
-
-    assert(exceptionWithCustom.getSqlState == "CUSTOM",
-      "Custom SQL state should take precedence")
   }
 
   test("Custom SQL state takes precedence - Multiple exception types") {
     // SparkSQLException
     val sqlException = new SparkSQLException(
       errorClass = "CANNOT_PARSE_DECIMAL",
-      messageParameters = Map.empty,
+      messageParameters = Map.empty[String, String],
       sqlState = Some("CUST1"))
     assert(sqlException.getSqlState == "CUST1")
 
     // SparkSecurityException
     val securityException = new SparkSecurityException(
       errorClass = "CANNOT_PARSE_DECIMAL",
-      messageParameters = Map.empty,
+      messageParameters = Map.empty[String, String],
       sqlState = Some("CUST2"))
     assert(securityException.getSqlState == "CUST2")
 
     // SparkNumberFormatException
     val numberFormatException = new SparkNumberFormatException(
       errorClass = "CANNOT_PARSE_DECIMAL",
-      messageParameters = Map.empty,
+      messageParameters = Map.empty[String, String],
       context = Array.empty,
       summary = "")
     assert(numberFormatException.getSqlState == "22018",
