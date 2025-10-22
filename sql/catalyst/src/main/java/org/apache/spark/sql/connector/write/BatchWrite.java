@@ -103,11 +103,11 @@ public interface BatchWrite {
    * <p>
    * @param messages a list of commit messages from successful data writers, produced by
    *                 {@link DataWriter#commit()}.
-   * @param writerMetrics metrics collected in a best-effort from the query producing
+   * @param summary metrics collected in a best-effort from the query producing
    *                         write. Currently supported metrics are provided through
-   *                         implementations of {@link WriterMetrics}.
+   *                         implementations of {@link WriteSummary}.
    */
-  default void commit(WriterCommitMessage[] messages, WriterMetrics writerMetrics) {
+  default void commit(WriterCommitMessage[] messages, WriteSummary summary) {
     commit(messages);
   }
 

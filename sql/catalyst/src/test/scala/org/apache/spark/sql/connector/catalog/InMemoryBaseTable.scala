@@ -1040,7 +1040,7 @@ class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
   override def value(): Long = value
 }
 
-case class Commit(id: Long, metrics: Option[WriterMetrics] = None)
+case class Commit(id: Long, writeSummary: Option[WriteSummary] = None)
 
 sealed trait Operation
 case object Write extends Operation

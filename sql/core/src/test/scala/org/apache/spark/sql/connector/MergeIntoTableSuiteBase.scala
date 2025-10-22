@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, I
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, ColumnDefaultValue, InMemoryTable, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.write.MergeMetrics
+import org.apache.spark.sql.connector.write.MergeSummary
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
@@ -1813,15 +1813,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(2, 200, "software"),
           Row(3, 300, "hr")))
 
-      val mergeMetrics = getMergeMetrics()
-      assert(mergeMetrics.numTargetRowsCopied === (if (deltaMerge) 0L else 2L))
-      assert(mergeMetrics.numTargetRowsInserted === 0L)
-      assert(mergeMetrics.numTargetRowsUpdated === 1L)
-      assert(mergeMetrics.numTargetRowsDeleted === 0L)
-      assert(mergeMetrics.numTargetRowsMatchedUpdated === 1L)
-      assert(mergeMetrics.numTargetRowsMatchedDeleted === 0L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceDeleted === 0L)
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 2L))
+      assert(mergeSummary.numTargetRowsInserted === 0L)
+      assert(mergeSummary.numTargetRowsUpdated === 1L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 1L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
@@ -1868,15 +1868,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(3, 300, "hr"),
           Row(5, 400, "executive"))) // inserted
 
-      val mergeMetrics = getMergeMetrics()
-      assert(mergeMetrics.numTargetRowsCopied === 0L)
-      assert(mergeMetrics.numTargetRowsInserted === 1L)
-      assert(mergeMetrics.numTargetRowsUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsDeleted === 0L)
-      assert(mergeMetrics.numTargetRowsMatchedUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsMatchedDeleted === 0L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceDeleted === 0L)
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsCopied === 0L)
+      assert(mergeSummary.numTargetRowsInserted === 1L)
+      assert(mergeSummary.numTargetRowsUpdated === 0L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
@@ -1922,15 +1922,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(4, 400, "marketing"),
           Row(5, -1, "executive"))) // updated
 
-      val mergeMetrics = getMergeMetrics()
-      assert(mergeMetrics.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
-      assert(mergeMetrics.numTargetRowsInserted === 0L)
-      assert(mergeMetrics.numTargetRowsUpdated === 2L)
-      assert(mergeMetrics.numTargetRowsDeleted === 0L)
-      assert(mergeMetrics.numTargetRowsMatchedUpdated === 1L)
-      assert(mergeMetrics.numTargetRowsMatchedDeleted === 0L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceUpdated === 1L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceDeleted === 0L)
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
+      assert(mergeSummary.numTargetRowsInserted === 0L)
+      assert(mergeSummary.numTargetRowsUpdated === 2L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 1L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 1L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
@@ -1978,15 +1978,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           // Row(5, 500, "executive") deleted
       )
 
-      val mergeMetrics = getMergeMetrics()
-      assert(mergeMetrics.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
-      assert(mergeMetrics.numTargetRowsInserted === 0L)
-      assert(mergeMetrics.numTargetRowsUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsDeleted === 2L)
-      assert(mergeMetrics.numTargetRowsMatchedUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsMatchedDeleted === 1L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceDeleted === 1L)
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
+      assert(mergeSummary.numTargetRowsInserted === 0L)
+      assert(mergeSummary.numTargetRowsUpdated === 0L)
+      assert(mergeSummary.numTargetRowsDeleted === 2L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 1L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 1L)
     }
   }
 
@@ -2035,15 +2035,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(5, -1, "executive"), // updated
           Row(6, -1, "dummy"))) // inserted
 
-      val mergeMetrics = getMergeMetrics()
-      assert(mergeMetrics.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
-      assert(mergeMetrics.numTargetRowsInserted === 1L)
-      assert(mergeMetrics.numTargetRowsUpdated === 2L)
-      assert(mergeMetrics.numTargetRowsDeleted === 0L)
-      assert(mergeMetrics.numTargetRowsMatchedUpdated === 1L)
-      assert(mergeMetrics.numTargetRowsMatchedDeleted === 0L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceUpdated === 1L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceDeleted === 0L)
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
+      assert(mergeSummary.numTargetRowsInserted === 1L)
+      assert(mergeSummary.numTargetRowsUpdated === 2L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 1L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 1L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
@@ -2092,15 +2092,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           // Row(5, 500, "executive") deleted
           Row(6, -1, "dummy"))) // inserted
 
-      val mergeMetrics = getMergeMetrics()
-      assert(mergeMetrics.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
-      assert(mergeMetrics.numTargetRowsInserted === 1L)
-      assert(mergeMetrics.numTargetRowsUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsDeleted === 2L)
-      assert(mergeMetrics.numTargetRowsMatchedUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsMatchedDeleted === 1L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceUpdated === 0L)
-      assert(mergeMetrics.numTargetRowsNotMatchedBySourceDeleted === 1L)
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
+      assert(mergeSummary.numTargetRowsInserted === 1L)
+      assert(mergeSummary.numTargetRowsUpdated === 0L)
+      assert(mergeSummary.numTargetRowsDeleted === 2L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 1L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 1L)
     }
   }
 
@@ -2132,7 +2132,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                |""".stripMargin
           )
 
-          val mergeMetrics = getMergeMetrics()
+          val mergeMetrics = getMergeSummary()
           assert(mergeMetrics.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
           assert(mergeMetrics.numTargetRowsInserted === 1L)
           assert(mergeMetrics.numTargetRowsUpdated === 0L)
@@ -3268,10 +3268,10 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  private def getMergeMetrics(): MergeMetrics = {
+  private def getMergeSummary(): MergeSummary = {
     val table = catalog.loadTable(ident)
-    table.asInstanceOf[InMemoryTable].commits.last.metrics.get
-      .asInstanceOf[MergeMetrics]
+    table.asInstanceOf[InMemoryTable].commits.last.writeSummary.get
+      .asInstanceOf[MergeSummary]
   }
 
   private def assertNoLeftBroadcastOrReplication(query: String): Unit = {

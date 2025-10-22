@@ -20,10 +20,10 @@ package org.apache.spark.sql.connector.write;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * An interface that represents operation metrics collected from write operations.
+ * An interface that represents a summary of the write operation.
  *
  * @since 4.1.0
  */
 @Evolving
-public interface WriterMetrics {
+public interface WriteSummary {
 }

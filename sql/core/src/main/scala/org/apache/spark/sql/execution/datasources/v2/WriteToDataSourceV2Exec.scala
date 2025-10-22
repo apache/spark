@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeMetricsImpl, PhysicalWriteInfoImpl, Write, WriterCommitMessage, WriterMetrics}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -452,10 +452,10 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       )
 
-      val writerMetrics = getWriterMetrics(query)
+      val writeSummary = getWriteSummary(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      writerMetrics match {
-        case Some(m) => batchWrite.commit(messages, m)
+      writeSummary match {
+        case Some(summary) => batchWrite.commit(messages, summary)
         case None => batchWrite.commit(messages)
       }
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
@@ -480,10 +480,10 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     Nil
   }
 
-  private def getWriterMetrics(query: SparkPlan): Option[WriterMetrics] = {
+  private def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
     collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
       val metrics = n.metrics
-      MergeMetricsImpl(
+      MergeSummaryImpl(
         metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
         metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
         metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
