@@ -281,8 +281,14 @@ message PipelineQueryFunctionExecutionSignal {
   repeated string flow_names = 1;
 }
 
-// Provides context for pipeline analysis during Spark Connect query execution.
+// Contextual metadata used during pipeline analysis within Spark Connect queries.
 message PipelineAnalysisContext {
+  // Unique identifier of the dataflow graph associated with this pipeline.
+  optional string dataflow_graph_id = 1;
+
   // Defines the path assigned at runtime when the pipeline initializes
-  optional string definition_path = 1;
+  optional string definition_path = 2;
+
+  // Reserved field for protocol extensions.
+  google.protobuf.Any extension = 999;
 }

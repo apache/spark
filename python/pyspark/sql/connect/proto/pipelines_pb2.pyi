@@ -1447,30 +1447,62 @@ class PipelineQueryFunctionExecutionSignal(google.protobuf.message.Message):
 global___PipelineQueryFunctionExecutionSignal = PipelineQueryFunctionExecutionSignal
 
 class PipelineAnalysisContext(google.protobuf.message.Message):
-    """Provides context for pipeline analysis during Spark Connect query execution."""
+    """Contextual metadata used during pipeline analysis within Spark Connect queries."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
     DEFINITION_PATH_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
+    dataflow_graph_id: builtins.str
+    """Unique identifier of the dataflow graph associated with this pipeline."""
     definition_path: builtins.str
     """Defines the path assigned at runtime when the pipeline initializes"""
+    @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """Reserved field for protocol extensions."""
     def __init__(
         self,
         *,
+        dataflow_graph_id: builtins.str | None = ...,
         definition_path: builtins.str | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_definition_path", b"_definition_path", "definition_path", b"definition_path"
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_definition_path",
+            b"_definition_path",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "definition_path",
+            b"definition_path",
+            "extension",
+            b"extension",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_definition_path", b"_definition_path", "definition_path", b"definition_path"
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_definition_path",
+            b"_definition_path",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "definition_path",
+            b"definition_path",
+            "extension",
+            b"extension",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"]
+    ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_definition_path", b"_definition_path"]
     ) -> typing_extensions.Literal["definition_path"] | None: ...
