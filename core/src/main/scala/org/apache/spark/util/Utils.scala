@@ -3145,6 +3145,11 @@ private[spark] object Utils
    */
   lazy val isZGC: Boolean = checkUseGC("UseZGC")
 
+  /**
+   * Return whether we are using ShenandoahGC or not
+   */
+  lazy val isShenandoahGC: Boolean = checkUseGC("UseShenandoahGC")
+
   def checkUseGC(useGCObjectStr: String): Boolean = {
     Try {
       val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
