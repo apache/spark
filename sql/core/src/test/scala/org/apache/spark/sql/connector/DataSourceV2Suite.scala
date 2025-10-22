@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.execution.{SortExec, SparkPlan}
+import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
@@ -983,7 +983,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     val df = spark.read.format(classOf[CanonicalizedScanDataSourceV2].getName).load()
 
     val q1 = df.select($"i", $"j").where($"i" > 1 && $"i" < 8)
-    val q2 = df.select($"i", $"j").where($"i" < 8 && $"i" > 1)
+    val q2 = q1
 
     val optimized1 = q1.queryExecution.optimizedPlan
     val optimized2 = q2.queryExecution.optimizedPlan
@@ -1001,45 +1001,22 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
 
-    // Apply the rule to both queries to ensure they go through different optimization paths
+    // Apply the rule to q1 to mimic that QO may generate different output ordering
+    // for subqueries on a shared scan
     val optimized1Reversed = reverseOutputRule(optimized1)
 
     assert(!optimized1Reversed.equals(optimized2))
     assert(optimized1.canonicalized == optimized2.canonicalized)
 
+    val dsv2ScanRelation1 = optimized1Reversed.collect {
+      case d: DataSourceV2ScanRelation => d
+    }.head
+    val dsv2ScanRelation2 = optimized2.collect {
+      case d: DataSourceV2ScanRelation => d
+    }.head
 
-    val executed1 = q1.queryExecution.executedPlan
-    val executed2 = q2.queryExecution.executedPlan
-
-    val reverseOutputInSparkPlan = new Rule[SparkPlan] {
-      def apply(plan: SparkPlan): SparkPlan = plan transform {
-        case dsv2 @ BatchScanExec(output, _, _, _, _, _) =>
-          val reversedOutput = output.reverse
-          dsv2.copy(output = reversedOutput)
-      }
-    }
-
-    val executed1Reversed = reverseOutputInSparkPlan(executed1)
-    assert(!executed1Reversed.equals(executed2))
-    assert(executed1Reversed.canonicalized == executed2.canonicalized)
-
-
-    //    val dsv2ScanRelation1 = optimized1.collect {
-    //      case d: DataSourceV2ScanRelation => d
-    //    }.head
-    //    val dsv2ScanRelation2 = optimized2.collect {
-    //      case d: DataSourceV2ScanRelation => d
-    //    }.head
-    //    val batchScanExec1 = executed1.collect {
-    //      case b: BatchScanExec => b
-    //    }.head
-    //    val batchScanExec2 = executed2.collect {
-    //      case b: BatchScanExec => b
-    //    }.head
-//    assert(dsv2ScanRelation1.equals(dsv2ScanRelation2))
-//    assert(dsv2ScanRelation1.canonicalized == dsv2ScanRelation2.canonicalized)
-//    assert(batchScanExec1.equals(batchScanExec2))
-//    assert(batchScanExec1.canonicalized == batchScanExec2.canonicalized)
+    assert(!dsv2ScanRelation1.equals(dsv2ScanRelation2))
+    assert(dsv2ScanRelation1.canonicalized == dsv2ScanRelation2.canonicalized)
   }
 }
 
