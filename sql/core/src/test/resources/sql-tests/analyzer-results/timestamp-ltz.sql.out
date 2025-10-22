@@ -137,7 +137,7 @@ SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 Ame
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
 -- !query analysis
-Project [try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), None, Some(America/Los_Angeles))) AS try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678)))#x]
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), None, Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
 +- OneRowRelation
 
 
@@ -204,12 +204,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
 -- !query analysis
-Project [try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(PST), Some(America/Los_Angeles))) AS try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST))#x]
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(PST), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
 -- !query analysis
-Project [try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(CET), Some(America/Los_Angeles))) AS try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET))#x]
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(CET), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)#x]
 +- OneRowRelation

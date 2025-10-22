@@ -165,7 +165,7 @@ struct<convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP '2022-03-
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
 -- !query schema
-struct<try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))):timestamp>
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp>
 -- !query output
 2021-07-11 06:30:45.678
 
@@ -173,7 +173,7 @@ struct<try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11), make_time(6
 -- !query
 SELECT try_make_timestamp_ltz(NULL, TIME'00:00:00')
 -- !query schema
-struct<try_make_timestamp_ltz(make_timestamp(NULL, TIME '00:00:00')):timestamp>
+struct<make_timestamp(NULL, TIME '00:00:00'):timestamp>
 -- !query output
 NULL
 
@@ -181,7 +181,7 @@ NULL
 -- !query
 SELECT try_make_timestamp_ltz(DATE'1970-01-01', NULL)
 -- !query schema
-struct<try_make_timestamp_ltz(make_timestamp(DATE '1970-01-01', NULL)):timestamp>
+struct<make_timestamp(DATE '1970-01-01', NULL):timestamp>
 -- !query output
 NULL
 
@@ -241,7 +241,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
 -- !query schema
-struct<try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)):timestamp>
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST):timestamp>
 -- !query output
 2021-07-11 06:30:45.678
 
@@ -249,6 +249,6 @@ struct<try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11), make_time(6
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
 -- !query schema
-struct<try_make_timestamp_ltz(make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)):timestamp>
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET):timestamp>
 -- !query output
 2021-07-10 21:30:45.678
