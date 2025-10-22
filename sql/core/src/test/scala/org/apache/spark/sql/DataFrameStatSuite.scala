@@ -270,19 +270,29 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     val Array(s1_1, s2_1) = df.stat.approxQuantile("singles", Array(q1, q2), 1.0)
     val Array(Array(ms1_1, ms2_1), Array(md1_1, md2_1)) =
       df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), 1.0)
+    val errorSingle = 1000 * 1.0
+    val errorDouble = 2.0 * errorSingle
+
+    assert(math.abs(single1_1 - q1 * n) <= errorSingle)
+    assert(math.abs(s1_1 - q1 * n) <= errorSingle)
+    assert(math.abs(s2_1 - q2 * n) <= errorSingle)
+    assert(math.abs(ms1_1 - q1 * n) <= errorSingle)
+    assert(math.abs(ms2_1 - q2 * n) <= errorSingle)
+    assert(math.abs(md1_1 - 2 * q1 * n) <= errorDouble)
+    assert(math.abs(md2_1 - 2 * q2 * n) <= errorDouble)
 
     for (epsilon <- epsilons) {
       val Array(single1) = df.stat.approxQuantile("singles", Array(q1), epsilon)
       val Array(s1, s2) = df.stat.approxQuantile("singles", Array(q1, q2), epsilon)
       val Array(Array(ms1, ms2), Array(md1, md2)) =
         df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), epsilon)
-      assert(single1_1 === single1)
-      assert(s1_1 === s1)
-      assert(s2_1 === s2)
-      assert(ms1_1 === ms1)
-      assert(ms2_1 === ms2)
-      assert(md1_1 === md1)
-      assert(md2_1 === md2)
+      assert(math.abs(single1 - q1 * n) <= errorSingle)
+      assert(math.abs(s1 - q1 * n) <= errorSingle)
+      assert(math.abs(s2 - q2 * n) <= errorSingle)
+      assert(math.abs(ms1 - q1 * n) <= errorSingle)
+      assert(math.abs(ms2 - q2 * n) <= errorSingle)
+      assert(math.abs(md1 - 2 * q1 * n) <= errorDouble)
+      assert(math.abs(md2 - 2 * q2 * n) <= errorDouble)
     }
   }
 
