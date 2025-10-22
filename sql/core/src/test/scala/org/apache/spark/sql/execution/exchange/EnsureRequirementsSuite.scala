@@ -1217,7 +1217,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
             ) =>
           assert(leftKeys === Seq(exprA))
           assert(rightKeys === Seq(exprA))
-        case other => fail(s"We don't expect shuffle on neither sides, but got: $other")
+        case other => fail(s"We don't expect shuffle on either side, but got: $other")
       }
     }
   }
@@ -1328,7 +1328,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
             ) =>
           assert(leftKeys === Seq(exprA, exprB))
           assert(rightKeys === Seq(exprA, exprB))
-        case other => fail(s"We don't expect shuffle on neither sides with multiple " +
+        case other => fail(s"We don't expect shuffle on either side with multiple " +
           s"clustering keys, but got: $other")
       }
 
