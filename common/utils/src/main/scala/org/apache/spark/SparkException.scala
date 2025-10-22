@@ -39,6 +39,11 @@ class SparkException(
   def this(message: String) =
     this(message = message, cause = null)
 
+  def this(message: String, cause: Throwable, errorClass: String,
+    messageParameters: Map[String, String], context: Array[QueryContext]) =
+    this(message = message, cause = cause, errorClass = Some(errorClass),
+      messageParameters = messageParameters, context = context, sqlState = None)
+
   def this(
       errorClass: String,
       messageParameters: Map[String, String],
