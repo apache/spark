@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
@@ -61,6 +61,9 @@ class StateStoreConf(
 
   /** Maximum count of versions a State Store implementation should retain in memory */
   val maxVersionsToRetainInMemory: Int = sqlConf.maxBatchesToRetainInMemory
+
+  /** Maximum number of versions to delete per maintenance operation */
+  val maxVersionsToDeletePerMaintenance: Int = sqlConf.maxVersionsToDeletePerMaintenance
 
   /**
    * Optional fully qualified name of the subclass of [[StateStoreProvider]]

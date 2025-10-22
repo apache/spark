@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.parser
 import scala.annotation.nowarn
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -1907,28 +1908,50 @@ class PlanParserSuite extends AnalysisTest {
     )
   }
 
-  test("SPARK-41271: parsing of named parameters") {
+  test("SPARK-41271: parameter substitution before parsing") {
+    // Test successful parameter substitution
+    val substitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Test named parameters
+    val sql1 = "SELECT :param_1"
+    val (substituted1, _, _) = substitutor.substitute(
+      sql1, Map("param_1" -> "42"))
     comparePlans(
-      parsePlan("SELECT :param_1"),
-      Project(UnresolvedAlias(NamedParameter("param_1"), None) :: Nil, OneRowRelation()))
+      parsePlan(substituted1),
+      Project(UnresolvedAlias(Literal(42), None) :: Nil, OneRowRelation()))
+
+    val sql2 = "SELECT abs(:1Abc)"
+    val (substituted2, _, _) = substitutor.substitute(
+      sql2, Map("1Abc" -> "123"))
     comparePlans(
-      parsePlan("SELECT abs(:1Abc)"),
+      parsePlan(substituted2),
       Project(UnresolvedAlias(
         UnresolvedFunction(
           "abs" :: Nil,
-          NamedParameter("1Abc") :: Nil,
+          Literal(123) :: Nil,
           isDistinct = false), None) :: Nil,
         OneRowRelation()))
+
+    val sql3 = "SELECT * FROM a LIMIT :limitA"
+    val (substituted3, _, _) = substitutor.substitute(
+      sql3, Map("limitA" -> "10"))
     comparePlans(
-      parsePlan("SELECT * FROM a LIMIT :limitA"),
-      table("a").select(star()).limit(NamedParameter("limitA")))
-    // Invalid empty name and invalid symbol in a name
+      parsePlan(substituted3),
+      table("a").select(star()).limit(Literal(10)))
+
+    // Test error cases - invalid parameter syntax should be caught by SubstituteParamsParser
     checkError(
-      exception = parseException(s"SELECT :-"),
+      exception = intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
+        val (substituted, _, _) = substitutor.substitute("SELECT :-")
+        substituted
+      },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'-'", "hint" -> ""))
     checkError(
-      exception = parseException(s"SELECT :"),
+      exception = intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
+        val (substituted, _, _) = substitutor.substitute("SELECT :")
+        substituted
+      },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
@@ -1952,21 +1975,36 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-44066: parsing of positional parameters") {
+  test("SPARK-44066: positional parameter substitution before parsing") {
+    // Test successful positional parameter substitution
+    val substitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Test positional parameters
+    val sql1 = "SELECT ?"
+    val (substituted1, _, _) = substitutor.substitute(
+      sql1, positionalParams = List("42"))
     comparePlans(
-      parsePlan("SELECT ?"),
-      Project(UnresolvedAlias(PosParameter(7), None) :: Nil, OneRowRelation()))
+      parsePlan(substituted1),
+      Project(UnresolvedAlias(Literal(42), None) :: Nil, OneRowRelation()))
+
+    val sql2 = "SELECT abs(?)"
+    val (substituted2, _, _) = substitutor.substitute(
+      sql2, positionalParams = List("123"))
     comparePlans(
-      parsePlan("SELECT abs(?)"),
+      parsePlan(substituted2),
       Project(UnresolvedAlias(
         UnresolvedFunction(
           "abs" :: Nil,
-          PosParameter(11) :: Nil,
+          Literal(123) :: Nil,
           isDistinct = false), None) :: Nil,
         OneRowRelation()))
+
+    val sql3 = "SELECT * FROM a LIMIT ?"
+    val (substituted3, _, _) = substitutor.substitute(
+      sql3, positionalParams = List("10"))
     comparePlans(
-      parsePlan("SELECT * FROM a LIMIT ?"),
-      table("a").select(star()).limit(PosParameter(22)))
+      parsePlan(substituted3),
+      table("a").select(star()).limit(Literal(10)))
   }
 
   test("SPARK-45189: Creating UnresolvedRelation from TableIdentifier should include the" +

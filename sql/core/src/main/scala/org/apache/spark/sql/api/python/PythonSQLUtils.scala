@@ -26,7 +26,7 @@ import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession, TableArg}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -117,7 +117,7 @@ private[sql] object PythonSQLUtils extends Logging {
   def toPyRow(row: Row): Array[Byte] = {
     assert(row.isInstanceOf[GenericRowWithSchema])
     withInternalRowPickler(_.dumps(EvaluatePython.toJava(
-      CatalystTypeConverters.convertToCatalyst(row), row.schema)))
+      CatalystTypeConverters.convertToCatalyst(row), row.schema, SQLConf.get.pysparkBinaryAsBytes)))
   }
 
   def toJVMRow(
@@ -181,6 +181,9 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def namedArgumentExpression(name: String, e: Column): Column =
     Column(NamedArgumentExpression(name, expression(e)))
+
+  def namedArgumentExpression(name: String, e: TableArg): Column =
+    Column(NamedArgumentExpression(name, e.expression))
 
   @scala.annotation.varargs
   def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)

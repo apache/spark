@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
-import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
@@ -30,7 +29,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
-import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
@@ -44,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -282,11 +281,15 @@ class AstBuilder extends DataTypeAstBuilder
       parsingCtx: SqlScriptingParsingContext): ExceptionHandler = {
     val exceptionHandlerTriggers = visitConditionValuesImpl(ctx.conditionValues())
 
-    if (Option(ctx.CONTINUE()).isDefined) {
-      throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+    val handlerType = if (Option(ctx.CONTINUE()).isDefined) {
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED)) {
+        throw SqlScriptingErrors.continueHandlerNotSupported(CurrentOrigin.get)
+      }
+      ExceptionHandlerType.CONTINUE
+    } else {
+      ExceptionHandlerType.EXIT
     }
 
-    val handlerType = ExceptionHandlerType.EXIT
     val body = if (Option(ctx.beginEndCompoundBlock()).isDefined) {
       visitBeginEndCompoundBlockImpl(
         ctx.beginEndCompoundBlock(),
@@ -713,12 +716,12 @@ class AstBuilder extends DataTypeAstBuilder
   private def withCTE(ctx: CtesContext, plan: LogicalPlan): LogicalPlan = {
     val ctes = ctx.namedQuery.asScala.map { nCtx =>
       val namedQuery = visitNamedQuery(nCtx)
-      val rowLevelLimit: Option[Int] = if (nCtx.INTEGER_VALUE() != null) {
+      val rowLevelLimit: Option[Int] = if (nCtx.integerValue() != null) {
         if (ctx.RECURSIVE() == null) {
           operationNotAllowed("Cannot specify MAX RECURSION LEVEL when the CTE is not marked as " +
             "RECURSIVE", ctx)
         }
-        Some(nCtx.INTEGER_VALUE().getText().toInt)
+        Some(getIntegerValue(nCtx.integerValue()))
       } else {
         None
       }
@@ -1149,7 +1152,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Returns the parameters for [[ExecuteImmediateQuery]] logical plan.
+   * Returns the parameters for [[UnresolvedExecuteImmediate]] logical plan.
    * Expected format:
    * {{{
    *   EXECUTE IMMEDIATE {query_string|string_literal}
@@ -1157,11 +1160,8 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitExecuteImmediate(ctx: ExecuteImmediateContext): LogicalPlan = withOrigin(ctx) {
-    // Because of how parsing rules are written, we know that either
-    // queryParam or targetVariable is non null - hence use Either to represent this.
-    val queryString = Option(ctx.queryParam.stringLit()).map(sl => Left(string(visitStringLit(sl))))
-    val queryVariable = Option(ctx.queryParam.multipartIdentifier)
-      .map(mpi => Right(UnresolvedAttribute(visitMultipartIdentifier(mpi))))
+    // With the new grammar, queryParam is now an expression
+    val queryParam = expression(ctx.queryParam)
 
     val targetVars = Option(ctx.targetVariable).toSeq
       .flatMap(v => visitMultipartIdentifierList(v))
@@ -1169,8 +1169,7 @@ class AstBuilder extends DataTypeAstBuilder
       visitExecuteImmediateUsing(_)
     }.getOrElse{ Seq.empty }
 
-
-    ExecuteImmediateQuery(exprs, queryString.getOrElse(queryVariable.get), targetVars)
+    UnresolvedExecuteImmediate(queryParam, exprs, targetVars)
   }
 
   override def visitExecuteImmediateUsing(
@@ -1346,14 +1345,20 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // LIMIT
-    // - LIMIT ALL is the same as omitting the LIMIT clause
-    withOffset.optional(limit) {
-      if (forPipeOperators && clause.nonEmpty && clause != PipeOperators.offsetClause) {
-        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-          ctx, clause, PipeOperators.limitClause)
-      }
+    if (forPipeOperators && clause.nonEmpty
+      && clause != PipeOperators.offsetClause && limit != null) {
+      throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+        ctx, clause, PipeOperators.limitClause)
+    }
+    // LIMIT ALL creates LimitAll node which can be used for infinite recursions in recursive CTEs.
+    if (ctx.ALL() != null) {
       clause = PipeOperators.limitClause
-      Limit(typedVisit(limit), withOffset)
+      LimitAll(withOffset)
+    } else {
+      withOffset.optional(limit) {
+        clause = PipeOperators.limitClause
+        Limit(typedVisit(limit), withOffset)
+      }
     }
   }
 
@@ -2195,7 +2200,10 @@ class AstBuilder extends DataTypeAstBuilder
         Limit(expression(ctx.expression), query)
 
       case ctx: SampleByPercentileContext =>
-        val fraction = ctx.percentage.getText.toDouble
+        val fraction = if (ctx.DECIMAL_VALUE() != null) { ctx.DECIMAL_VALUE().getText.toDouble }
+        else {
+          getIntegerValue(ctx.integerValue()).toDouble
+        }
         val sign = if (ctx.negativeSign == null) 1 else -1
         sample(sign * fraction / 100.0d, seed)
 
@@ -2252,7 +2260,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitVersion(ctx: VersionContext): Option[String] = {
     if (ctx != null) {
-      if (ctx.INTEGER_VALUE != null) {
+      if (ctx.INTEGER_VALUE() != null) {
         Some(ctx.INTEGER_VALUE().getText)
       } else {
         Option(string(visitStringLit(ctx.stringLit())))
@@ -3403,7 +3411,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Currently Date, Timestamp, Interval and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
-    val value = string(visitStringLit(ctx.stringLit))
+    val value = string(visit(ctx.stringLitWithoutMarker).asInstanceOf[Token])
     val valueType = ctx.literalType.start.getType
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
@@ -4182,7 +4190,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitBucketSpec(ctx: BucketSpecContext): BucketSpec = withOrigin(ctx) {
     BucketSpec(
-      ctx.INTEGER_VALUE.getText.toInt,
+      getIntegerValue(ctx.integerValue()),
       visitIdentifierList(ctx.identifierList),
       Option(ctx.orderedIdentifierList)
           .toSeq
@@ -6362,7 +6370,7 @@ class AstBuilder extends DataTypeAstBuilder
    * */
   override def visitNamedParameterLiteral(
       ctx: NamedParameterLiteralContext): Expression = withOrigin(ctx) {
-    NamedParameter(ctx.identifier().getText)
+    NamedParameter(ctx.namedParameterMarker().identifier().getText)
   }
 
   /**
@@ -6379,7 +6387,7 @@ class AstBuilder extends DataTypeAstBuilder
    *
    * For example:
    * {{{
-   *   DECLARE [OR REPLACE] [VARIABLE] [db_name.]variable_name
+   *   DECLARE [OR REPLACE] [VARIABLE] variable_name [COMMA variable_name]*
    *   [dataType] [defaultExpression];
    * }}}
    *
@@ -6392,7 +6400,7 @@ class AstBuilder extends DataTypeAstBuilder
         throw new ParseException(
           errorClass = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
           messageParameters = Map.empty,
-          ctx.identifierReference)
+          ctx.identifierReferences.get(0))
       }
       DefaultValueExpression(Literal(null, dataTypeOpt.get), "null")
     } else {
@@ -6400,7 +6408,11 @@ class AstBuilder extends DataTypeAstBuilder
       dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
     }
     CreateVariable(
-      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      ctx.identifierReferences.asScala.map (
+        identifierReference => {
+          withIdentClause(identifierReference, UnresolvedIdentifier(_))
+        }
+      ).toSeq,
       defaultExpression,
       ctx.REPLACE() != null
     )

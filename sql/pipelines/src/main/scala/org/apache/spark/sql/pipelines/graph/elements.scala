@@ -27,7 +27,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.common.DatasetType
 import org.apache.spark.sql.pipelines.util.{
   BatchReadOptions,
@@ -78,8 +78,12 @@ trait Input extends GraphElement {
  * Represents a node in a [[DataflowGraph]] that can be written to by a [[Flow]].
  * Must be backed by a file source.
  */
-sealed trait Output {
+sealed trait Output {}
 
+/**
+ * A type of [[Output]] that represents a materialized dataset in a [[DataflowGraph]].
+ */
+sealed trait Dataset extends Output {
   /**
    * Normalized storage location used for storing materializations for this [[Output]].
    * If None, it means this [[Output]] has not been normalized yet.
@@ -123,16 +127,11 @@ case class Table(
     normalizedPath: Option[String],
     properties: Map[String, String] = Map.empty,
     comment: Option[String],
-    baseOrigin: QueryOrigin,
+    override val origin: QueryOrigin,
     isStreamingTable: Boolean,
     format: Option[String]
 ) extends TableInput
-    with Output {
-
-  override val origin: QueryOrigin = baseOrigin.copy(
-    objectType = Some("table"),
-    objectName = Some(identifier.unquotedString)
-  )
+    with Dataset {
 
   // Load this table's data from underlying storage.
   override def load(readOptions: InputReadOptions): DataFrame = {
@@ -204,7 +203,7 @@ case class VirtualTableInput(
     // create empty streaming/batch df based on input type.
     def createEmptyDF(schema: StructType): DataFrame = readOptions match {
       case _: StreamingReadOptions =>
-        MemoryStream[Row](ExpressionEncoder(schema, lenient = false), spark.sqlContext)
+        MemoryStream[Row](ExpressionEncoder(schema, lenient = false), spark)
           .toDF()
       case _ => spark.createDataFrame(new util.ArrayList[Row](), schema)
     }
@@ -225,34 +224,46 @@ trait View extends GraphElement {
   /** Properties of this view */
   val properties: Map[String, String]
 
+  /** (SQL-specific) The raw query that defines the [[View]]. */
+  val sqlText: Option[String]
+
   /** User-specified comment that can be placed on the [[View]]. */
   val comment: Option[String]
 }
 
 /**
  * Representing a temporary [[View]] in a [[DataflowGraph]].
- *
- * @param identifier The identifier of this view within the graph.
- * @param properties Properties of the view
- * @param comment when defining a view
  */
 case class TemporaryView(
     identifier: TableIdentifier,
     properties: Map[String, String],
+    sqlText: Option[String],
     comment: Option[String],
     origin: QueryOrigin
 ) extends View {}
 
 /**
  * Representing a persisted [[View]] in a [[DataflowGraph]].
- *
- * @param identifier The identifier of this view within the graph.
- * @param properties Properties of the view
- * @param comment when defining a view
  */
 case class PersistedView(
     identifier: TableIdentifier,
     properties: Map[String, String],
+    sqlText: Option[String],
     comment: Option[String],
     origin: QueryOrigin
 ) extends View {}
+
+trait Sink extends GraphElement with Output {
+  /** format of the sink */
+  val format: String
+
+  /** options defined for the sink */
+  val options: Map[String, String]
+}
+
+case class SinkImpl(
+   identifier: TableIdentifier,
+   format: String,
+   options: Map[String, String],
+   origin: QueryOrigin
+ ) extends Sink {}

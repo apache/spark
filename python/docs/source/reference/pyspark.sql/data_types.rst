@@ -31,9 +31,12 @@ Data Types
     ByteType
     DataType
     DateType
+    TimeType
     DecimalType
     DoubleType
     FloatType
+    GeographyType
+    GeometryType
     IntegerType
     LongType
     MapType

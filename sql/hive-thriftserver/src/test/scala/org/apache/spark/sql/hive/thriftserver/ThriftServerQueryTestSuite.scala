@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
+import java.nio.file.Files
 import java.sql.{SQLException, Statement, Timestamp}
 import java.util.{Locale, MissingFormatArgumentException}
 
@@ -27,7 +28,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult.{getBinaryFormatter, getTimeFormatters, toHiveString, BinaryFormatter, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -103,7 +103,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "timestampNTZ/datetime-special-ansi.sql",
     // SPARK-47264
     "view-with-default-collation.sql",
-    "collations.sql",
+    "collations-basic.sql",
+    "collations-aliases.sql",
+    "collations-padding-trim.sql",
+    "collations-string-functions.sql",
     "listagg-collations.sql",
     "pipe-operators.sql",
     // VARIANT type
@@ -151,7 +154,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
 
       // Read back the golden file.
       val expectedOutputs: Seq[QueryTestOutput] = {
-        val goldenOutput = fileToString(new File(testCase.resultFile))
+        val goldenOutput = Files.readString(new File(testCase.resultFile).toPath)
         val segments = goldenOutput.split("-- !query.*\n")
 
         // each query has 3 segments, plus the header

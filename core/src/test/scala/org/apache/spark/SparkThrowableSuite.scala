@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import scala.jdk.CollectionConverters._
 import scala.util.Properties.lineSeparator
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
@@ -504,6 +505,90 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("breaking changes info") {
+    assert(SparkThrowableHelper.getBreakingChangeInfo(null).isEmpty)
+
+    val nonBreakingChangeError = new SparkException(
+      errorClass = "CANNOT_PARSE_DECIMAL",
+      messageParameters = Map.empty[String, String],
+      cause = null)
+    assert(nonBreakingChangeError.getBreakingChangeInfo == null)
+
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      Files.writeString(
+        json.toPath,
+        """
+          |{
+          |  "TEST_ERROR": {
+          |    "message": [
+          |      "Error message 1 with <param1>."
+          |    ],
+          |    "breakingChangeInfo": {
+          |      "migrationMessage": [
+          |        "Migration message with <param2>."
+          |      ],
+          |      "mitigationConfig": {
+          |        "key": "config.key1",
+          |        "value": "config.value1"
+          |      },
+          |      "needsAudit": false
+          |    }
+          |  },
+          |  "TEST_ERROR_WITH_SUBCLASS": {
+          |    "message": [
+          |      "Error message 2 with <param1>."
+          |    ],
+          |    "subClass": {
+          |      "SUBCLASS": {
+          |        "message": [
+          |          "Subclass message with <param2>."
+          |        ],
+          |        "breakingChangeInfo": {
+          |          "migrationMessage": [
+          |            "Subclass migration message with <param3>."
+          |          ],
+          |          "mitigationConfig": {
+          |            "key": "config.key2",
+          |            "value": "config.value2"
+          |          },
+          |          "needsAudit": true
+          |        }
+          |      }
+          |    }
+          |  }
+          |}
+          |""".stripMargin,
+        StandardCharsets.UTF_8)
+
+      val error1Params = Map("param1" -> "value1", "param2" -> "value2")
+      val error2Params = Map("param1" -> "value1", "param2" -> "value2", "param3" -> "value3")
+
+      val reader =
+        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      val errorMessage = reader.getErrorMessage("TEST_ERROR", error1Params)
+      assert(errorMessage == "Error message 1 with value1. Migration message with value2.")
+      val breakingChangeInfo = reader.getBreakingChangeInfo("TEST_ERROR")
+      assert(
+        breakingChangeInfo.contains(
+          new BreakingChangeInfo(
+            Seq("Migration message with <param2>."),
+            Some(new MitigationConfig("config.key1", "config.value1")),
+            false)))
+      val errorMessage2 =
+        reader.getErrorMessage("TEST_ERROR_WITH_SUBCLASS.SUBCLASS", error2Params)
+      assert(
+        errorMessage2 == "Error message 2 with value1. Subclass message with value2." +
+          " Subclass migration message with value3.")
+      val breakingChangeInfo2 = reader.getBreakingChangeInfo("TEST_ERROR_WITH_SUBCLASS.SUBCLASS")
+      assert(
+        breakingChangeInfo2.contains(
+          new BreakingChangeInfo(
+            Seq("Subclass migration message with <param3>."),
+            Some(new MitigationConfig("config.key2", "config.value2")))))
+    }
+  }
+
   test("detect unused message parameters") {
     checkError(
       exception = intercept[SparkException] {
@@ -526,5 +611,86 @@ class SparkThrowableSuite extends SparkFunSuite {
           "remove unused message parameters.")
       )
     )
+  }
+
+  test("getMessage uses custom getDefaultMessageTemplate from SparkThrowable") {
+    import ErrorMessageFormat._
+
+    // Create a custom throwable that overrides getDefaultMessageTemplate.
+    class CustomTemplatedThrowable extends Throwable with SparkThrowable {
+      override def getCondition: String = "DIVIDE_BY_ZERO"
+      override def getErrorClass: String = "DIVIDE_BY_ZERO"
+      override def getMessage: String = "Custom message"
+      override def getMessageParameters: java.util.Map[String, String] =
+        Map("config" -> "TEST_CONFIG").asJava
+      override def getDefaultMessageTemplate: String = "Custom template: Division by <config>"
+    }
+
+    val customThrowable = new CustomTemplatedThrowable
+
+    // Test STANDARD format uses the custom template.
+    val standardResult = SparkThrowableHelper.getMessage(customThrowable, STANDARD)
+    assert(standardResult.contains("Custom template: Division by <config>"))
+
+    // Test that it doesn't contain the default template from JSON.
+    assert(!standardResult.contains("Use `try_divide` to tolerate divisor being 0"))
+  }
+
+  test("getMessage falls back to JSON template when getDefaultMessageTemplate not overridden") {
+    import ErrorMessageFormat._
+
+    // Create a throwable that uses default getDefaultMessageTemplate implementation.
+    class ReadFromJSONThrowable extends Throwable with SparkThrowable {
+      override def getCondition: String = "DIVIDE_BY_ZERO"
+      override def getErrorClass: String = "DIVIDE_BY_ZERO"
+      override def getMessage: String = "Random message"
+      override def getMessageParameters: java.util.Map[String, String] =
+        Map("config" -> "TEST_CONFIG").asJava
+    }
+
+    val readFromJSONThrowable = new ReadFromJSONThrowable
+
+    // Test STANDARD format reads messageTemplate from JSON file.
+    val readFromJSONResult = SparkThrowableHelper.getMessage(readFromJSONThrowable, STANDARD)
+    assert(readFromJSONResult
+      .contains("\"messageTemplate\" : \"Division by zero. Use `try_divide` to tolerate divisor " +
+        "being 0 and return NULL instead. If necessary set <config> to \\\"false\\\" " +
+        "to bypass this error.\""))
+  }
+
+  test("getMessage writes null messageTemplate for non-existing error condition") {
+    import ErrorMessageFormat._
+
+    // Create a throwable with non-existing error condition.
+    class NonExistingConditionThrowable extends Throwable with SparkThrowable {
+      override def getCondition: String = "NON_EXISTING_ERROR_CONDITION"
+      override def getErrorClass: String = "NON_EXISTING_ERROR_CONDITION"
+      override def getMessage: String = "Non-existing error message"
+      override def getMessageParameters: java.util.Map[String, String] =
+        Map("param" -> "value").asJava
+    }
+
+    val nonExistingThrowable = new NonExistingConditionThrowable
+
+    // Test STANDARD format writes null messageTemplate when condition doesn't exist in JSON.
+    val standardResult = SparkThrowableHelper.getMessage(nonExistingThrowable, STANDARD)
+    assert(standardResult.contains("\"messageTemplate\" : null"))
+
+    // Verify it still contains the error class and other fields.
+    assert(standardResult.contains("\"errorClass\" : \"NON_EXISTING_ERROR_CONDITION\""))
+    assert(standardResult.contains("\"messageParameters\""))
+  }
+
+  test("getMessage with custom sqlState and messageTemplate") {
+    val errorClass = "TEST_CUSTOM_TEMPLATE"
+    val sqlState = "42S01"
+    val messageTemplate = "Custom error: <param1> occurred with <param2>"
+    val messageParameters = Map("param1" -> "something", "param2" -> "somewhere")
+
+    val result = getMessage(errorClass, sqlState, messageTemplate, messageParameters)
+
+    // Verify the message is formatted correctly.
+    assert(result == "[TEST_CUSTOM_TEMPLATE] Custom error: " +
+      "something occurred with somewhere SQLSTATE: 42S01")
   }
 }

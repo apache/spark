@@ -31,7 +31,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException, TaskContext}
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -617,6 +617,175 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
         stateMachineObj2.asInstanceOf[RocksDBStateMachine].verifyStamp(validStamp)
       }
       assert(postAbortException.getMessage.contains("Invalid stamp"))
+    }
+  }
+
+  test("SPARK-53276: safe provider close during concurrent commit operations") {
+    // This test simulates the scenario fixed by SPARK-53276:
+    // - Multiple partitions are processing, some hit errors while others are committing
+    // - StateStore.stop() is called, which tries to close all providers
+    // - The fix ensures RocksDB is only closed when no other thread is using it
+
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      val commitInProgressLatch = new CountDownLatch(1)
+      val proceedWithCloseLatch = new CountDownLatch(1)
+      val commitCompletedLatch = new CountDownLatch(1)
+
+      @volatile var commitThreadException: Option[Throwable] = None
+      @volatile var closeResult: Option[Boolean] = None
+
+      // Thread 1: Simulate partition that's in the middle of commit (partition 1)
+      val commitFuture = Future {
+        val taskContext = TaskContext.empty()
+        TaskContext.setTaskContext(taskContext)
+
+        try {
+          val store = provider.getStore(0)
+          put(store, "partition1_key", 0, 1, StateStore.DEFAULT_COL_FAMILY_NAME)
+
+          // Signal that we're about to start commit
+          commitInProgressLatch.countDown()
+
+          // Wait for close thread to start attempting close
+          proceedWithCloseLatch.await(5, TimeUnit.SECONDS)
+
+          // Simulate some commit processing time
+          Thread.sleep(500)
+
+          // This commit should succeed even while close() is being called
+          val version = store.commit()
+          assert(version === 1)
+
+          commitCompletedLatch.countDown()
+        } catch {
+          case ex: Throwable =>
+            commitThreadException = Some(ex)
+            commitCompletedLatch.countDown()
+        }
+      }
+
+      // Thread 2: Simulate StateStore.stop() being called (from partition 0 error)
+      val closeFuture = Future {
+        try {
+          // Wait for commit thread to start its transaction
+          commitInProgressLatch.await(5, TimeUnit.SECONDS)
+
+          // Signal commit thread to proceed with its work
+          proceedWithCloseLatch.countDown()
+
+          // Attempt to close the provider (this simulates StateStore.stop())
+          // With the fix, this should wait until the commit thread releases the RocksDB
+          provider.close()
+          closeResult = Some(true)
+
+        } catch {
+          case ex: Throwable =>
+            // Log unexpected exceptions for debugging
+            logInfo(s"Close thread exception: ${ex.getClass.getName}: ${ex.getMessage}")
+        }
+      }
+
+      // Wait for both operations to complete
+      awaitResult(commitFuture, 10.seconds)
+      awaitResult(closeFuture, 10.seconds)
+
+      // Verify that commit completed successfully without exceptions
+      assert(commitCompletedLatch.await(1, TimeUnit.SECONDS),
+        "Commit should have completed")
+      assert(commitThreadException.isEmpty,
+        s"Commit should not have thrown exception: ${commitThreadException.map(_.getMessage)}")
+
+      // The state machine should have coordinated the close properly:
+      // - Either close() returned true (indicating it was safe to close)
+      // - Or close() waited until the commit completed before proceeding
+
+      // After everything completes, the provider should be properly closed
+      val stateMachine = PrivateMethod[Any](Symbol("stateMachine"))
+      val stateMachineObj = provider invokePrivate stateMachine()
+
+      // Attempting to get a new store should fail since provider is closed
+      val exception = intercept[StateStoreInvalidStateMachineTransition] {
+        provider.getStore(1)
+      }
+      assert(exception.getMessage.contains("Old state: CLOSED"))
+    }
+  }
+
+  test("SPARK-53276: close waits for concurrent operations to complete") {
+    // This test verifies that close() properly waits for ongoing operations
+    // to complete before actually closing the RocksDB instance
+
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      val operationStarted = new CountDownLatch(1)
+      val proceedWithClose = new CountDownLatch(1)
+      val operationCompleted = new CountDownLatch(1)
+
+      @volatile var operationException: Option[Throwable] = None
+      @volatile var closeStartTime: Long = 0
+      @volatile var closeEndTime: Long = 0
+
+      // Thread 1: Long-running operation
+      val operationFuture = Future {
+        val taskContext = TaskContext.empty()
+        TaskContext.setTaskContext(taskContext)
+
+        try {
+          val store = provider.getStore(0)
+          put(store, "key", 0, 1, StateStore.DEFAULT_COL_FAMILY_NAME)
+
+          operationStarted.countDown()
+
+          // Wait for close to be initiated
+          proceedWithClose.await(5, TimeUnit.SECONDS)
+
+          // Simulate some processing time
+          Thread.sleep(1000)
+
+          // This should complete successfully
+          store.commit()
+          operationCompleted.countDown()
+
+        } catch {
+          case ex: Throwable =>
+            operationException = Some(ex)
+            operationCompleted.countDown()
+        }
+      }
+
+      // Thread 2: Close operation
+      val closeFuture = Future {
+        // Wait for operation to start
+        operationStarted.await(5, TimeUnit.SECONDS)
+
+        // Signal operation to proceed
+        proceedWithClose.countDown()
+
+        // Start close - this should wait for the operation to complete
+        closeStartTime = System.currentTimeMillis()
+        provider.close()
+        closeEndTime = System.currentTimeMillis()
+      }
+
+      // Wait for both to complete
+      awaitResult(operationFuture, 10.seconds)
+      awaitResult(closeFuture, 10.seconds)
+
+      // Verify operation completed successfully
+      assert(operationCompleted.await(1, TimeUnit.SECONDS),
+        "Operation should have completed")
+      assert(operationException.isEmpty,
+        s"Operation should not have failed: ${operationException.map(_.getMessage)}")
+
+      // Verify close waited for operation (should take at least 1 second)
+      val closeDuration = closeEndTime - closeStartTime
+      assert(closeDuration >= 900, // Allow some margin for timing
+        s"Close should have waited for operation, but took only $closeDuration ms")
+
+      // Verify provider is properly closed
+      val exception = intercept[StateStoreInvalidStateMachineTransition] {
+        provider.getStore(1)
+      }
+      assert(exception.getMessage.contains("Old state: CLOSED"))
     }
   }
 

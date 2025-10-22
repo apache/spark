@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 4.0 to 4.1
 
-- Since Spark 4.1, `mapInPandas` and `mapInArrow` enforces strict validation of the result against the schema. The column names must exactly match and types must match with compatible nullability. To restore the previous behavior, set `spark.sql.execution.arrow.pyspark.validateSchema.enabled` to `false`.
+- Since Spark 4.1, the Parquet reader no longer assumes all struct values to be null, if all the requested fields are missing in the parquet file. The new default behavior is to read an additional struct field that is present in the file to determine nullness. To restore the previous behavior, set `spark.sql.legacy.parquet.returnNullStructIfAllFieldsMissing` to `true`.
 
 ## Upgrading from Spark SQL 3.5 to 4.0
 

@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{spy, times, verify}
 import org.scalatest.BeforeAndAfterEach
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableChange, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -2650,10 +2652,10 @@ class HiveDDLSuite
   }
 
   test("SPARK-21216: join with a streaming DataFrame") {
-    import org.apache.spark.sql.execution.streaming.MemoryStream
+    import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
     import testImplicits._
 
-    implicit val _sqlContext = spark.sqlContext
+    implicit val sparkSession: SparkSession = spark
 
     withTempView("t1") {
       Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word").createOrReplaceTempView("t1")
@@ -2710,8 +2712,9 @@ class HiveDDLSuite
         OrcFileOperator.getFileReader(maybeFile.get.toPath.toString).get.getCompression.name
 
       case "parquet" =>
+        val hadoopConf = sparkContext.hadoopConfiguration
         val footer = ParquetFooterReader.readFooter(
-          sparkContext.hadoopConfiguration, new Path(maybeFile.get.getPath), NO_FILTER)
+          HadoopInputFile.fromPath(new Path(maybeFile.get.getPath), hadoopConf), NO_FILTER)
         footer.getBlocks.get(0).getColumns.get(0).getCodec.toString
     }
 

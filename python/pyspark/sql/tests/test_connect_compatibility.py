@@ -268,7 +268,7 @@ class ConnectCompatibilityTestsMixin:
             "registerProgressHandler",
             "removeProgressHandler",
         }
-        expected_missing_classic_methods = set()
+        expected_missing_classic_methods = {"cloneSession"}
         self.check_compatibility(
             ClassicSparkSession,
             ConnectSparkSession,
@@ -379,8 +379,7 @@ class ConnectCompatibilityTestsMixin:
         """Test Functions compatibility between classic and connect."""
         expected_missing_connect_properties = set()
         expected_missing_classic_properties = set()
-        # TODO(SPARK-53012): support arrow_udtf in Spark Connect
-        expected_missing_connect_methods = {"arrow_udtf"}
+        expected_missing_connect_methods = set()
         expected_missing_classic_methods = {"check_dependencies"}
         self.check_compatibility(
             ClassicFunctions,

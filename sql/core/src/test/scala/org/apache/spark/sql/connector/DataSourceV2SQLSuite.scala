@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -78,6 +78,17 @@ abstract class DataSourceV2SQLSuite
 
   protected def analysisException(sqlText: String): AnalysisException = {
     intercept[AnalysisException](sql(sqlText))
+  }
+
+  test("EXPLAIN") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id int, data string)")
+      val explain = spark.sql(s"EXPLAIN EXTENDED SELECT * FROM $t").head().getString(0)
+      val relationPattern = raw".*RelationV2\[[^\]]*]\s+$t\s*$$".r
+      val relations = explain.split("\n").filter(_.contains("RelationV2"))
+      assert(relations.nonEmpty && relations.forall(line => relationPattern.matches(line.trim)))
+    }
   }
 }
 

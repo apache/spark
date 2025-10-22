@@ -171,13 +171,14 @@ INSERT INTO ids
 SELECT * EXCEPT (name, data) FROM tbl_view
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/ids, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/ids], Append, `spark_catalog`.`default`.`ids`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/ids), [id]
-+- Project [id#x]
-   +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x, name#x, data#x])
-         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
-            +- Project [id#x, name#x, data#x]
-               +- SubqueryAlias tbl_view
-                  +- LocalRelation [id#x, name#x, data#x]
++- Project [id#x AS id#x]
+   +- Project [id#x]
+      +- SubqueryAlias tbl_view
+         +- View (`tbl_view`, [id#x, name#x, data#x])
+            +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+               +- Project [id#x, name#x, data#x]
+                  +- SubqueryAlias tbl_view
+                     +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query

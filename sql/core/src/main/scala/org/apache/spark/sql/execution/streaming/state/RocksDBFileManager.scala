@@ -41,8 +41,7 @@ import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{DFS_FILE, VERSION_NUM}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -581,8 +580,22 @@ class RocksDBFileManager(
    * - Partially written SST files
    * - SST files that were used in a version, but that version got overwritten with a different
    *   set of SST files.
+   *
+   * @param numVersionsToRetain the number of RocksDB versions to keep in object store after the
+   *                            deletion. Must be greater than 0, or -1 to retain all versions.
+   * @param maxVersionsToDeletePerMaintenance the max number of RocksDB versions
+   *                            to delete per maintenance operation.
+   *                            Must be greater than 0, or -1 to delete all stale versions.
+   * @param minVersionsToDelete the min number of stale versions required to trigger deletion.
+   *                            If its set to <= 0, then we will always perform list operations
+   *                            to determine deletion candidates. If set to a positive value, then
+   *                            we will skip deletion if the number of stale versions is less than
+   *                            this value.
    */
-  def deleteOldVersions(numVersionsToRetain: Int, minVersionsToDelete: Long = 0): Unit = {
+  def deleteOldVersions(
+      numVersionsToRetain: Int,
+      maxVersionsToDeletePerMaintenance: Int = -1,
+      minVersionsToDelete: Long = 0): Unit = {
     // Check if enough stale version files present
     if (shouldSkipDeletion(numVersionsToRetain, minVersionsToDelete)) return
 
@@ -604,14 +617,22 @@ class RocksDBFileManager(
 
     // Find the versions to delete
     val maxSnapshotVersionPresent = sortedSnapshotVersionsAndUniqueIds.last._1
+    val minSnapshotVersionPresent = sortedSnapshotVersionsAndUniqueIds.head._1
 
     // In order to reconstruct numVersionsToRetain version, retain the latest snapshot
     // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1).
+    // Also require
+    // minVersionToRetain <= minSnapshotVersionPresent + maxVersionsToDeletePerMaintenance.
     // If none of the snapshots satisfy the condition, minVersionToRetain will be 0 and
     // no version gets deleted.
     val minVersionToRetain = sortedSnapshotVersionsAndUniqueIds
       .map(_._1)
       .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
+      .filter( v =>
+        if (maxVersionsToDeletePerMaintenance != -1) {
+          v <= minSnapshotVersionPresent + maxVersionsToDeletePerMaintenance
+        } else true
+      )
       .foldLeft(0L)(math.max)
 
     // When snapshotVersionToDelete is non-empty, there are at least 2 snapshot versions.
@@ -1032,7 +1053,7 @@ case class RocksDBCheckpointMetadata(
 
 /** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
-  val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
+  val VERSION = 1
 
   implicit val format: Formats = Serialization.formats(NoTypeHints)
 

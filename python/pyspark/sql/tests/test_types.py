@@ -60,6 +60,8 @@ from pyspark.sql.types import (
     DecimalType,
     BinaryType,
     BooleanType,
+    GeographyType,
+    GeometryType,
     NullType,
     VariantType,
     VariantVal,
@@ -184,6 +186,7 @@ class TypesTestsMixin:
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.time(hour=1, minute=2, second=3),
             datetime.timedelta(microseconds=123456678),
             1.0,
             array.array("d", [1]),
@@ -207,6 +210,7 @@ class TypesTestsMixin:
             "string",
             "date",
             "timestamp",
+            "time(6)",
             "interval day to second",
             "double",
             "array<double>",
@@ -230,6 +234,7 @@ class TypesTestsMixin:
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.time(hour=1, minute=2, second=3),
             datetime.timedelta(microseconds=123456678),
             1.0,
             [1.0],
@@ -918,6 +923,98 @@ class TypesTestsMixin:
 
         self.assertRaises(PySparkValueError, lambda: _parse_datatype_json_string(schema_json))
 
+    def test_geography_json_serde(self):
+        from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
+
+        valid_test_cases = [
+            ("geography", GeographyType(4326)),
+            ("geography(OGC:CRS84)", GeographyType(4326)),
+            ("geography(OGC:CRS84, SPHERICAL)", GeographyType(4326)),
+            ("geography(SPHERICAL)", GeographyType(4326)),
+            ("geography(SRID:ANY)", GeographyType("ANY")),
+            ("geography(srid:any)", GeographyType("ANY")),
+        ]
+        for json, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json)
+            self.assertEqual(python_datatype, expected)
+            self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
+
+        invalid_test_cases = [
+            "geography()",
+            "geography(())",
+            "geography(0)",
+            "geography(1)",
+            "geography(3857)",
+            "geography(4326)",
+            "geography(ANY)",
+            "geography(any)",
+            "geography(SRID)",
+            "geography(srid)",
+            "geography(CRS)",
+            "geography(crs)",
+            "geography(asdf)",
+            "geography(asdf:fdsa)",
+            "geography(123:123)",
+            "geography(srid:srid)",
+            "geography(SRID:0)",
+            "geography(SRID:1)",
+            "geography(SRID:123)",
+            "geography(EPSG:123)",
+            "geography(ESRI:123)",
+            "geography(OCG:123)",
+            "geography(OCG:CRS123)",
+            "geography(SRID:0,)",
+            "geography(SRID0)",
+            "geography(SRID:4326, ALG)",
+        ]
+        for json in invalid_test_cases:
+            with self.assertRaises(Exception):
+                _parse_datatype_json_value(json)
+
+    def test_geometry_json_serde(self):
+        from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
+
+        valid_test_cases = [
+            ("geometry", GeometryType(4326)),
+            ("geometry(OGC:CRS84)", GeometryType(4326)),
+            ("geometry(SRID:ANY)", GeometryType("ANY")),
+            ("geometry(srid:any)", GeometryType("ANY")),
+        ]
+        for json, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json)
+            self.assertEqual(python_datatype, expected)
+            self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
+
+        invalid_test_cases = [
+            "geometry()",
+            "geometry(())",
+            "geometry(0)",
+            "geometry(1)",
+            "geometry(3857)",
+            "geometry(4326)",
+            "geometry(ANY)",
+            "geometry(any)",
+            "geometry(SRID)",
+            "geometry(srid)",
+            "geometry(CRS)",
+            "geometry(crs)",
+            "geometry(asdf)",
+            "geometry(asdf:fdsa)",
+            "geometry(123:123)",
+            "geometry(srid:srid)",
+            "geometry(SRID:1)",
+            "geometry(SRID:123)",
+            "geometry(EPSG:123)",
+            "geometry(ESRI:123)",
+            "geometry(OCG:123)",
+            "geometry(OCG:CRS123)",
+            "geometry(SRID:0,)",
+            "geometry(SRID0)",
+        ]
+        for json in invalid_test_cases:
+            with self.assertRaises(Exception):
+                _parse_datatype_json_value(json)
+
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
 
@@ -999,9 +1096,10 @@ class TypesTestsMixin:
             if x > 0:
                 return PythonOnlyPoint(float(x), float(x))
 
-        self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
-        rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
-        self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
+        with self.temp_func("udf"):
+            self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
+            rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
+            self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
 
     def test_infer_schema_with_udt(self):
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
@@ -1265,6 +1363,10 @@ class TypesTestsMixin:
             TimestampType(),
             TimestampNTZType(),
             NullType(),
+            GeographyType(4326),
+            GeographyType("ANY"),
+            GeometryType(4326),
+            GeometryType("ANY"),
             VariantType(),
             YearMonthIntervalType(),
             YearMonthIntervalType(YearMonthIntervalType.YEAR),

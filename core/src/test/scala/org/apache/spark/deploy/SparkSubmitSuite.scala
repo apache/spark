@@ -25,7 +25,6 @@ import java.nio.file.{Files, Paths}
 import scala.collection.mutable.ArrayBuffer
 import scala.io.{Codec, Source}
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.BeforeAndAfterEach
@@ -72,7 +71,7 @@ trait TestPrematureExit {
 
     @volatile var exitedCleanly = false
     val original = mainObject.exitFn
-    mainObject.exitFn = (_) => exitedCleanly = true
+    mainObject.exitFn = (_, _) => exitedCleanly = true
     try {
       @volatile var exception: Exception = null
       val thread = new Thread {
@@ -1594,6 +1593,44 @@ class SparkSubmitSuite
       runSparkSubmit(argsSuccess, expectFailure = false))
   }
 
+  test("spark.submit.callSystemExitOnMainExit returns non-zero exit code on unclean main exit") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", MainThrowsUncaughtExceptionSparkApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--conf", s"${SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key}=true",
+      unusedJar.toString
+    )
+    assertResult(1)(runSparkSubmit(args, expectFailure = true))
+  }
+
+  test("spark.submit.callSystemExitOnMainExit calls system exit on clean main exit") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", NonDaemonThreadSparkApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--conf", s"${SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key}=true",
+      unusedJar.toString
+    )
+    // With SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT set to false, the non-daemon thread will
+    // prevent the JVM from beginning shutdown and the following call will fail with a
+    // timeout:
+    assertResult(0)(runSparkSubmit(args))
+  }
+
+  test("spark.submit.callSystemExitOnMainExit with main that explicitly calls System.exit") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class",
+      MainExplicitlyCallsSystemExit3SparkApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--conf", s"${SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key}=true",
+      unusedJar.toString
+    )
+    // This main class explicitly exits with System.exit(3), hence this expected exit code:
+    assertResult(3)(runSparkSubmit(args, expectFailure = true))
+  }
+
   private def testRemoteResources(
       enableHttpFs: Boolean,
       forceDownloadSchemes: Seq[String] = Nil): Unit = {
@@ -1877,11 +1914,38 @@ object SimpleApplicationTest {
   }
 }
 
+object MainThrowsUncaughtExceptionSparkApplicationTest {
+  def main(args: Array[String]): Unit = {
+    throw new Exception("User exception")
+  }
+}
+
+object NonDaemonThreadSparkApplicationTest {
+  def main(args: Array[String]): Unit = {
+    val nonDaemonThread: Thread = new Thread {
+      override def run(): Unit = {
+        while (true) {
+          Thread.sleep(1000)
+        }
+      }
+    }
+    nonDaemonThread.setDaemon(false)
+    nonDaemonThread.setName("Non-Daemon-Thread")
+    nonDaemonThread.start()
+    // Fall off the end of the main method.
+  }
+}
+
+object MainExplicitlyCallsSystemExit3SparkApplicationTest {
+  def main(args: Array[String]): Unit = {
+    System.exit(3)
+  }
+}
+
 object UserClasspathFirstTest {
   def main(args: Array[String]): Unit = {
     val ccl = Thread.currentThread().getContextClassLoader()
-    val resource = ccl.getResourceAsStream("test.resource")
-    val bytes = ByteStreams.toByteArray(resource)
+    val bytes = ccl.getResourceAsStream("test.resource").readAllBytes()
     val contents = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     if (contents != "USER") {
       throw new SparkException("Should have read user resource, but instead read: " + contents)

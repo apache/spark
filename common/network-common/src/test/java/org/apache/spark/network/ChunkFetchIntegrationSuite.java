@@ -30,7 +30,6 @@ import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -188,7 +187,7 @@ public class ChunkFetchIntegrationSuite {
   @Test
   public void fetchBufferChunk() throws Exception {
     FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_INDEX));
-    assertEquals(Sets.newHashSet(BUFFER_CHUNK_INDEX), res.successChunks);
+    assertEquals(Set.of(BUFFER_CHUNK_INDEX), res.successChunks);
     assertTrue(res.failedChunks.isEmpty());
     assertBufferListsEqual(Arrays.asList(bufferChunk), res.buffers);
     res.releaseBuffers();
@@ -197,7 +196,7 @@ public class ChunkFetchIntegrationSuite {
   @Test
   public void fetchFileChunk() throws Exception {
     FetchResult res = fetchChunks(Arrays.asList(FILE_CHUNK_INDEX));
-    assertEquals(Sets.newHashSet(FILE_CHUNK_INDEX), res.successChunks);
+    assertEquals(Set.of(FILE_CHUNK_INDEX), res.successChunks);
     assertTrue(res.failedChunks.isEmpty());
     assertBufferListsEqual(Arrays.asList(fileChunk), res.buffers);
     res.releaseBuffers();
@@ -207,14 +206,14 @@ public class ChunkFetchIntegrationSuite {
   public void fetchNonExistentChunk() throws Exception {
     FetchResult res = fetchChunks(Arrays.asList(12345));
     assertTrue(res.successChunks.isEmpty());
-    assertEquals(Sets.newHashSet(12345), res.failedChunks);
+    assertEquals(Set.of(12345), res.failedChunks);
     assertTrue(res.buffers.isEmpty());
   }
 
   @Test
   public void fetchBothChunks() throws Exception {
     FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX));
-    assertEquals(Sets.newHashSet(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX), res.successChunks);
+    assertEquals(Set.of(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX), res.successChunks);
     assertTrue(res.failedChunks.isEmpty());
     assertBufferListsEqual(Arrays.asList(bufferChunk, fileChunk), res.buffers);
     res.releaseBuffers();
@@ -223,8 +222,8 @@ public class ChunkFetchIntegrationSuite {
   @Test
   public void fetchChunkAndNonExistent() throws Exception {
     FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_INDEX, 12345));
-    assertEquals(Sets.newHashSet(BUFFER_CHUNK_INDEX), res.successChunks);
-    assertEquals(Sets.newHashSet(12345), res.failedChunks);
+    assertEquals(Set.of(BUFFER_CHUNK_INDEX), res.successChunks);
+    assertEquals(Set.of(12345), res.failedChunks);
     assertBufferListsEqual(Arrays.asList(bufferChunk), res.buffers);
     res.releaseBuffers();
   }

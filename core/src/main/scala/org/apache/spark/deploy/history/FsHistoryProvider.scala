@@ -52,7 +52,7 @@ import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{CallerContext, Clock, JsonProtocol, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{CallerContext, Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils.stringToSeq
 import org.apache.spark.util.kvstore._
@@ -102,7 +102,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val CLEAN_INTERVAL_S = conf.get(History.CLEANER_INTERVAL_S)
 
   // Number of threads used to replay event logs.
-  private val NUM_PROCESSING_THREADS = conf.get(History.NUM_REPLAY_THREADS)
+  private val numReplayThreads = conf.get(History.NUM_REPLAY_THREADS)
+  // Number of threads used to compact rolling event logs.
+  private val numCompactThreads = conf.get(History.NUM_COMPACT_THREADS)
 
   private val logDir = conf.get(History.HISTORY_LOG_DIR)
 
@@ -209,7 +211,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private val replayExecutor: ExecutorService = {
     if (!Utils.isTesting) {
-      ThreadUtils.newDaemonFixedThreadPool(NUM_PROCESSING_THREADS, "log-replay-executor")
+      ThreadUtils.newDaemonBlockingThreadPoolExecutorService(
+        numReplayThreads, 1024, "log-replay-executor")
+    } else {
+      ThreadUtils.sameThreadExecutorService()
+    }
+  }
+
+  /**
+   * Fixed size thread pool to compact log files.
+   */
+  private val compactExecutor: ExecutorService = {
+    if (!Utils.isTesting) {
+      ThreadUtils.newDaemonBlockingThreadPoolExecutorService(
+        numCompactThreads, 1024, "log-compact-executor")
     } else {
       ThreadUtils.sameThreadExecutorService()
     }
@@ -431,7 +446,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         initThread.interrupt()
         initThread.join()
       }
-      Seq(pool, replayExecutor).foreach { executor =>
+      Seq(pool, replayExecutor, compactExecutor).foreach { executor =>
         executor.shutdown()
         if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
           executor.shutdownNow()
@@ -487,7 +502,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var count: Int = 0
     try {
       val newLastScanTime = clock.getTimeMillis()
-      logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
+      logInfo(log"Scanning ${MDC(HISTORY_DIR, logDir)} with " +
+        log"lastScanTime=${MDC(LAST_SCAN_TIME, lastScanTime)}")
 
       // Mark entries that are processing as not stale. Such entries do not have a chance to be
       // updated with the new 'lastProcessed' time and thus any entity that completes processing
@@ -495,7 +511,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // and will be deleted from the UI until the next 'checkForLogs' run.
       val notStale = mutable.HashSet[String]()
       val updated = Option(fs.listStatus(new Path(logDir)))
-        .map(_.toImmutableArraySeq).getOrElse(Nil)
+        .map(_.toImmutableArraySeq).getOrElse(Seq.empty)
         .filter { entry => isAccessible(entry.getPath) }
         .filter { entry =>
           if (isProcessing(entry.getPath)) {
@@ -612,11 +628,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
 
       if (updated.nonEmpty) {
-        logDebug(s"New/updated attempts found: ${updated.size} ${updated.map(_.rootPath)}")
+        logInfo(log"New/updated attempts found: ${MDC(NUM_ATTEMPT, updated.size)}")
       }
 
       updated.foreach { entry =>
-        submitLogProcessTask(entry.rootPath) { () =>
+        submitLogProcessTask(entry.rootPath, replayExecutor) { () =>
           mergeApplicationListing(entry, newLastScanTime, true)
         }
       }
@@ -788,7 +804,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       // triggering another task for compaction task only if it succeeds
       if (succeeded) {
-        submitLogProcessTask(rootPath) { () => compact(reader) }
+        submitLogProcessTask(rootPath, compactExecutor) { () => compact(reader) }
       }
     }
   }
@@ -827,7 +843,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val shouldHalt = enableOptimizations &&
       ((!appCompleted && fastInProgressParsing) || reparseChunkSize > 0)
 
-    val bus = new ReplayListenerBus(new JsonProtocol(conf))
+    val bus = new ReplayListenerBus()
     val listener = new AppListingListener(reader, clock, shouldHalt)
     bus.addListener(listener)
 
@@ -1144,7 +1160,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // to parse the event logs in the SHS.
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
     val trackingStore = new ElementTrackingStore(store, replayConf)
-    val replayBus = new ReplayListenerBus(new JsonProtocol(conf))
+    val replayBus = new ReplayListenerBus()
     val listener = new AppStatusListener(trackingStore, replayConf, false,
       lastUpdateTime = Some(lastUpdated))
     replayBus.addListener(listener)
@@ -1456,13 +1472,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /** NOTE: 'task' should ensure it executes 'endProcessing' at the end */
-  private def submitLogProcessTask(rootPath: Path)(task: Runnable): Unit = {
+  private def submitLogProcessTask(
+      rootPath: Path, pool: ExecutorService)(task: Runnable): Unit = {
     try {
       processing(rootPath)
-      replayExecutor.submit(task)
+      pool.submit(task)
     } catch {
       // let the iteration over the updated entries break, since an exception on
-      // replayExecutor.submit (..) indicates the ExecutorService is unable
+      // pool.submit (..) indicates the ExecutorService is unable
       // to take any more submissions at this time
       case e: Exception =>
         logError(s"Exception while submitting task", e)

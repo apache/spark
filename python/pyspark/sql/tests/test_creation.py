@@ -29,6 +29,7 @@ from pyspark.sql.types import (
     StructField,
     StringType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
 )
@@ -68,6 +69,20 @@ class DataFrameCreationTestsMixin:
         data = [Row(longarray=array.array("l", [-9223372036854775808, 0, 9223372036854775807]))]
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
+
+    def test_create_dataframe_from_datetime_time(self):
+        import datetime
+
+        df = self.spark.createDataFrame(
+            [
+                (datetime.time(1, 2, 3),),
+                (datetime.time(4, 5, 6),),
+                (datetime.time(7, 8, 9),),
+            ],
+            ["t"],
+        )
+        self.assertIsInstance(df.schema["t"].dataType, TimeType)
+        self.assertEqual(df.count(), 3)
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_timestamp(self):
@@ -151,6 +166,11 @@ class DataFrameCreationTestsMixin:
         schema = StructType([StructField("dec", DecimalType(), False)])
         with self.assertRaises(PySparkValueError):
             self.spark.createDataFrame(data=data, schema=schema)
+
+    def test_decimal_round(self):
+        df = self.spark.createDataFrame([(Decimal(1.234),)], ["d"])
+        rounded = df.first().d
+        self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
     def test_invalid_argument_create_dataframe(self):
         with self.assertRaises(PySparkTypeError) as pe:

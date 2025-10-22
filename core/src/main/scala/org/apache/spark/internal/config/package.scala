@@ -291,14 +291,6 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val EVENT_LOG_READER_MAX_STRING_LENGTH =
-    ConfigBuilder("spark.eventLog.readerMaxStringLength")
-      .doc("Limit the maximum string size an eventlog item can have when deserializing it.")
-      .version("4.1.0")
-      .intConf
-      .checkValue(_ > 0, "Maximum string size of an eventLog item should be positive.")
-      .createWithDefault(Int.MaxValue)
-
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
@@ -950,7 +942,6 @@ package object config {
   private[spark] val EXCLUDE_ON_FAILURE_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.enabled")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.enabled")
       .booleanConf
       .createOptional
 
@@ -969,56 +960,48 @@ package object config {
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerExecutor")
       .intConf
       .createWithDefault(1)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerNode")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerNode")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC =
     ConfigBuilder("spark.excludeOnFailure.application.maxFailedTasksPerExecutor")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.application.maxFailedTasksPerExecutor")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
     ConfigBuilder("spark.excludeOnFailure.stage.maxFailedTasksPerExecutor")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.stage.maxFailedTasksPerExecutor")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
     ConfigBuilder("spark.excludeOnFailure.application.maxFailedExecutorsPerNode")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.application.maxFailedExecutorsPerNode")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
     ConfigBuilder("spark.excludeOnFailure.stage.maxFailedExecutorsPerNode")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.stage.maxFailedExecutorsPerNode")
       .intConf
       .createWithDefault(2)
 
   private[spark] val EXCLUDE_ON_FAILURE_TIMEOUT_CONF =
     ConfigBuilder("spark.excludeOnFailure.timeout")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.timeout")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val EXCLUDE_ON_FAILURE_KILL_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.killBlacklistedExecutors")
       .booleanConf
       .createWithDefault(false)
 
@@ -1033,14 +1016,12 @@ package object config {
     ConfigBuilder("spark.scheduler.executorTaskExcludeOnFailureTime")
       .internal()
       .version("3.1.0")
-      .withAlternative("spark.scheduler.executorTaskBlacklistTime")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.application.fetchFailure.enabled")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.application.fetchFailure.enabled")
       .booleanConf
       .createWithDefault(false)
 
@@ -1208,6 +1189,14 @@ package object config {
     .timeConf(TimeUnit.MINUTES)
     .checkValue(v => v >= 0, "The value should be a non-negative time value.")
     .createWithDefaultString("0min")
+
+  private[spark] val DRIVER_METRICS_POLLING_INTERVAL =
+    ConfigBuilder("spark.driver.metrics.pollingInterval")
+      .doc("How often to collect driver metrics (in milliseconds). " +
+        "If unset, the polling is done at the executor heartbeat interval. " +
+        "If set, the polling is done at this interval.")
+      .version("4.1.0")
+      .fallbackConf(EXECUTOR_HEARTBEAT_INTERVAL)
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
@@ -1607,9 +1596,9 @@ package object config {
       .createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD =
-    ConfigBuilder("spark.shuffle.spill.maxRecordsSizeForSpillThreshold")
+    ConfigBuilder("spark.shuffle.spill.maxSizeInBytesForSpillThreshold")
       .internal()
-      .doc("The maximum size in memory before forcing the shuffle sorter to spill. " +
+      .doc("The maximum in memory size in bytes before forcing the shuffle sorter to spill. " +
         "By default it is Long.MAX_VALUE, which means we never force the sorter to spill, " +
         "until we reach some limitations, like the max page size limitation for the pointer " +
         "array in the sorter.")
@@ -1866,7 +1855,6 @@ package object config {
         "before aborting a TaskSet which is unschedulable because all executors are " +
         "excluded due to failures.")
       .version("3.1.0")
-      .withAlternative("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
       .createWithDefault(120)
@@ -2149,7 +2137,7 @@ package object config {
       .doc("When true, LZF compression will use multiple threads to compress data in parallel.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val IO_WARNING_LARGEFILETHRESHOLD =
     ConfigBuilder("spark.io.warning.largeFileThreshold")
@@ -2318,6 +2306,15 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT =
+    ConfigBuilder("spark.submit.callSystemExitOnMainExit")
+      .doc("If true, SparkSubmit will call System.exit() to initiate JVM shutdown once the " +
+        "user's main method has exited. This can be useful in cases where non-daemon JVM " +
+        "threads might otherwise prevent the JVM from shutting down on its own.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val SCHEDULER_ALLOCATION_FILE =
     ConfigBuilder("spark.scheduler.allocation.file")
@@ -2892,7 +2889,7 @@ package object config {
       .createWithDefault(Seq("stdout", "stderr"))
 
   private[spark] val EXEC_REDIRECT_CONSOLE_OUTPUTS =
-    ConfigBuilder("spark.executor.log.redirectConsoleOutputs")
+    ConfigBuilder("spark.executor.logs.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for executor that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
         s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")

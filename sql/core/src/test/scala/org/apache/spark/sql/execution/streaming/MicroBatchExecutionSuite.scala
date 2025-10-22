@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, SerializedOffset, StreamExecution, StreamingExecutionRelation}
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest, Trigger}
@@ -53,7 +54,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
   test("async log purging") {
     withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2", SQLConf.ASYNC_LOG_PURGE.key -> "true") {
       withTempDir { checkpointLocation =>
-        val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
+        val inputData = new MemoryStream[Int](id = 0, spark)
         val ds = inputData.toDS()
         testStream(ds)(
           StartStream(checkpointLocation = checkpointLocation.getCanonicalPath),
@@ -98,7 +99,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
   test("error notifier test") {
     withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2", SQLConf.ASYNC_LOG_PURGE.key -> "true") {
       withTempDir { checkpointLocation =>
-        val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
+        val inputData = new MemoryStream[Int](id = 0, spark)
         val ds = inputData.toDS()
         val e = intercept[StreamingQueryException] {
 

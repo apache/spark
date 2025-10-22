@@ -20,20 +20,20 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.Objects
 import java.util.OptionalLong
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
-import com.google.common.base.Objects
-
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EvalMode, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
+import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
@@ -135,6 +135,8 @@ abstract class InMemoryBaseTable(
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
+  private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
+    .toBoolean
 
   partitioning.foreach {
     case _: IdentityTransform =>
@@ -145,7 +147,7 @@ abstract class InMemoryBaseTable(
     case _: BucketTransform =>
     case _: SortedBucketTransform =>
     case _: ClusterByTransform =>
-    case NamedTransform("truncate", Seq(_: NamedReference, _: Literal[_])) =>
+    case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -243,7 +245,7 @@ abstract class InMemoryBaseTable(
         var dataTypeHashCode = 0
         valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
         ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
-      case NamedTransform("truncate", Seq(ref: NamedReference, length: Literal[_])) =>
+      case NamedTransform("truncate", Seq(ref: NamedReference, length: V2Literal[_])) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>
             str.substring(0, length.value.asInstanceOf[Int])
@@ -263,9 +265,10 @@ abstract class InMemoryBaseTable(
       partitionSchema: StructType,
       from: Seq[Any],
       to: Seq[Any]): Boolean = {
-    val splits = dataMap.remove(from).getOrElse(Seq(new BufferedRows(from)))
+    val splits = dataMap.remove(from).getOrElse(Seq(BufferedRows(from, columns())))
+    val existingSchema = splits.head.schema
     val newSplits = splits.map { rows =>
-      val newRows = new BufferedRows(to)
+      val newRows = new BufferedRows(to, existingSchema)
       rows.rows.foreach { r =>
         val newRow = new GenericInternalRow(r.numFields)
         for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema()(i).dataType))
@@ -290,8 +293,8 @@ abstract class InMemoryBaseTable(
 
   protected def createPartitionKey(key: Seq[Any]): Unit = dataMap.synchronized {
     if (!dataMap.contains(key)) {
-      val emptyRows = new BufferedRows(key)
-      val rows = if (key.length == schema.length) {
+      val emptyRows = BufferedRows(key, columns())
+      val rows = if (key.length == columns().length) {
         emptyRows.withRow(InternalRow.fromSeq(key))
       } else emptyRows
       dataMap.put(key, Seq(rows))
@@ -300,14 +303,15 @@ abstract class InMemoryBaseTable(
 
   protected def clearPartition(key: Seq[Any]): Unit = dataMap.synchronized {
     assert(dataMap.contains(key))
-    dataMap.update(key, Seq(new BufferedRows(key)))
+    val schema = dataMap(key).head.schema
+    dataMap.update(key, Seq(new BufferedRows(key, schema)))
   }
 
   def withDeletes(data: Array[BufferedRows]): InMemoryBaseTable = {
     data.foreach { p =>
       dataMap ++= dataMap.map { case (key, currentSplits) =>
         val newSplits = currentSplits.map { currentRows =>
-          val newRows = new BufferedRows(currentRows.key)
+          val newRows = new BufferedRows(currentRows.key, currentRows.schema)
           newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(r.getInt(0)))
           newRows
         }
@@ -318,7 +322,11 @@ abstract class InMemoryBaseTable(
   }
 
   def withData(data: Array[BufferedRows]): InMemoryBaseTable = {
-    withData(data, schema)
+    withData(data, CatalogV2Util.v2ColumnsToStructType(columns()))
+  }
+
+  def withData(data: Array[BufferedRows], columns: Array[Column]): InMemoryBaseTable = {
+    withData(data, CatalogV2Util.v2ColumnsToStructType(columns))
   }
 
   def withData(
@@ -328,17 +336,46 @@ abstract class InMemoryBaseTable(
       val key = getKey(row, writeSchema)
       dataMap += dataMap.get(key)
           .map { splits =>
-            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-              splits :+ new BufferedRows(key)
+            val newSplits = if ((splits.last.rows.size >= numRowsPerSplit)
+            || (splits.last.schema != writeSchema)) {
+              splits :+ new BufferedRows(key, writeSchema)
             } else {
               splits
             }
             newSplits.last.withRow(row)
             key -> newSplits
           }
-          .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
+          .getOrElse(key -> Seq(
+            new BufferedRows(key, writeSchema).withRow(row)))
       addPartitionKey(key)
     })
+    this
+  }
+
+  def alterTableWithData(
+      data: Array[BufferedRows],
+      newSchema: StructType): InMemoryBaseTable = {
+    data.foreach { bufferedRow =>
+      val oldSchema = bufferedRow.schema
+      bufferedRow.rows.foreach { row =>
+        // handle partition evolution by re-keying all data
+        val key = getKey(row, newSchema)
+        dataMap += dataMap.get(key)
+          .map { splits =>
+            val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
+                (splits.last.schema != oldSchema)) {
+              splits :+ new BufferedRows(key, oldSchema)
+            } else {
+              splits
+            }
+            newSplits.last.withRow(row)
+            key -> newSplits
+          }
+          .getOrElse(key -> Seq(
+            new BufferedRows(key, oldSchema).withRow(row)))
+        addPartitionKey(key)
+      }
+    }
     this
   }
 
@@ -350,13 +387,11 @@ abstract class InMemoryBaseTable(
     TableCapability.OVERWRITE_DYNAMIC,
     TableCapability.TRUNCATE)
 
-  override def capabilities(): util.Set[TableCapability] = {
-    if (acceptAnySchema) {
-      (baseCapabiilities ++ Set(TableCapability.ACCEPT_ANY_SCHEMA)).asJava
-    } else {
-      baseCapabiilities.asJava
-    }
-  }
+  override def capabilities(): util.Set[TableCapability] =
+    (baseCapabiilities ++
+      (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
+      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty))
+      .asJava
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryScanBuilder(schema, options)
@@ -623,7 +658,7 @@ abstract class InMemoryBaseTable(
     var commitProperties: mutable.Map[String, String] = mutable.Map.empty[String, String]
 
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
-      BufferedRowsWriterFactory
+      new BufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
 
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
@@ -659,7 +694,7 @@ abstract class InMemoryBaseTable(
 
   protected abstract class TestStreamingWrite extends StreamingWrite {
     def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory = {
-      BufferedRowsWriterFactory
+      new BufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
 
     def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
@@ -719,7 +754,13 @@ object InMemoryBaseTable {
   }
 }
 
-class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
+/**
+ * Represent a set of rows buffered in memory for a given partition key.
+ * @param key partition key
+ * @param schema schema used to write the rows
+ */
+class BufferedRows(val key: Seq[Any], val schema: StructType)
+  extends WriterCommitMessage
     with InputPartition with HasPartitionKey with HasPartitionStatistics with Serializable {
   val log = new mutable.ArrayBuffer[InternalRow]()
   val rows = new mutable.ArrayBuffer[InternalRow]()
@@ -740,6 +781,12 @@ class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
   def clear(): Unit = rows.clear()
 }
 
+object BufferedRows {
+  def apply(key: Seq[Any], schema: Array[Column]): BufferedRows = {
+    new BufferedRows(key, CatalogV2Util.v2ColumnsToStructType(schema))
+  }
+}
+
 /**
  * Theoretically, [[InternalRow]] returned by [[HasPartitionKey#partitionKey()]]
  * does not need to implement equal and hashcode methods.
@@ -756,7 +803,7 @@ case class PartitionInternalRow(keys: Array[Any])
     this.keys == other.asInstanceOf[PartitionInternalRow].keys
   }
   override def hashCode: Int = {
-    Objects.hashCode(keys)
+    Objects.hash(keys)
   }
 }
 
@@ -794,7 +841,8 @@ private class BufferedRowsReader(
     val originalRow = partition.rows(index)
     val values = new Array[Any](nonMetadataColumns.length)
     nonMetadataColumns.zipWithIndex.foreach { case (col, idx) =>
-      values(idx) = extractFieldValue(col, tableSchema, originalRow)
+      values(idx) = extractFieldValue(col, tableSchema,
+        partition.schema, originalRow)
     }
     addMetadata(new GenericInternalRow(values))
   }
@@ -803,51 +851,153 @@ private class BufferedRowsReader(
 
   private def extractFieldValue(
       field: StructField,
-      schema: StructType,
+      readSchema: StructType,
+      writeSchema: StructType,
       row: InternalRow): Any = {
-    val index = schema.fieldIndex(field.name)
-
-    if (index >= row.numFields) {
-      return ResolveDefaultColumns.getExistenceDefaultValue(field)
-    }
-
-    field.dataType match {
-      case StructType(fields) =>
-        if (row.isNullAt(index)) {
-          return null
+    val writeIndexOpt = writeSchema.getFieldIndex(field.name)
+    val readIndexOpt = readSchema.getFieldIndex(field.name)
+    (writeIndexOpt, readIndexOpt) match {
+      case (Some(writeIndex), Some(readIndex)) =>
+        if (writeIndex >= row.numFields) {
+          return ResolveDefaultColumns.getExistenceDefaultValue(field)
         }
-        val childRow = row.toSeq(schema)(index).asInstanceOf[InternalRow]
-        val childSchema = schema(index).dataType.asInstanceOf[StructType]
-        val resultValue = new Array[Any](fields.length)
-        fields.zipWithIndex.foreach { case (childField, idx) =>
-          val childValue = extractFieldValue(childField, childSchema, childRow)
-          resultValue(idx) = childValue
+
+        field.dataType match {
+          case StructType(fields) =>
+            if (row.isNullAt(writeIndex)) {
+              return null
+            }
+            val childRow = row.toSeq(writeSchema)(writeIndex).asInstanceOf[InternalRow]
+            val childWriteSchema = writeSchema.fields(writeIndex).dataType.asInstanceOf[StructType]
+            val childReadSchema = readSchema.fields(writeIndex).dataType.asInstanceOf[StructType]
+            val resultValue = new Array[Any](fields.length)
+            fields.zipWithIndex.foreach { case (childField, idx) =>
+              val childValue = extractFieldValue(childField, childReadSchema,
+                childWriteSchema, childRow)
+              resultValue(idx) = childValue
+            }
+            new GenericInternalRow(resultValue)
+
+          case MapType(keyType, valueType, _) =>
+            val writeMapType = writeSchema.fields(writeIndex).dataType.asInstanceOf[MapType]
+            val mapData = row.getMap(writeIndex)
+            if (mapData == null) {
+              null
+            } else {
+              extractMapValue(mapData, keyType, valueType,
+                writeMapType.keyType, writeMapType.valueType)
+            }
+
+          case ArrayType(elementType, _) =>
+            val arrayData = row.getArray(writeIndex)
+            if (arrayData == null) {
+              null
+            } else {
+              val writeType = writeSchema.fields(writeIndex).dataType.asInstanceOf[ArrayType]
+              extractArrayValue(arrayData, elementType, writeType.elementType)
+            }
+
+          case dt =>
+            row.get(writeIndex, dt)
         }
-        new GenericInternalRow(resultValue)
-      case dt =>
-        row.get(index, dt)
+      case (None, Some(_)) =>
+        ResolveDefaultColumns.getExistenceDefaultValue(field)
+      case _ => throw new RuntimeException("Failed, " +
+        "field is not found in both read and write schema.")
     }
   }
+
+  private def extractArrayValue(
+      arrayData: ArrayData,
+      readType: DataType,
+      writeType: DataType): ArrayData = {
+    val elements = arrayData.toArray[Any](writeType)
+    val convertedElements = extractCollection(elements, readType, writeType)
+    new GenericArrayData(convertedElements)
+  }
+
+  private def extractMapValue(
+      mapData: MapData,
+      readKeyType: DataType,
+      readValueType: DataType,
+      writeKeyType: DataType,
+      writeValueType: DataType): MapData = {
+    val keys = mapData.keyArray().toArray[Any](writeKeyType)
+    val values = mapData.valueArray().toArray[Any](writeValueType)
+
+    val convertedKeys = extractCollection(keys, readKeyType, writeKeyType)
+    val convertedValues = extractCollection(values, readValueType, writeValueType)
+    ArrayBasedMapData(convertedKeys, convertedValues)
+  }
+
+  private def extractCollection(
+      elements: Array[Any],
+      readType: DataType,
+      writeType: DataType) = {
+    (readType, writeType) match {
+      case (readSt: StructType, writeSt: StructType) =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            val elemRow = elem.asInstanceOf[InternalRow]
+            val result = readSt.fields
+              .map(f => extractFieldValue(f, readSt, writeSt, elemRow))
+            new GenericInternalRow(result)
+          }
+        }
+      case (ArrayType(readAType, _), ArrayType(writeAType, _)) =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            extractArrayValue(elem.asInstanceOf[ArrayData], readAType, writeAType)
+          }
+        }
+      case (MapType(rKeyType, rValueType, _), MapType(wKeyType, wValueType, _)) =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            extractMapValue(elem.asInstanceOf[MapData], rKeyType, rValueType,
+              wKeyType, wValueType)
+          }
+        }
+      case (readType: AtomicType, writeType: AtomicType) if readType != writeType =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            castElement(elem, readType, writeType)
+          }
+        }
+      case (_, _) => elements
+    }
+  }
+
+  private def castElement(elem: Any, toType: DataType, fromType: DataType): Any =
+    Cast(Literal(elem, fromType), toType, None, EvalMode.TRY).eval(null)
 }
 
-private object BufferedRowsWriterFactory extends DataWriterFactory with StreamingDataWriterFactory {
+private class BufferedRowsWriterFactory(schema: StructType)
+  extends DataWriterFactory with StreamingDataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new BufferWriter
+    new BufferWriter(schema)
   }
 
   override def createWriter(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
-    new BufferWriter
+    new BufferWriter(schema)
   }
 }
 
-private class BufferWriter extends DataWriter[InternalRow] {
+private class BufferWriter(schema: StructType) extends DataWriter[InternalRow] {
 
   private final val WRITE = UTF8String.fromString(Write.toString)
 
-  protected val buffer = new BufferedRows
+  protected val buffer = new BufferedRows(Seq.empty, schema)
 
   override def write(metadata: InternalRow, row: InternalRow): Unit = {
     buffer.rows.append(row.copy())

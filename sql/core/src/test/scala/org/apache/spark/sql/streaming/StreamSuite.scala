@@ -42,6 +42,8 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingLocalLimitExec
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper, StreamingRelation}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, ForeachBatchUserFuncException, MemorySink}
 import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateSchemaProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.expressions.Window
@@ -114,7 +116,7 @@ class StreamSuite extends StreamTest {
     val memoryStream = MemoryStream[Int]
     val executionRelation = StreamingExecutionRelation(
       memoryStream, toAttributes(memoryStream.encoder.schema), None)(
-      memoryStream.sqlContext.sparkSession)
+      memoryStream.sparkSession)
     assert(executionRelation.computeStats().sizeInBytes ==
       spark.sessionState.conf.defaultSizeInBytes)
   }

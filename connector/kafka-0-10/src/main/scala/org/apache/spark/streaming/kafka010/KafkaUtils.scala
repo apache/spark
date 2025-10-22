@@ -112,7 +112,7 @@ object KafkaUtils extends Logging {
       locationStrategy: LocationStrategy,
       consumerStrategy: ConsumerStrategy[K, V]
     ): InputDStream[ConsumerRecord[K, V]] = {
-    val ppc = new DefaultPerPartitionConfig(ssc.sparkContext.getConf)
+    val ppc = new DefaultPerPartitionConfig(ssc.sparkContext.getReadOnlyConf)
     createDirectStream[K, V](ssc, locationStrategy, consumerStrategy, ppc)
   }
 

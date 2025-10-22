@@ -306,6 +306,7 @@ try:
             "pyspark.pandas.spark",
             "pyspark.pandas.typedef",
             "pyspark.pandas.usage_logging",
+            "pyspark.pipelines",
             "pyspark.python.pyspark",
             "pyspark.python.lib",
             "pyspark.testing",
@@ -342,7 +343,7 @@ try:
             "pyspark.examples.src.main.python": ["*.py", "*/*.py"],
         },
         scripts=scripts,
-        license="http://www.apache.org/licenses/LICENSE-2.0",
+        license="Apache-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=["py4j==0.10.9.9"],
@@ -380,11 +381,11 @@ try:
         python_requires=">=3.10",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
-            "License :: OSI Approved :: Apache Software License",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
             "Programming Language :: Python :: 3.13",
+            "Programming Language :: Python :: 3.14",
             "Programming Language :: Python :: Implementation :: CPython",
             "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",

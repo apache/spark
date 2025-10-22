@@ -29,8 +29,20 @@ Upgrading from PySpark 4.0 to 4.1
 * In Spark 4.1, Arrow-optimized Python UDF supports UDT input / output instead of falling back to the regular UDF. To restore the legacy behavior, set ``spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT`` to ``true``.
 * In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``.
 * In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDTF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``.
+* In Spark 4.1, the data type ``BinaryType`` is by default mapped consistently to Python ``bytes`` in PySpark.
+  To restore the previous behavior, set ``spark.sql.execution.pyspark.binaryAsBytes`` to ``false``. The behavior before Spark 4.1.0 is illustrated in the following table:
+
+    ===============================================================================  ==============================
+    Case                                                                             Python type for ``BinaryType``
+    ===============================================================================  ==============================
+    Regular UDF and UDTF without Arrow optimization                                  ``bytearray``
+    DataFrame APIs (both Spark Classic and Spark Connect)                            ``bytearray``
+    Data sources                                                                     ``bytearray``
+    Arrow-optimized UDF and UDTF with unnecessary conversion to pandas instances     ``bytes``
+    ===============================================================================  ==============================
 
 * In Spark 4.1, the ``spark.sql.execution.pandas.convertToArrowArraySafely`` configuration is enabled by default. When this setting is enabled, PyArrow raises errors for unsafe conversions such as integer overflows, floating point truncation, and loss of precision. This change affects the return data serialization of arrow-enabled UDFs/pandas_udfs, and the creation of PySpark DataFrames. To restore the previous behavior, set the configuration to ``false``.
+* In Spark 4.1, pandas API on Spark works under ANSI mode when ``compute.ansi_mode_support`` is set to ``True`` (default). The safeguard option ``compute.fail_on_ansi_mode`` remains available, but it only takes effect when ``compute.ansi_mode_support`` is ``False``.
 
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------

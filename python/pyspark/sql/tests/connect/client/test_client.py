@@ -25,7 +25,9 @@ from pyspark.testing.utils import eventually
 
 if should_test_connect:
     import grpc
+    import google.protobuf.any_pb2 as any_pb2
     from google.rpc import status_pb2
+    from google.rpc.error_details_pb2 import ErrorInfo
     import pandas as pd
     import pyarrow as pa
     from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
@@ -36,6 +38,7 @@ if should_test_connect:
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.errors import PySparkRuntimeError
+    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
     import pyspark.sql.connect.proto as proto
 
     class TestPolicy(DefaultPolicy):
@@ -158,6 +161,20 @@ if should_test_connect:
             self.req = req
             resp = proto.InterruptResponse()
             resp.session_id = self._session_id
+            return resp
+
+        def Config(self, req: proto.ConfigRequest, metadata):
+            self.req = req
+            resp = proto.ConfigResponse()
+            resp.session_id = self._session_id
+            if req.operation.HasField("get"):
+                pair = resp.pairs.add()
+                pair.key = req.operation.get.keys[0]
+                pair.value = "true"  # Default value
+            elif req.operation.HasField("get_with_default"):
+                pair = resp.pairs.add()
+                pair.key = req.operation.get_with_default.pairs[0].key
+                pair.value = req.operation.get_with_default.pairs[0].value or "true"
             return resp
 
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
@@ -449,6 +466,89 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         self.request.client_observed_server_side_session_id = session_id
         reattach = ite._create_reattach_execute_request()
         self.assertEqual(reattach.client_observed_server_side_session_id, session_id)
+
+    def test_server_unreachable(self):
+        # DNS resolution should fail for "foo". This error is a retriable UNAVAILABLE error.
+        client = SparkConnectClient(
+            "sc://foo", use_reattachable_execute=False, retry_policy=dict(max_retries=0)
+        )
+        with self.assertRaises(SparkConnectGrpcException) as cm:
+            command = proto.Command()
+            client.execute_command(command)
+        err = cm.exception
+        self.assertEqual(err.getGrpcStatusCode(), grpc.StatusCode.UNAVAILABLE)
+        self.assertEqual(err.getErrorClass(), None)
+        self.assertEqual(err.getSqlState(), None)
+
+    def test_error_codes(self):
+        msg = "Something went wrong on the server"
+
+        def raise_without_status():
+            raise TestException(msg=msg, trailing_status=None)
+
+        def raise_without_status_unauthenticated():
+            raise TestException(msg=msg, code=grpc.StatusCode.UNAUTHENTICATED)
+
+        def raise_without_status_permission_denied():
+            raise TestException(msg=msg, code=grpc.StatusCode.PERMISSION_DENIED)
+
+        def raise_without_details():
+            status = status_pb2.Status(
+                code=grpc.StatusCode.INTERNAL.value[0], message=msg, details=[]
+            )
+            raise TestException(msg=msg, trailing_status=status)
+
+        def raise_without_metadata():
+            any = any_pb2.Any()
+            any.Pack(ErrorInfo())
+            status = status_pb2.Status(
+                code=grpc.StatusCode.INTERNAL.value[0], message=msg, details=[any]
+            )
+            raise TestException(msg=msg, trailing_status=status)
+
+        def raise_with_error_class():
+            any = any_pb2.Any()
+            any.Pack(ErrorInfo(metadata=dict(errorClass="TEST_ERROR_CLASS")))
+            status = status_pb2.Status(
+                code=grpc.StatusCode.INTERNAL.value[0], message=msg, details=[any]
+            )
+            raise TestException(msg=msg, trailing_status=status)
+
+        def raise_with_sql_state():
+            any = any_pb2.Any()
+            any.Pack(ErrorInfo(metadata=dict(sqlState="TEST_SQL_STATE")))
+            status = status_pb2.Status(
+                code=grpc.StatusCode.INTERNAL.value[0], message=msg, details=[any]
+            )
+            raise TestException(msg=msg, trailing_status=status)
+
+        test_cases = [
+            (raise_without_status, grpc.StatusCode.INTERNAL, None, None),
+            (raise_without_status_unauthenticated, grpc.StatusCode.UNAUTHENTICATED, None, None),
+            (raise_without_status_permission_denied, grpc.StatusCode.PERMISSION_DENIED, None, None),
+            (raise_without_details, grpc.StatusCode.INTERNAL, None, None),
+            (raise_without_metadata, grpc.StatusCode.INTERNAL, None, None),
+            (raise_with_error_class, grpc.StatusCode.INTERNAL, "TEST_ERROR_CLASS", None),
+            (raise_with_sql_state, grpc.StatusCode.INTERNAL, None, "TEST_SQL_STATE"),
+        ]
+
+        for (
+            response_function,
+            expected_status_code,
+            expected_error_class,
+            expected_sql_state,
+        ) in test_cases:
+            client = SparkConnectClient(
+                "sc://foo", use_reattachable_execute=False, retry_policy=dict(max_retries=0)
+            )
+            client._stub = self._stub_with([response_function])
+            with self.assertRaises(SparkConnectGrpcException) as cm:
+                command = proto.Command()
+                client.execute_command(command)
+            err = cm.exception
+            self.assertEqual(err.getGrpcStatusCode(), expected_status_code)
+            self.assertEqual(err.getErrorClass(), expected_error_class)
+            self.assertEqual(err.getSqlState(), expected_sql_state)
 
 
 if __name__ == "__main__":

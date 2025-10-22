@@ -72,7 +72,6 @@ private[spark] object EventFilter extends Logging {
       fs: FileSystem,
       filters: Seq[EventFilter],
       path: Path,
-      jsonProtocol: JsonProtocol,
       onAccepted: (String, SparkListenerEvent) => Unit,
       onRejected: (String, SparkListenerEvent) => Unit,
       onUnidentified: String => Unit): Unit = {
@@ -82,7 +81,7 @@ private[spark] object EventFilter extends Logging {
       lines.zipWithIndex.foreach { case (line, lineNum) =>
         try {
           val event = try {
-            Some(jsonProtocol.sparkEventFromJson(line))
+            Some(JsonProtocol.sparkEventFromJson(line))
           } catch {
             // ignore any exception occurred from unidentified json
             case NonFatal(_) =>

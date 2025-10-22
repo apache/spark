@@ -39,6 +39,7 @@ import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.Utils.createArray
 
 class FileSuite extends SparkFunSuite with LocalSparkContext {
   var tempDir: File = _
@@ -86,11 +87,12 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     val normalFile = new File(normalDir, "part-00000")
     val normalContent = sc.textFile(normalDir).collect()
-    assert(normalContent === Array.fill(10000)("a"))
+    val expected = createArray(10000, "a")
+    assert(normalContent === expected)
 
     val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
     val compressedContent = sc.textFile(compressedOutputDir).collect()
-    assert(compressedContent === Array.fill(10000)("a"))
+    assert(compressedContent === expected)
 
     assert(compressedFile.length < normalFile.length)
   }
@@ -125,11 +127,12 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
       val normalFile = new File(normalDir, "part-00000")
       val normalContent = sc.sequenceFile[String, String](normalDir).collect()
-      assert(normalContent === Array.fill(100)(("abc", "abc")))
+      val expected = createArray(100, ("abc", "abc"))
+      assert(normalContent === expected)
 
       val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
       val compressedContent = sc.sequenceFile[String, String](compressedOutputDir).collect()
-      assert(compressedContent === Array.fill(100)(("abc", "abc")))
+      assert(compressedContent === expected)
 
       assert(compressedFile.length < normalFile.length)
     }

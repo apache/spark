@@ -19,19 +19,18 @@ from pathlib import Path
 
 SPEC = """
 name: {{ name }}
-definitions:
+storage: storage-root
+libraries:
   - glob:
-      include: transformations/**/*.py
-  - glob:
-      include: transformations/**/*.sql
+      include: transformations/**
 """
 
-PYTHON_EXAMPLE = """from pyspark import pipelines as sdp
+PYTHON_EXAMPLE = """from pyspark import pipelines as dp
 from pyspark.sql import DataFrame, SparkSession
 
 spark = SparkSession.active()
 
-@sdp.materialized_view
+@dp.materialized_view
 def example_python_materialized_view() -> DataFrame:
     return spark.range(10)
 """

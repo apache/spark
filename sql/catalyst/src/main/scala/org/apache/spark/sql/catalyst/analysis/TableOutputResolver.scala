@@ -133,7 +133,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         val canWriteExpr = canWrite(
           tableName, valueType, colType, byName = true, conf, addError, colPath)
         if (canWriteExpr) {
-          applyColumnMetadata(checkNullability(value, col, conf, colPath), col)
+          val nullsHandled = checkNullability(value, col, conf, colPath)
+          applyColumnMetadata(nullsHandled, col)
         } else {
           value
         }
@@ -222,12 +223,29 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val requiredMetadata = CharVarcharUtils.cleanMetadata(column.metadata)
 
     // Make sure that the result has the requiredMetadata and only that.
-    // If the expr is an Attribute or NamedLambdaVariable with the proper name and metadata,
-    // it should remain stable, but we do not trust that other NamedAttributes will
-    // remain stable (namely Alias).
+    //
+    // If the expr is a NamedLambdaVariable, it must be from our handling of structured
+    // array or map fields; the Alias will be added on the outer structured value.
+    //
+    // Even an Attribute with the proper name and metadata is not enough to prevent
+    // source query metadata leaking to the Write after rewrites, ie:
+    //   case a: Attribute if a.name == column.name && a.metadata == requiredMetadata => a
+    //
+    // The problem is that an Attribute can be replaced by what it refers to, for example:
+    //    Project AttrRef(metadata={}, exprId=2)
+    //      Project Alias(
+    //         cast(AttrRef(metadata={source_field_default_value}, exprId=1) as same_type),
+    //         exprId=2,
+    //         explicitMetadata=None) -- metadata.isEmpty
+    // gets rewritten to:
+    //      Project Alias(
+    //         AttrRef(metadata={source_field_default_value}, exprId=1),
+    //         exprId=2,
+    //         explicitMetadata=None) -- metadata.nonEmpty !!
+    //
+    // So we always add an Alias(expr, name, explicitMetadata = Some(requiredMetadata))
+    // to prevent expr from leaking the source query metadata into the Write.
     expr match {
-      case a: Attribute if a.name == column.name && a.metadata == requiredMetadata =>
-        a
       case v: NamedLambdaVariable if v.name == column.name && v.metadata == requiredMetadata =>
         v
       case _ =>

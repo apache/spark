@@ -45,6 +45,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
@@ -263,7 +264,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             invalidateCache) :: Nil
       }
 
-    case AppendData(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), _, _,
+    case AppendData(r @ ExtractV2Table(v1: SupportsWrite), _, _,
         _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
@@ -277,7 +278,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AppendData(r: DataSourceV2Relation, query, _, _, Some(write), _) =>
       AppendDataExec(planLater(query), refreshCache(r), write) :: Nil
 
-    case OverwriteByExpression(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), _, _,
+    case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
         _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>

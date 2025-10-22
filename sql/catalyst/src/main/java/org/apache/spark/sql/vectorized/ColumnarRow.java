@@ -164,6 +164,7 @@ public final class ColumnarRow extends InternalRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
+    if (isNullAt(ordinal)) return null;
     if (dataType instanceof BooleanType) {
       return getBoolean(ordinal);
     } else if (dataType instanceof ByteType) {

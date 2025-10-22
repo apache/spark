@@ -460,7 +460,6 @@ object PrefixSpan extends Logging {
     def genPrefixItems: Iterator[(Int, Long)] = {
       val n1 = items.length - 1
       // For each unique item (subject to sign) in this sequence, we output exact one split.
-      // TODO: use PrimitiveKeyOpenHashMap
       val prefixes = mutable.Map.empty[Int, Long]
       // a) items that can be assembled to the last itemset of the prefix
       partialStarts.foreach { start =>

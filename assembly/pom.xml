@@ -125,6 +125,18 @@
       </exclusions>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-connect-client-jdbc_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
+      <scope>provided</scope>
+    </dependency>
 
     <!--
       Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
@@ -134,16 +146,6 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <scope>${hadoop.deps.scope}</scope>
-    </dependency>
-
-    <!--
-      SPARK-51311: HDFS-15098 (3.4.0) adds hard dependency on bcprov-jdk18on, Spark fails to submit
-      to Kerberized cluster without this dependency, until HADOOP-19152 (3.5.0, unreleased)
-      -->
-    <dependency>
-      <groupId>org.bouncycastle</groupId>
-      <artifactId>bcprov-jdk18on</artifactId>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
   </dependencies>
@@ -217,6 +219,20 @@
               <executable>cp</executable>
               <arguments>
                 <argument>${basedir}/../sql/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
+                <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-connect-client-jdbc-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>cp</executable>
+              <arguments>
+                <argument>${basedir}/../sql/connect/client/jdbc/target/spark-connect-client-jdbc_${scala.binary.version}-${project.version}.jar</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
               </arguments>
             </configuration>

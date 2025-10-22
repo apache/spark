@@ -26,6 +26,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{StructType, UserDefinedType}
+import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -84,7 +85,7 @@ case class ArrowEvalPythonUDTFExec(
 
       val actualDataTypes = (0 until flattenedBatch.numCols()).map(
         i => flattenedBatch.column(i).dataType())
-      if (outputTypes != actualDataTypes) {
+      if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
         throw QueryExecutionErrors.arrowDataTypeMismatchError(
           "Python UDTF", outputTypes, actualDataTypes)
       }

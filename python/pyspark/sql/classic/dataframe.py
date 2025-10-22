@@ -569,6 +569,30 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 },
             )
 
+    def repartitionById(
+        self, numPartitions: int, partitionIdCol: "ColumnOrName"
+    ) -> ParentDataFrame:
+        if not isinstance(numPartitions, (int, bool)):
+            raise PySparkTypeError(
+                errorClass="NOT_INT",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_type": type(numPartitions).__name__,
+                },
+            )
+        if numPartitions <= 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_value": str(numPartitions),
+                },
+            )
+        return DataFrame(
+            self._jdf.repartitionById(numPartitions, _to_java_column(partitionIdCol)),
+            self.sparkSession,
+        )
+
     def distinct(self) -> ParentDataFrame:
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
@@ -1938,10 +1962,19 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.dataframe
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.
     globs = pyspark.sql.dataframe.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.pandas_api.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.classic.dataframe tests").getOrCreate()
     )

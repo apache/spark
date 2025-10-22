@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -340,6 +341,84 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(
       sqlContext.createDataFrame(sparkContext.makeRDD(rows), schema),
       intsToDF(expected)(schema))
+  }
+
+  test("LowPriorityMemoryStreamImplicits works with implicit sqlContext") {
+    // Test that MemoryStream can be created using implicit sqlContext
+    implicit val sqlContext: SQLContext = spark.sqlContext
+
+    // Test MemoryStream[A]() with implicit sqlContext
+    val stream1 = MemoryStream[Int]()
+    assert(stream1 != null)
+
+    // Test MemoryStream[A](numPartitions) with implicit sqlContext
+    val stream2 = MemoryStream[String](3)
+    assert(stream2 != null)
+
+    // Verify the streams work correctly
+    stream1.addData(1, 2, 3)
+    val df1 = stream1.toDF()
+    assert(df1.schema.fieldNames.contains("value"))
+
+    stream2.addData("a", "b", "c")
+    val df2 = stream2.toDF()
+    assert(df2.schema.fieldNames.contains("value"))
+  }
+
+  test("LowPriorityContinuousMemoryStreamImplicits works with implicit sqlContext") {
+    import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
+    // Test that ContinuousMemoryStream can be created using implicit sqlContext
+    implicit val sqlContext: SQLContext = spark.sqlContext
+
+    // Test ContinuousMemoryStream[A]() with implicit sqlContext
+    val stream1 = ContinuousMemoryStream[Int]()
+    assert(stream1 != null)
+
+    // Test ContinuousMemoryStream[A](numPartitions) with implicit sqlContext
+    val stream2 = ContinuousMemoryStream[String](3)
+    assert(stream2 != null)
+
+    // Test ContinuousMemoryStream.singlePartition with implicit sqlContext
+    val stream3 = ContinuousMemoryStream.singlePartition[Int]()
+    assert(stream3 != null)
+
+    // Verify the streams work correctly
+    stream1.addData(Seq(1, 2, 3))
+    stream2.addData(Seq("a", "b", "c"))
+    stream3.addData(Seq(10, 20))
+
+    // Basic verification that streams are functional
+    assert(stream1.initialOffset() != null)
+    assert(stream2.initialOffset() != null)
+    assert(stream3.initialOffset() != null)
+  }
+
+  test("LowPriorityLowLatencyMemoryStreamImplicits works with implicit sqlContext") {
+    import org.apache.spark.sql.execution.streaming.LowLatencyMemoryStream
+    // Test that LowLatencyMemoryStream can be created using implicit sqlContext
+    implicit val sqlContext: SQLContext = spark.sqlContext
+
+    // Test LowLatencyMemoryStream[A]() with implicit sqlContext
+    val stream1 = LowLatencyMemoryStream[Int]()
+    assert(stream1 != null)
+
+    // Test LowLatencyMemoryStream[A](numPartitions) with implicit sqlContext
+    val stream2 = LowLatencyMemoryStream[String](3)
+    assert(stream2 != null)
+
+    // Test LowLatencyMemoryStream.singlePartition with implicit sqlContext
+    val stream3 = LowLatencyMemoryStream.singlePartition[Int]()
+    assert(stream3 != null)
+
+    // Verify the streams work correctly
+    stream1.addData(Seq(1, 2, 3))
+    stream2.addData(Seq("a", "b", "c"))
+    stream3.addData(Seq(10, 20))
+
+    // Basic verification that streams are functional
+    assert(stream1.initialOffset() != null)
+    assert(stream2.initialOffset() != null)
+    assert(stream3.initialOffset() != null)
   }
 
   private implicit def intsToDF(seq: Seq[Int])(implicit schema: StructType): DataFrame = {

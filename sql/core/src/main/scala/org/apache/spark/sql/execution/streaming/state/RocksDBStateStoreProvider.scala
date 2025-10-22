@@ -32,7 +32,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.StateStoreEncoding.Avro
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
@@ -767,7 +767,9 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def close(): Unit = {
-    rocksDB.close()
+    if (stateMachine.close()) {
+      rocksDB.close()
+    }
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = ALL_CUSTOM_METRICS
@@ -822,7 +824,8 @@ private[sql] class RocksDBStateStoreProvider
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, loggingId,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
-      rocksDBEventForwarder, Some(stateStoreProviderId.toString))
+      rocksDBEventForwarder,
+      Some(s"${stateStoreProviderId.toString}_${UUID.randomUUID().toString}"))
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -841,10 +844,17 @@ private[sql] class RocksDBStateStoreProvider
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return [[StateStore]]
    */
   override def replayStateFromSnapshot(
-      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
+      snapshotVersion: Long,
+      endVersion: Long,
+      readOnly: Boolean,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): StateStore = {
     try {
       if (snapshotVersion < 1) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
@@ -854,7 +864,11 @@ private[sql] class RocksDBStateStoreProvider
       }
       val stamp = stateMachine.acquireStamp()
       try {
-        rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
+        rocksDB.loadFromSnapshot(
+          snapshotVersion,
+          endVersion,
+          snapshotVersionStateStoreCkptId,
+          endVersionStateStoreCkptId)
         new RocksDBStateStore(endVersion, stamp, readOnly)
       } catch {
         case e: Throwable =>
@@ -875,15 +889,18 @@ private[sql] class RocksDBStateStoreProvider
   override def getStateStoreChangeDataReader(
       startVersion: Long,
       endVersion: Long,
-      colFamilyNameOpt: Option[String] = None):
+      colFamilyNameOpt: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None):
     StateStoreChangeDataReader = {
     val statePath = stateStoreId.storeCheckpointLocation()
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     new RocksDBStateStoreChangeDataReader(
       CheckpointFileManager.create(statePath, hadoopConf),
+      rocksDB,
       statePath,
       startVersion,
       endVersion,
+      endVersionStateStoreCkptId,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keyValueEncoderMap,
       colFamilyNameOpt)
@@ -1222,9 +1239,11 @@ object RocksDBStateStoreProvider {
 /** [[StateStoreChangeDataReader]] implementation for [[RocksDBStateStoreProvider]] */
 class RocksDBStateStoreChangeDataReader(
     fm: CheckpointFileManager,
+    rocksDB: RocksDB,
     stateLocation: Path,
     startVersion: Long,
     endVersion: Long,
+    endVersionStateStoreCkptId: Option[String],
     compressionCodec: CompressionCodec,
     keyValueEncoderMap:
       ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)],
@@ -1232,7 +1251,20 @@ class RocksDBStateStoreChangeDataReader(
   extends StateStoreChangeDataReader(
     fm, stateLocation, startVersion, endVersion, compressionCodec, colFamilyNameOpt) {
 
-  override protected var changelogSuffix: String = "changelog"
+  override protected val versionsAndUniqueIds: Array[(Long, Option[String])] =
+    if (endVersionStateStoreCkptId.isDefined) {
+      val fullVersionLineage = rocksDB.getFullLineage(
+        startVersion,
+        endVersion,
+        endVersionStateStoreCkptId)
+      fullVersionLineage
+        .sortBy(_.version)
+        .map(item => (item.version, Some(item.checkpointUniqueId)))
+    } else {
+      (startVersion to endVersion).map((_, None)).toArray
+    }
+
+  override protected val changelogSuffix: String = "changelog"
 
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null

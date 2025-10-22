@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.{DataFrame, Dataset, Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
@@ -753,5 +753,13 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         new InitialStatefulProcessorWithUnflattenStateDataSource(),
         TimeMode.None(), OutputMode.Append(), initDf).toDF()
     }
+  }
+}
+
+class TransformWithStateInitialStateSuiteCheckpointV2
+  extends TransformWithStateInitialStateSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
   }
 }

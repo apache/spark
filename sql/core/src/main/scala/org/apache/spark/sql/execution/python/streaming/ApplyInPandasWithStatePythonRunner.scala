@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{PythonArrowInput, PythonArrowOutput, PythonUDFRunner}
 import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStatePythonRunner.{COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER, InType, OutType, OutTypeForState, STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER}
 import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA
-import org.apache.spark.sql.execution.streaming.GroupStateImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
@@ -106,12 +106,14 @@ class ApplyInPandasWithStatePythonRunner(
   }
 
   private val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
+  private val arrowMaxBytesPerBatch = sqlConf.arrowMaxBytesPerBatch
 
   // applyInPandasWithState has its own mechanism to construct the Arrow RecordBatch instance.
   // Configurations are both applied to executor and Python worker, set them to the worker conf
   // to let Python worker read the config properly.
   override protected val workerConf: Map[String, String] = initialWorkerConf +
-    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
+    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString) +
+    (SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
@@ -142,7 +144,11 @@ class ApplyInPandasWithStatePythonRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[InType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new ApplyInPandasWithStateWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new ApplyInPandasWithStateWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch)
     }
     if (inputIterator.hasNext) {
       val startData = dataOut.size()

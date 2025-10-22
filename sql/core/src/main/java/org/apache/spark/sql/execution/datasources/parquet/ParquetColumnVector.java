@@ -21,15 +21,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import com.google.common.base.Preconditions;
-
-import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.catalyst.types.DataTypeUtils;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
@@ -70,16 +65,9 @@ final class ParquetColumnVector {
       ParquetColumn column,
       WritableColumnVector vector,
       int capacity,
-      MemoryMode memoryMode,
       Set<ParquetColumn> missingColumns,
       boolean isTopLevel,
       Object defaultValue) {
-    DataType sparkType = column.sparkType();
-    if (!DataTypeUtils.sameType(sparkType, vector.dataType())) {
-      throw new IllegalArgumentException("Spark type: " + sparkType +
-        " doesn't match the type: " + vector.dataType() + " in column vector");
-    }
-
     this.column = column;
     this.vector = vector;
     this.children = new ArrayList<>();
@@ -112,11 +100,10 @@ final class ParquetColumnVector {
 
     if (column.variantFileType().isDefined()) {
       ParquetColumn fileContentCol = column.variantFileType().get();
-      WritableColumnVector fileContent = memoryMode == MemoryMode.OFF_HEAP
-          ? new OffHeapColumnVector(capacity, fileContentCol.sparkType())
-          : new OnHeapColumnVector(capacity, fileContentCol.sparkType());
-      ParquetColumnVector contentVector = new ParquetColumnVector(fileContentCol,
-          fileContent, capacity, memoryMode, missingColumns, false, null);
+      WritableColumnVector fileContent = vector.reserveNewColumn(
+        capacity, fileContentCol.sparkType());
+      ParquetColumnVector contentVector = new ParquetColumnVector(fileContentCol, fileContent,
+        capacity, missingColumns, /* isTopLevel= */ false, /* defaultValue= */ null);
       children.add(contentVector);
       variantSchema = SparkShreddingUtils.buildVariantSchema(fileContentCol.sparkType());
       fieldsToExtract = SparkShreddingUtils.getFieldsToExtract(column.sparkType(), variantSchema);
@@ -124,21 +111,29 @@ final class ParquetColumnVector {
       definitionLevels = contentVector.definitionLevels;
     } else if (isPrimitive) {
       if (column.repetitionLevel() > 0) {
-        repetitionLevels = allocateLevelsVector(capacity, memoryMode);
+        repetitionLevels = vector.reserveNewColumn(capacity, DataTypes.IntegerType);
       }
       // We don't need to create and store definition levels if the column is top-level.
       if (!isTopLevel) {
-        definitionLevels = allocateLevelsVector(capacity, memoryMode);
+        definitionLevels = vector.reserveNewColumn(capacity, DataTypes.IntegerType);
       }
     } else {
-      Preconditions.checkArgument(column.children().size() == vector.getNumChildren());
+      // If a child is not present in the allocated vectors, it means we don't care about this
+      // child's data, we just want to read its levels to help assemble some parent struct. So we
+      // create a dummy vector below to hold the child's data. There can only be one such child.
+      JavaUtils.checkArgument(column.children().size() == vector.getNumChildren() ||
+        column.children().size() == vector.getNumChildren() + 1,
+        "The number of column children is not equal to the number of vector children or that + 1");
       boolean allChildrenAreMissing = true;
 
       for (int i = 0; i < column.children().size(); i++) {
-        ParquetColumnVector childCv = new ParquetColumnVector(column.children().apply(i),
-          vector.getChild(i), capacity, memoryMode, missingColumns, false, null);
+        ParquetColumn childColumn = column.children().apply(i);
+        WritableColumnVector childVector = i < vector.getNumChildren()
+          ? vector.getChild(i)
+          : vector.reserveNewColumn(capacity, childColumn.sparkType());
+        ParquetColumnVector childCv = new ParquetColumnVector(childColumn, childVector, capacity,
+          missingColumns, /* isTopLevel= */ false, /* defaultValue= */ null);
         children.add(childCv);
-
 
         // Only use levels from non-missing child, this can happen if only some but not all
         // fields of a struct are missing.
@@ -373,13 +368,6 @@ final class ParquetColumnVector {
       }
     }
     vector.addElementsAppended(rowId);
-  }
-
-  private static WritableColumnVector allocateLevelsVector(int capacity, MemoryMode memoryMode) {
-    return switch (memoryMode) {
-      case ON_HEAP -> new OnHeapColumnVector(capacity, DataTypes.IntegerType);
-      case OFF_HEAP -> new OffHeapColumnVector(capacity, DataTypes.IntegerType);
-    };
   }
 
   /**

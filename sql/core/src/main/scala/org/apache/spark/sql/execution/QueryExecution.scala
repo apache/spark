@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
 
@@ -44,7 +45,8 @@ import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableU
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
-import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
@@ -149,7 +151,8 @@ class QueryExecution(
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
-      val qe = sparkSession.sessionState.executePlan(p, mode)
+      val qe = new QueryExecution(sparkSession, p, mode = mode,
+        shuffleCleanupMode = shuffleCleanupMode)
       val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
         SQLExecution.withNewExecutionId(qe, Some(name)) {
           qe.executedPlan.executeCollect()
@@ -270,8 +273,13 @@ class QueryExecution(
    */
   def toRdd: RDD[InternalRow] = lazyToRdd.get
 
+  private val observedMetricsLock = new Object
+
   /** Get the metrics observed during the execution of the query plan. */
-  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
+  @GuardedBy("observedMetricsLock")
+  def observedMetrics: Map[String, Row] = observedMetricsLock.synchronized {
+    CollectMetricsExec.collect(executedPlan)
+  }
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
@@ -681,6 +689,14 @@ object QueryExecution {
       }
       planChangeLogger.logBatch("Plan Normalization", plan, normalized)
       normalized
+    }
+  }
+
+  def determineShuffleCleanupMode(conf: SQLConf): ShuffleCleanupMode = {
+    if (conf.getConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+      RemoveShuffleFiles
+    } else {
+      DoNotCleanup
     }
   }
 }

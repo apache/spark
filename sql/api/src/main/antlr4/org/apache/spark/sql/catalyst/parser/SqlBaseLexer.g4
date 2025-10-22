@@ -257,6 +257,8 @@ FULL: 'FULL';
 FUNCTION: 'FUNCTION';
 FUNCTIONS: 'FUNCTIONS';
 GENERATED: 'GENERATED';
+GEOGRAPHY: 'GEOGRAPHY';
+GEOMETRY: 'GEOMETRY';
 GLOBAL: 'GLOBAL';
 GRANT: 'GRANT';
 GROUP: 'GROUP';
@@ -518,7 +520,7 @@ ZONE: 'ZONE';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
-NEQ : '<>' {complex_type_level_counter == 0}?;
+NEQ : '<>';
 NEQJ: '!=';
 LT  : '<';
 LTE : '<=' | '!>';

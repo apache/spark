@@ -39,7 +39,23 @@ case class PipelineEvent(
     message: String,
     details: EventDetails,
     error: Option[Throwable]
-)
+) {
+  /** Combines the message and error (if any) into a single string */
+  def messageWithError: String = {
+    if (error.nonEmpty) {
+      // Returns the message associated with a Throwable and all its causes
+      def getExceptionMessages(throwable: Throwable): Seq[String] = {
+        throwable.getMessage +:
+          Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
+      }
+      val errorMessages = getExceptionMessages(error.get)
+      s"""${message}
+         |Error: ${errorMessages.mkString("\n")}""".stripMargin
+    } else {
+      message
+    }
+  }
+}
 
 /**
  * Describes where the event originated from

@@ -19,7 +19,7 @@ addSbtPlugin("software.purpledragon" % "sbt-checkstyle-plugin" % "4.0.1")
 
 // If you are changing the dependency setting for checkstyle plugin,
 // please check pom.xml in the root of the source tree too.
-libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "10.21.2"
+libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "11.0.1"
 
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "2.3.1")
 
@@ -39,8 +39,10 @@ libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.8"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
-addSbtPlugin("com.github.sbt" % "sbt-pom-reader" % "2.4.0")
+addSbtPlugin("com.github.sbt" % "sbt-pom-reader" % "2.5.0")
 
-addSbtPlugin("com.github.sbt.junit" % "sbt-jupiter-interface" % "0.15.0")
+addSbtPlugin("com.github.sbt.junit" % "sbt-jupiter-interface" % "0.17.0")
 
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.7")
+
+addSbtPlugin("com.here.platform" % "sbt-bom" % "1.0.29")

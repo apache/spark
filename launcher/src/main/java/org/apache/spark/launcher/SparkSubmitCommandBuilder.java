@@ -172,6 +172,16 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   @Override
   public List<String> buildCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
+    for (Map.Entry<String, String> entry : getEffectiveConfig().entrySet()) {
+      // If both spark.remote and spark.master are set, the error will be thrown later
+      // when the application is started.
+      if (entry.getKey().equals("spark.remote")) {
+        isRemote = true;
+      } else if (entry.getKey().equals(SparkLauncher.SPARK_API_MODE)) {
+        // Respects if the API mode is explicitly set.
+        isRemote = entry.getValue().equalsIgnoreCase("connect");
+      }
+    }
     if (PYSPARK_SHELL.equals(appResource) && !isSpecialCommand) {
       return buildPySparkShellCommand(env);
     } else if (SPARKR_SHELL.equals(appResource) && !isSpecialCommand) {
@@ -239,6 +249,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     if (propertiesFile != null) {
       args.add(parser.PROPERTIES_FILE);
       args.add(propertiesFile);
+    }
+
+    if (loadSparkDefaults) {
+      args.add(parser.LOAD_SPARK_DEFAULTS);
     }
 
     if (isExample) {
@@ -540,6 +554,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         }
         case DEPLOY_MODE -> deployMode = value;
         case PROPERTIES_FILE -> propertiesFile = value;
+        case LOAD_SPARK_DEFAULTS -> loadSparkDefaults = true;
         case DRIVER_MEMORY -> conf.put(SparkLauncher.DRIVER_MEMORY, value);
         case DRIVER_JAVA_OPTIONS -> conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
         case DRIVER_LIBRARY_PATH -> conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
@@ -550,14 +565,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-          // If both spark.remote and spark.mater are set, the error will be thrown later when
-          // the application is started.
-          if (setConf[0].equals("spark.remote")) {
-            isRemote = true;
-          } else if (setConf[0].equals(SparkLauncher.SPARK_API_MODE)) {
-            // Respects if the API mode is explicitly set.
-            isRemote = setConf[1].equalsIgnoreCase("connect");
-          }
           conf.put(setConf[0], setConf[1]);
         }
         case CLASS -> {

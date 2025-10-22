@@ -25,8 +25,9 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.{count, expr}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
@@ -122,11 +123,10 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
   test("query stop deactivates related store providers") {
     var coordRef: StateStoreCoordinatorRef = null
     try {
-      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      implicit val spark: SparkSession = SparkSession.builder().sparkContext(sc).getOrCreate()
       SparkSession.setActiveSession(spark)
       import spark.implicits._
       coordRef = spark.streams.stateStoreCoordinator
-      implicit val sqlContext = spark.sqlContext
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
 
       // Start a query and run a batch to load state stores
@@ -253,7 +253,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       ) {
         case (coordRef, spark) =>
           import spark.implicits._
-          implicit val sqlContext = spark.sqlContext
+          implicit val sparkSession: SparkSession = spark
           val inputData = MemoryStream[Int]
           val query = setUpStatefulQuery(inputData, "query")
           // Add, commit, and wait multiple times to force snapshot versions and time difference
@@ -289,7 +289,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       ) {
         case (coordRef, spark) =>
           import spark.implicits._
-          implicit val sqlContext = spark.sqlContext
+          implicit val sparkSession: SparkSession = spark
           // Start a join query and run some data to force snapshot uploads
           val input1 = MemoryStream[Int]
           val input2 = MemoryStream[Int]
@@ -332,7 +332,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
-        implicit val sqlContext = spark.sqlContext
+        implicit val sparkSession: SparkSession = spark
         // Start and run two queries together with some data to force snapshot uploads
         val input1 = MemoryStream[Int]
         val input2 = MemoryStream[Int]
@@ -399,7 +399,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
-        implicit val sqlContext = spark.sqlContext
+        implicit val sparkSession: SparkSession = spark
         // Start a query and run some data to force snapshot uploads
         val inputData = MemoryStream[Int]
         val query = setUpStatefulQuery(inputData, "query")
@@ -443,7 +443,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     ) {
       case (coordRef, spark) =>
         import spark.implicits._
-        implicit val sqlContext = spark.sqlContext
+        implicit val sparkSession: SparkSession = spark
         // Start a query and run some data to force snapshot uploads
         val inputData = MemoryStream[Int]
         val query = setUpStatefulQuery(inputData, "query")

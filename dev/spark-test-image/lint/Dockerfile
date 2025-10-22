@@ -93,7 +93,7 @@ RUN python3.11 -m pip install \
     'pandas' \
     'pandas-stubs==1.2.0.53' \
     'plotly>=4.8' \
-    'pyarrow>=20.0.0' \
+    'pyarrow>=21.0.0' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
     && python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \

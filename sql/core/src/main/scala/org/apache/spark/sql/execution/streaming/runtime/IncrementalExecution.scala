@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
@@ -38,6 +38,11 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessi
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaBroadcast, StateSchemaMetadata}
 import org.apache.spark.sql.internal.SQLConf
@@ -73,7 +78,9 @@ class IncrementalExecution(
       MutableMap[Long, StateSchemaBroadcast](),
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val isTerminatingTrigger: Boolean = false)
-  extends QueryExecution(sparkSession, logicalPlan, mode = mode) with Logging {
+  extends QueryExecution(sparkSession, logicalPlan, mode = mode,
+    shuffleCleanupMode =
+      QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)) with Logging {
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(

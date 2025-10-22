@@ -30,10 +30,13 @@ import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupported
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateExec, TransformWithStateOperatorProperties, TransformWithStateVariableUtils}
+import org.apache.spark.sql.execution.streaming.runtime._
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
@@ -1006,7 +1009,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("transformWithState - lazy iterators can properly get/set keyed state") {
-    val spark = this.spark
+    implicit val spark: SparkSession = this.spark
     import spark.implicits._
 
     class ProcessorWithLazyIterators

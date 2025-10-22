@@ -10638,15 +10638,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             var_name = [var_name]  # type: ignore[list-item]
 
-        value_col_types = [
-            self._internal.spark_column_for(label).expr.dataType for label in value_vars
-        ]
-        # If any value column is of StringType, cast all value columns to StringType to avoid
-        # ANSI mode errors during explode - mixing strings and integers.
-        string_cast_required_type = (
-            StringType() if any(isinstance(t, StringType) for t in value_col_types) else None
-        )
         use_cast = is_ansi_mode_enabled(self._internal.spark_frame.sparkSession)
+        string_cast_required_type = None
+        if use_cast:
+            field_by_label = {
+                label: field
+                for label, field in zip(self._internal.column_labels, self._internal.data_fields)
+            }
+
+            value_col_types = [field_by_label[label].spark_type for label in value_vars]
+            # If any value column is of StringType, cast all value columns to StringType to avoid
+            # ANSI mode errors during explode - mixing strings and integers.
+            string_cast_required_type = (
+                StringType() if any(isinstance(t, StringType) for t in value_col_types) else None
+            )
 
         pairs = F.explode(
             F.array(
@@ -11124,8 +11129,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._result_aggregated(column_labels, applied)
 
-    # TODO(SPARK-46166): axis, skipna and **kwargs should be implemented.
-    def any(self, axis: Axis = 0, bool_only: Optional[bool] = None) -> "Series":
+    # TODO(SPARK-46166): axis and **kwargs should be implemented.
+    def any(
+        self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
+    ) -> "Series":
         """
         Return whether any element is True.
 
@@ -11143,6 +11150,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
             then use only boolean data.
+
+        skipna : bool, default True
+            Exclude NA/null values. If the entire row/column is NA and skipna is True,
+            then the result will be False, as for an empty row/column. If skipna is False,
+            then NA are treated as True, because these are not equal to zero.
 
         Returns
         -------
@@ -11196,8 +11208,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         applied: List[PySparkColumn] = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
-            any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
-            applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
+            if skipna:
+                # When skipna=True, nulls count as False
+                any_col = F.max(scol.cast("boolean"))
+                applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
+            else:
+                # When skipna=False, nulls count as True
+                any_col = F.max(scol.cast("boolean"))
+                applied.append(F.when(any_col.isNull(), True).otherwise(any_col))
 
         return self._result_aggregated(column_labels, applied)
 
@@ -13824,31 +13842,11 @@ def _test() -> None:
     import uuid
     from pyspark.sql import SparkSession
     import pyspark.pandas.frame
-    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.frame.__dict__.copy()
     globs["ps"] = pyspark.pandas
-
-    if is_ansi_mode_test:
-        del pyspark.pandas.frame.DataFrame.add.__doc__
-        del pyspark.pandas.frame.DataFrame.div.__doc__
-        del pyspark.pandas.frame.DataFrame.floordiv.__doc__
-        del pyspark.pandas.frame.DataFrame.melt.__doc__
-        del pyspark.pandas.frame.DataFrame.mod.__doc__
-        del pyspark.pandas.frame.DataFrame.mul.__doc__
-        del pyspark.pandas.frame.DataFrame.pow.__doc__
-        del pyspark.pandas.frame.DataFrame.radd.__doc__
-        del pyspark.pandas.frame.DataFrame.rdiv.__doc__
-        del pyspark.pandas.frame.DataFrame.rfloordiv.__doc__
-        del pyspark.pandas.frame.DataFrame.rmod.__doc__
-        del pyspark.pandas.frame.DataFrame.rmul.__doc__
-        del pyspark.pandas.frame.DataFrame.rpow.__doc__
-        del pyspark.pandas.frame.DataFrame.rsub.__doc__
-        del pyspark.pandas.frame.DataFrame.rtruediv.__doc__
-        del pyspark.pandas.frame.DataFrame.sub.__doc__
-        del pyspark.pandas.frame.DataFrame.truediv.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
