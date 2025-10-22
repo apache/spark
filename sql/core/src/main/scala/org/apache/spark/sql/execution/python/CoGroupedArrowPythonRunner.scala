@@ -134,14 +134,14 @@ class CoGroupedArrowPythonRunner(
           }
         }
 
-        var numRowsWrittenInArrowBatch: Int = 0
+        var numRowsInBatch: Int = 0
         if (nextBatchInLeftGroup != null) {
           if (leftGroupArrowWriter == null) {
             leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(leftSchema,
               timeZoneId, pythonExec + " (left)", errorOnDuplicatedFieldNames = true,
               largeVarTypes, dataOut, context)
           }
-          numRowsWrittenInArrowBatch = BatchedPythonArrowInput.writeSizedBatch(
+          numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
             leftGroupArrowWriter.arrowWriter,
             leftGroupArrowWriter.streamWriter,
             nextBatchInLeftGroup,
@@ -159,7 +159,7 @@ class CoGroupedArrowPythonRunner(
               timeZoneId, pythonExec + " (right)", errorOnDuplicatedFieldNames = true,
               largeVarTypes, dataOut, context)
           }
-          numRowsWrittenInArrowBatch = BatchedPythonArrowInput.writeSizedBatch(
+          numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
             rightGroupArrowWriter.arrowWriter,
             rightGroupArrowWriter.streamWriter,
             nextBatchInRightGroup,
@@ -176,7 +176,7 @@ class CoGroupedArrowPythonRunner(
 
         // With CoGroupedIterator, we can have empty groups for one of the sides if a grouping
         // key exists in one side but not in the other side.
-        assert(numRowsWrittenInArrowBatch <= maxRecordsPerBatch)
+        assert(0 <= numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
         val deltaData = dataOut.size() - startData
         pythonMetrics("pythonDataSent") += deltaData
         true
