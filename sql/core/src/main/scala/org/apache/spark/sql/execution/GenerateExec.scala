@@ -63,7 +63,20 @@ case class GenerateExec(
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
+  override def output: Seq[Attribute] = requiredChildOutput ++ correctedGeneratorOutput
+
+  /**
+   * SPARK-47230: Create corrected generator output attributes with data types from the
+   * bound generator's element schema. This ensures projections use the correct ordinals
+   * after schema pruning.
+   */
+  private lazy val correctedGeneratorOutput: Seq[Attribute] = {
+    val elementFields = boundGenerator.elementSchema.fields
+    generatorOutput.zip(elementFields).map { case (attr, field) =>
+      // Create a new attribute with the correct data type from the generator's schema
+      attr.withDataType(field.dataType)
+    }
+  }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -77,6 +90,7 @@ case class GenerateExec(
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     val numOutputRows = longMetric("numOutputRows")
+
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       boundGenerator.foreach {
         case n: Nondeterministic => n.initialize(index)

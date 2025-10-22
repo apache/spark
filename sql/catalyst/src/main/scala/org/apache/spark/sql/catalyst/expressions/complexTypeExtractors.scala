@@ -59,7 +59,9 @@ object ExtractValue {
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
+        // SPARK-47230: Keep the original field name from schema (not user-provided name)
+        // to ensure case-insensitive lookups work correctly during schema pruning
+        GetArrayStructFields(child, fields(ordinal),
           ordinal, fields.length, containsNull || fields(ordinal).nullable)
 
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
@@ -196,9 +198,22 @@ case class GetArrayStructFields(
       val values = ctx.freshName("values")
       val j = ctx.freshName("j")
       val row = ctx.freshName("row")
+      val actualOrdinal = ctx.freshName("actualOrdinal")
+      val actualNumFields = ctx.freshName("actualNumFields")
+
+      // SPARK-47230: Dynamic ordinal lookup to support schema pruning
+      // Store the element struct schema as a reference object
+      // Get the current schema from the child expression's dataType
+      val elementSchema = child.dataType.asInstanceOf[ArrayType].elementType
+        .asInstanceOf[StructType]
+      val schemaRef = ctx.addReferenceObj("elementSchema", elementSchema,
+        classOf[StructType].getName)
+      // field.name contains the resolved field name from the schema (case-preserved)
+      val fieldNameRef = ctx.addReferenceObj("fieldName", field.name, classOf[String].getName)
+
       val nullSafeEval = if (field.nullable) {
         s"""
-         if ($row.isNullAt($ordinal)) {
+         if ($row.isNullAt($actualOrdinal)) {
            $values[$j] = null;
          } else
         """
@@ -209,13 +224,17 @@ case class GetArrayStructFields(
       s"""
         final int $n = $eval.numElements();
         final Object[] $values = new Object[$n];
+        // SPARK-47230: Look up ordinal by field name from CURRENT schema
+        final int $actualOrdinal = $schemaRef.fieldIndex($fieldNameRef);
+        final int $actualNumFields = $schemaRef.size();
+
         for (int $j = 0; $j < $n; $j++) {
           if ($eval.isNullAt($j)) {
             $values[$j] = null;
           } else {
-            final InternalRow $row = $eval.getStruct($j, $numFields);
+            final InternalRow $row = $eval.getStruct($j, $actualNumFields);
             $nullSafeEval {
-              $values[$j] = ${CodeGenerator.getValue(row, field.dataType, ordinal.toString)};
+              $values[$j] = ${CodeGenerator.getValue(row, field.dataType, actualOrdinal)};
             }
           }
         }
