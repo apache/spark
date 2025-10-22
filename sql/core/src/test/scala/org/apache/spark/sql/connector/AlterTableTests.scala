@@ -20,11 +20,12 @@ package org.apache.spark.sql.connector
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.QueryTest.checkAnswer
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, ColumnDefaultValue, Identifier, Table, TableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -53,6 +54,24 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       s"spark_catalog.$tableName"
     } else {
       tableName
+    }
+  }
+
+  private def tableIdentifier(tableName: String): Identifier = {
+    if (catalogAndNamespace.nonEmpty) {
+      val parts = catalogAndNamespace.stripSuffix(".").split("\\.").tail
+      Identifier.of(parts, tableName)
+    } else {
+      Identifier.of(Array("default"), tableName)
+    }
+  }
+
+  private def tableCatalog(): TableCatalog = {
+    if (catalogAndNamespace.isEmpty) {
+      spark.sessionState.catalogManager.v2SessionCatalog.asInstanceOf[TableCatalog]
+    } else {
+      val parts = catalogAndNamespace.stripSuffix(".").split("\\.")
+      spark.sessionState.catalogManager.catalog(parts(0)).asInstanceOf[TableCatalog]
     }
   }
 
@@ -1533,5 +1552,117 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           )
         }
       }
+  }
+
+  test("Alter table add nested column") {
+    val t = fullTableName("table_name")
+    withTable(t) {
+      val schema =
+        StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("m", MapType(
+            StructType(Seq(StructField("c1", IntegerType))),
+            StructType(Seq(StructField("c2", StringType))))),
+          StructField("dep", StringType)))
+
+      val ident = tableIdentifier("table_name")
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(CatalogV2Util.structTypeToV2Columns(schema))
+        .build()
+
+      val catalog = tableCatalog()
+      catalog.createTable(ident, tableInfo)
+
+      val data = Seq(
+        Row(0, Map(Row(10) -> Row("c")), "hr"),
+        Row(1, Map(Row(20) -> Row("d")), "sales"))
+
+      spark.createDataFrame(
+        spark.sparkContext.parallelize(data),
+        schema).writeTo(t).append()
+
+      sql(s"ALTER TABLE $t ADD COLUMN m.key.c5 boolean")
+      sql(s"ALTER TABLE $t ADD COLUMN m.value.c6 boolean")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $t"),
+        Seq(Row(0, Map(Row(10, null) -> Row("c", null)), "hr"),
+          Row(1, Map(Row(20, null) -> Row("d", null)), "sales")))
+    }
+  }
+
+  private def checkConflictSpecialColNameResult(table: String): Unit = {
+    val result = sql(s"SELECT * FROM $table").collect()
+    assert(result.length == 1)
+    assert(!result(0).getBoolean(0))
+    assert(result(0).get(1) != null)
+  }
+
+  test("Add column with special column name default value conflicting with column name") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      // There is a default value that is a special column name 'current_timestamp'.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN s timestamp DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name 'current_user' but in uppercase.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN s string DEFAULT CURRENT_USER")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name same as current column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (b boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN current_timestamp timestamp DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(b) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name same as another column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (current_date boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN s date DEFAULT current_date")
+        sql(s"INSERT INTO $t(current_date) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+    }
+  }
+
+  test("Set default value for existing column conflicting with special column names") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      // There is a default value that is a special column name 'current_timestamp'.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean, s timestamp) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN s SET DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name 'current_user' but in uppercase.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean, s string) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN s SET DEFAULT CURRENT_USER")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name same as current column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (b boolean, current_timestamp timestamp) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN current_timestamp SET DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(b) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name same as another column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (current_date boolean, s date) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN s SET DEFAULT current_date")
+        sql(s"INSERT INTO $t(current_date) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+    }
   }
 }

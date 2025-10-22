@@ -205,6 +205,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = getSummary(context))
   }
 
+  def remainderByZeroError(context: QueryContext): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "REMAINDER_BY_ZERO",
+      messageParameters = Map("config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = Array(context),
+      summary = getSummary(context))
+  }
+
   def intervalDividedByZeroError(context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_DIVIDED_BY_ZERO",
@@ -2740,6 +2748,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def invalidCheckpointLineage(lineage: String, message: String): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHECKPOINT_LINEAGE",
+      messageParameters = Map(
+        "lineage" -> lineage,
+        "message" -> message
+      ),
+      cause = null
+    )
+  }
+
   def notEnoughMemoryToLoadStore(
       stateStoreId: String,
       stateStoreProviderName: String,
@@ -2812,6 +2831,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
         "limit" -> toSQLValue(limit, IntegerType)))
+  }
+
+  def approxTopKSketchSizeNotMatch(size1: Int, size2: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_SKETCH_SIZE_NOT_MATCH",
+      messageParameters = Map(
+        "size1" -> toSQLValue(size1, IntegerType),
+        "size2" -> toSQLValue(size2, IntegerType)))
+  }
+
+  def approxTopKSketchTypeNotMatch(type1: DataType, type2: DataType): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
+      messageParameters = Map(
+        "type1" -> toSQLType(type1),
+        "type2" -> toSQLType(type2)))
   }
 
   def mergeCardinalityViolationError(): SparkRuntimeException = {
@@ -3100,5 +3135,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "tableName" -> tableName
       )
     )
+  }
+
+  def thetaInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def thetaInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_LG_NOM_ENTRIES",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "min" -> toSQLValue(min, IntegerType),
+        "max" -> toSQLValue(max, IntegerType),
+        "value" -> toSQLValue(value, IntegerType)))
   }
 }

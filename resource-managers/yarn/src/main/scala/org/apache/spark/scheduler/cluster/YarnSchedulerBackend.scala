@@ -179,7 +179,7 @@ private[spark] abstract class YarnSchedulerBackend(
       resourceProfileId: Int): Seq[BlockManagerId] = {
     // TODO (SPARK-33481) This is a naive way of calculating numMergersDesired for a stage,
     // TODO we can use better heuristics to calculate numMergersDesired for a stage.
-    val maxExecutors = if (Utils.isDynamicAllocationEnabled(sc.getConf)) {
+    val maxExecutors = if (Utils.isDynamicAllocationEnabled(sc.getReadOnlyConf)) {
       maxNumExecutors
     } else {
       numExecutors

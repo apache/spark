@@ -20,8 +20,9 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.CodegenMetrics
+import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -344,6 +345,76 @@ class ArtifactManagerSuite extends SharedSparkSession {
       spark.addArtifact(buffer, filePath)
       filePath
     }
+  }
+
+  test("Add multiple artifacts to local session and check if all are added despite exception") {
+    val copyDir = Utils.createTempDir().toPath
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+
+    val artifact1Path = "my/custom/pkg/artifact1.jar"
+    val artifact2Path = "my/custom/pkg/artifact2.jar"
+    val targetPath = Paths.get(artifact1Path)
+    val targetPath2 = Paths.get(artifact2Path)
+
+    val classPath1 = copyDir.resolve("Hello.class")
+    val classPath2 = copyDir.resolve("udf_noA.jar")
+    assume(artifactPath.resolve("Hello.class").toFile.exists)
+    assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
+
+    val artifact1 = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.LocalFile(Paths.get(classPath1.toString)))
+
+    val alreadyExistingArtifact = Artifact.newArtifactFromExtension(
+      targetPath2.getFileName.toString,
+      targetPath,
+      new Artifact.LocalFile(Paths.get(classPath2.toString)))
+
+    val artifact2 = Artifact.newArtifactFromExtension(
+      targetPath2.getFileName.toString,
+      targetPath2,
+      new Artifact.LocalFile(Paths.get(classPath2.toString)))
+
+    spark.artifactManager.addLocalArtifacts(Seq(artifact1))
+
+    val ex = intercept[SparkRuntimeException] {
+      spark.artifactManager.addLocalArtifacts(
+        Seq(alreadyExistingArtifact, artifact2, alreadyExistingArtifact))
+    }
+
+    checkError(
+      exception = ex,
+      condition = "ARTIFACT_ALREADY_EXISTS",
+      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"))
+
+    assert(ex.getSuppressed.length == 1)
+    assert(ex.getSuppressed.head.isInstanceOf[SparkRuntimeException])
+    val suppressed = ex.getSuppressed.head.asInstanceOf[SparkRuntimeException]
+
+    checkError(
+      exception = suppressed,
+      condition = "ARTIFACT_ALREADY_EXISTS",
+      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"))
+
+    // Artifact1 should have been added
+    val expectedFile1 = ArtifactManager.artifactRootDirectory
+      .resolve(s"$sessionUUID/jars/$artifact1Path")
+      .toFile
+    assert(expectedFile1.exists())
+
+    // Artifact2 should have been added despite exception
+    val expectedFile2 = ArtifactManager.artifactRootDirectory
+      .resolve(s"$sessionUUID/jars/$artifact2Path")
+      .toFile
+    assert(expectedFile2.exists())
+
+    // Cleanup
+    artifactManager.cleanUpResourcesForTesting()
+    val sessionDir = ArtifactManager.artifactRootDirectory.resolve(sessionUUID).toFile
+
+    assert(!expectedFile1.exists())
+    assert(!sessionDir.exists())
   }
 
   test("Added artifact can be loaded by the current SparkSession") {

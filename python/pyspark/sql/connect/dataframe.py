@@ -82,6 +82,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    DirectShufflePartitionID,
     SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
@@ -440,6 +441,38 @@ class DataFrame(ParentDataFrame):
                     "arg_type": type(numPartitions).__name__,
                 },
             )
+        res._cached_schema = self._cached_schema
+        return res
+
+    def repartitionById(
+        self, numPartitions: int, partitionIdCol: "ColumnOrName"
+    ) -> ParentDataFrame:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
+            raise PySparkTypeError(
+                errorClass="NOT_INT",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_type": type(numPartitions).__name__,
+                },
+            )
+        if numPartitions <= 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_value": str(numPartitions),
+                },
+            )
+
+        partition_connect_col = cast(ConnectColumn, F._to_col(partitionIdCol))
+        direct_partition_expr = DirectShufflePartitionID(partition_connect_col._expr)
+        direct_partition_col = ConnectColumn(direct_partition_expr)
+        res = DataFrame(
+            plan.RepartitionByExpression(self._plan, numPartitions, [direct_partition_col]),
+            self._session,
+        )
         res._cached_schema = self._cached_schema
         return res
 
@@ -1790,7 +1823,14 @@ class DataFrame(ParentDataFrame):
 
         assert schema is not None and isinstance(schema, StructType)
 
-        return ArrowTableToRowsConversion.convert(table, schema)
+        return ArrowTableToRowsConversion.convert(
+            table, schema, binary_as_bytes=self._get_binary_as_bytes()
+        )
+
+    def _get_binary_as_bytes(self) -> bool:
+        """Get the binary_as_bytes configuration value from Spark session."""
+        conf_value = self._session.conf.get("spark.sql.execution.pyspark.binaryAsBytes", "true")
+        return conf_value is not None and conf_value.lower() == "true"
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
@@ -2042,7 +2082,9 @@ class DataFrame(ParentDataFrame):
                 table = schema_or_table
                 if schema is None:
                     schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
-                yield from ArrowTableToRowsConversion.convert(table, schema)
+                yield from ArrowTableToRowsConversion.convert(
+                    table, schema, binary_as_bytes=self._get_binary_as_bytes()
+                )
 
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -2128,8 +2170,12 @@ class DataFrame(ParentDataFrame):
 
     def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
         schema = self._schema
+        binary_as_bytes = self._get_binary_as_bytes()
         field_converters = [
-            ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
+            ArrowTableToRowsConversion._create_converter(
+                f.dataType, none_on_identity=False, binary_as_bytes=binary_as_bytes
+            )
+            for f in schema.fields
         ]
 
         def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
@@ -2138,7 +2184,7 @@ class DataFrame(ParentDataFrame):
                     columnar_data = [column.to_pylist() for column in table.columns]
                     for i in range(0, table.num_rows):
                         values = [
-                            field_converters[j](columnar_data[j][i])
+                            field_converters[j](columnar_data[j][i])  # type: ignore[misc]
                             for j in range(table.num_columns)
                         ]
                         yield _create_row(fields=schema.fieldNames(), values=values)
@@ -2304,6 +2350,7 @@ def _test() -> None:
     from pyspark.util import is_remote_only
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.dataframe
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.
@@ -2314,6 +2361,13 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.pandas_api.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

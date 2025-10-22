@@ -208,7 +208,7 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       scopes.current.hiddenOutput.filter(_.qualifiedAccessOnly)
 
     val newProjectList =
-      if (unresolvedJoin.getTagValue(Resolver.TOP_LEVEL_OPERATOR).isEmpty) {
+      if (unresolvedJoin.getTagValue(ResolverTag.TOP_LEVEL_OPERATOR).isEmpty) {
         newOutputList ++ qualifiedAccessOnlyColumnsFromHiddenOutput
       } else {
         newOutputList

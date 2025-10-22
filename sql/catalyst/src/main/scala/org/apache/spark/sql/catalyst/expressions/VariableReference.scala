@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIABLE_REFERENCE}
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier}
 import org.apache.spark.sql.types.DataType
@@ -57,4 +58,6 @@ case class VariableReference(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     varDef.currentValue.doGenCode(ctx, ev)
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(VARIABLE_REFERENCE)
 }

@@ -19,11 +19,10 @@ from pathlib import Path
 
 SPEC = """
 name: {{ name }}
-definitions:
+storage: storage-root
+libraries:
   - glob:
-      include: transformations/**/*.py
-  - glob:
-      include: transformations/**/*.sql
+      include: transformations/**
 """
 
 PYTHON_EXAMPLE = """from pyspark import pipelines as dp

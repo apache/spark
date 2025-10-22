@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.{File, IOException}
 import java.nio.file.{Files, Paths}
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
@@ -37,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, FileScan, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ExtractV2Table, FileScan, FileTable}
 import org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.execution.streaming.sinks.{FileStreamSink, FileStreamSinkLog, SinkFileStatus}
@@ -534,10 +535,25 @@ abstract class FileStreamSinkSuite extends StreamTest {
         }
 
         import PendingCommitFilesTrackingManifestFileCommitProtocol._
-        val outputFileNames = Files.walk(outputDir.toPath).iterator().asScala
-          .filter(_.toString.endsWith(".parquet"))
-          .map(_.getFileName.toString)
-          .toSet
+        import java.nio.file.{Path, _}
+        val outputFileNames = scala.collection.mutable.Set.empty[String]
+        Files.walkFileTree(
+          outputDir.toPath,
+          new SimpleFileVisitor[Path] {
+            override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
+              val fileName = file.getFileName.toString
+              if (fileName.endsWith(".parquet")) outputFileNames += fileName
+              FileVisitResult.CONTINUE
+            }
+            override def visitFileFailed(file: Path, exc: IOException): FileVisitResult = {
+              exc match {
+                case _: NoSuchFileException =>
+                  FileVisitResult.CONTINUE
+                case _ =>
+                  FileVisitResult.TERMINATE
+              }
+            }
+          })
         val trackingFileNames = tracking.map(SparkPath.fromUrlString(_).toPath.getName).toSet
 
         // there would be possible to have race condition:
@@ -776,7 +792,7 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
     // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
     // been inferred
     val table = df.queryExecution.analyzed.collect {
-      case DataSourceV2Relation(table: FileTable, _, _, _, _) => table
+      case ExtractV2Table(table: FileTable) => table
     }
     assert(table.size === 1)
     assert(table.head.fileIndex.isInstanceOf[MetadataLogFileIndex])

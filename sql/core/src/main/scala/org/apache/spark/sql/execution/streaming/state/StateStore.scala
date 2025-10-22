@@ -799,9 +799,17 @@ trait SupportsFineGrainedReplay {
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param readOnly whether the state store should be read-only
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
+   * @return An instance of [[StateStore]] representing state data of the given version
    */
   def replayStateFromSnapshot(
-      snapshotVersion: Long, endVersion: Long, readOnly: Boolean = false): StateStore
+      snapshotVersion: Long,
+      endVersion: Long,
+      readOnly: Boolean = false,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version.
@@ -812,9 +820,22 @@ trait SupportsFineGrainedReplay {
    *
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @param snapshotVersionStateStoreCkptId state store checkpoint ID of the snapshot version
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
+   * @return An instance of [[ReadStateStore]] representing state data of the given version
    */
-  def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
-    new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion, readOnly = true))
+  def replayReadStateFromSnapshot(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): ReadStateStore = {
+    new WrappedReadStateStore(
+      replayStateFromSnapshot(
+        snapshotVersion,
+        endVersion,
+        readOnly = true,
+        snapshotVersionStateStoreCkptId,
+        endVersionStateStoreCkptId))
   }
 
   /**
@@ -828,13 +849,15 @@ trait SupportsFineGrainedReplay {
    * @param startVersion starting changelog version
    * @param endVersion ending changelog version
    * @param colFamilyNameOpt optional column family name to read from
+   * @param endVersionStateStoreCkptId state store checkpoint ID of the end version
    * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
    *         nested value: [[UnsafeRow]], batchId: [[Long]])
    */
   def getStateStoreChangeDataReader(
       startVersion: Long,
       endVersion: Long,
-      colFamilyNameOpt: Option[String] = None):
+      colFamilyNameOpt: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None):
     NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
 }
 

@@ -22,6 +22,7 @@ import java.time.ZoneOffset
 
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.sql.Row
@@ -229,8 +230,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // sure the test is configured correctly.
               assert(parts.size == 2)
               parts.foreach { part =>
-                val oneFooter =
-                  ParquetFooterReader.readFooter(hadoopConf, part.getPath, NO_FILTER)
+                val oneFooter = ParquetFooterReader.readFooter(
+                  HadoopInputFile.fromStatus(part, hadoopConf), NO_FILTER)
                 assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
                 val typeName = oneFooter
                   .getFileMetaData.getSchema.getColumns.get(0).getPrimitiveType.getPrimitiveTypeName

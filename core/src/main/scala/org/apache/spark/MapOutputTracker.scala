@@ -23,7 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolE
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
-import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.collection.mutable.{HashMap, ListBuffer, Map, Set}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
@@ -100,6 +100,12 @@ private class ShuffleStatus(
   val mapStatusesDeleted = new Array[MapStatus](numPartitions)
 
   /**
+   * Keep the indices of the Map tasks whose checksums are different across retries.
+   * Exposed for testing.
+   */
+  private[spark] val checksumMismatchIndices: Set[Int] = Set()
+
+  /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the
    * array is the shuffle partition id (reduce id). Each value in the array is the MergeStatus for
    * a shuffle partition, or null if not available. When push-based shuffle is enabled, this array
@@ -159,9 +165,11 @@ private class ShuffleStatus(
 
   /**
    * Register a map output. If there is already a registered location for the map output then it
-   * will be replaced by the new location.
+   * will be replaced by the new location. Returns true if the checksum in the new MapStatus is
+   * different from a previous registered MapStatus. Otherwise, returns false.
    */
-  def addMapOutput(mapIndex: Int, status: MapStatus): Unit = withWriteLock {
+  def addMapOutput(mapIndex: Int, status: MapStatus): Boolean = withWriteLock {
+    var isChecksumMismatch: Boolean = false
     val currentMapStatus = mapStatuses(mapIndex)
     if (currentMapStatus == null) {
       _numAvailableMapOutputs += 1
@@ -169,8 +177,19 @@ private class ShuffleStatus(
     } else {
       mapIdToMapIndex.remove(currentMapStatus.mapId)
     }
+    logDebug(s"Checksum of map output for task ${status.mapId} is ${status.checksumValue}")
+
+    val preStatus =
+      if (mapStatuses(mapIndex) != null) mapStatuses(mapIndex) else mapStatusesDeleted(mapIndex)
+    if (preStatus != null && preStatus.checksumValue != status.checksumValue) {
+      logInfo(s"Checksum of map output changes from ${preStatus.checksumValue} to " +
+        s"${status.checksumValue} for task ${status.mapId}.")
+      checksumMismatchIndices.add(mapIndex)
+      isChecksumMismatch = true
+    }
     mapStatuses(mapIndex) = status
     mapIdToMapIndex(status.mapId) = mapIndex
+    isChecksumMismatch
   }
 
   /**
@@ -838,7 +857,7 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Unit = {
+  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Boolean = {
     shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
   }
 

@@ -1206,9 +1206,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   test("SPARK-21145: Restarted queries create new provider instances") {
     try {
       val checkpointLocation = Utils.createTempDir().getAbsoluteFile
-      val spark = SparkSession.builder().master("local[2]").getOrCreate()
+      implicit val spark: SparkSession = SparkSession.builder().master("local[2]").getOrCreate()
       SparkSession.setActiveSession(spark)
-      implicit val sqlContext = spark.sqlContext
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
       import spark.implicits._
       val inputData = MemoryStream[Int]
@@ -1400,7 +1399,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val hadoopConf = new Configuration()
     hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
 
-    val e = intercept[AssertionError] {
+    val e = intercept[StateStoreCheckpointIdsNotSupported] {
       provider.init(
         StateStoreId(newDir(), Random.nextInt(), 0),
         keySchema,
@@ -1411,7 +1410,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         hadoopConf)
     }
     assert(e.getMessage.contains(
-      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2"))
+      "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1"))
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {

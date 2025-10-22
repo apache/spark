@@ -135,13 +135,11 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                              if `t` was a permanent table when the current view was created, it
  *                              should still be a permanent table when resolving the current view,
  *                              even if a temp view `t` has been created.
- * @param isExecuteImmediate Whether the current plan is created by EXECUTE IMMEDIATE. Used when
- *                           resolving variables, as SQL Scripting local variables should not be
- *                           visible from EXECUTE IMMEDIATE.
  * @param outerPlan The query plan from the outer query that can be used to resolve star
  *                  expressions in a subquery.
  */
 case class AnalysisContext(
+    isDefault: Boolean = false,
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
@@ -155,7 +153,6 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None,
-    isExecuteImmediate: Boolean = false,
     collation: Option[String] = None,
 
     /**
@@ -179,7 +176,7 @@ case class AnalysisContext(
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
-    override def initialValue: AnalysisContext = AnalysisContext()
+    override def initialValue: AnalysisContext = AnalysisContext(isDefault = true)
   }
 
   def get: AnalysisContext = value.get()
@@ -205,36 +202,30 @@ object AnalysisContext {
       originContext.maxNestedViewDepth
     }
     val context = AnalysisContext(
-      viewDesc.viewCatalogAndNamespace,
-      originContext.nestedViewDepth + 1,
-      maxNestedViewDepth,
-      originContext.relationCache,
-      viewDesc.viewReferredTempViewNames,
-      mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
-      viewDesc.viewReferredTempVariableNames,
-      isExecuteImmediate = originContext.isExecuteImmediate,
+      isDefault = false,
+      catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
+      nestedViewDepth = originContext.nestedViewDepth + 1,
+      maxNestedViewDepth = maxNestedViewDepth,
+      relationCache = originContext.relationCache,
+      referredTempViewNames = viewDesc.viewReferredTempViewNames,
+      referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
+      referredTempVariableNames = viewDesc.viewReferredTempVariableNames,
       collation = viewDesc.collation)
     set(context)
     try f finally { set(originContext) }
   }
 
-  def withExecuteImmediateContext[A](f: => A): A = {
-    val originContext = value.get()
-    val context = originContext.copy(isExecuteImmediate = true)
-
-    set(context)
-    try f finally { set(originContext) }
-  }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
     reset()
+    set(get.copy(isDefault = false))
     try f finally { set(originContext) }
   }
 
   def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(outerPlan = Some(outerPlan))
+    val context = originContext.copy(isDefault = false, outerPlan = Some(outerPlan))
     set(context)
     try f finally { set(originContext) }
   }
@@ -320,13 +311,21 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     if (plan.analyzed) {
       plan
     } else {
-      AnalysisContext.reset()
-      try {
-        AnalysisHelper.markInAnalyzer {
-          HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
-        }
-      } finally {
+      if (AnalysisContext.get.isDefault) {
         AnalysisContext.reset()
+        try {
+          AnalysisHelper.markInAnalyzer {
+            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
+          }
+        } finally {
+          AnalysisContext.reset()
+        }
+      } else {
+        AnalysisContext.withNewAnalysisContext {
+          AnalysisHelper.markInAnalyzer {
+            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
+          }
+        }
       }
     }
   }
@@ -422,6 +421,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       WindowsSubstitution,
       EliminateUnions,
       EliminateLazyExpression),
+    Batch("Apply Limit All", Once, ApplyLimitAll),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -495,10 +495,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteMergeIntoTable ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
-      new SubstituteExecuteImmediate(
-        catalogManager,
-        resolveChild = executeSameContext,
-        checkAnalysis = checkAnalysis) ::
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
@@ -1802,8 +1798,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
 
-      // Pass for Execute Immediate as arguments will be resolved by [[SubstituteExecuteImmediate]].
-      case e : ExecuteImmediateQuery => e
 
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
@@ -1945,7 +1939,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               f1.nameParts == Seq("count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
-              case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
+              case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
                 throw QueryCompilationErrors
                   .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
               case _ => // do nothing
@@ -2360,7 +2354,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val inputType = extractInputType(args)
         val bound = unbound.bind(inputType)
         validateParameterModes(bound)
-        val rearrangedArgs = NamedParametersSupport.defaultRearrange(bound, args)
+        val rearrangedArgs =
+          NamedParametersSupport.defaultRearrange(bound, args, SQLConf.get.resolver)
         Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
     }
 
@@ -3193,7 +3188,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   unrequiredChildIndex = Nil,
                   outer = outer,
                   qualifier = None,
-                  generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
+                  generatorOutput = GeneratorResolution.makeGeneratorOutput(generator, names),
                   child)
                 (Some(g), res._2 ++ g.nullableOutput)
               case other =>
@@ -3241,28 +3236,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         if (g.generator.children.exists(ExtractGenerator.hasGenerator)) {
           throw QueryCompilationErrors.nestedGeneratorError(g.generator)
         }
-        g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
-      }
-    }
-
-    /**
-     * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
-     * names is empty names are assigned from field names in generator.
-     */
-    private[analysis] def makeGeneratorOutput(
-        generator: Generator,
-        names: Seq[String]): Seq[Attribute] = {
-      val elementAttrs = DataTypeUtils.toAttributes(generator.elementSchema)
-
-      if (names.length == elementAttrs.length) {
-        names.zip(elementAttrs).map {
-          case (name, attr) => attr.withName(name)
-        }
-      } else if (names.isEmpty) {
-        elementAttrs
-      } else {
-        throw QueryCompilationErrors.aliasesNumberNotMatchUDTFOutputError(
-          elementAttrs.size, names.mkString(","))
+        g.copy(generatorOutput =
+          GeneratorResolution.makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
       }
     }
   }

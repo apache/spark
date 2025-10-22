@@ -1687,6 +1687,111 @@ class ClientE2ETestSuite
       assert(df.count() == 100)
     }
   }
+
+  test("SPARK-52930: the nullability of arrays should be preserved using typedlit") {
+    val arrays = Seq(
+      (typedlit(Array[Int]()), false),
+      (typedlit(Array[Int](1)), false),
+      (typedlit(Array[Integer]()), true),
+      (typedlit(Array[Integer](1)), true))
+    for ((array, containsNull) <- arrays) {
+      val df = spark.sql("select 1").select(array)
+      df.createOrReplaceTempView("test_array_nullability")
+      val schema = spark.sql("select * from test_array_nullability").schema
+      assert(schema.fields.head.dataType.asInstanceOf[ArrayType].containsNull === containsNull)
+    }
+  }
+
+  test("SPARK-52930: the nullability of map values should be preserved using typedlit") {
+    val maps = Seq(
+      (typedlit(Map[String, Int]()), false),
+      (typedlit(Map[String, Int]("a" -> 1)), false),
+      (typedlit(Map[String, Integer]()), true),
+      (typedlit(Map[String, Integer]("a" -> 1)), true))
+    for ((map, valueContainsNull) <- maps) {
+      val df = spark.sql("select 1").select(map)
+      df.createOrReplaceTempView("test_map_nullability")
+      val schema = spark.sql("select * from test_map_nullability").schema
+      assert(
+        schema.fields.head.dataType.asInstanceOf[MapType].valueContainsNull === valueContainsNull)
+    }
+  }
+
+  test("SPARK-54043: DirectShufflePartitionID should be supported") {
+    val df = spark.range(100).withColumn("expected_p_id", col("id") % 10)
+    val repartitioned = df.repartitionById(10, col("expected_p_id").cast("int"))
+    val result = repartitioned.withColumn("actual_p_id", spark_partition_id())
+
+    assert(result.filter(col("expected_p_id") =!= col("actual_p_id")).count() == 0)
+
+    val negativeDf = spark.range(10).toDF("id")
+    val negativeRepartitioned = negativeDf.repartitionById(10, (col("id") - 5).cast("int"))
+    val negativeResult =
+      negativeRepartitioned
+        .withColumn("actual_p_id", spark_partition_id())
+        .collect()
+
+    assert(negativeResult.forall(row => {
+      val actualPartitionId = row.getAs[Int]("actual_p_id")
+      val id = row.getAs[Long]("id")
+      val expectedPartitionId = {
+        val mod = (id - 5) % 10
+        if (mod < 0) mod + 10 else mod
+      }.toInt
+      actualPartitionId == expectedPartitionId
+    }))
+
+    val nullDf = spark.range(10).toDF("id")
+    val nullExpr = when(col("id") < 5, col("id")).otherwise(lit(null)).cast("int")
+    val nullRepartitioned = nullDf.repartitionById(10, nullExpr)
+    val nullResult = nullRepartitioned.withColumn("actual_p_id", spark_partition_id()).collect()
+
+    val nullRows = nullResult.filter(_.getAs[Long]("id") >= 5)
+    assert(nullRows.forall(_.getAs[Int]("actual_p_id") == 0))
+  }
+
+  test("SPARK-53490: struct type in observed metrics") {
+    val observation = Observation("struct")
+    spark
+      .range(10)
+      .observe(observation, struct(count(lit(1)).as("rows"), max("id").as("maxid")).as("struct"))
+      .collect()
+    val expectedSchema =
+      StructType(Seq(StructField("rows", LongType), StructField("maxid", LongType)))
+    val expectedValue = new GenericRowWithSchema(Array(10, 9), expectedSchema)
+    assert(observation.get.size === 1)
+    assert(observation.get.contains("struct"))
+    assert(observation.get("struct") === expectedValue)
+  }
+
+  test("SPARK-53490: array type in observed metrics") {
+    val observation = Observation("array")
+    spark
+      .range(10)
+      .observe(observation, array(count(lit(1))).as("array"))
+      .collect()
+    assert(observation.get.size === 1)
+    assert(observation.get.contains("array"))
+    assert(observation.get("array") === Array(10))
+  }
+
+  test("SPARK-53490: map type in observed metrics") {
+    val observation = Observation("map")
+    spark
+      .range(10)
+      .observe(observation, map(lit("count"), count(lit(1))).as("map"))
+      .collect()
+    assert(observation.get.size === 1)
+    assert(observation.get.contains("map"))
+    assert(observation.get("map") === Map("count" -> 10))
+  }
+
+  test("SPARK-53553: null value handling in literals") {
+    val df = spark.sql("select 1").select(typedlit(Array[Integer](1, null)).as("arr_col"))
+    val result = df.collect()
+    assert(result.length === 1)
+    assert(result(0).getAs[Array[Integer]]("arr_col") === Array(1, null))
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)

@@ -167,6 +167,10 @@ class ErrorClassesReader:
             raise ValueError(f"Cannot find main error class '{main_error_class}'")
 
         main_message_template = "\n".join(main_error_class_info_map["message"])
+        if "breaking_change_info" in main_error_class_info_map:
+            main_message_template += " " + "\n".join(
+                main_error_class_info_map["breaking_change_info"]["migration_message"]
+            )
 
         has_sub_class = len_error_classes == 2
 
@@ -182,9 +186,42 @@ class ErrorClassesReader:
                 raise ValueError(f"Cannot find sub error class '{sub_error_class}'")
 
             sub_message_template = "\n".join(sub_error_class_info_map["message"])
+            if "breaking_change_info" in sub_error_class_info_map:
+                sub_message_template += " " + "\n".join(
+                    sub_error_class_info_map["breaking_change_info"]["migration_message"]
+                )
             message_template = main_message_template + " " + sub_message_template
 
         return message_template
+
+    def get_breaking_change_info(self, errorClass: Optional[str]) -> Optional[Dict[str, Any]]:
+        """
+        Returns the breaking change info for an error if it is present.
+        """
+        if errorClass is None:
+            return None
+        error_classes = errorClass.split(".")
+        len_error_classes = len(error_classes)
+        assert len_error_classes in (1, 2)
+
+        main_error_class = error_classes[0]
+        if main_error_class in self.error_info_map:
+            main_error_class_info_map = self.error_info_map[main_error_class]
+        else:
+            raise ValueError(f"Cannot find main error class '{main_error_class}'")
+
+        if len_error_classes == 2:
+            sub_error_class = error_classes[1]
+            main_error_class_subclass_info_map = main_error_class_info_map["sub_class"]
+            if sub_error_class in main_error_class_subclass_info_map:
+                sub_error_class_info_map = main_error_class_subclass_info_map[sub_error_class]
+            else:
+                raise ValueError(f"Cannot find sub error class '{sub_error_class}'")
+            if "breaking_change_info" in sub_error_class_info_map:
+                return sub_error_class_info_map["breaking_change_info"]
+        if "breaking_change_info" in main_error_class_info_map:
+            return main_error_class_info_map["breaking_change_info"]
+        return None
 
 
 def _capture_call_site(depth: int) -> str:

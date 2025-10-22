@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 
 class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -45,17 +45,65 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  override def visitStringLit(ctx: StringLitContext): Token = {
-    if (ctx != null) {
-      if (ctx.STRING_LITERAL != null) {
-        ctx.STRING_LITERAL.getSymbol
-      } else {
-        ctx.DOUBLEQUOTED_STRING.getSymbol
-      }
-    } else {
-      null
-    }
+  override def visitStringLiteralValue(ctx: StringLiteralValueContext): Token =
+    Option(ctx).map(_.STRING_LITERAL.getSymbol).orNull
+
+  override def visitDoubleQuotedStringLiteralValue(
+      ctx: DoubleQuotedStringLiteralValueContext): Token =
+    Option(ctx).map(_.DOUBLEQUOTED_STRING.getSymbol).orNull
+
+  override def visitIntegerVal(ctx: IntegerValContext): Token =
+    Option(ctx).map(_.INTEGER_VALUE.getSymbol).orNull
+
+  override def visitStringLiteralInContext(ctx: StringLiteralInContextContext): Token = {
+    visit(ctx.stringLitWithoutMarker).asInstanceOf[Token]
   }
+
+  override def visitNamedParameterMarkerRule(ctx: NamedParameterMarkerRuleContext): Token = {
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
+  }
+
+  override def visitPositionalParameterMarkerRule(
+      ctx: PositionalParameterMarkerRuleContext): Token = {
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
+  }
+
+  override def visitNamedParameterLiteral(ctx: NamedParameterLiteralContext): AnyRef = {
+    // Parameter markers are not allowed in data type definitions
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
+  }
+
+  override def visitPosParameterLiteral(ctx: PosParameterLiteralContext): AnyRef = {
+    // Parameter markers are not allowed in data type definitions
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
+  }
+
+  /**
+   * Gets the integer value from an IntegerValueContext after parameter replacement. Asserts that
+   * parameter markers have been substituted before reaching DataTypeAstBuilder.
+   *
+   * @param ctx
+   *   The IntegerValueContext to extract the integer from
+   * @return
+   *   The integer value
+   */
+  protected def getIntegerValue(ctx: IntegerValueContext): Int = {
+    assert(
+      !ctx.isInstanceOf[ParameterIntegerValueContext],
+      "Parameter markers should be substituted before DataTypeAstBuilder processes the " +
+        s"parse tree. Found unsubstituted parameter: ${ctx.getText}")
+    ctx.getText.toInt
+  }
+
+  /**
+   * Visit a stringLit context by delegating to the appropriate labeled visitor.
+   */
+  def visitStringLit(ctx: StringLitContext): Token =
+    Option(ctx).map(visit(_).asInstanceOf[Token]).orNull
 
   /**
    * Create a multi-part identifier.
@@ -118,6 +166,30 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
             currentCtx.precision.getText.toInt
           }
           TimeType(precision)
+        case GEOGRAPHY =>
+          // Unparameterized geometry type isn't supported and will be caught by the default branch.
+          // Here, we only handle the parameterized GEOGRAPHY type syntax, which comes in two forms:
+          if (currentCtx.any != null) {
+            // The special parameterized GEOGRAPHY type syntax uses a single "ANY" string value.
+            // This implies a mixed GEOGRAPHY type, with potentially different SRIDs across rows.
+            GeographyType("ANY")
+          } else {
+            // The explicitly parameterzied GEOGRAPHY syntax uses a specified integer SRID value.
+            // This implies a fixed GEOGRAPHY type, with a single fixed SRID value across all rows.
+            GeographyType(currentCtx.srid.getText.toInt)
+          }
+        case GEOMETRY =>
+          // Unparameterized geometry type isn't supported and will be caught by the default branch.
+          // Here, we only handle the parameterized GEOMETRY type syntax, which comes in two forms:
+          if (currentCtx.any != null) {
+            // The special parameterized GEOMETRY type syntax uses a single "ANY" string value.
+            // This implies a mixed GEOMETRY type, with potentially different SRIDs across rows.
+            GeometryType("ANY")
+          } else {
+            // The explicitly parameterzied GEOMETRY type syntax has a single integer SRID value.
+            // This implies a fixed GEOMETRY type, with a single fixed SRID value across all rows.
+            GeometryType(currentCtx.srid.getText.toInt)
+          }
       }
     } else if (typeCtx.trivialPrimitiveType != null) {
       // This is a primitive type without parameters, e.g. BOOLEAN, TINYINT, etc.
@@ -138,7 +210,11 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       }
     } else {
       val badType = typeCtx.unsupportedType.getText
-      val params = typeCtx.INTEGER_VALUE().asScala.toList
+      val params = typeCtx
+        .integerValue()
+        .asScala
+        .map(getIntegerValue(_).toString)
+        .toList
       val dtStr =
         if (params.nonEmpty) s"$badType(${params.mkString(",")})"
         else badType
