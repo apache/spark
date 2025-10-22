@@ -208,25 +208,22 @@ class ApplyInPandasTestsMixin:
         assert_frame_equal(expected, result)
 
     def test_register_grouped_map_udf(self):
-        with self.quiet():
-            self.check_register_grouped_map_udf()
+        with self.quiet(), self.temp_func("foo_udf"):
+            foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
 
-    def check_register_grouped_map_udf(self):
-        foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
+            with self.assertRaises(PySparkTypeError) as pe:
+                self.spark.catalog.registerFunction("foo_udf", foo_udf)
 
-        with self.assertRaises(PySparkTypeError) as pe:
-            self.spark.catalog.registerFunction("foo_udf", foo_udf)
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="INVALID_UDF_EVAL_TYPE",
-            messageParameters={
-                "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
-                "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
-                "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
-                "SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF"
-            },
-        )
+            self.check_error(
+                exception=pe.exception,
+                errorClass="INVALID_UDF_EVAL_TYPE",
+                messageParameters={
+                    "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
+                    "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
+                    "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
+                    "SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF"
+                },
+            )
 
     def test_decorator(self):
         df = self.data

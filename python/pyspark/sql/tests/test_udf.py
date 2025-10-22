@@ -216,7 +216,7 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(tuple(row), (2,))
 
     def test_multiple_udfs(self):
-        with self.temp_func("double_int"):
+        with self.temp_func("double_int", "add_int"):
             self.spark.catalog.registerFunction("double_int", lambda x: x * 2, IntegerType())
             [row] = self.spark.sql("SELECT double_int(1), double_int(2)").collect()
             self.assertEqual(tuple(row), (2, 4))
@@ -224,6 +224,7 @@ class BaseUDFTestsMixin(object):
                 "SELECT double_int(double_int(1)), double_int(double_int(2) + 2)"
             ).collect()
             self.assertEqual(tuple(row), (4, 12))
+
             self.spark.catalog.registerFunction("add_int", lambda x, y: x + y, IntegerType())
             [row] = self.spark.sql(
                 "SELECT double_int(add_int(1, 2)), add_int(double_int(2), 1)"
