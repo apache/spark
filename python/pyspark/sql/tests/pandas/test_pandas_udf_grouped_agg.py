@@ -522,17 +522,23 @@ class GroupedAggPandasUDFTestsMixin:
             df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
 
     def test_register_vectorized_udf_basic(self):
-        sum_pandas_udf = pandas_udf(
-            lambda v: v.sum(), "integer", PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
-        )
+        with self.temp_func("sum_pandas_udf"):
+            sum_pandas_udf = pandas_udf(
+                lambda v: v.sum(), "integer", PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+            )
 
-        self.assertEqual(sum_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
-        group_agg_pandas_udf = self.spark.udf.register("sum_pandas_udf", sum_pandas_udf)
-        self.assertEqual(group_agg_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
-        q = "SELECT sum_pandas_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
-        actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
-        expected = [1, 5]
-        self.assertEqual(actual, expected)
+            self.assertEqual(sum_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+            group_agg_pandas_udf = self.spark.udf.register("sum_pandas_udf", sum_pandas_udf)
+            self.assertEqual(
+                group_agg_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+            )
+            q = """
+                SELECT sum_pandas_udf(v1)
+                FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2
+                """
+            actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
+            expected = [1, 5]
+            self.assertEqual(actual, expected)
 
     def test_grouped_with_empty_partition(self):
         data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
@@ -551,10 +557,10 @@ class GroupedAggPandasUDFTestsMixin:
             return v.max()
 
         df = self.spark.range(0, 100)
-        self.spark.udf.register("max_udf", max_udf)
 
-        with self.tempView("table"):
+        with self.tempView("table"), self.temp_func("max_udf"):
             df.createTempView("table")
+            self.spark.udf.register("max_udf", max_udf)
 
             agg1 = df.agg(max_udf(df["id"]))
             agg2 = self.spark.sql("select max_udf(id) from table")
@@ -579,7 +585,7 @@ class GroupedAggPandasUDFTestsMixin:
         df = self.data
         weighted_mean = self.pandas_agg_weighted_mean_udf
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -604,7 +610,7 @@ class GroupedAggPandasUDFTestsMixin:
         df = self.data
         weighted_mean = self.pandas_agg_weighted_mean_udf
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -644,7 +650,7 @@ class GroupedAggPandasUDFTestsMixin:
 
             return np.average(kwargs["v"], weights=kwargs["w"])
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -684,7 +690,7 @@ class GroupedAggPandasUDFTestsMixin:
         def biased_sum(v, w=None):
             return v.sum() + (w.sum() if w is not None else 100)
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("biased_sum"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("biased_sum", biased_sum)
 
