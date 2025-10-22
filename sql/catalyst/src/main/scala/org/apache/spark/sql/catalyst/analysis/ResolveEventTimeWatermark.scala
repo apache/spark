@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 
 /**
  * Resolve [[UnresolvedEventTimeWatermark]] to [[EventTimeWatermark]].
@@ -29,6 +31,14 @@ object ResolveEventTimeWatermark extends Rule[LogicalPlan] {
     _.containsPattern(TreePattern.UNRESOLVED_EVENT_TIME_WATERMARK), ruleId) {
 
     case u: UnresolvedEventTimeWatermark if u.eventTimeColExpr.resolved && u.childrenResolved =>
+      if (u.eventTimeColExpr.metadata.contains(AUTO_GENERATED_ALIAS) &&
+          u.eventTimeColExpr.metadata.getString(AUTO_GENERATED_ALIAS) == "true") {
+        throw new AnalysisException(
+          errorClass = "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE",
+          messageParameters = Map("sqlExpr" -> u.eventTimeColExpr.sql)
+        )
+      }
+
       val uuid = java.util.UUID.randomUUID()
 
       val attrRef = u.eventTimeColExpr.toAttribute

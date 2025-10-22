@@ -2058,18 +2058,22 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("watermark clause - table & expression without alias") {
-    val sql =
+    assertEqual(
       """
         |SELECT *
         |FROM testData
         |WATERMARK timestamp_seconds(value) DELAY OF INTERVAL 10 seconds AS tbl
         |WHERE a > 1
-        |""".stripMargin
-    checkError(
-      parseException(sql),
-      condition = "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE",
-      sqlState = "42000",
-      parameters = Map("sqlExpr" -> "timestamp_seconds(value)")
+        |""".stripMargin,
+      table("testData")
+        .as("tbl")
+        .unresolvedWithWatermark(
+          UnresolvedAlias(
+            UnresolvedFunction(
+              Seq("timestamp_seconds"), Seq(UnresolvedAttribute("value")), isDistinct = false)),
+          IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
+        .where($"a" > 1)
+        .select(UnresolvedStar(None))
     )
   }
 

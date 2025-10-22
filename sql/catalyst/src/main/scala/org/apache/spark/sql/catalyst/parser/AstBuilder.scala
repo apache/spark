@@ -2093,11 +2093,7 @@ class AstBuilder extends DataTypeAstBuilder
           messageParameters = Map()
         )
       case e: NamedExpression => e
-      case _ =>
-        throw new AnalysisException(
-          errorClass = "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE",
-          messageParameters = Map("sqlExpr" -> expression.sql)
-        )
+      case e => UnresolvedAlias(e)
     }
 
     val delayInterval = visitInterval(ctx.delay)
