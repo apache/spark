@@ -1114,6 +1114,7 @@ class ScanDefinedColumnarSupport extends TestingV2Source {
 
 }
 
+
 // This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
 // tests still pass.
 class SimpleDataSourceV2 extends TestingV2Source {
