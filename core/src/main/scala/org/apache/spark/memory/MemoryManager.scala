@@ -244,7 +244,7 @@ private[spark] abstract class MemoryManager(
    * by looking at the number of cores available to the process, and the total amount of memory,
    * and then divide it by a factor of safety.
    *
-   * SPARK-37593 If we are using G1GC or ZGC, it's better to take the LONG_ARRAY_OFFSET
+   * SPARK-37593 If we are using G1GC, it's better to take the LONG_ARRAY_OFFSET
    * into consideration so that the requested memory size is power of 2
    * and can be divided by G1 heap region size to reduce memory waste within one G1 region.
    */
