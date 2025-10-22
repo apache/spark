@@ -3990,7 +3990,6 @@ def make_timestamp(
     mins: Optional["ColumnOrName"] = None,
     secs: Optional["ColumnOrName"] = None,
     timezone: Optional["ColumnOrName"] = None,
-    *,
     date: Optional["ColumnOrName"] = None,
     time: Optional["ColumnOrName"] = None,
 ) -> Column:

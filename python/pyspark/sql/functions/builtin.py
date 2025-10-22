@@ -24816,12 +24816,14 @@ def make_timestamp(
 
 
 @overload
-def make_timestamp(date: "ColumnOrName", time: "ColumnOrName") -> Column:
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def make_timestamp(date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName") -> Column:
+def make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+) -> Column:
     ...
 
 
