@@ -86,6 +86,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveCollationName" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveDefaultColumns" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveEventTimeWatermark" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExecuteImmediate" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExpressionsWithNamePlaceholders" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveGroupByAll" ::
