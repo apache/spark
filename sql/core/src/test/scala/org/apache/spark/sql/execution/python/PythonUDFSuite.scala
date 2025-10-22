@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Dataset, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.functions.{array, avg, col, count, transform}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
@@ -155,5 +155,18 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       .agg(avg("id"), pythonUDF(col("value")))
 
     checkAnswer(df, Row(0, 0.0, 0))
+  }
+
+  test("profile test") {
+    assume(shouldTestPythonUDFs)
+    val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
+      .agg(pythonTestUDF(base("a") + 1), pythonTestUDF(count(base("b"))))
+    df2.collect()
+    val df3 = spark.readStream.format(
+      "org.apache.spark.sql.execution.streaming.sources.PythonProfileSourceProvider").load()
+    val q = df3.writeStream.foreachBatch((df: Dataset[Row], batchId: Long) => {
+      df.show(truncate = false)
+    }).start()
+    q.awaitTermination()
   }
 }

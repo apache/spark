@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PythonProfileSourceProvider extends SimpleTableProvider with DataSourceRegister with Logging {
@@ -40,7 +40,8 @@ class PythonProfileTable()
   override def name(): String = s"PythonProfile"
 
   override def schema(): StructType = {
-    StructType(StructField("key", MapType(keyType = StringType, valueType = StringType)) :: Nil)
+    StructType(StructField(
+      "data", ArrayType(MapType(keyType = StringType, valueType = StringType))) :: Nil)
   }
 
   override def capabilities(): util.Set[TableCapability] = {

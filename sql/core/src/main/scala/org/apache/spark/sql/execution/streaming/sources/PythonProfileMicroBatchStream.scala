@@ -29,11 +29,10 @@ import net.razorvine.pickle.Unpickler
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.execution.streaming.runtime.LongOffset
-import org.apache.spark.unsafe.types.UTF8String
 
 
 class PythonProfileMicroBatchStream
@@ -119,7 +118,9 @@ class PythonProfileMicroBatchStream
         }
 
         override def get(): InternalRow = {
-          InternalRow.fromSeq(stats(currentIdx).asScala.toSeq.map(_.asScala))
+          InternalRow.fromSeq(
+            CatalystTypeConverters.convertToCatalyst(
+              stats(currentIdx).asScala.toSeq.map(_.asScala)) :: Nil)
         }
 
         override def close(): Unit = {}

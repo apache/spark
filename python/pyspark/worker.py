@@ -3180,6 +3180,7 @@ def write_profile(outfile):
             stats.extend([{str(k): str(v) for k, v in d.items()} for d in data])
         pickled = pickle.dumps(stats)
         write_with_length(pickled, outfile)
+        outfile.flush()
         time.sleep(1)
 
 

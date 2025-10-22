@@ -42,37 +42,33 @@ case class PythonWorker(
     channel: SocketChannel,
     extraChannel: Option[SocketChannel] = None) {
 
-  private[this] var selectors: Seq[Selector] = Seq.empty
-  private[this] var selectionKeys: Seq[SelectionKey] = Seq.empty
+  private[this] var selectorOpt: Option[Selector] = None
+  private[this] var selectionKeyOpt: Option[SelectionKey] = None
 
-  private def closeSelectors(): Unit = {
-    selectionKeys.foreach(_.cancel())
-    selectors.foreach(_.close())
-    selectors = Seq.empty
-    selectionKeys = Seq.empty
+  def selector: Selector = selectorOpt.orNull
+  def selectionKey: SelectionKey = selectionKeyOpt.orNull
+
+  private def closeSelector(): Unit = {
+    selectionKeyOpt.foreach(_.cancel())
+    selectorOpt.foreach(_.close())
   }
 
   def refresh(): this.type = synchronized {
-    closeSelectors()
-
-    val channels = Seq(Some(channel), extraChannel).flatten
-    val (selList, keyList) = channels.map { ch =>
-      if (ch.isBlocking) {
-        (None, None)
-      } else {
-        val selector = Selector.open()
-        val key = ch.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE)
-        (Some(selector), Some(key))
-      }
-    }.unzip
-
-    selectors = selList.flatten
-    selectionKeys = keyList.flatten
+    closeSelector()
+    if (channel.isBlocking) {
+      selectorOpt = None
+      selectionKeyOpt = None
+    } else {
+      val selector = Selector.open()
+      selectorOpt = Some(selector)
+      selectionKeyOpt =
+        Some(channel.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE))
+    }
     this
   }
 
   def stop(): Unit = synchronized {
-    closeSelectors()
+    closeSelector()
     Option(channel).foreach(_.close())
     extraChannel.foreach(_.close())
   }
@@ -201,7 +197,7 @@ private[spark] class PythonWorkerFactory(
 
       authHelper.authToServer(mainChannel)
       mainChannel.configureBlocking(false)
-      extraChannel.foreach(_.configureBlocking(false))
+      extraChannel.foreach(_.configureBlocking(true))
 
       val worker = PythonWorker(mainChannel, extraChannel)
       daemonWorkers.put(worker, processHandle)

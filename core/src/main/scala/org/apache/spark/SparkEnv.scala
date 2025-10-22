@@ -92,9 +92,10 @@ class SparkEnv (
    * @param daemonModule The daemon module name to reuse the worker, e.g., "pyspark.daemon".
    * @param envVars The environment variables for the worker.
    */
-  private case class PythonWorkersKey(
+  case class PythonWorkersKey(
       pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
-  private[sql] val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
+  val pythonWorkers: mutable.Map[PythonWorkersKey, PythonWorkerFactory] =
+    mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
