@@ -2827,12 +2827,10 @@ object TryMakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
     val numArgs = expressions.length
     if (numArgs == 2 || numArgs == 3) {
       // Overload for: date, time[, timezone].
-      TryEval(
-        MakeTimestampFromDateTime(
-          expressions(0),
-          Some(expressions(1)),
-          expressions.drop(2).lastOption
-        )
+      MakeTimestampFromDateTime(
+        expressions(0),
+        Some(expressions(1)),
+        expressions.drop(2).lastOption
       )
     } else if (numArgs == 6 || numArgs == 7) {
       MakeTimestamp(
