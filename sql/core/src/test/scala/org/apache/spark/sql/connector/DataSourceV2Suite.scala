@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.{Filter, GreaterThan, LessThan}
+import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -980,9 +980,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("SPARK-53809: scan canonicalization") {
-    val df = spark.read.format(classOf[CanonicalizedScanDataSourceV2].getName).load()
+    val df = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
 
-    val q1 = df.select($"i", $"j").where($"i" > 1 && $"i" < 8)
+    val q1 = df.select($"i", $"j")
     val q2 = q1
 
     val optimized1 = q1.queryExecution.optimizedPlan
@@ -1004,7 +1004,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     // Apply the rule to q1 to mimic that QO may generate different output ordering
     // for subqueries on a shared scan
     val optimized1Reversed = reverseOutputRule(optimized1)
-
+    // The two plans are not identified as equal, but their canonicalized forms are equal
     assert(!optimized1Reversed.equals(optimized2))
     assert(optimized1.canonicalized == optimized2.canonicalized)
 
@@ -1014,7 +1014,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     val dsv2ScanRelation2 = optimized2.collect {
       case d: DataSourceV2ScanRelation => d
     }.head
-
+    // Check the effectiveness of canonicalization on DataSourceV2ScanRelation
     assert(!dsv2ScanRelation1.equals(dsv2ScanRelation2))
     assert(dsv2ScanRelation1.canonicalized == dsv2ScanRelation2.canonicalized)
   }
@@ -1113,93 +1113,6 @@ class ScanDefinedColumnarSupport extends TestingV2Source {
   }
 
 }
-
-class CanonicalizedScanDataSourceV2 extends TestingV2Source {
-
-  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    TestingV2Source.schema
-  }
-
-  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
-    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new CanonicalizedScanBuilder()
-    }
-  }
-}
-
-class CanonicalizedScanBuilder extends ScanBuilder
-                               with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
-
-  var requiredSchema: StructType = TestingV2Source.schema
-  var filters = Array.empty[Filter]
-
-  override def build(): Scan = new ScanWithCanonicalization(requiredSchema, filters)
-
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    val (supported, unsupported) = filters.partition {
-      case GreaterThan("i", _: Int) => true
-      case LessThan("i", _: Int) => true
-      case _ => false
-    }
-    this.filters = supported
-    unsupported
-  }
-
-  override def pushedFilters(): Array[Filter] = filters
-
-  override def pruneColumns(requiredSchema: StructType): Unit = {
-    this.requiredSchema = requiredSchema
-  }
-}
-
-class ScanWithCanonicalization(readSchema: StructType, val filters: Array[Filter])
-  extends Scan with Batch {
-
-  override def readSchema(): StructType = readSchema
-
-  override def toBatch: Batch = this
-
-  override def equals(obj: Any): Boolean = {
-    obj match {
-      case that: ScanWithCanonicalization =>
-        this.readSchema == that.readSchema &&
-          this.filters.sortBy(_.hashCode()).sameElements(that.filters.sortBy(_.hashCode()))
-      case _ => false
-    }
-  }
-
-  override def hashCode(): Int = {
-    var result = readSchema.hashCode()
-    result = 31 * result + java.util.Arrays.hashCode(
-      filters.asInstanceOf[Array[AnyRef]])
-    result
-  }
-
-  override def planInputPartitions(): Array[InputPartition] = {
-    val lowerBound = filters.collectFirst {
-      case GreaterThan("i", v: Int) => v
-    }
-
-    val res = scala.collection.mutable.ArrayBuffer.empty[InputPartition]
-
-    if (lowerBound.isEmpty) {
-      res.append(RangeInputPartition(0, 5))
-      res.append(RangeInputPartition(5, 10))
-    } else if (lowerBound.get < 4) {
-      res.append(RangeInputPartition(lowerBound.get + 1, 5))
-      res.append(RangeInputPartition(5, 10))
-    } else if (lowerBound.get < 9) {
-      res.append(RangeInputPartition(lowerBound.get + 1, 10))
-    }
-
-    res.toArray
-  }
-
-  override def createReaderFactory(): PartitionReaderFactory = {
-    new AdvancedReaderFactory(readSchema)
-  }
-}
-
 
 // This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
 // tests still pass.
