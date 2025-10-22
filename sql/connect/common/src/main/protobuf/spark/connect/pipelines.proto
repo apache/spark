@@ -267,6 +267,8 @@ message SourceCodeLocation {
   optional string file_name = 1;
   // The specific line number that this pipeline source code is located at, if applicable.
   optional int32 line_number = 2;
+  // The path of the top-level pipeline file determined at runtime during pipeline initialization.
+  optional string definition_path = 3;
 
   // Reserved field for protocol extensions.
   // Used to support forward-compatibility by carrying additional fields
@@ -281,14 +283,13 @@ message PipelineQueryFunctionExecutionSignal {
   repeated string flow_names = 1;
 }
 
-// Contextual metadata used during pipeline analysis within Spark Connect queries.
+// Metadata providing context about the pipeline during Spark Connect query analysis.
 message PipelineAnalysisContext {
   // Unique identifier of the dataflow graph associated with this pipeline.
   optional string dataflow_graph_id = 1;
-
-  // Defines the path assigned at runtime when the pipeline initializes
+  // The path of the top-level pipeline file determined at runtime during pipeline initialization.
   optional string definition_path = 2;
 
   // Reserved field for protocol extensions.
-  google.protobuf.Any extension = 999;
+  repeated google.protobuf.Any extension = 999;
 }
