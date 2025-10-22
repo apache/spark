@@ -24827,6 +24827,7 @@ def make_timestamp(
     ...
 
 
+@_try_remote_functions
 def make_timestamp(
     years: Optional["ColumnOrName"] = None,
     months: Optional["ColumnOrName"] = None,
