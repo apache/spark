@@ -36,7 +36,11 @@ public final class GeographyVal implements Comparable<GeographyVal>, Serializabl
   }
 
   public static GeographyVal fromBytes(byte[] bytes) {
-    return new GeographyVal(bytes);
+    if (bytes == null) {
+      return null;
+    } else {
+      return new GeographyVal(bytes);
+    }
   }
 
   // Comparison is not yet supported for GEOGRAPHY.

@@ -20,6 +20,7 @@ package org.apache.spark.unsafe.types;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class GeographyValSuite {
 
@@ -30,6 +31,14 @@ public class GeographyValSuite {
     GeographyVal geographyVal = GeographyVal.fromBytes(bytes);
     assertNotNull(geographyVal);
     assertArrayEquals(bytes, geographyVal.getBytes());
+  }
+
+  @Test
+  public void roundNullHandling() {
+    // A simple null byte array to test null handling for GEOGRAPHY.
+    byte[] bytes = null;
+    GeographyVal geographyVal = GeographyVal.fromBytes(bytes);
+    assertNull(geographyVal);
   }
 
   @Test

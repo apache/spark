@@ -36,7 +36,11 @@ public final class GeometryVal implements Comparable<GeometryVal>, Serializable 
   }
 
   public static GeometryVal fromBytes(byte[] bytes) {
-    return new GeometryVal(bytes);
+    if (bytes == null) {
+      return null;
+    } else {
+      return new GeometryVal(bytes);
+    }
   }
 
   // Comparison is not yet supported for GEOMETRY.
