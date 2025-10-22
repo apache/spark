@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.write;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Interface that provides MERGE write operation summary.
+ * Provides an informational summary of the MERGE operation producing write.
  *
  * @since 4.1.0
  */

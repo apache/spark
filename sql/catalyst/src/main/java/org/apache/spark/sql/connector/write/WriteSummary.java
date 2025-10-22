@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.write;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * An interface that represents a summary of the write operation.
+ * An informational summary of the operation producing write.
  *
  * @since 4.1.0
  */

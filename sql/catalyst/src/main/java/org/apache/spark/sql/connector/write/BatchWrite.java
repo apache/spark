@@ -89,7 +89,7 @@ public interface BatchWrite {
   void commit(WriterCommitMessage[] messages);
 
   /**
-   * Commits this writing job with a list of commit messages and operation metrics.
+   * Commits this writing job with a list of commit messages and write summary.
    * <p>
    * If this method fails (by throwing an exception), this writing job is considered to to have been
    * failed, and {@link #abort(WriterCommitMessage[])} would be called. The state of the destination
@@ -103,9 +103,9 @@ public interface BatchWrite {
    * <p>
    * @param messages a list of commit messages from successful data writers, produced by
    *                 {@link DataWriter#commit()}.
-   * @param summary metrics collected in a best-effort from the query producing
-   *                         write. Currently supported metrics are provided through
-   *                         implementations of {@link WriteSummary}.
+   * @param summary an informational summary collected in a best-effort from the operation
+   *                producing write. Currently supported summary fields are provided through
+   *                implementations of {@link WriteSummary}.
    */
   default void commit(WriterCommitMessage[] messages, WriteSummary summary) {
     commit(messages);
