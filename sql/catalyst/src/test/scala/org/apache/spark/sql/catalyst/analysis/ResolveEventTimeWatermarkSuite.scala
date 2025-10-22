@@ -95,4 +95,26 @@ class ResolveEventTimeWatermarkSuite extends AnalysisTest {
         ).analyze
     )
   }
+
+  test("event time column expr deduces a new column but the name is not explicitly given") {
+    val plan = streamingRelation
+      .unresolvedWithWatermark(
+        UnresolvedAlias(
+          UnresolvedFunction(
+            Seq("timestamp_seconds"), Seq(UnresolvedAttribute("a")), isDistinct = false)
+        ),
+        new CalendarInterval(0, 0, 1000))
+
+    import org.apache.spark.sql.AnalysisException
+    val exc = intercept[AnalysisException] {
+      getAnalyzer.execute(plan)
+    }
+    checkError(
+      exc,
+      condition = "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE",
+      sqlState = "42000",
+      // The sqlExpr is updated to the auto generated alias
+      parameters = Map("sqlExpr" -> "timestamp_seconds(a) AS `timestamp_seconds(a)`")
+    )
+  }
 }
