@@ -627,7 +627,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         // The number of leaves in the trigger's logical plan should be same as the executed plan.
         require(
           q.lastExecution.logical.collectLeaves().length ==
-            q.lastExecution.executedPlan.collectLeaves().length)
+            StreamingQueryPlanTraverseHelper
+              .collectFromUnfoldedPlan(q.lastExecution.executedPlan) {
+                case n if n.children.isEmpty => n
+              }.length)
 
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)

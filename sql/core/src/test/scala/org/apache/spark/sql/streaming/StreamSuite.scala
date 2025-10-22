@@ -1116,7 +1116,7 @@ class StreamSuite extends StreamTest {
       )
       require(execPlan != null)
 
-      val localLimits = execPlan.collect {
+      val localLimits = StreamingQueryPlanTraverseHelper.collectFromUnfoldedPlan(execPlan) {
         case l: LocalLimitExec => l
         case l: StreamingLocalLimitExec => l
       }
