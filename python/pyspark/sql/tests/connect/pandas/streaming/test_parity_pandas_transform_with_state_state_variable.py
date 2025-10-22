@@ -16,25 +16,25 @@
 #
 import unittest
 
-from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import (
-    TransformWithStateInPandasTestsMixin,
+from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable import (
+    TransformWithStateInPandasStateVariableTestsMixin,
 )
 from pyspark import SparkConf
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class TransformWithStateInPandasParityTests(
-    TransformWithStateInPandasTestsMixin, ReusedConnectTestCase
+class TransformWithStateInPandasStateVariableParityTests(
+    TransformWithStateInPandasStateVariableTestsMixin, ReusedConnectTestCase
 ):
     """
     Spark connect parity tests for TransformWithStateInPandas. Run every test case in
-     `TransformWithStateInPandasTestsMixin` in spark connect mode.
+     `TransformWithStateInPandasStateVariableTestsMixin` in spark connect mode.
     """
 
     @classmethod
     def conf(cls):
         # Due to multiple inheritance from the same level, we need to explicitly setting configs in
-        # both TransformWithStateInPandasTestsMixin and ReusedConnectTestCase here
+        # both TransformWithStateInPandasStateVariableTestsMixin and ReusedConnectTestCase here
         cfg = SparkConf(loadDefaults=False)
         for base in cls.__bases__:
             if hasattr(base, "conf"):
@@ -48,13 +48,9 @@ class TransformWithStateInPandasParityTests(
 
         return cfg
 
-    @unittest.skip("Flaky in spark connect on CI. Skip for now. See SPARK-51368 for details.")
-    def test_schema_evolution_scenarios(self):
-        pass
-
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state import *  # noqa: F401,E501
+    from pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state_state_variable import *  # noqa: F401,E501
 
     try:
         import xmlrunner

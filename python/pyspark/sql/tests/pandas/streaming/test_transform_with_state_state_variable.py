@@ -15,10 +15,19 @@
 # limitations under the License.
 #
 
+import os
 import unittest
+from typing import cast
+
+from pyspark import SparkConf
+from pyspark.testing.sqlutils import (
+    have_pyarrow,
+    pyarrow_requirement_message,
+    ReusedSQLTestCase,
+)
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable import (
+from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable import (
     TransformWithStateStateVariableTestsMixin,
 )
 
@@ -49,7 +58,7 @@ class TransformWithStateInPySparkStateVariableTestsMixin(
         return cfg
 
 
-class TransformWithStateInPySparkStateVariableWithCheckpointV2Tests(
+class TransformWithStateInPySparkStateVariableTests(
     TransformWithStateInPySparkStateVariableTestsMixin,
     ReusedSQLTestCase
 ):

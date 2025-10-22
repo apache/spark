@@ -1186,9 +1186,11 @@ pyspark_structured_streaming_connect = Module(
         "pyspark.sql.tests.connect.streaming.test_parity_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach_batch",
-        "pyspark.sql.tests.connect.streaming.test_parity_transform_with_state_pyspark",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map_with_state",
-        "pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state_state_variable",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state_state_variable",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
