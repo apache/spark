@@ -3993,13 +3993,13 @@ def try_make_timestamp(
 
 
 @overload
-def try_make_timestamp(date: "ColumnOrName", time: "ColumnOrName") -> Column:
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
     ...
 
 
 @overload
 def try_make_timestamp(
-    date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
 ) -> Column:
     ...
 
