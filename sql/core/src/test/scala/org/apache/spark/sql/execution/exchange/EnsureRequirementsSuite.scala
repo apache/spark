@@ -1280,7 +1280,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
           SortExec(_, _, _: DummySparkPlan, _), _) =>
           // Left side shuffled, right side kept as-is
-        case other => fail(s"Expected shuffle on at least one side, but got: $other")
+        case other => fail(s"Expected shuffle on the left side, but got: $other")
       }
     }
   }
