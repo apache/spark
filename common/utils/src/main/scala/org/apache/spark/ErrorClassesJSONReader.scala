@@ -41,6 +41,13 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getErrorMessage(errorClass: String, messageParameters: Map[String, Any]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
+    getErrorMessage(errorClass, messageTemplate, messageParameters)
+  }
+
+  def getErrorMessage(
+      errorClass: String,
+      messageTemplate: String,
+      messageParameters: Map[String, Any]): String = {
     val sanitizedParameters = messageParameters.map {
       case (key, null) => key -> "null"
       case (key, value) => key -> value
@@ -71,6 +78,10 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getMessageParameters(errorClass: String): Seq[String] = {
     val messageTemplate = getMessageTemplate(errorClass)
+    getMessageParametersFromTemplate(messageTemplate)
+  }
+
+  def getMessageParametersFromTemplate(messageTemplate: String): Seq[String] = {
     val matches = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).toSeq
     matches.map(m => m.stripSuffix(">").stripPrefix("<"))
   }

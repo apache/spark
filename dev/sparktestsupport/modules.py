@@ -437,6 +437,7 @@ connect = Module(
     sbt_test_goals=[
         "connect/test",
         "connect-client-jvm/test",
+        "connect-client-jdbc/test",
     ],
 )
 
@@ -574,6 +575,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_session",
         "pyspark.sql.tests.test_subquery",
         "pyspark.sql.tests.test_types",
+        "pyspark.sql.tests.test_geographytype",
+        "pyspark.sql.tests.test_geometrytype",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_udf_combinations",
         "pyspark.sql.tests.test_udf_profiler",

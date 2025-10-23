@@ -524,6 +524,16 @@ of the most common options to set are:
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.driver.log.redirectConsoleOutputs</code></td>
+  <td>stdout,stderr</td>
+  <td>
+    Comma-separated list of the console output kind for driver that needs to redirect
+    to logging system. Supported values are `stdout`, `stderr`. It only takes affect when
+    `spark.plugins` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.decommission.enabled</code></td>
   <td>false</td>
   <td>
@@ -773,6 +783,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.executor.logs.redirectConsoleOutputs</code></td>
+  <td>stdout,stderr</td>
+  <td>
+    Comma-separated list of the console output kind for executor that needs to redirect
+    to logging system. Supported values are `stdout`, `stderr`. It only takes affect when
+    `spark.plugins` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.executor.userClassPathFirst</code></td>
   <td>false</td>
   <td>
@@ -858,6 +878,47 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.python.factory.idleWorkerMaxPoolSize</code></td>
+  <td>(none)</td>
+  <td>
+    Maximum number of idle Python workers to keep. If unset, the number is unbounded.
+    If set to a positive integer N, at most N idle workers are retained;
+    least-recently used workers are evicted first.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.python.worker.killOnIdleTimeout</code></td>
+  <td>false</td>
+  <td>
+    Whether Spark should terminate the Python worker process when the idle timeout
+    (as defined by <code>spark.python.worker.idleTimeoutSeconds</code>) is reached. If enabled,
+    Spark will terminate the Python worker process in addition to logging the status.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.python.worker.tracebackDumpIntervalSeconds</code></td>
+  <td>0</td>
+  <td>
+    The interval (in seconds) for Python workers to dump their tracebacks.
+    If it's positive, the Python worker will periodically dump the traceback into
+    its `stderr`. The default is `0` that means it is disabled.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.python.unix.domain.socket.enabled</code></td>
+  <td>false</td>
+  <td>
+    When set to true, the Python driver uses a Unix domain socket for operations like
+    creating or collecting a DataFrame from local data, using accumulators, and executing
+    Python functions with PySpark such as Python UDFs. This configuration only applies
+    to Spark Classic and Spark Connect server.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.files</code></td>
   <td></td>
   <td>
@@ -872,6 +933,16 @@ Apart from these, the following properties are also available, and may be useful
     Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps. Globs are allowed.
   </td>
   <td>1.0.1</td>
+</tr>
+<tr>
+  <td><code>spark.submit.callSystemExitOnMainExit</code></td>
+  <td>false</td>
+  <td>
+    If true, SparkSubmit will call System.exit() to initiate JVM shutdown once the
+    user's main method has exited. This can be useful in cases where non-daemon JVM
+    threads might otherwise prevent the JVM from shutting down on its own.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.jars</code></td>
@@ -1432,6 +1503,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.excludedPatterns</code></td>
+  <td>(none)</td>
+  <td>
+    Specifies comma-separated event names to be excluded from the event logs.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.eventLog.dir</code></td>
   <td>file:///tmp/spark-events</td>
   <td>
@@ -1906,6 +1985,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.io.compression.zstd.strategy</code></td>
+  <td>(none)</td>
+  <td>
+    Compression strategy for Zstd compression codec. The higher the value is, the more
+    complex it becomes, usually resulting stronger but slower compression or higher CPU cost.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.io.compression.zstd.workers</code></td>
   <td>0</td>
   <td>
@@ -1918,7 +2006,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.io.compression.lzf.parallel.enabled</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     When true, LZF compression will use multiple threads to compress data in parallel.
   </td>
@@ -2091,6 +2179,17 @@ Apart from these, the following properties are also available, and may be useful
     This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
   </td>
   <td>1.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.memory.unmanagedMemoryPollingInterval</code></td>
+  <td>0s</td>
+  <td>
+    Interval for polling unmanaged memory users to track their memory usage.
+    Unmanaged memory users are components that manage their own memory outside of
+    Spark's core memory management, such as RocksDB for Streaming State Store.
+    Setting this to 0 disables unmanaged memory polling.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.storage.unrollMemoryThreshold</code></td>
@@ -2542,6 +2641,16 @@ Apart from these, the following properties are also available, and may be useful
     This is used for communicating with the executors and the standalone Master.
   </td>
   <td>0.7.0</td>
+</tr>
+<tr>
+  <td><code>spark.driver.metrics.pollingInterval</code></td>
+  <td>10s</td>
+  <td>
+    How often to collect driver metrics (in milliseconds).
+    If unset, the polling is done at the executor heartbeat interval.
+    If set, the polling is done at this interval.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.rpc.io.backLog</code></td>

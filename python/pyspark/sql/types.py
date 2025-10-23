@@ -51,6 +51,7 @@ from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import (
     get_active_spark_context,
     escape_meta_characters,
+    IllegalArgumentException,
     StringConcat,
 )
 from pyspark.sql.variant_utils import VariantUtils
@@ -516,6 +517,182 @@ class FloatType(FractionalType, metaclass=DataTypeSingleton):
     """Float data type, representing single precision floats."""
 
     pass
+
+
+class SpatialType(AtomicType):
+    """Super class of all spatial data types: GeographyType and GeometryType."""
+
+    # Mixed SRID value and the corresponding CRS for geospatial types (Geometry and Geography).
+    # These values represent a geospatial type that can hold different SRID values per row.
+    MIXED_SRID = -1
+    MIXED_CRS = "SRID:ANY"
+
+
+class GeographyType(SpatialType):
+    """
+    The data type representing GEOGRAPHY values which are spatial objects, as defined in the Open
+    Geospatial Consortium (OGC) Simple Feature Access specification
+    (https://portal.ogc.org/files/?artifact_id=25355), with a geographic coordinate system.
+
+    .. versionadded:: 4.1.0
+    """
+
+    # The default coordinate reference system (CRS) value and the default edge interpolation
+    # algorithm used for geographies, as specified by the Parquet, Delta, and Iceberg
+    # specifications. If CRS or algorithm values are omitted, they should default to these.
+    DEFAULT_CRS = "OGC:CRS84"
+    DEFAULT_ALG = "SPHERICAL"
+    DEFAULT_SRID = 4326
+
+    def __init__(self, srid: int | str):
+        # Special string value "ANY" is used to represent the mixed SRID GEOGRAPHY type.
+        if srid == "ANY":
+            self.srid = GeographyType.MIXED_SRID
+            self._crs = GeographyType.MIXED_CRS
+        # Otherwise, the parameterized GEOMETRY type syntax requires a valid SRID value.
+        elif not isinstance(srid, int) or srid != GeographyType.DEFAULT_SRID:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_SRID_VALUE",
+                messageParameters={
+                    "srid": str(srid),
+                },
+            )
+        else:
+            self.srid = srid
+            self._crs = GeographyType.DEFAULT_CRS
+        self._alg = GeographyType.DEFAULT_ALG
+
+    @classmethod
+    def _from_crs(cls, crs: str, alg: str) -> "GeographyType":
+        # Algorithm value must be validated, although only SPHERICAL is supported currently.
+        if alg != cls.DEFAULT_ALG:
+            raise IllegalArgumentException(
+                errorClass="INVALID_ALGORITHM_VALUE",
+                messageParameters={
+                    "alg": str(alg),
+                },
+            )
+        # Special CRS value "SRID:ANY" is used to represent the mixed SRID GEOGRAPHY type.
+        # Note: unlike the actual CRS values, the special "SRID:ANY" value is case-insensitive.
+        if crs.lower() == cls.MIXED_CRS.lower():
+            return GeographyType("ANY")
+        # Otherwise, JSON parsing for the GEOGRAPHY type requires a valid CRS value.
+        srid = GeographyType.DEFAULT_SRID if crs == "OGC:CRS84" else None
+        if srid is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_CRS_VALUE",
+                messageParameters={
+                    "crs": str(crs),
+                },
+            )
+        geography = GeographyType(srid)
+        geography._crs = crs
+        geography._alg = alg
+        return geography
+
+    def simpleString(self) -> str:
+        if self.srid == GeographyType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "geography(any)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"geography({self.srid})"
+
+    def __repr__(self) -> str:
+        if self.srid == GeographyType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "GeographyType(ANY)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"GeographyType({self.srid})"
+
+    def jsonValue(self) -> Union[str, Dict[str, Any]]:
+        # The JSON representation always uses the CRS and algorithm value.
+        return f"geography({self._crs}, {self._alg})"
+
+
+class GeometryType(SpatialType):
+    """
+    The data type representing GEOMETRY values which are spatial objects, as defined in the Open
+    Geospatial Consortium (OGC) Simple Feature Access specification
+    (https://portal.ogc.org/files/?artifact_id=25355), with a Cartesian coordinate system.
+
+    Parameters
+    ----------
+    srid : int or str
+        The Spatial Reference System Identifier (SRID) value for the GEOMETRY.
+
+    .. versionadded:: 4.1.0
+    """
+
+    # The default coordinate reference system (CRS) value used for geometries, as specified by the
+    # Parquet, Delta, and Iceberg specifications. If CRS is omitted, it should default to this.
+    DEFAULT_CRS = "OGC:CRS84"
+    DEFAULT_SRID = 4326
+
+    """ The constructor for the GEOMETRY type can accept either a single valid geometric integer
+    SRID value, or a special string value "ANY" used to represent a mixed SRID GEOMETRY type."""
+
+    def __init__(self, srid: int | str):
+        # Special string value "ANY" is used to represent the mixed SRID GEOMETRY type.
+        if srid == "ANY":
+            self.srid = GeometryType.MIXED_SRID
+            self._crs = GeometryType.MIXED_CRS
+        # Otherwise, the parameterized GEOMETRY type syntax requires a valid SRID value.
+        elif not isinstance(srid, int) or srid != GeometryType.DEFAULT_SRID:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_SRID_VALUE",
+                messageParameters={
+                    "srid": str(srid),
+                },
+            )
+        # If the SRID is valid, initialize the GEOMETRY type with the corresponding CRS value.
+        else:
+            self.srid = srid
+            self._crs = GeometryType.DEFAULT_CRS
+
+    """ JSON parsing logic for the GEOMETRY type relies on the CRS value, instead of the SRID.
+    The method can accept either a single valid geometric string CRS value, or a special case
+    insensitive string value "SRID:ANY" used to represent a mixed SRID GEOMETRY type."""
+
+    @classmethod
+    def _from_crs(cls, crs: str) -> "GeometryType":
+        # Special CRS value "SRID:ANY" is used to represent the mixed SRID GEOMETRY type.
+        # Note: unlike the actual CRS values, the special "SRID:ANY" value is case-insensitive.
+        if crs.lower() == cls.MIXED_CRS.lower():
+            return GeometryType("ANY")
+        # Otherwise, JSON parsing for the GEOMETRY type requires a valid CRS value.
+        srid = GeometryType.DEFAULT_SRID if crs == "OGC:CRS84" else None
+        if srid is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_CRS_VALUE",
+                messageParameters={
+                    "crs": str(crs),
+                },
+            )
+        geometry = GeometryType(srid)
+        geometry._crs = crs
+        return geometry
+
+    def simpleString(self) -> str:
+        if self.srid == GeometryType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "geometry(any)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"geometry({self.srid})"
+
+    def __repr__(self) -> str:
+        if self.srid == GeometryType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "GeometryType(ANY)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"GeometryType({self.srid})"
+
+    def jsonValue(self) -> Union[str, Dict[str, Any]]:
+        # The JSON representation always uses the CRS value.
+        return f"geometry({self._crs})"
 
 
 class ByteType(IntegralType):
@@ -1921,6 +2098,12 @@ _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 _TIME = re.compile(r"time\(\s*(\d+)\s*\)")
+_GEOMETRY = re.compile(r"^geometry$")
+_GEOMETRY_CRS = re.compile(r"geometry\(\s*([\w]+:-?[\w]+)\s*\)")
+_GEOGRAPHY = re.compile(r"^geography$")
+_GEOGRAPHY_CRS = re.compile(r"geography\(\s*([\w]+:-?[\w]+)\s*\)")
+_GEOGRAPHY_CRS_ALG = re.compile(r"geography\(\s*([\w]+:-?[\w]+)\s*,\s*(\w+)\s*\)")
+_GEOGRAPHY_ALG = re.compile(r"geography\(\s*(\w+)\s*\)")
 
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
@@ -2047,7 +2230,7 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     return _parse_datatype_json_value(json.loads(json_string))
 
 
-def _parse_datatype_json_value(
+def _parse_datatype_json_value(  # type: ignore[return]
     json_value: Union[dict, str],
     fieldPath: str = "",
     collationsMap: Optional[Dict[str, str]] = None,
@@ -2090,6 +2273,26 @@ def _parse_datatype_json_value(
         elif _LENGTH_VARCHAR.match(json_value):
             m = _LENGTH_VARCHAR.match(json_value)
             return VarcharType(int(m.group(1)))  # type: ignore[union-attr]
+        elif _GEOMETRY.match(json_value):
+            return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
+        elif _GEOMETRY_CRS.match(json_value):
+            crs = _GEOMETRY_CRS.match(json_value)
+            if crs is not None:
+                return GeometryType._from_crs(crs.group(1))
+        elif _GEOGRAPHY.match(json_value):
+            return GeographyType._from_crs(GeographyType.DEFAULT_CRS, GeographyType.DEFAULT_ALG)
+        elif _GEOGRAPHY_CRS.match(json_value):
+            crs = _GEOGRAPHY_CRS.match(json_value)
+            if crs is not None:
+                return GeographyType._from_crs(crs.group(1), GeographyType.DEFAULT_ALG)
+        elif _GEOGRAPHY_CRS_ALG.match(json_value):
+            crs_alg = _GEOGRAPHY_CRS_ALG.match(json_value)
+            if crs_alg is not None:
+                return GeographyType._from_crs(crs_alg.group(1), crs_alg.group(2))
+        elif _GEOGRAPHY_ALG.match(json_value):
+            alg = _GEOGRAPHY_ALG.match(json_value)
+            if alg is not None:
+                return GeographyType._from_crs(GeographyType.DEFAULT_CRS, alg.group(1))
         else:
             raise PySparkValueError(
                 errorClass="CANNOT_PARSE_DATATYPE",

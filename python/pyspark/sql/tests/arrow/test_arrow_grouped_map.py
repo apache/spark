@@ -360,6 +360,7 @@ class ApplyInArrowTestsMixin:
         df = df.withColumns(cols)
 
         def min_max_v(table):
+            assert len(table) == 10000000 / 2, len(table)
             return pa.Table.from_pydict(
                 {
                     "key": [table.column("key")[0].as_py()],
@@ -372,8 +373,7 @@ class ApplyInArrowTestsMixin:
             df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
         ).collect()
 
-        int_max = 2147483647
-        for maxRecords, maxBytes in [(1000, int_max), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {

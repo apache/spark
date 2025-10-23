@@ -8796,6 +8796,24 @@ object functions {
     Column.fn("make_timestamp", years, months, days, hours, mins, secs)
 
   /**
+   * Create a local date-time from date, time, and timezone fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp(date: Column, time: Column, timezone: Column): Column =
+    Column.fn("make_timestamp", date, time, timezone)
+
+  /**
+   * Create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp(date: Column, time: Column): Column =
+    Column.fn("make_timestamp", date, time)
+
+  /**
    * Try to create a timestamp from years, months, days, hours, mins, secs and timezone fields.
    * The result data type is consistent with the value of configuration `spark.sql.timestampType`.
    * The function returns NULL on invalid inputs.
@@ -8829,6 +8847,24 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("try_make_timestamp", years, months, days, hours, mins, secs)
+
+  /**
+   * Try to create a local date-time from date, time, and timezone fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp(date: Column, time: Column, timezone: Column): Column =
+    Column.fn("try_make_timestamp", date, time, timezone)
+
+  /**
+   * Try to create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp(date: Column, time: Column): Column =
+    Column.fn("try_make_timestamp", date, time)
 
   /**
    * Create the current timestamp with local time zone from years, months, days, hours, mins, secs

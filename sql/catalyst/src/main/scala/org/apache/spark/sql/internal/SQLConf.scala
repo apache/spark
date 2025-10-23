@@ -1534,6 +1534,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING =
+    buildConf("spark.sql.legacy.parquet.returnNullStructIfAllFieldsMissing")
+      .internal()
+      .doc("When true, if all requested fields of a struct are missing in a parquet file, assume " +
+        "the struct is always null, even if other fields are present. The default behavior is " +
+        "to fetch and read an arbitrary non-requested field present in the file to determine " +
+        "struct nullness. If enabled, schema pruning may cause non-null structs to be read as " +
+        "null.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
       "filters. " +
@@ -3752,6 +3764,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYSPARK_BINARY_AS_BYTES =
+    buildConf("spark.sql.execution.pyspark.binaryAsBytes")
+      .doc("When true, BinaryType is consistently mapped to bytes in PySpark. " +
+        "When false, restores the PySpark behavior before 4.1.0. Before 4.1.0, BinaryType is " +
+        "mapped to bytearray for regular UDF and UDTF without Arrow optimization, " +
+        "DataFrame APIs (both Spark Classic and Spark Connect), and data sources; " +
+        "BinaryType is mapped to bytes for Arrow-optimized UDF and UDTF with " +
+        "legacy pandas conversion.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+
   val ARROW_LOCAL_RELATION_THRESHOLD =
     buildConf("spark.sql.execution.arrow.localRelationThreshold")
       .doc(
@@ -5204,6 +5229,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY =
+    buildConf("spark.sql.legacy.parameterSubstitution.constantsOnly")
+      .doc("When true, limits parameter substitution to constants in DML/queries only, " +
+        "restoring the legacy behavior where parameter markers (? or :param) are only allowed " +
+        "in contexts where constant literals are expected. When false (default), " +
+        "parameter substitution is enabled everywhere a literal is supported, " +
+        "allowing parameter markers in any literal context throughout SQL parsing.")
+      .internal()
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
       .internal()
@@ -5882,7 +5919,47 @@ object SQLConf {
       .version("3.5.0")
       .intConf
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
-      .createWithDefault(64 * 1024 * 1024)
+      .createWithDefault(1024 * 1024)
+
+  val LOCAL_RELATION_CHUNK_SIZE_ROWS =
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY)
+      .doc("The chunk size in number of rows when splitting ChunkedCachedLocalRelation.data " +
+        "into batches. A new chunk is created when either " +
+        "spark.sql.session.localRelationChunkSizeBytes " +
+        "or spark.sql.session.localRelationChunkSizeRows is reached.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "The chunk size in number of rows must be positive")
+      .createWithDefault(10000)
+
+  val LOCAL_RELATION_CHUNK_SIZE_BYTES =
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY)
+      .doc("The chunk size in bytes when splitting ChunkedCachedLocalRelation.data " +
+        "into batches. A new chunk is created when either " +
+        "spark.sql.session.localRelationChunkSizeBytes " +
+        "or spark.sql.session.localRelationChunkSizeRows is reached.")
+      .version("4.1.0")
+      .longConf
+      .checkValue(_ > 0, "The chunk size in bytes must be positive")
+      .createWithDefault(16 * 1024 * 1024L)
+
+  val LOCAL_RELATION_CHUNK_SIZE_LIMIT =
+    buildConf("spark.sql.session.localRelationChunkSizeLimit")
+      .internal()
+      .doc("Limit on how large a single chunk of a ChunkedCachedLocalRelation.data " +
+        "can be in bytes. If the limit is exceeded, an exception is thrown.")
+      .version("4.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("2000MB")
+
+  val LOCAL_RELATION_SIZE_LIMIT =
+    buildConf("spark.sql.session.localRelationSizeLimit")
+      .internal()
+      .doc("Limit on how large ChunkedCachedLocalRelation.data can be in bytes." +
+        "If the limit is exceeded, an exception is thrown.")
+      .version("4.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("3GB")
 
   val DECORRELATE_JOIN_PREDICATE_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
@@ -7128,11 +7205,17 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
+  def localRelationChunkSizeLimit: Long = getConf(LOCAL_RELATION_CHUNK_SIZE_LIMIT)
+
+  def localRelationSizeLimit: Long = getConf(LOCAL_RELATION_SIZE_LIMIT)
+
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
 
   def arrowLocalRelationThreshold: Long = getConf(ARROW_LOCAL_RELATION_THRESHOLD)
 
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
+
+  def pysparkBinaryAsBytes: Boolean = getConf(PYSPARK_BINARY_AS_BYTES)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
@@ -7438,6 +7521,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
+
+  override def legacyParameterSubstitutionConstantsOnly: Boolean =
+    getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)
 
   def streamStatePollingInterval: Long = getConf(SQLConf.PIPELINES_STREAM_STATE_POLLING_INTERVAL)
 

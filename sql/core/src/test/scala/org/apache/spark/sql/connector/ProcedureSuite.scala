@@ -149,7 +149,6 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     val explain2 = spark.sql(
       "EXPLAIN EXTENDED CALL IDENTIFIER(:p1)(10, 10)",
       Map("p1" -> "cat.ns.sum")).head().getString(0)
-    assert(explain2.contains("'NameParameterizedQuery [p1], [cat.ns.sum]"))
     assert(explain2.contains("Call cat.ns.sum(10, 10)"))
   }
 

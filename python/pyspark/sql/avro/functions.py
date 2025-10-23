@@ -69,7 +69,7 @@ def from_avro(
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> avroDf = df.select(to_avro(df.value).alias("avro"))
     >>> avroDf.collect()
-    [Row(avro=bytearray(b'\\x00\\x00\\x04\\x00\\nAlice'))]
+    [Row(avro=b'\\x00\\x00\\x04\\x00\\nAlice')]
 
     >>> jsonFormatSchema = '''{"type":"record","name":"topLevelRecord","fields":
     ...     [{"name":"avro","type":[{"type":"record","name":"value","namespace":"topLevelRecord",
@@ -141,12 +141,12 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     >>> data = ['SPADES']
     >>> df = spark.createDataFrame(data, "string")
     >>> df.select(to_avro(df.value).alias("suite")).collect()
-    [Row(suite=bytearray(b'\\x00\\x0cSPADES'))]
+    [Row(suite=b'\\x00\\x0cSPADES')]
 
     >>> jsonFormatSchema = '''["null", {"type": "enum", "name": "value",
     ...     "symbols": ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]}]'''
     >>> df.select(to_avro(df.value, jsonFormatSchema).alias("suite")).collect()
-    [Row(suite=bytearray(b'\\x02\\x00'))]
+    [Row(suite=b'\\x02\\x00')]
     """
     from py4j.java_gateway import JVMView
     from pyspark.sql.classic.column import _to_java_column

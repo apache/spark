@@ -488,12 +488,19 @@ class GroupedAggArrowUDFTestsMixin:
         )
 
         self.assertEqual(sum_arrow_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF)
-        group_agg_pandas_udf = self.spark.udf.register("sum_arrow_udf", sum_arrow_udf)
-        self.assertEqual(group_agg_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF)
-        q = "SELECT sum_arrow_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
-        actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
-        expected = [1, 5]
-        self.assertEqual(actual, expected)
+
+        with self.temp_func("sum_arrow_udf"):
+            group_agg_pandas_udf = self.spark.udf.register("sum_arrow_udf", sum_arrow_udf)
+            self.assertEqual(
+                group_agg_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+            )
+            q = """
+                SELECT sum_arrow_udf(v1)
+                FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2
+                """
+            actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
+            expected = [1, 5]
+            self.assertEqual(actual, expected)
 
     def test_grouped_with_empty_partition(self):
         import pyarrow as pa
@@ -516,10 +523,10 @@ class GroupedAggArrowUDFTestsMixin:
             return float(pa.compute.max(v).as_py())
 
         df = self.spark.range(0, 100)
-        self.spark.udf.register("max_udf", max_udf)
 
-        with self.tempView("table"):
+        with self.tempView("table"), self.temp_func("max_udf"):
             df.createTempView("table")
+            self.spark.udf.register("max_udf", max_udf)
 
             agg1 = df.agg(max_udf(df["id"]))
             agg2 = self.spark.sql("select max_udf(id) from table")
@@ -546,7 +553,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -575,7 +582,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -615,7 +622,7 @@ class GroupedAggArrowUDFTestsMixin:
 
             return np.average(kwargs["v"], weights=kwargs["w"])
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -660,7 +667,7 @@ class GroupedAggArrowUDFTestsMixin:
         def biased_sum(v, w=None):
             return pa.compute.sum(v).as_py() + (pa.compute.sum(w).as_py() if w is not None else 100)
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("biased_sum"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("biased_sum", biased_sum)
 
@@ -985,6 +992,34 @@ class GroupedAggArrowUDFTestsMixin:
             .sort("k")
         )
         self.assertEqual(expected2.collect(), result2.collect())
+
+    def test_arrow_batch_slicing(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10000000).select(
+            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+        )
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_max(v):
+            assert len(v) == 10000000 / 2, len(v)
+            return pa.compute.max(v)
+
+        expected = (df.groupby("key").agg(sf.max("v").alias("res")).sort("key")).collect()
+
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
+                    }
+                ):
+                    result = (
+                        df.groupBy("key").agg(arrow_max("v").alias("res")).sort("key")
+                    ).collect()
+
+                    self.assertEqual(expected, result)
 
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):
