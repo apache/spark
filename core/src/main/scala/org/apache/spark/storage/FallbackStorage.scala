@@ -127,9 +127,10 @@ private[spark] object FallbackStorage extends Logging {
   }
 
   /** Register the fallback block manager and its RPC endpoint. */
-  def registerBlockManagerIfNeeded(master: BlockManagerMaster,
-                                   conf: SparkConf,
-                                   hadoopConf: Configuration): Unit = {
+  def registerBlockManagerIfNeeded(
+      master: BlockManagerMaster,
+      conf: SparkConf,
+      hadoopConf: Configuration): Unit = {
     if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
       master.registerBlockManager(
         FALLBACK_BLOCK_MANAGER_ID, Array.empty[String], 0, 0,
