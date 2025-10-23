@@ -27,7 +27,7 @@ import unittest
 from typing import cast
 
 from pyspark import SparkConf
-from pyspark.sql.functions import array_sort, col, explode, split
+from pyspark.sql.functions import explode, split
 from pyspark.sql.types import (
     StringType,
     StructType,
@@ -40,7 +40,6 @@ from pyspark.sql.types import (
     MapType,
     DoubleType,
 )
-from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,

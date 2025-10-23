@@ -34,11 +34,6 @@ from pyspark.sql.types import (
     StructField,
     Row,
     IntegerType,
-    TimestampType,
-    DecimalType,
-    ArrayType,
-    MapType,
-    DoubleType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
