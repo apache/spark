@@ -1006,7 +1006,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     val optimized1Reversed = reverseOutputRule(optimized1)
     // The two plans are not identified as equal, but their canonicalized forms are equal
     assert(!optimized1Reversed.equals(optimized2))
-    assert(optimized1.canonicalized == optimized2.canonicalized)
+    assert(optimized1Reversed.canonicalized == optimized2.canonicalized)
 
     val dsv2ScanRelation1 = optimized1Reversed.collect {
       case d: DataSourceV2ScanRelation => d
