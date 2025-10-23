@@ -34,10 +34,11 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -481,9 +482,45 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   }
 
   private def getOperationMetrics(query: SparkPlan): util.Map[String, lang.Long] = {
-    collectFirst(query) { case m: MergeRowsExec => m }.map{ n =>
-      n.metrics.map { case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value) }
-    }.getOrElse(Map.empty[String, lang.Long]).asJava
+    collectFirst(query) { case m: MergeRowsExec => m } match {
+      case Some(mergeRowsExec) =>
+        val mergeMetrics = mergeRowsExec.metrics.map {
+          case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value)
+        }
+        val numSourceRows = getNumSourceRows(mergeRowsExec)
+        (mergeMetrics + ("merge.numSourceRows" -> lang.Long.valueOf(numSourceRows))).asJava
+      case None =>
+        Map.empty[String, lang.Long].asJava
+    }
+  }
+
+  private def getNumSourceRows(mergeRowsExec: MergeRowsExec): Long = {
+    def isTargetTableScan(plan: SparkPlan): Boolean = {
+      collectFirst(plan) {
+        case scan: BatchScanExec if scan.table.isInstanceOf[RowLevelOperationTable] => true
+      }.getOrElse(false)
+    }
+
+    val joinOpt = collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
+
+    joinOpt.flatMap { join =>
+      val leftIsTarget = isTargetTableScan(join.left)
+      val rightIsTarget = isTargetTableScan(join.right)
+
+      val sourceChild = if (leftIsTarget) {
+        Some(join.right)
+      } else if (rightIsTarget) {
+        Some(join.left)
+      } else {
+        None
+      }
+
+      sourceChild.flatMap { child =>
+        collectFirst(child) {
+          case plan if plan.metrics.contains("numOutputRows") => plan
+        }.flatMap(_.metrics.get("numOutputRows").map(_.value))
+      }
+    }.getOrElse(-1L)
   }
 }
 
