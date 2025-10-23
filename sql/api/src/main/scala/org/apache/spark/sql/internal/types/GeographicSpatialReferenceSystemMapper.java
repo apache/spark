@@ -18,9 +18,16 @@
 package org.apache.spark.sql.internal.types;
 
 /**
- * Abstract class for providing SRS mappings for spatial reference systems.
+ * Class for providing SRS mappings for geographic spatial reference systems.
  */
-public abstract class SpatialReferenceSystemMapper {
-  protected static final SpatialReferenceSystemCache srsCache =
-      SpatialReferenceSystemCache.getInstance();
+public class GeographicSpatialReferenceSystemMapper extends SpatialReferenceSystemMapper {
+  // Returns the string ID corresponding to the input SRID. If not supported, returns `null`.
+  public static String getStringId(int srid) {
+    return srsCache.isGeographicSrid(srid) ? srsCache.getSrsInfo(srid).stringId() : null;
+  }
+
+  // Returns the SRID corresponding to the input string ID. If not supported, returns `null`.
+  public static Integer getSrid(String stringId) {
+    return srsCache.isGeographicStringId(stringId) ? srsCache.getSrsInfo(stringId).srid() : null;
+  }
 }

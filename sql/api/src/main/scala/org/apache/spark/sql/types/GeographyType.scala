@@ -21,7 +21,7 @@ import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.internal.types.SpatialReferenceSystemMapper
+import org.apache.spark.sql.internal.types.GeographicSpatialReferenceSystemMapper
 
 /**
  * The data type representing GEOGRAPHY values which are spatial objects, as defined in the Open
@@ -158,15 +158,10 @@ object GeographyType extends SpatialType {
     GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
 
   /**
-   * Type enum alias for geographic reference system mapping.
-   */
-  private final val GEOG = SpatialReferenceSystemMapper.Type.GEOGRAPHY
-
-  /**
    * Constructors for GeographyType.
    */
   def apply(srid: Int): GeographyType = {
-    val crs = SpatialReferenceSystemMapper.get().getStringId(srid, GEOG)
+    val crs = GeographicSpatialReferenceSystemMapper.getStringId(srid)
     if (crs == null) {
       throw new SparkIllegalArgumentException(
         errorClass = "ST_INVALID_SRID_VALUE",
@@ -218,7 +213,7 @@ object GeographyType extends SpatialType {
       return GeographyType.MIXED_SRID
     }
     // For all other CRS values, we need to look up the corresponding SRID.
-    val srid = SpatialReferenceSystemMapper.get().getSrid(crs, GEOG)
+    val srid = GeographicSpatialReferenceSystemMapper.getSrid(crs)
     if (srid == null) {
       // If the CRS value is not recognized, we throw an exception.
       throw new SparkIllegalArgumentException(

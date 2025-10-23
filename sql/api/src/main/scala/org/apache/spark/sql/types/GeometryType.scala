@@ -21,7 +21,7 @@ import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.internal.types.SpatialReferenceSystemMapper
+import org.apache.spark.sql.internal.types.CartesianSpatialReferenceSystemMapper
 
 /**
  * The data type representing GEOMETRY values which are spatial objects, as defined in the Open
@@ -150,15 +150,10 @@ object GeometryType extends SpatialType {
     GeometryType(MIXED_CRS)
 
   /**
-   * Type enum alias for geometric reference system mapping.
-   */
-  private final val GEOM = SpatialReferenceSystemMapper.Type.GEOMETRY
-
-  /**
    * Constructors for GeometryType.
    */
   def apply(srid: Int): GeometryType = {
-    val crs = SpatialReferenceSystemMapper.get().getStringId(srid, GEOM)
+    val crs = CartesianSpatialReferenceSystemMapper.getStringId(srid)
     if (crs == null) {
       throw new SparkIllegalArgumentException(
         errorClass = "ST_INVALID_SRID_VALUE",
@@ -196,7 +191,7 @@ object GeometryType extends SpatialType {
       return GeometryType.MIXED_SRID
     }
     // For all other CRS values, we need to look up the corresponding SRID.
-    val srid = SpatialReferenceSystemMapper.get().getSrid(crs, GEOM)
+    val srid = CartesianSpatialReferenceSystemMapper.getSrid(crs)
     if (srid == null) {
       // If the CRS value is not recognized, we throw an exception.
       throw new SparkIllegalArgumentException(
