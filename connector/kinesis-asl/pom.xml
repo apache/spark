@@ -69,6 +69,13 @@
       <version>${aws.kinesis.producer.version}</version>
       <scope>test</scope>
     </dependency>
+    <!-- This dependency is necessary for JDK 9 and above -->
+    <dependency>
+      <groupId>javax.xml.bind</groupId>
+      <artifactId>jaxb-api</artifactId>
+      <version>2.3.1</version>
+      <scope>test</scope>
+    </dependency>
     <!-- manage this up explicitly to match Spark; com.amazonaws:aws-java-sdk-pom specifies
       2.6.7 but says we can manage it up -->
     <dependency>
