@@ -26,6 +26,9 @@ import io.netty.channel.ServerChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.epoll.EpollSocketChannel;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
+import io.netty.channel.kqueue.KQueueServerSocketChannel;
+import io.netty.channel.kqueue.KQueueSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -68,6 +71,7 @@ public class NettyUtils {
     return switch (mode) {
       case NIO -> new NioEventLoopGroup(numThreads, threadFactory);
       case EPOLL -> new EpollEventLoopGroup(numThreads, threadFactory);
+      case KQUEUE ->  new KQueueEventLoopGroup(numThreads, threadFactory);
     };
   }
 
@@ -76,6 +80,7 @@ public class NettyUtils {
     return switch (mode) {
       case NIO -> NioSocketChannel.class;
       case EPOLL -> EpollSocketChannel.class;
+      case KQUEUE -> KQueueSocketChannel.class;
     };
   }
 
@@ -84,6 +89,7 @@ public class NettyUtils {
     return switch (mode) {
       case NIO -> NioServerSocketChannel.class;
       case EPOLL -> EpollServerSocketChannel.class;
+      case KQUEUE -> KQueueServerSocketChannel.class;
     };
   }
 
