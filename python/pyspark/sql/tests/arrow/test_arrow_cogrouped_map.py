@@ -20,7 +20,7 @@ import unittest
 
 from pyspark.errors import PythonException
 from pyspark.sql import Row
-from pyspark.sql.functions import col
+from pyspark.sql import functions as sf
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pyarrow,
@@ -39,16 +39,16 @@ if have_pyarrow:
 class CogroupedMapInArrowTestsMixin:
     @property
     def left(self):
-        return self.spark.range(0, 10, 2, 3).withColumn("v", col("id") * 10)
+        return self.spark.range(0, 10, 2, 3).withColumn("v", sf.col("id") * 10)
 
     @property
     def right(self):
-        return self.spark.range(0, 10, 3, 3).withColumn("v", col("id") * 10)
+        return self.spark.range(0, 10, 3, 3).withColumn("v", sf.col("id") * 10)
 
     @property
     def cogrouped(self):
-        grouped_left_df = self.left.groupBy((col("id") / 4).cast("int"))
-        grouped_right_df = self.right.groupBy((col("id") / 4).cast("int"))
+        grouped_left_df = self.left.groupBy((sf.col("id") / 4).cast("int"))
+        grouped_right_df = self.right.groupBy((sf.col("id") / 4).cast("int"))
         return grouped_left_df.cogroup(grouped_right_df)
 
     @staticmethod
@@ -308,6 +308,60 @@ class CogroupedMapInArrowTestsMixin:
         df2 = df.groupby("k").cogroup(df.groupby("k")).applyInArrow(arrow_func, "x long, y long")
 
         self.assertEqual(df2.join(df2).count(), 1)
+
+    def test_arrow_batch_slicing(self):
+        df1 = self.spark.range(10000000).select(
+            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+        )
+        cols = {f"col_{i}": sf.col("v") + i for i in range(10)}
+        df1 = df1.withColumns(cols)
+
+        df2 = self.spark.range(100000).select(
+            (sf.col("id") % 4).alias("key"), sf.col("id").alias("v")
+        )
+        cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
+        df2 = df2.withColumns(cols)
+
+        def summarize(key, left, right):
+            assert len(left) == 10000000 / 2 or len(left) == 0, len(left)
+            assert len(right) == 100000 / 4, len(right)
+            return pa.Table.from_pydict(
+                {
+                    "key": [key[0].as_py()],
+                    "left_rows": [left.num_rows],
+                    "left_columns": [left.num_columns],
+                    "right_rows": [right.num_rows],
+                    "right_columns": [right.num_columns],
+                }
+            )
+
+        expected = [
+            Row(key=0, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
+            Row(key=1, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
+            Row(key=2, left_rows=0, left_columns=12, right_rows=25000, right_columns=22),
+            Row(key=3, left_rows=0, left_columns=12, right_rows=25000, right_columns=22),
+        ]
+
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
+                    }
+                ):
+                    result = (
+                        df1.groupby("key")
+                        .cogroup(df2.groupby("key"))
+                        .applyInArrow(
+                            summarize,
+                            schema="key long, left_rows long, left_columns long, right_rows long, right_columns long",
+                        )
+                        .sort("key")
+                        .collect()
+                    )
+
+                    self.assertEqual(expected, result)
 
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):

@@ -27,8 +27,6 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.Utils
-
 
 /**
  * Python UDF Runner for cogrouped udfs. It sends Arrow bathes from two different DataFrames,
@@ -96,17 +94,6 @@ class CoGroupedArrowPythonRunner(
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
       }
 
-      private def writeFooterAndCloseArrowWriter(writer: ArrowWriterWrapper): Unit = {
-        Utils.tryWithSafeFinally {
-          // end writes footer to the output stream and doesn't clean any resources.
-          // It could throw exception if the output stream is closed, so it should be
-          // in the try block.
-          writer.streamWriter.end()
-        } {
-          writer.close()
-        }
-      }
-
       /**
        * Writes the input iterator to the Arrow stream. We slice the input iterator into multiple
        * small batches contain at most `arrowMaxRecordsPerBatch` records.
@@ -149,7 +136,8 @@ class CoGroupedArrowPythonRunner(
             maxRecordsPerBatch)
 
           if (!nextBatchInLeftGroup.hasNext) {
-            writeFooterAndCloseArrowWriter(leftGroupArrowWriter)
+            leftGroupArrowWriter.streamWriter.end()
+            leftGroupArrowWriter.close()
             nextBatchInLeftGroup = null
             leftGroupArrowWriter = null
           }
@@ -166,17 +154,18 @@ class CoGroupedArrowPythonRunner(
             maxBytesPerBatch,
             maxRecordsPerBatch)
           if (!nextBatchInRightGroup.hasNext) {
-            writeFooterAndCloseArrowWriter(rightGroupArrowWriter)
+            rightGroupArrowWriter.streamWriter.end()
+            rightGroupArrowWriter.close()
             nextBatchInRightGroup = null
             rightGroupArrowWriter = null
           }
         } else {
           assert(assertion = false, "Either left or right iterator must be non-empty.")
         }
-
         // With CoGroupedIterator, we can have empty groups for one of the sides if a grouping
         // key exists in one side but not in the other side.
         assert(0 <= numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
+
         val deltaData = dataOut.size() - startData
         pythonMetrics("pythonDataSent") += deltaData
         true
