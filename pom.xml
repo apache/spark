@@ -2519,6 +2519,25 @@
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-compression</artifactId>
+        <version>${arrow.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
         <artifactId>arrow-memory-netty</artifactId>
         <version>${arrow.version}</version>
         <exclusions>

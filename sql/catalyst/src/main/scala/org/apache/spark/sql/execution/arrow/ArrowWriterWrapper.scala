@@ -60,6 +60,13 @@ case class ArrowWriterWrapper(
       allocator = null
     }
   }
+
+  /**
+   * Clear the underlying VectorSchemaRoot to release the memory held by the vectors.
+   */
+  def clear(): Unit = {
+    root.clear()
+  }
 }
 
 object ArrowWriterWrapper {

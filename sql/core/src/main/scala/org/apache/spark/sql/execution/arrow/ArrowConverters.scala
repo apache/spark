@@ -23,9 +23,11 @@ import java.nio.channels.{Channels, ReadableByteChannel}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
+import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter, ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, IpcOption, MessageSerializer}
 
@@ -37,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -92,9 +95,27 @@ private[sql] object ArrowConverters extends Logging {
       ArrowUtils.rootAllocator.newChildAllocator(
         s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
 
-    private val root = VectorSchemaRoot.create(arrowSchema, allocator)
-    protected val unloader = new VectorUnloader(root)
-    protected val arrowWriter = ArrowWriter.create(root)
+    protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
+
+    // Create compression codec based on config
+    private val compressionCodecName = SQLConf.get.arrowCompressionCodec
+    private val codec = compressionCodecName match {
+      case "none" => NoCompressionCodec.INSTANCE
+      case "zstd" =>
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new ZstdCompressionCodec().getCodecType()
+        factory.createCodec(codecType)
+      case "lz4" =>
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new Lz4CompressionCodec().getCodecType()
+        factory.createCodec(codecType)
+      case other =>
+        throw new IllegalArgumentException(
+          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
+    }
+    protected val unloader = new VectorUnloader(root, true, codec, true)
+
+    protected var arrowWriter: ArrowWriter = null
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
       close()
@@ -110,6 +131,13 @@ private[sql] object ArrowConverters extends Logging {
       val writeChannel = new WriteChannel(Channels.newChannel(out))
 
       Utils.tryWithSafeFinally {
+        val initCapacity = if (maxRecordsPerBatch > 0) {
+          Some(maxRecordsPerBatch.toInt)
+        } else {
+          None
+        }
+        arrowWriter = ArrowWriter.create(root, initCapacity)
+
         var rowCount = 0L
         while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
           val row = rowIter.next()
@@ -122,6 +150,7 @@ private[sql] object ArrowConverters extends Logging {
         batch.close()
       } {
         arrowWriter.reset()
+        root.clear()
       }
 
       out.toByteArray
@@ -161,6 +190,8 @@ private[sql] object ArrowConverters extends Logging {
       rowCountInLastBatch = 0
       var estimatedBatchSize = arrowSchemaSize
       Utils.tryWithSafeFinally {
+        arrowWriter = ArrowWriter.create(root)
+
         // Always write the schema.
         MessageSerializer.serialize(writeChannel, arrowSchema)
 
@@ -199,6 +230,7 @@ private[sql] object ArrowConverters extends Logging {
         batch.close()
       } {
         arrowWriter.reset()
+        root.clear()
       }
 
       out.toByteArray
@@ -425,10 +457,22 @@ private[sql] object ArrowConverters extends Logging {
       context: TaskContext)
       extends InternalRowIterator(arrowBatchIter, context) {
 
+    // Track the current root so we can clear it between batches
+    private var currentRoot: VectorSchemaRoot = null
+
     override def nextBatch(): (Iterator[InternalRow], StructType) = {
       val arrowSchema =
         ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+
+      // Clear and close previous root to release memory
+      if (currentRoot != null) {
+        currentRoot.clear()
+        currentRoot.close()
+        resources.remove(resources.size - 1)  // Remove previous root from resources
+      }
+
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      currentRoot = root
       resources.append(root)
       val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
       val vectorLoader = new VectorLoader(root)

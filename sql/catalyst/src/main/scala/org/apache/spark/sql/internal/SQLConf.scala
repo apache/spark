@@ -3958,6 +3958,20 @@ object SQLConf {
           "than zero and less than INT_MAX.")
       .createWithDefaultString("64MB")
 
+  val ARROW_EXECUTION_COMPRESSION_CODEC =
+    buildConf("spark.sql.execution.arrow.compressionCodec")
+      .doc("Compression codec used to compress Arrow IPC data when transferring data " +
+        "between JVM and Python processes (e.g., toPandas, toArrow). This can significantly " +
+        "reduce memory usage and network bandwidth when transferring large datasets. " +
+        "Supported codecs: 'none' (no compression), 'zstd' (Zstandard), 'lz4' (LZ4). " +
+        "Note that compression may add CPU overhead but can provide substantial memory savings " +
+        "especially for datasets with high compression ratios.")
+      .version("4.1.0")
+      .stringConf
+      .transform(_.toLowerCase(java.util.Locale.ROOT))
+      .checkValues(Set("none", "zstd", "lz4"))
+      .createWithDefault("none")
+
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
       .doc("When using TransformWithState in PySpark (both Python Row and Pandas), limit " +
@@ -7286,6 +7300,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowMaxBytesPerOutputBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH)
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
+
+  def arrowCompressionCodec: String = getConf(ARROW_EXECUTION_COMPRESSION_CODEC)
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)
