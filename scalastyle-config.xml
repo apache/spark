@@ -797,6 +797,11 @@ This file is divided into 3 sections:
     <customMessage>Use java.util.Set.of instead.</customMessage>
   </check>
 
+  <check customId="emptySet" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bCollections\.emptySet\b</parameter></parameters>
+    <customMessage>Use java.util.Set.of() instead.</customMessage>
+  </check>
+
   <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.collections4\.MapUtils\b</parameter></parameters>
     <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>
