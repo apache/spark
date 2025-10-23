@@ -1068,6 +1068,103 @@ class ApplyInPandasTestsMixin:
         self.assertEqual(result[1][0], 2)
         self.assertEqual(result[1][1], 18.0)
 
+    def test_apply_in_pandas_iterator_batch_slicing(self):
+        from typing import Iterator
+        
+        df = self.spark.range(10000000).select(
+            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+        )
+        cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
+        df = df.withColumns(cols)
+
+        def min_max_v(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+            # Collect all batches to compute min/max across the entire group
+            all_data = []
+            key_val = None
+            for batch in batches:
+                all_data.append(batch)
+                if key_val is None:
+                    key_val = batch.key.iloc[0]
+            
+            combined = pd.concat(all_data, ignore_index=True)
+            assert len(combined) == 10000000 / 2, len(combined)
+            
+            yield pd.DataFrame(
+                {
+                    "key": [key_val],
+                    "min": [combined.v.min()],
+                    "max": [combined.v.max()],
+                }
+            )
+
+        expected = (
+            df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
+        ).collect()
+
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
+                    }
+                ):
+                    result = (
+                        df.groupBy("key")
+                        .applyInPandas(min_max_v, "key long, min long, max long")
+                        .sort("key")
+                    ).collect()
+
+                    self.assertEqual(expected, result)
+
+    def test_apply_in_pandas_iterator_with_keys_batch_slicing(self):
+        from typing import Iterator, Tuple, Any
+        
+        df = self.spark.range(10000000).select(
+            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+        )
+        cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
+        df = df.withColumns(cols)
+
+        def min_max_v(
+            key: Tuple[Any, ...], batches: Iterator[pd.DataFrame]
+        ) -> Iterator[pd.DataFrame]:
+            # Collect all batches to compute min/max across the entire group
+            all_data = []
+            for batch in batches:
+                all_data.append(batch)
+            
+            combined = pd.concat(all_data, ignore_index=True)
+            assert len(combined) == 10000000 / 2, len(combined)
+            
+            yield pd.DataFrame(
+                {
+                    "key": [key[0]],
+                    "min": [combined.v.min()],
+                    "max": [combined.v.max()],
+                }
+            )
+
+        expected = (
+            df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
+        ).collect()
+
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
+                    }
+                ):
+                    result = (
+                        df.groupBy("key")
+                        .applyInPandas(min_max_v, "key long, min long, max long")
+                        .sort("key")
+                    ).collect()
+
+                    self.assertEqual(expected, result)
+
 
 class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
     pass
