@@ -32,7 +32,7 @@ import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.TableValuedFunctionArgument
+import org.apache.spark.sql.internal.{SQLConf, TableValuedFunctionArgument}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -57,7 +57,7 @@ case class UserDefinedPythonFunction(
        * - don't have duplicated names
        * - don't contain positional arguments after named arguments
        */
-      NamedParametersSupport.splitAndCheckNamedArguments(e, name)
+      NamedParametersSupport.splitAndCheckNamedArguments(e, name, SQLConf.get.resolver)
     } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
@@ -121,7 +121,7 @@ case class UserDefinedPythonTableFunction(
      * - don't have duplicated names
      * - don't contain positional arguments after named arguments
      */
-    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
+    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name, SQLConf.get.resolver)
 
     // Check which argument is a table argument here since it will be replaced with
     // `UnresolvedAttribute` to construct lateral join.
@@ -231,7 +231,8 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       }
       if (value.foldable) {
         dataOut.writeBoolean(true)
-        val obj = pickler.dumps(EvaluatePython.toJava(value.eval(), value.dataType))
+        val obj = pickler.dumps(EvaluatePython.toJava(
+          value.eval(), value.dataType, SQLConf.get.pysparkBinaryAsBytes))
         PythonWorkerUtils.writeBytes(obj, dataOut)
       } else {
         dataOut.writeBoolean(false)

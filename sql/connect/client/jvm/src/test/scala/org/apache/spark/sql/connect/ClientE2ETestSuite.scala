@@ -1749,6 +1749,49 @@ class ClientE2ETestSuite
     val nullRows = nullResult.filter(_.getAs[Long]("id") >= 5)
     assert(nullRows.forall(_.getAs[Int]("actual_p_id") == 0))
   }
+
+  test("SPARK-53490: struct type in observed metrics") {
+    val observation = Observation("struct")
+    spark
+      .range(10)
+      .observe(observation, struct(count(lit(1)).as("rows"), max("id").as("maxid")).as("struct"))
+      .collect()
+    val expectedSchema =
+      StructType(Seq(StructField("rows", LongType), StructField("maxid", LongType)))
+    val expectedValue = new GenericRowWithSchema(Array(10, 9), expectedSchema)
+    assert(observation.get.size === 1)
+    assert(observation.get.contains("struct"))
+    assert(observation.get("struct") === expectedValue)
+  }
+
+  test("SPARK-53490: array type in observed metrics") {
+    val observation = Observation("array")
+    spark
+      .range(10)
+      .observe(observation, array(count(lit(1))).as("array"))
+      .collect()
+    assert(observation.get.size === 1)
+    assert(observation.get.contains("array"))
+    assert(observation.get("array") === Array(10))
+  }
+
+  test("SPARK-53490: map type in observed metrics") {
+    val observation = Observation("map")
+    spark
+      .range(10)
+      .observe(observation, map(lit("count"), count(lit(1))).as("map"))
+      .collect()
+    assert(observation.get.size === 1)
+    assert(observation.get.contains("map"))
+    assert(observation.get("map") === Map("count" -> 10))
+  }
+
+  test("SPARK-53553: null value handling in literals") {
+    val df = spark.sql("select 1").select(typedlit(Array[Integer](1, null)).as("arr_col"))
+    val result = df.collect()
+    assert(result.length === 1)
+    assert(result(0).getAs[Array[Integer]]("arr_col") === Array(1, null))
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)

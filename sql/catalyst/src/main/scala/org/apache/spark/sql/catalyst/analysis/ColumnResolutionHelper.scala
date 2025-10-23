@@ -167,13 +167,24 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
         }
 
-        case u @ UnresolvedExtractValue(child, fieldName) =>
+        case u @ UnresolvedExtractValue(child, field) =>
           val newChild = innerResolve(child, isTopLevel = false)
-          if (newChild.resolved) {
-            ExtractValue(newChild, fieldName, resolver)
+          val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
+            innerResolve(field, isTopLevel = false)
           } else {
-            u.copy(child = newChild)
+            field
           }
+          if (newChild.resolved) {
+            ExtractValue(child = newChild, extraction = resolvedField, resolver = resolver)
+          } else {
+            u.copy(child = newChild, extraction = resolvedField)
+          }
+
+        // Default value expression can not reference real columns,
+        // so we only need to resolve special literal columns like CURRENT_DATE.
+        // See {@link LiteralFunctionResolution} for details.
+        case d @ DefaultValueExpression(c: Expression, _, _) =>
+          d.copy(child = resolveLiteralColumns(c))
 
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
@@ -192,6 +203,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
         expr
+    }
+  }
+
+  private def resolveLiteralColumns(e: Expression) = {
+    e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+      case u @ UnresolvedAttribute(nameParts) =>
+        LiteralFunctionResolution.resolve(nameParts).getOrElse(u)
     }
   }
 
@@ -241,7 +259,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       variableResolution.resolveMultipartName(
         nameParts = nameParts,
         resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty,
-        resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate,
         referredTempVariableNames = AnalysisContext.get.referredTempVariableNames
       ).map(e => Alias(e, nameParts.last)())
     }

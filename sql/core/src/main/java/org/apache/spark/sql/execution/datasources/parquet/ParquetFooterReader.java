@@ -18,10 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.util.Optional;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.Path;
 import org.apache.parquet.HadoopReadOptions;
 import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.format.converter.ParquetMetadataConverter;
@@ -37,53 +36,77 @@ import org.apache.spark.sql.execution.datasources.PartitionedFile;
  */
 public class ParquetFooterReader {
 
-  public static final boolean SKIP_ROW_GROUPS = true;
-  public static final boolean WITH_ROW_GROUPS = false;
-
   /**
-   * Reads footer for the input Parquet file 'split'. If 'skipRowGroup' is true,
-   * this will skip reading the Parquet row group metadata.
+   * Build a filter for reading footer of the input Parquet file 'split'.
+   * If 'skipRowGroup' is true, this will skip reading the Parquet row group metadata.
    *
    * @param file a part (i.e. "block") of a single file that should be read
-   * @param configuration hadoop configuration of file
+   * @param hadoopConf   hadoop configuration of file
    * @param skipRowGroup If true, skip reading row groups;
    *                     if false, read row groups according to the file split range
    */
-  public static ParquetMetadata readFooter(
-      Configuration configuration,
-      PartitionedFile file,
-      boolean skipRowGroup) throws IOException {
-    long fileStart = file.start();
-    ParquetMetadataConverter.MetadataFilter filter;
+  public static ParquetMetadataConverter.MetadataFilter buildFilter(
+      Configuration hadoopConf, PartitionedFile file, boolean skipRowGroup) {
     if (skipRowGroup) {
-      filter = ParquetMetadataConverter.SKIP_ROW_GROUPS;
+      return ParquetMetadataConverter.SKIP_ROW_GROUPS;
     } else {
-      filter = HadoopReadOptions.builder(configuration, file.toPath())
+      long fileStart = file.start();
+      return HadoopReadOptions.builder(hadoopConf, file.toPath())
           .withRange(fileStart, fileStart + file.length())
           .build()
           .getMetadataFilter();
     }
-    return readFooter(configuration, file.toPath(), filter);
   }
 
-  public static ParquetMetadata readFooter(Configuration configuration,
-      Path file, ParquetMetadataConverter.MetadataFilter filter) throws IOException {
-    return readFooter(HadoopInputFile.fromPath(file, configuration), filter);
-  }
-
-  public static ParquetMetadata readFooter(Configuration configuration,
-      FileStatus fileStatus, ParquetMetadataConverter.MetadataFilter filter) throws IOException {
-    return readFooter(HadoopInputFile.fromStatus(fileStatus, configuration), filter);
-  }
-
-  private static ParquetMetadata readFooter(HadoopInputFile inputFile,
+  public static ParquetMetadata readFooter(
+      HadoopInputFile inputFile,
       ParquetMetadataConverter.MetadataFilter filter) throws IOException {
-    ParquetReadOptions readOptions =
-      HadoopReadOptions.builder(inputFile.getConfiguration(), inputFile.getPath())
+    ParquetReadOptions readOptions = HadoopReadOptions
+        .builder(inputFile.getConfiguration(), inputFile.getPath())
         .withMetadataFilter(filter).build();
-    // Use try-with-resources to ensure fd is closed.
-    try (ParquetFileReader fileReader = ParquetFileReader.open(inputFile, readOptions)) {
+    try (var fileReader = ParquetFileReader.open(inputFile, readOptions)) {
       return fileReader.getFooter();
+    }
+  }
+
+  /**
+   * Decoding Parquet files generally involves two steps:
+   *  1. read and resolve the metadata (footer),
+   *  2. read and decode the row groups/column chunks.
+   * <p>
+   * It's possible to avoid opening the file twice by resuing the SeekableInputStream.
+   * When keepInputStreamOpen is true, the caller takes responsibility to close the
+   * SeekableInputStream. Currently, this is only supported by parquet vectorized reader.
+   *
+   * @param hadoopConf hadoop configuration of file
+   * @param file       a part (i.e. "block") of a single file that should be read
+   * @param keepInputStreamOpen when true, keep the SeekableInputStream of file being open
+   * @return if keepInputStreamOpen is true, the returned OpenedParquetFooter carries
+   *         Some(SeekableInputStream), otherwise None.
+   */
+  public static OpenedParquetFooter openFileAndReadFooter(
+      Configuration hadoopConf,
+      PartitionedFile file,
+      boolean keepInputStreamOpen) throws IOException {
+    var readOptions = HadoopReadOptions.builder(hadoopConf, file.toPath())
+        // `keepInputStreamOpen` is true only when parquet vectorized reader is used
+        // on the caller side, in such a case, the footer will be resued later on
+        // reading row groups, so here must read row groups metadata ahead.
+        // when false, the caller uses parquet-mr to read the file, only file metadata
+        // is required on planning phase, and parquet-mr will read the footer again
+        // on reading row groups.
+        .withMetadataFilter(buildFilter(hadoopConf, file, !keepInputStreamOpen))
+        .build();
+    var inputFile = HadoopInputFile.fromPath(file.toPath(), hadoopConf);
+    var inputStream = inputFile.newStream();
+    try (var fileReader = ParquetFileReader.open(inputFile, readOptions, inputStream)) {
+      var footer = fileReader.getFooter();
+      if (keepInputStreamOpen) {
+        fileReader.detachFileInputStream();
+        return new OpenedParquetFooter(footer, inputFile, Optional.of(inputStream));
+      } else {
+        return new OpenedParquetFooter(footer, inputFile, Optional.empty());
+      }
     }
   }
 }

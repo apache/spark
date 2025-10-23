@@ -65,11 +65,7 @@ abstract class DataSourceV2RelationBase(
   override def skipSchemaResolution: Boolean = table.supports(TableCapability.ACCEPT_ANY_SCHEMA)
 
   override def simpleString(maxFields: Int): String = {
-    val qualifiedTableName = (catalog, identifier) match {
-      case (Some(cat), Some(ident)) => s"${cat.name()}.${ident.toString}"
-      case _ => ""
-    }
-    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $qualifiedTableName $name"
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
   override def computeStats(): Statistics = {
@@ -233,6 +229,10 @@ case class StreamingDataSourceV2ScanRelation(
   }
 
   override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
+}
+
+object ExtractV2Table {
+  def unapply(relation: DataSourceV2Relation): Option[Table] = Some(relation.table)
 }
 
 object DataSourceV2Relation {

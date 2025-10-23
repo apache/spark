@@ -384,6 +384,11 @@
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
     ]
   },
+  "INVALID_ARROW_UDTF_TABLE_ARGUMENT": {
+    "message": [
+      "Arrow UDTFs with PARTITION BY must have a TABLE argument that results in a PyArrow RecordBatch, but got <actual_type>."
+    ]
+  },
   "INVALID_ARROW_UDTF_WITH_ANALYZE": {
     "message": [
       "The arrow UDTF '<name>' is invalid. Arrow UDTFs do not support the 'analyze' method. Please remove the 'analyze' method from '<name>' and specify a returnType instead."
@@ -896,6 +901,11 @@
       "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
     ]
   },
+  "PIPELINE_SPEC_INVALID_GLOB_PATTERN": {
+    "message": [
+      "Invalid glob pattern `<glob_pattern>` in libraries. Only file paths, or folder paths ending with /** are allowed."
+    ]
+  },
   "PIPELINE_SPEC_MISSING_REQUIRED_FIELD": {
     "message": [
       "Pipeline spec missing required field `<field_name>`."
@@ -1123,6 +1133,24 @@
     "message": [
       "Cannot serialize the function `<name>`. If you accessed the Spark session, or a DataFrame defined outside of the function, or any object that contains a Spark session, please be aware that they are not allowed in Spark Connect. For `foreachBatch`, please access the Spark session using `df.sparkSession`, where `df` is the first parameter in your `foreachBatch` function. For `StreamingQueryListener`, please access the Spark session using `self.spark`. For details please check out the PySpark doc for `foreachBatch` and `StreamingQueryListener`."
     ]
+  },
+  "ST_INVALID_ALGORITHM_VALUE" : {
+    "message" : [
+      "Invalid or unsupported edge interpolation algorithm value: '<alg>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_CRS_VALUE" : {
+    "message" : [
+      "Invalid or unsupported CRS (coordinate reference system) value: '<crs>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_SRID_VALUE" : {
+    "message" : [
+      "Invalid or unsupported SRID (spatial reference identifier) value: <srid>."
+    ],
+    "sqlState" : "22023"
   },
   "TEST_CLASS_NOT_COMPILED": {
     "message": [

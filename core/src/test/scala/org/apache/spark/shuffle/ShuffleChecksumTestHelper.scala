@@ -19,6 +19,8 @@ package org.apache.spark.shuffle
 
 import java.io.File
 
+import org.apache.spark.shuffle.checksum.{OutputStreamRowBasedChecksum, RowBasedChecksum}
+
 trait ShuffleChecksumTestHelper {
 
   /**
@@ -36,5 +38,17 @@ trait ShuffleChecksumTestHelper {
 
     assert(ShuffleChecksumUtils.compareChecksums(numPartition, algorithm, checksum, data, index),
       "checksum must be consistent at both write and read sides")
+  }
+
+  def getRowBasedChecksumValues(rowBasedChecksums: Array[RowBasedChecksum]): Array[Long] = {
+    if (rowBasedChecksums.isEmpty) {
+      Array.empty
+    } else {
+      rowBasedChecksums.map(_.getValue)
+    }
+  }
+
+  def createPartitionRowBasedChecksums(numPartitions: Int): Array[RowBasedChecksum] = {
+    Array.tabulate(numPartitions)(_ => new OutputStreamRowBasedChecksum("ADLER32"))
   }
 }

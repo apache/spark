@@ -154,7 +154,6 @@ case class TransformWithStateInPySparkExec(
     val runner = new TransformWithStateInPySparkPythonPreInitRunner(
       pythonFunction,
       "pyspark.sql.streaming.transform_with_state_driver_worker",
-      sessionLocalTimeZone,
       groupingKeySchema,
       driverProcessorHandle
     )

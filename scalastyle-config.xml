@@ -827,6 +827,11 @@ This file is divided into 3 sections:
     <customMessage>Use stackTraceToString of JavaUtils/SparkFileUtils/Utils instead.</customMessage>
   </check>
 
+  <check customId="googleThrowablesGetRootCause" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bThrowables\.getRootCause\b</parameter></parameters>
+    <customMessage>Use getRootCause of SparkErrorUtils or Utils instead</customMessage>
+  </check>
+
   <check customId="preconditionschecknotnull" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bPreconditions\.checkNotNull\b</parameter></parameters>
     <customMessage>Use requireNonNull of java.util.Objects instead.</customMessage>

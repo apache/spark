@@ -148,6 +148,20 @@ class SQLTestUtils:
                 self.spark.catalog.dropTempView(v)
 
     @contextmanager
+    def temp_func(self, *functions):
+        """
+        A convenient context manager to test with some specific temporary functions.
+        This drops the temporary functions if it exists.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for f in functions:
+                self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS %s" % f)
+
+    @contextmanager
     def function(self, *functions):
         """
         A convenient context manager to test with some specific functions. This drops the given

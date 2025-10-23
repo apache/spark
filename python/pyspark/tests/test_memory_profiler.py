@@ -112,6 +112,10 @@ class MemoryProfilerTests(PySparkTestCase):
             self.sc.dump_profiles(d)
             self.assertTrue(f"udf_{id}_memory.txt" in os.listdir(d))
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
     def test_profile_pandas_udf(self):
         udfs = [self.exec_pandas_udf_ser_to_ser, self.exec_pandas_udf_ser_to_scalar]
         udf_names = ["ser_to_ser", "ser_to_scalar"]
@@ -130,6 +134,10 @@ class MemoryProfilerTests(PySparkTestCase):
                 "Profiling UDFs with iterators input/output is not supported" in str(user_warns[0])
             )
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
     def test_profile_pandas_function_api(self):
         apis = [self.exec_grouped_map]
         f_names = ["grouped_map"]
@@ -294,15 +302,16 @@ class MemoryProfiler2TestsMixin:
         def add1(x):
             return x + 1
 
-        self.spark.udf.register("add1", add1)
+        with self.temp_func("add1"):
+            self.spark.udf.register("add1", add1)
 
-        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
-            self.spark.sql("SELECT id, add1(id) add1 FROM range(10)").collect()
+            with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+                self.spark.sql("SELECT id, add1(id) add1 FROM range(10)").collect()
 
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+            self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
-        for id in self.profile_results:
-            self.assert_udf_memory_profile_present(udf_id=id)
+            for id in self.profile_results:
+                self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,

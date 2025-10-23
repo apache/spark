@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -1211,4 +1212,32 @@ trait UnresolvedPlanId extends LeafExpression with Unevaluable {
 
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
+}
+
+/**
+ * Logical plan representing execute immediate query.
+ *
+ * @param sqlStmtStr the query expression (first child)
+ * @param args parameters from USING clause (subsequent children)
+ * @param targetVariables variables to store the result of the query
+ */
+case class UnresolvedExecuteImmediate(
+    sqlStmtStr: Expression,
+    args: Seq[Expression],
+    targetVariables: Seq[Expression])
+  extends UnresolvedLeafNode with SupportsSubquery {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
+}
+
+case class UnresolvedEventTimeWatermark(
+    eventTimeColExpr: NamedExpression,
+    delay: CalendarInterval,
+    child: LogicalPlan)
+  extends UnresolvedUnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_EVENT_TIME_WATERMARK)
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): UnresolvedEventTimeWatermark = copy(child = newChild)
 }

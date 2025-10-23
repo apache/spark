@@ -241,6 +241,16 @@ object SQLConf {
     }
   }
 
+  val PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX =
+    buildConf("spark.sql.analyzer.preferColumnOverLcaInArrayIndex")
+    .internal()
+    .doc(
+      "When true, prefer the column from the underlying relation over the lateral column alias " +
+      "reference with the same name (see SPARK-53734)."
+    )
+    .booleanConf
+    .createWithDefault(true)
+
   val DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT =
     buildConf("spark.sql.analyzer.dontDeduplicateExpressionIfExprIdInOutput")
     .internal()
@@ -875,6 +885,29 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
 
+  val SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED =
+    buildConf("spark.sql.shuffle.orderIndependentChecksum.enabled")
+      .doc("Whether to calculate order independent checksum for the shuffle data or not. If " +
+        "enabled, Spark will calculate a checksum that is independent of the input row order for " +
+        "each mapper and returns the checksums from executors to driver. This is different from " +
+        "the checksum computed when spark.shuffle.checksum.enabled is enabled which is sensitive " +
+        "to shuffle data ordering to detect file corruption. While this checksum will be the " +
+        "same even if the shuffle row order changes and it is used to detect whether different " +
+        "task attempts of the same partition produce different output data or not (same set of " +
+        "keyValue pairs). In case the output data has changed across retries, Spark will need to " +
+        "retry all tasks of the consumer stages to avoid correctness issues.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED =
+    buildConf("spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch")
+      .doc("Whether to retry all tasks of a consumer stage when we detect checksum mismatches " +
+        "with its producer stages.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
       .internal()
@@ -1500,6 +1533,18 @@ object SQLConf {
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
+
+  val LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING =
+    buildConf("spark.sql.legacy.parquet.returnNullStructIfAllFieldsMissing")
+      .internal()
+      .doc("When true, if all requested fields of a struct are missing in a parquet file, assume " +
+        "the struct is always null, even if other fields are present. The default behavior is " +
+        "to fetch and read an arbitrary non-requested field present in the file to determine " +
+        "struct nullness. If enabled, schema pruning may cause non-null structs to be read as " +
+        "null.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
@@ -2631,6 +2676,16 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.3)
 
+  val MAX_VERSIONS_TO_DELETE_PER_MAINTENANCE =
+    buildConf("spark.sql.streaming.stateStore.maxVersionsToDeletePerMaintenance")
+    .internal()
+    .doc("The maximum number of versions to delete per maintenance operation. By default, " +
+      "this value is set to -1, which means no limit. Note that, currently this is only " +
+      "supported for the RocksDB state store provider.")
+    .version("4.1.0")
+    .intConf
+    .createWithDefault(-1)
+
   val MAX_BATCHES_TO_RETAIN_IN_MEMORY = buildConf("spark.sql.streaming.maxBatchesToRetainInMemory")
     .internal()
     .doc("The maximum number of batches which will be retained in memory to avoid " +
@@ -3594,7 +3649,8 @@ object SQLConf {
   val CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
     buildConf("spark.sql.classic.shuffleDependency.fileCleanup.enabled")
       .doc("When enabled, shuffle files will be cleaned up at the end of classic " +
-        "SQL executions.")
+        "SQL executions. Note that this cleanup may cause stage retries and regenerate " +
+        "shuffle files if the same dataframe reference is executed again.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
@@ -3707,6 +3763,19 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
+
+  val PYSPARK_BINARY_AS_BYTES =
+    buildConf("spark.sql.execution.pyspark.binaryAsBytes")
+      .doc("When true, BinaryType is consistently mapped to bytes in PySpark. " +
+        "When false, restores the PySpark behavior before 4.1.0. Before 4.1.0, BinaryType is " +
+        "mapped to bytearray for regular UDF and UDTF without Arrow optimization, " +
+        "DataFrame APIs (both Spark Classic and Spark Connect), and data sources; " +
+        "BinaryType is mapped to bytes for Arrow-optimized UDF and UDTF with " +
+        "legacy pandas conversion.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
 
   val ARROW_LOCAL_RELATION_THRESHOLD =
     buildConf("spark.sql.execution.arrow.localRelationThreshold")
@@ -4143,6 +4212,17 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED =
+    buildConf("spark.sql.scripting.continueHandlerEnabled")
+      .internal()
+      .doc("EXPERIMENTAL FEATURE/WORK IN PROGRESS: SQL Scripting CONTINUE HANDLER feature " +
+        "is under development and still not working as intended. This feature switch is intended " +
+        "to be used internally for development and testing, not by end users. " +
+        "YOU ARE ADVISED AGAINST USING THIS FEATURE AS ITS NOT FINISHED.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
@@ -5149,6 +5229,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY =
+    buildConf("spark.sql.legacy.parameterSubstitution.constantsOnly")
+      .doc("When true, limits parameter substitution to constants in DML/queries only, " +
+        "restoring the legacy behavior where parameter markers (? or :param) are only allowed " +
+        "in contexts where constant literals are expected. When false (default), " +
+        "parameter substitution is enabled everywhere a literal is supported, " +
+        "allowing parameter markers in any literal context throughout SQL parsing.")
+      .internal()
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
       .internal()
@@ -5827,7 +5919,47 @@ object SQLConf {
       .version("3.5.0")
       .intConf
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
-      .createWithDefault(64 * 1024 * 1024)
+      .createWithDefault(1024 * 1024)
+
+  val LOCAL_RELATION_CHUNK_SIZE_ROWS =
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY)
+      .doc("The chunk size in number of rows when splitting ChunkedCachedLocalRelation.data " +
+        "into batches. A new chunk is created when either " +
+        "spark.sql.session.localRelationChunkSizeBytes " +
+        "or spark.sql.session.localRelationChunkSizeRows is reached.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "The chunk size in number of rows must be positive")
+      .createWithDefault(10000)
+
+  val LOCAL_RELATION_CHUNK_SIZE_BYTES =
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY)
+      .doc("The chunk size in bytes when splitting ChunkedCachedLocalRelation.data " +
+        "into batches. A new chunk is created when either " +
+        "spark.sql.session.localRelationChunkSizeBytes " +
+        "or spark.sql.session.localRelationChunkSizeRows is reached.")
+      .version("4.1.0")
+      .longConf
+      .checkValue(_ > 0, "The chunk size in bytes must be positive")
+      .createWithDefault(16 * 1024 * 1024L)
+
+  val LOCAL_RELATION_CHUNK_SIZE_LIMIT =
+    buildConf("spark.sql.session.localRelationChunkSizeLimit")
+      .internal()
+      .doc("Limit on how large a single chunk of a ChunkedCachedLocalRelation.data " +
+        "can be in bytes. If the limit is exceeded, an exception is thrown.")
+      .version("4.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("2000MB")
+
+  val LOCAL_RELATION_SIZE_LIMIT =
+    buildConf("spark.sql.session.localRelationSizeLimit")
+      .internal()
+      .doc("Limit on how large ChunkedCachedLocalRelation.data can be in bytes." +
+        "If the limit is exceeded, an exception is thrown.")
+      .version("4.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("3GB")
 
   val DECORRELATE_JOIN_PREDICATE_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
@@ -6621,6 +6753,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
+  def shuffleOrderIndependentChecksumEnabled: Boolean =
+    getConf(SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)
+
+  def shuffleChecksumMismatchFullRetryEnabled: Boolean =
+    getConf(SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED)
+
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
@@ -6641,6 +6779,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
+
+  def maxVersionsToDeletePerMaintenance: Int = getConf(MAX_VERSIONS_TO_DELETE_PER_MAINTENANCE)
 
   def ratioExtraSpaceAllowedInCheckpoint: Double = getConf(RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT)
 
@@ -7065,11 +7205,17 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
+  def localRelationChunkSizeLimit: Long = getConf(LOCAL_RELATION_CHUNK_SIZE_LIMIT)
+
+  def localRelationSizeLimit: Long = getConf(LOCAL_RELATION_SIZE_LIMIT)
+
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
 
   def arrowLocalRelationThreshold: Long = getConf(ARROW_LOCAL_RELATION_THRESHOLD)
 
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
+
+  def pysparkBinaryAsBytes: Boolean = getConf(PYSPARK_BINARY_AS_BYTES)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
@@ -7375,6 +7521,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
+
+  override def legacyParameterSubstitutionConstantsOnly: Boolean =
+    getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)
 
   def streamStatePollingInterval: Long = getConf(SQLConf.PIPELINES_STREAM_STATE_POLLING_INTERVAL)
 

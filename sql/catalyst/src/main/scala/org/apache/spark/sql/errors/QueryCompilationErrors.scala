@@ -1511,8 +1511,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "continuousSources" -> continuousSources.mkString(", ")))
   }
 
-  def noSuchTableError(ident: Identifier): NoSuchTableException = {
-    new NoSuchTableException(ident.asMultipartIdentifier)
+  def noSuchTableError(catalogName: String, ident: Identifier): NoSuchTableException = {
+    new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
   }
 
   def noSuchTableError(nameParts: Seq[String]): Throwable = {
@@ -3475,19 +3475,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key))
   }
 
-  def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> SPARK_DOC_ROOT)
-    )
-  }
-
-  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
-  }
-
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1327",
@@ -4131,10 +4118,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def invalidExecuteImmediateVariableType(dataType: DataType): Throwable = {
+  def invalidExecuteImmediateExpressionType(dataType: DataType): Throwable = {
     throw new AnalysisException(
-      errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
-      messageParameters = Map("varType" -> toSQLType(dataType)))
+      errorClass = "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      messageParameters = Map("exprType" -> toSQLType(dataType)))
   }
 
   def nullSQLStringExecuteImmediate(varName: String): Throwable = {
@@ -4146,12 +4133,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidStatementForExecuteInto(queryString: String): Throwable = {
     throw new AnalysisException(
       errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
-      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
-  }
-
-  def nestedExecuteImmediate(queryString: String): Throwable = {
-    throw new AnalysisException(
-      errorClass = "NESTED_EXECUTE_IMMEDIATE",
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
   }
 

@@ -20,7 +20,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from decimal import Decimal
-from typing import Callable, Iterable, List, Union
+from typing import Callable, Iterable, List, Union, Iterator, Tuple
 
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql.datasource import (
@@ -48,7 +48,7 @@ from pyspark.sql.datasource import (
 )
 from pyspark.sql.functions import spark_partition_id
 from pyspark.sql.session import SparkSession
-from pyspark.sql.types import Row, StructType, VariantVal
+from pyspark.sql.types import Row, StructField, StructType, IntegerType, DecimalType, VariantVal
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     SPARK_HOME,
@@ -754,6 +754,33 @@ class BasePythonDataSourceTestsMixin:
             r"\[DATA_SOURCE_TYPE_MISMATCH\] Expected an instance of DataSourceWriter",
         ):
             df.write.format("test").mode("append").saveAsTable("test_table")
+
+    def test_decimal_round(self):
+        class SimpleDataSource(DataSource):
+            @classmethod
+            def name(cls) -> str:
+                return "simple_decimal"
+
+            def schema(self) -> StructType:
+                return StructType(
+                    [
+                        StructField("i", IntegerType()),
+                        StructField("d", DecimalType(38, 18)),
+                    ]
+                )
+
+            def reader(self, schema: StructType) -> DataSourceReader:
+                return SimpleDataSourceReader()
+
+        class SimpleDataSourceReader(DataSourceReader):
+            def read(self, partition: InputPartition) -> Iterator[Tuple]:
+                yield (1, Decimal(1.234))
+
+        self.spark.dataSource.register(SimpleDataSource)
+        df = self.spark.read.format("simple_decimal").load()
+
+        rounded = df.select("d").first().d
+        self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
     @unittest.skipIf(
         "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"

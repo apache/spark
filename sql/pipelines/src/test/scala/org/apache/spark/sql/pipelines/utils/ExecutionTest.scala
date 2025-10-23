@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.pipelines.utils
 
+import org.scalatest.Assertions.fail
+
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
@@ -51,17 +53,35 @@ trait TestPipelineUpdateContextMixin {
    * @param fullRefreshTables Set of tables to be fully refreshed.
    * @param refreshTables  Set of tables to be refreshed.
    * @param resetCheckpointFlows Set of flows to be reset.
+   * @param failOnErrorEvent Whether to fail test when receiving event with error.
    */
   case class TestPipelineUpdateContext(
       spark: SparkSession,
       unresolvedGraph: DataflowGraph,
+      storageRoot: String,
       fullRefreshTables: TableFilter = NoTables,
       refreshTables: TableFilter = AllTables,
-      resetCheckpointFlows: FlowFilter = AllFlows
+      resetCheckpointFlows: FlowFilter = AllFlows,
+      failOnErrorEvent: Boolean = false
   ) extends PipelineUpdateContext {
     val eventBuffer = new PipelineRunEventBuffer()
 
-    override val eventCallback: PipelineEvent => Unit = eventBuffer.addEvent
+    override val eventCallback: PipelineEvent => Unit = { event =>
+      eventBuffer.addEvent(event)
+      // For debugging purposes, print the event to the console.
+      // Most tests expects pipeline to succeed, this makes it easier to see
+      // the error when it happens.
+      if (event.error.nonEmpty) {
+        // scalastyle:off println
+        println("\n=== Received Pipeline Event with Error ===")
+        println(event.messageWithError)
+        println("=================================")
+        // scalastyle:on println
+        if (failOnErrorEvent) {
+          fail(s"Pipeline event with error received: ${event.messageWithError}")
+        }
+      }
+    }
 
     override def flowProgressEventLogger: FlowProgressEventLogger = {
       new FlowProgressEventLogger(eventCallback = eventCallback)
