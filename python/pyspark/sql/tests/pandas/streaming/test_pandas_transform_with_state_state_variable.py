@@ -985,9 +985,7 @@ class TransformWithStateStateVariableTestsMixin:
         pandas_requirement_message or pyarrow_requirement_message or "Not supported in no-GIL mode",
     ),
 )
-class TransformWithStateInPandasStateVariableTestsMixin(
-    TransformWithStateStateVariableTestsMixin
-):
+class TransformWithStateInPandasStateVariableTestsMixin(TransformWithStateStateVariableTestsMixin):
     @classmethod
     def use_pandas(cls) -> bool:
         return True
@@ -1008,8 +1006,7 @@ class TransformWithStateInPandasStateVariableTestsMixin(
 
 
 class TransformWithStateInPandasStateVariableTests(
-    TransformWithStateInPandasStateVariableTestsMixin,
-    ReusedSQLTestCase
+    TransformWithStateInPandasStateVariableTestsMixin, ReusedSQLTestCase
 ):
     pass
 

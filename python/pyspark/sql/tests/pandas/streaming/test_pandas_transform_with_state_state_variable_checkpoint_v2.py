@@ -34,8 +34,7 @@ class TransformWithStateInPandasStateVariableWithCheckpointV2TestsMixin(
 
 
 class TransformWithStateInPandasStateVariableWithCheckpointV2Tests(
-    TransformWithStateInPandasStateVariableWithCheckpointV2TestsMixin,
-    ReusedSQLTestCase
+    TransformWithStateInPandasStateVariableWithCheckpointV2TestsMixin, ReusedSQLTestCase
 ):
     pass
 

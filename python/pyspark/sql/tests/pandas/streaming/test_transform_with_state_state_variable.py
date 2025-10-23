@@ -35,10 +35,8 @@ from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_v
 @unittest.skipIf(
     not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
     cast(str, pyarrow_requirement_message or "Not supported in no-GIL mode"),
-    )
-class TransformWithStateInPySparkStateVariableTestsMixin(
-    TransformWithStateStateVariableTestsMixin
-):
+)
+class TransformWithStateInPySparkStateVariableTestsMixin(TransformWithStateStateVariableTestsMixin):
     @classmethod
     def use_pandas(cls) -> bool:
         return False
@@ -59,8 +57,7 @@ class TransformWithStateInPySparkStateVariableTestsMixin(
 
 
 class TransformWithStateInPySparkStateVariableTests(
-    TransformWithStateInPySparkStateVariableTestsMixin,
-    ReusedSQLTestCase
+    TransformWithStateInPySparkStateVariableTestsMixin, ReusedSQLTestCase
 ):
     pass
 

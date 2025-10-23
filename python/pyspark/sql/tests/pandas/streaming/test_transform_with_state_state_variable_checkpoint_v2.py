@@ -34,8 +34,7 @@ class TransformWithStateInPySparkStateVariableWithCheckpointV2TestsMixin(
 
 
 class TransformWithStateInPySparkStateVariableWithCheckpointV2Tests(
-    TransformWithStateInPySparkStateVariableWithCheckpointV2TestsMixin,
-    ReusedSQLTestCase
+    TransformWithStateInPySparkStateVariableWithCheckpointV2TestsMixin, ReusedSQLTestCase
 ):
     pass
 

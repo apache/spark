@@ -25,14 +25,16 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
     ReusedSQLTestCase,
 )
-from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state \
-    import TransformWithStateTestsMixin
+from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import (
+    TransformWithStateTestsMixin,
+)
 from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import *
+
 
 @unittest.skipIf(
     not have_pyarrow or os.environ.get("PYTHON_GIL", "?") == "0",
     cast(str, pyarrow_requirement_message or "Not supported in no-GIL mode"),
-    )
+)
 class TransformWithStateInPySparkTestsMixin(TransformWithStateTestsMixin):
     @classmethod
     def use_pandas(cls) -> bool:
