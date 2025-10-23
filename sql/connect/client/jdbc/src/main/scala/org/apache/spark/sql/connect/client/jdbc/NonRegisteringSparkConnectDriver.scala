@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.client.jdbc
 
-import java.sql.{Connection, Driver, DriverPropertyInfo, SQLFeatureNotSupportedException}
+import java.sql.{Connection, Driver, DriverPropertyInfo, SQLException, SQLFeatureNotSupportedException}
 import java.util.Properties
 import java.util.logging.Logger
 
@@ -29,7 +29,11 @@ class NonRegisteringSparkConnectDriver extends Driver {
   override def acceptsURL(url: String): Boolean = url.startsWith("jdbc:sc://")
 
   override def connect(url: String, info: Properties): Connection = {
-    throw new UnsupportedOperationException("TODO(SPARK-53934)")
+    if (url == null) {
+      throw new SQLException("url must not be null")
+    }
+
+    if (this.acceptsURL(url)) new SparkConnectConnection(url, info) else null
   }
 
   override def getPropertyInfo(url: String, info: Properties): Array[DriverPropertyInfo] =
