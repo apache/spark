@@ -1361,11 +1361,14 @@ class SourceCodeLocation(google.protobuf.message.Message):
 
     FILE_NAME_FIELD_NUMBER: builtins.int
     LINE_NUMBER_FIELD_NUMBER: builtins.int
+    DEFINITION_PATH_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     file_name: builtins.str
     """The file that this pipeline source code was defined in."""
     line_number: builtins.int
     """The specific line number that this pipeline source code is located at, if applicable."""
+    definition_path: builtins.str
+    """The path of the top-level pipeline file determined at runtime during pipeline initialization."""
     @property
     def extension(
         self,
@@ -1382,15 +1385,20 @@ class SourceCodeLocation(google.protobuf.message.Message):
         *,
         file_name: builtins.str | None = ...,
         line_number: builtins.int | None = ...,
+        definition_path: builtins.str | None = ...,
         extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_definition_path",
+            b"_definition_path",
             "_file_name",
             b"_file_name",
             "_line_number",
             b"_line_number",
+            "definition_path",
+            b"definition_path",
             "file_name",
             b"file_name",
             "line_number",
@@ -1400,10 +1408,14 @@ class SourceCodeLocation(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_definition_path",
+            b"_definition_path",
             "_file_name",
             b"_file_name",
             "_line_number",
             b"_line_number",
+            "definition_path",
+            b"definition_path",
             "extension",
             b"extension",
             "file_name",
@@ -1412,6 +1424,10 @@ class SourceCodeLocation(google.protobuf.message.Message):
             b"line_number",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_definition_path", b"_definition_path"]
+    ) -> typing_extensions.Literal["definition_path"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
@@ -1445,3 +1461,68 @@ class PipelineQueryFunctionExecutionSignal(google.protobuf.message.Message):
     ) -> None: ...
 
 global___PipelineQueryFunctionExecutionSignal = PipelineQueryFunctionExecutionSignal
+
+class PipelineAnalysisContext(google.protobuf.message.Message):
+    """Metadata providing context about the pipeline during Spark Connect query analysis."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
+    DEFINITION_PATH_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
+    dataflow_graph_id: builtins.str
+    """Unique identifier of the dataflow graph associated with this pipeline."""
+    definition_path: builtins.str
+    """The path of the top-level pipeline file determined at runtime during pipeline initialization."""
+    @property
+    def extension(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        google.protobuf.any_pb2.Any
+    ]:
+        """Reserved field for protocol extensions."""
+    def __init__(
+        self,
+        *,
+        dataflow_graph_id: builtins.str | None = ...,
+        definition_path: builtins.str | None = ...,
+        extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_definition_path",
+            b"_definition_path",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "definition_path",
+            b"definition_path",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_dataflow_graph_id",
+            b"_dataflow_graph_id",
+            "_definition_path",
+            b"_definition_path",
+            "dataflow_graph_id",
+            b"dataflow_graph_id",
+            "definition_path",
+            b"definition_path",
+            "extension",
+            b"extension",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"]
+    ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_definition_path", b"_definition_path"]
+    ) -> typing_extensions.Literal["definition_path"] | None: ...
+
+global___PipelineAnalysisContext = PipelineAnalysisContext
