@@ -273,7 +273,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Request more than the max per rp for one rp
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2, rp -> 3))
     // 2 for default, and 2 for rp
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 4)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 4)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(1, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(2, defaultProfile.id))
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(3, rp.id))
@@ -285,7 +285,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(pendingExecutor(2, defaultProfile.id))
     snapshotsStore.updatePod(pendingExecutor(3, rp.id))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 4)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 4)
     verify(podResource, times(4)).create()
     verify(labeledPods, never()).delete()
 
@@ -294,14 +294,14 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1, rp -> 3))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(labeledPods, times(1)).delete()
 
     // Make one pod running from non-default rp so we have one more slot for pending pods.
     snapshotsStore.updatePod(runningExecutor(3, rp.id))
     snapshotsStore.updatePod(pendingExecutor(4, rp.id))
     snapshotsStore.notifySubscribers()
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(5, rp.id))
     verify(labeledPods, times(1)).delete()
   }
