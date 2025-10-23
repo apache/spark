@@ -114,6 +114,18 @@
     ],
     "sqlState" : "22004"
   },
+  "APPROX_TOP_K_SKETCH_SIZE_NOT_MATCH" : {
+    "message" : [
+      "Combining approx_top_k sketches of different sizes is not allowed. Found sketches of size <size1> and <size2>."
+    ],
+    "sqlState" : "42846"
+  },
+  "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH" : {
+    "message" : [
+      "Combining approx_top_k sketches of different types is not allowed. Found sketches of type <type1> and <type2>."
+    ],
+    "sqlState" : "42846"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -570,6 +582,12 @@
       "Cannot load Kryo serialization codec. Kryo serialization cannot be used in the Spark Connect client. Use Java serialization, provide a custom Codec, or use Spark Classic instead."
     ],
     "sqlState" : "22KD3"
+  },
+  "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE" : {
+    "message" : [
+      "Multiple aliases are not supported in watermark clause."
+    ],
+    "sqlState" : "42000"
   },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
@@ -4973,6 +4991,12 @@
     ],
     "sqlState" : "4274K"
   },
+  "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE" : {
+    "message" : [
+      "The watermark clause requires an explicit name if expression is specified, but got <sqlExpr>."
+    ],
+    "sqlState" : "42000"
+  },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
       "<sessionCatalog> requires a single-part namespace, but got <namespace>."
@@ -5561,7 +5585,7 @@
   },
   "ST_INVALID_SRID_VALUE" : {
     "message" : [
-      "Invalid or unsupported SRID (spatial reference identifier) value: <srid>"
+      "Invalid or unsupported SRID (spatial reference identifier) value: <srid>."
     ],
     "sqlState" : "22023"
   },

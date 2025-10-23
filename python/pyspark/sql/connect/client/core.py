@@ -2003,6 +2003,12 @@ class SparkConnectClient(object):
                 return self._artifact_manager.cache_artifact(blob)
         raise SparkConnectException("Invalid state during retry exception handling.")
 
+    def cache_artifacts(self, blobs: list[bytes]) -> list[str]:
+        for attempt in self._retrying():
+            with attempt:
+                return self._artifact_manager.cache_artifacts(blobs)
+        raise SparkConnectException("Invalid state during retry exception handling.")
+
     def _verify_response_integrity(
         self,
         response: Union[

@@ -420,6 +420,29 @@ class ArrowTestsMixin:
                     )
             assert_frame_equal(pdf_ny, pdf_la_corrected)
 
+    def check_cached_local_relation_changing_values(self):
+        import random
+        import string
+
+        row_size = 1000
+        row_count = 64 * 1000
+        suffix = "abcdef"
+        str_value = (
+            "".join(random.choices(string.ascii_letters + string.digits, k=row_size)) + suffix
+        )
+        data = [(i, str_value) for i in range(row_count)]
+
+        for _ in range(2):
+            df = self.spark.createDataFrame(data, ["col1", "col2"])
+            assert df.count() == row_count
+            assert not df.filter(df["col2"].endswith(suffix)).isEmpty()
+
+    def check_large_cached_local_relation_same_values(self):
+        data = [("C000000032", "R20", 0.2555)] * 500_000
+        pdf = pd.DataFrame(data=data, columns=["Contrat", "Recommandation", "Distance"])
+        df = self.spark.createDataFrame(pdf)
+        df.collect()
+
     def test_toArrow_keep_utc_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
 
