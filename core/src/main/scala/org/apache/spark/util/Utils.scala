@@ -3136,6 +3136,16 @@ private[spark] object Utils
   }
 
   /**
+   * Return whether we are using SerialGC or not
+   */
+  lazy val isSerialGC: Boolean = checkUseGC("UseSerialGC")
+
+  /**
+   * Return whether we are using ParallelGC or not
+   */
+  lazy val isParallelGC: Boolean = checkUseGC("UseParallelGC")
+
+  /**
    * Return whether we are using G1GC or not
    */
   lazy val isG1GC: Boolean = checkUseGC("UseG1GC")
