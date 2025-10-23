@@ -64,9 +64,37 @@
       <version>${aws.java.sdk.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.amazonaws</groupId>
+      <groupId>software.amazon.kinesis</groupId>
       <artifactId>amazon-kinesis-producer</artifactId>
       <version>${aws.kinesis.producer.version}</version>
+      <scope>test</scope>
+      <exclusions>
+        <!-- auth and sts are excluded for SBT dependency management, so those dependencies
+          can be added explicitly -->
+        <exclusion>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>auth</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>sts</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.kjetland</groupId>
+          <artifactId>mbknor-jackson-jsonschema_2.12</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>auth</artifactId>
+      <version>${aws.java.sdk.v2.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>sts</artifactId>
+      <version>${aws.java.sdk.v2.version}</version>
       <scope>test</scope>
     </dependency>
     <!-- manage this up explicitly to match Spark; com.amazonaws:aws-java-sdk-pom specifies
