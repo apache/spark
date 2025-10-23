@@ -335,6 +335,8 @@ class CogroupedMapInArrowTestsMixin:
                 }
             )
 
+        schema = "key long, left_rows long, left_columns long, right_rows long, right_columns long"
+
         expected = [
             Row(key=0, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
             Row(key=1, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
@@ -353,10 +355,7 @@ class CogroupedMapInArrowTestsMixin:
                     result = (
                         df1.groupby("key")
                         .cogroup(df2.groupby("key"))
-                        .applyInArrow(
-                            summarize,
-                            schema="key long, left_rows long, left_columns long, right_rows long, right_columns long",
-                        )
+                        .applyInArrow(summarize, schema=schema)
                         .sort("key")
                         .collect()
                     )

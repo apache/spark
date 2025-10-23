@@ -682,6 +682,8 @@ class CogroupedApplyInPandasTestsMixin:
                 }
             )
 
+        schema = "key long, left_rows long, left_columns long, right_rows long, right_columns long"
+
         expected = [
             Row(key=0, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
             Row(key=1, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
@@ -700,10 +702,7 @@ class CogroupedApplyInPandasTestsMixin:
                     result = (
                         df1.groupby("key")
                         .cogroup(df2.groupby("key"))
-                        .applyInPandas(
-                            summarize,
-                            schema="key long, left_rows long, left_columns long, right_rows long, right_columns long",
-                        )
+                        .applyInPandas(summarize, schema=schema)
                         .sort("key")
                         .collect()
                     )
