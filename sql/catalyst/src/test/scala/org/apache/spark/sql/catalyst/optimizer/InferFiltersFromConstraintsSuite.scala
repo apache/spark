@@ -63,6 +63,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("filter: filter out constraints in condition with complex expression") {
+    val originalQuery = testRelation.where($"a" === 1 && $"b" === $"a" + 2).analyze
+    val correctAnswer = testRelation.where(IsNotNull($"a") && IsNotNull($"b") &&
+      $"a" === 1 &&  $"b" === $"a" + 2 && $"b" === Add(1, 2)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("single inner join: filter out values on either side on equi-join keys") {
     val x = testRelation.subquery("x")
     val y = testRelation.subquery("y")
@@ -211,6 +219,23 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val correct = optimizedLeft.join(right, Inner, condition)
 
     comparePlans(Optimize.execute(original.analyze), correct.analyze)
+  }
+
+  test("single inner join: infer constraints in condition with complex expressions") {
+    val leftRelation = testRelation.subquery("x")
+    val rightRelation = testRelation.subquery("y")
+
+    val left = leftRelation.where($"a" === 1)
+    val right = rightRelation
+
+    testConstraintsAfterJoin(
+      left,
+      right,
+      leftRelation.where(IsNotNull($"a") && $"a" === 1),
+      rightRelation.where(IsNotNull($"b") && $"b" === Add(1, 2)),
+      Inner,
+      Some("y.b".attr === "x.a".attr + 2)
+    )
   }
 
   test("SPARK-23405: left-semi equal-join should filter out null join keys on both sides") {
