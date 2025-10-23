@@ -892,4 +892,114 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       }
     }
   }
+
+  test("Partial aggregation skip should get triggered") {
+    withSQLConf(
+      SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key -> "true",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_MINROWS.key -> "2",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_RATIO.key -> "0.5",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_COMPACTION.key -> "1.0"
+    ) {
+      val data = Seq(("James", 1), ("James", 1), ("Phil", 1))
+      val aggDF = data.toDF("name", "values").groupBy("name").sum("values")
+      val partAggNode = aggDF.queryExecution.executedPlan.find {
+        case h: HashAggregateExec =>
+          val modes = h.aggregateExpressions.map(_.mode)
+          modes.nonEmpty && modes.forall(_ == Partial)
+        case _ => false
+      }
+      checkAnswer(aggDF, Seq(Row("James", 2), Row("Phil", 1)))
+      assert(partAggNode.isDefined,
+        "No HashAggregate node with partial aggregate expression found")
+      assert(partAggNode.get.metrics("partialAggSkipped").value > 0,
+        "Partial aggregation skip logic was not triggered")
+    }
+  }
+
+  test("Partial aggregation should not happen when skip partial aggregate disabled") {
+    withSQLConf(
+      SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key -> "false",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_MINROWS.key -> "2",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_RATIO.key -> "0.5",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_COMPACTION.key -> "1.0"
+    ) {
+      // Remove nulls from column 'a' to avoid NPE in sum_distinct
+      val cleanData = testData2.filter($"a".isNotNull)
+      val aggDF = cleanData.select(sum_distinct($"a"), sum($"b"))
+
+      val aggNodes = aggDF.queryExecution.executedPlan.collect {
+        case h: HashAggregateExec => h
+      }
+      val (baseNodes, other) = aggNodes.partition(_.child.isInstanceOf[SerializeFromObjectExec])
+
+      checkAnswer(aggDF, Row(6, 9))
+      assert(baseNodes.size == 1)
+
+      val skipped = baseNodes.head.metrics.get("partialAggSkipped").map(_.value).getOrElse(0L)
+      assert(skipped == 0, s"Partial aggregation skip logic was not triggered, skipped=$skipped")
+    }
+  }
+
+  test("Distinct: Partial aggregation should happen with all configs") {
+    withSQLConf(
+      SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key -> "true",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_MINROWS.key -> "2",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_RATIO.key -> "0.5",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_COMPACTION.key -> "1.0"
+    ) {
+      // Remove nulls from column 'a' to avoid NPE in sum_distinct
+      val cleanData = testData2.filter($"a".isNotNull)
+      val aggDF = cleanData.select(sum_distinct($"a"), sum($"b"))
+
+      val aggNodes = aggDF.queryExecution.executedPlan.collect {
+        case h: HashAggregateExec => h
+      }
+      val (baseNodes, other) = aggNodes.partition(_.child.isInstanceOf[SerializeFromObjectExec])
+
+      checkAnswer(aggDF, Row(6, 9))
+      assert(baseNodes.size == 1)
+
+      val skipped = baseNodes.head.metrics.get("partialAggSkipped").map(_.value).getOrElse(0L)
+      assert(skipped > 0, s"Partial aggregation skip logic was not triggered, skipped=$skipped")
+      assert(other.forall(!_.metrics.contains("partialAggSkipped")))
+    }
+  }
+
+  test("Avoid spill in partial aggregation" ) {
+    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key -> "true"),
+      (SQLConf.SKIP_PARTIAL_AGGREGATE_MINROWS.key -> "1")) {
+      // Create Dataframes
+      val data = Seq(("James", 1), ("James", 1), ("Phil", 1))
+      val aggDF = data.toDF("name", "values").groupBy("name").sum("values")
+      val partAggNode = aggDF.queryExecution.executedPlan.find {
+        case h: HashAggregateExec =>
+          val modes = h.aggregateExpressions.map(_.mode)
+          modes.nonEmpty && modes.forall(_ == Partial)
+        case _ => false
+      }
+
+      checkAnswer(aggDF, Seq(Row("James", 2), Row("Phil", 1)))
+      assert(partAggNode.isDefined,
+        "No HashAggregate node with partial aggregate expression found")
+      assert(partAggNode.get.metrics("partialAggSkipped").value == data.size,
+        "Partial aggregation got triggered in partial hash aggregate node")
+    }
+  }
+
+  test(s"Distinct: Partial aggregation should happen for " +
+    "HashAggregate nodes performing partial Aggregate operations " ) {
+    withSQLConf(
+      SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key -> "true",
+      SQLConf.SKIP_PARTIAL_AGGREGATE_MINROWS.key -> "2") {
+      val aggDF = testData2.select(sum_distinct($"a"), sum($"b"))
+      val aggNodes = aggDF.queryExecution.executedPlan.collect {
+        case h: HashAggregateExec => h
+      }
+      val (baseNodes, other) = aggNodes.partition(_.child.isInstanceOf[SerializeFromObjectExec])
+      checkAnswer(aggDF, Row(6, 9))
+      assert(baseNodes.size == 1 )
+      assert(baseNodes.head.metrics("partialAggSkipped").value == testData2.count())
+      assert(other.forall(!_.metrics.contains("partialAggSkipped")))
+    }
+  }
 }

@@ -1065,7 +1065,11 @@ class HashAggregationQuerySuite extends AggregationQuerySuite
 class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    Seq("true", "false").foreach { enableTwoLevelMaps =>
+    // The HashAggregationQueryWithControlledFallbackSuite is dependent on ordering and also
+    // assumes  partial aggregation to have happened.
+    // disabling the flag that skips partial aggregation
+    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key, "false")) {
+     Seq("true", "false").foreach { enableTwoLevelMaps =>
       withSQLConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key ->
         enableTwoLevelMaps) {
         Seq(4, 8).foreach { uaoSize =>
@@ -1099,6 +1103,7 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
           UnsafeAlignedOffset.setUaoSize(0)
         }
       }
+     }
     }
   }
 

@@ -2202,6 +2202,67 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SKIP_PARTIAL_AGGREGATE_MINROWS =
+    buildConf("spark.sql.aggregate.skipPartialAggregate.minNumRows")
+      .internal()
+      .doc("Number of records after which aggregate operator checks if " +
+        "partial aggregation phase can be avoided")
+      .version("3.1.0")
+      .longConf
+      .createWithDefault(100000)
+
+  // Low cardinality - Few unique keys which means hash map has very few entries.
+  // Controls skipping based on aggregation success ratio.
+  // Computed as (rows aggregated successfully / total input rows).
+  // If the ratio is greater than this threshold, partial aggregation is skipped,
+  // since most rows are already aggregating well and shuffle reduction is trivial.
+  val SKIP_PARTIAL_AGGREGATE_RATIO =
+    buildConf("spark.sql.aggregate.skipPartialAggregate.aggregateRatio")
+      .internal()
+      .doc("Threshold for skipping partial aggregation based on aggregation success ratio. " +
+        "This ratio is computed as (number of rows aggregated successfully /" +
+        " total number of input rows). " +
+        "If the ratio exceeds this value, the partial aggregate stage is skipped.")
+      .version("3.1.0")
+      .doubleConf
+      .checkValue(ratio => ratio > 0 && ratio <= 1.0,
+        "Invalid value for spark.sql.aggregate.skipPartialAggregate.aggregateRatio. " +
+          "Valid range is between 0 and 1.0")
+      .createWithDefault(0.5)
+
+
+  // High-cardinality - almost every row is unique.
+  // Controls skipping based on compaction effectiveness.
+  // Computed as (total input rows / number of unique keys).
+  // If this ratio is less than or equal to the threshold, compaction benefit is negligible
+  // (i.e., almost every row is unique), so partial aggregation is skipped.
+  val SKIP_PARTIAL_AGGREGATE_COMPACTION =
+    buildConf("spark.sql.aggregate.skipPartialAggregate.aggregateCompaction")
+      .internal()
+      .doc("Threshold for skipping partial aggregation based on compaction effectiveness. " +
+        "This ratio is computed as (total number of input rows /" +
+        " number of unique grouping keys). " +
+        "If the ratio is less than or equal to this value, compaction benefit is minimal and " +
+        "the partial aggregate stage is skipped.")
+      .version("3.1.0")
+      .doubleConf
+      .checkValue(ratio => ratio > 0,
+        "Invalid value for spark.sql.aggregate.skipPartialAggregate.aggregateCompaction. " +
+          "Valid value must be greater than 0")
+      .createWithDefault(1.05)
+
+  val SKIP_PARTIAL_AGGREGATE_ENABLED =
+    buildConf("spark.sql.aggregate.skipPartialAggregate")
+      .internal()
+      .doc("When enabled, the partial aggregation is skipped when the following" +
+        "two conditions are met. 1. When the total number of records processed is greater" +
+        s"than threshold defined by ${SKIP_PARTIAL_AGGREGATE_MINROWS.key} 2. When the ratio" +
+        "of record count in map to the total records is less that value defined by " +
+        s"${SKIP_PARTIAL_AGGREGATE_RATIO.key}")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_SORT_AGGREGATE_CODEGEN =
     buildConf("spark.sql.codegen.aggregate.sortAggregate.enabled")
       .internal()
@@ -4809,6 +4870,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
+  def skipPartialAggregateEnabled: Boolean = getConf(SKIP_PARTIAL_AGGREGATE_ENABLED)
+
+  def skipPartialAggregateThreshold: Long = getConf(SKIP_PARTIAL_AGGREGATE_MINROWS)
+
+  def skipPartialAggregateRatio: Double = getConf(SKIP_PARTIAL_AGGREGATE_RATIO)
+
+  def skipPartialAggregateCompaction: Double = getConf(SKIP_PARTIAL_AGGREGATE_COMPACTION)
 
   def streamingSessionWindowMergeSessionInLocalPartition: Boolean =
     getConf(STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION)
