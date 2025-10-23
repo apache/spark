@@ -264,7 +264,7 @@ def context_provider() -> dict[str, str]:
 def capture_outputs(
     context_provider: Callable[[], dict[str, str]] = context_provider
 ) -> Generator[None, None, None]:
-    if "SPARK_SESSION_UUID" in os.environ:
+    if "PYSPARK_SPARK_SESSION_UUID" in os.environ:
         marker: str = "PYTHON_WORKER_LOGGING"
         worker_id: str = str(os.getpid())
         json_out = original_stdout = sys.stdout

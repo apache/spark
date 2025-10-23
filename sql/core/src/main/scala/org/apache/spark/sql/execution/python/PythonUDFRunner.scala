@@ -43,7 +43,7 @@ abstract class BasePythonUDFRunner(
   override val envVars: util.Map[String, String] = {
     val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
     sessionUUID.foreach { uuid =>
-      envVars.put("SPARK_SESSION_UUID", uuid)
+      envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
     }
     envVars
   }

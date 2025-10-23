@@ -396,7 +396,7 @@ private[spark] class PythonWorkerFactory(
   }
 
   private val workerLogCapture =
-    envVars.get("SPARK_SESSION_UUID").map(new PythonWorkerLogCapture(_))
+    envVars.get("PYSPARK_SPARK_SESSION_UUID").map(new PythonWorkerLogCapture(_))
 
   /**
    * Redirect the given streams to our stderr in separate threads.
