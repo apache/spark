@@ -508,6 +508,14 @@ class SparkConf(loadDefaults: Boolean)
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
+  /**
+   * Get all parameters that start with `prefix` and apply f.
+   */
+  def getAllWithPrefix[K](prefix: String, f: String => K): Array[(K, String)] = {
+    getAll.filter { case (k, _) => k.startsWith(prefix) }
+      .map { case (k, v) => (f(k), v) }
+  }
+
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
     getAllWithPrefix("spark.executorEnv.").toImmutableArraySeq
