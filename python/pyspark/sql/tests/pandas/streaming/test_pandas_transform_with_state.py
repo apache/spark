@@ -27,7 +27,7 @@ import unittest
 from typing import cast
 
 from pyspark import SparkConf
-from pyspark.sql.functions import explode, split
+from pyspark.sql.functions import split
 from pyspark.sql.types import (
     StringType,
     StructType,
