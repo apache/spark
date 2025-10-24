@@ -307,7 +307,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               sql(wildcardL1DirStatement)
               val wildcardL1DirSqlStatement = s"SELECT * FROM tbl5"
               if (convertMetastore) {
-                checkAnswer(sql(wildcardL1DirSqlStatement), (1 to 4).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(wildcardL1DirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
               } else {
                 checkAnswer(sql(wildcardL1DirSqlStatement), Nil)
               }
