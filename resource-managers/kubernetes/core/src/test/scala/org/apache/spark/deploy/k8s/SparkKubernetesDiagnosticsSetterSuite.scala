@@ -30,7 +30,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants.DIAGNOSTICS_ANNOTATION
+import org.apache.spark.deploy.k8s.Constants.EXIT_EXCEPTION_ANNOTATION
 import org.apache.spark.deploy.k8s.Fabric8Aliases.PODS
 
 class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
@@ -60,14 +60,10 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
     setter = new SparkKubernetesDiagnosticsSetter(clientProvider)
   }
 
-  test("supports() should return true only for k8s:// URLs when the feature is enabled") {
-    assert(setter.supports(k8sClusterManagerUrl,
-      new SparkConf().set(KUBERNETES_STORE_DIAGNOSTICS, true)))
-    assert(!setter.supports(k8sClusterManagerUrl, new SparkConf()))
-    assert(!setter.supports(k8sClusterManagerUrl,
-      new SparkConf().set(KUBERNETES_STORE_DIAGNOSTICS, false)))
-    assert(!setter.supports("yarn", new SparkConf().set(KUBERNETES_STORE_DIAGNOSTICS, true)))
-    assert(!setter.supports("spark://localhost", new SparkConf()))
+  test("supports() should return true only for k8s:// URLs") {
+    assert(setter.supports(k8sClusterManagerUrl))
+    assert(!setter.supports("yarn"))
+    assert(!setter.supports("spark://localhost"))
   }
 
   test("setDiagnostics should throw if driver pod name is missing") {
@@ -97,7 +93,7 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
     val initialPod = SparkPod.initialPod().pod
     val editedPod = fn.apply(initialPod)
 
-    assert(editedPod.getMetadata.getAnnotations.get(DIAGNOSTICS_ANNOTATION)
+    assert(editedPod.getMetadata.getAnnotations.get(EXIT_EXCEPTION_ANNOTATION)
       == StringUtils.stringifyException(diagnostics))
   }
 }

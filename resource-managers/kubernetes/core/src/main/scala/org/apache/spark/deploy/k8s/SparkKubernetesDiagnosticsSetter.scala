@@ -23,7 +23,7 @@ import org.apache.hadoop.util.StringUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkDiagnosticsSetter
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants.DIAGNOSTICS_ANNOTATION
+import org.apache.spark.deploy.k8s.Constants.EXIT_EXCEPTION_ANNOTATION
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory.ClientType
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{SparkStringUtils, Utils}
@@ -51,7 +51,7 @@ private[spark] class DefaultKubernetesClientProvider extends KubernetesClientPro
 private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: KubernetesClientProvider)
   extends SparkDiagnosticsSetter with Logging {
 
-  private val KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES = 64 * 1024 // 64 KiB
+  private val KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES = 64 * 1024 // 64 KiB
 
   def this() = {
     this(new DefaultKubernetesClientProvider)
@@ -61,7 +61,7 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
     require(conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
       "Driver pod name must be set in order to set diagnostics on the driver pod.")
     val diagnostics = SparkStringUtils.abbreviate(StringUtils.stringifyException(throwable),
-      KUBERNETES_DIAGNOSTICS_MESSAGE_LIMIT_BYTES)
+      KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
     Utils.tryWithResource(clientProvider.create(conf)) { client =>
       conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
         client.pods()
@@ -69,14 +69,14 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
           .withName(podName)
           .edit((p: Pod) => new PodBuilder(p)
             .editOrNewMetadata()
-            .addToAnnotations(DIAGNOSTICS_ANNOTATION, diagnostics)
+            .addToAnnotations(EXIT_EXCEPTION_ANNOTATION, diagnostics)
             .endMetadata()
             .build());
       }
     }
   }
 
-  override def supports(clusterManagerUrl: String, conf: SparkConf): Boolean = {
-    conf.get(KUBERNETES_STORE_DIAGNOSTICS) && clusterManagerUrl.startsWith("k8s://")
+  override def supports(clusterManagerUrl: String): Boolean = {
+    clusterManagerUrl.startsWith("k8s://")
   }
 }

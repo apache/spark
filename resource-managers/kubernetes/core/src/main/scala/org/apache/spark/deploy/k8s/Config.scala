@@ -784,10 +784,10 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
       .createWithDefaultString("20s")
 
-  val KUBERNETES_STORE_DIAGNOSTICS =
-    ConfigBuilder("spark.kubernetes.storeDiagnostics")
-      .doc("If set to true, Spark will store diagnostics information for failed applications in" +
-        s" the Kubernetes API server using the $DIAGNOSTICS_ANNOTATION annotation.")
+  val KUBERNETES_ANNOTATE_EXIT_EXCEPTION =
+    ConfigBuilder("spark.kubernetes.driver.annotateExitException")
+      .doc("If set to true, Spark will store the exit exception failed applications in" +
+        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)

@@ -1036,8 +1036,8 @@ private[spark] class SparkSubmit extends Logging {
           case _ =>
         }
         // Store the diagnostics externally if enabled, but still throw to complete the application.
-        if (sparkConf.getBoolean("spark.kubernetes.storeDiagnostics", false)) {
-          storeDiagnostics(args, sparkConf, cause)
+        if (sparkConf.getBoolean("spark.kubernetes.driver.annotateExitException", false)) {
+          annotateExitException(args, sparkConf, cause)
         }
         throw cause
     } finally {
@@ -1063,9 +1063,9 @@ private[spark] class SparkSubmit extends Logging {
   private def error(msg: String): Unit = throw new SparkException(msg)
 
   /**
-   * Store the diagnostics using the SparkDiagnosticsSetter.
+   * Store the exit exception using the SparkDiagnosticsSetter.
    */
-  private def storeDiagnostics(
+  private def annotateExitException(
       args: SparkSubmitArguments,
       sparkConf: SparkConf,
       throwable: Throwable): Unit = {
@@ -1263,7 +1263,7 @@ private[spark] object SparkSubmitUtils {
     val serviceLoaders =
       ServiceLoader.load(classOf[SparkDiagnosticsSetter], loader)
         .asScala
-        .filter(_.supports(master, sparkConf))
+        .filter(_.supports(master))
 
     serviceLoaders.size match {
       case x if x > 1 =>
@@ -1307,8 +1307,8 @@ private[spark] trait SparkDiagnosticsSetter {
   def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit
 
   /**
-   * Whether this implementation of the SparkDiagnosticsSetter supports setting the stack
-   * trace for this application.
+   * Whether this implementation of the SparkDiagnosticsSetter supports setting the exit
+   * exception for this application.
    */
-  def supports(clusterManagerUrl: String, conf: SparkConf): Boolean
+  def supports(clusterManagerUrl: String): Boolean
 }
