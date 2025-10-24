@@ -111,7 +111,7 @@ case class LowLatencyReaderFactoryWrap(
 }
 
 /**
- * Physical plan node for scanning a micro-batch of data from a data source.
+ * Physical plan node for Real-time Mode to scan/read data from a data source.
  */
 case class RealTimeStreamScanExec(
     output: Seq[Attribute],
@@ -121,12 +121,13 @@ case class RealTimeStreamScanExec(
     batchDurationMs: Long)
     extends DataSourceV2ScanExecBase {
 
+  assert(stream.isInstanceOf[SupportsRealTimeMode])
+
   override def keyGroupedPartitioning: Option[Seq[Expression]] = None
 
   override def ordering: Option[Seq[SortOrder]] = None
 
   val endOffsetsAccumulator: CollectionAccumulator[PartitionOffsetWithIndex] = {
-    assert(stream.isInstanceOf[SupportsRealTimeMode])
     SparkContext.getActive.map(_.collectionAccumulator[PartitionOffsetWithIndex]).get
   }
 

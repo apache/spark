@@ -386,7 +386,7 @@ class MicroBatchExecution(
     // For a query running in Real-time Mode that fails after
     // writing to offset log but before writing to commit log, we delete the extra
     // entries in offsetLog to sync up. Note that this also means async checkpoint rollback handling
-    // is not compatible with low latency mode at this stage.
+    // is not compatible with Real-time Mode at this stage.
     if (trigger.isInstanceOf[RealTimeTrigger]) {
       val lastOffsetLogBatchId = latestStartedBatch.map(_._1).getOrElse(-1L)
       if (lastOffsetLogBatchId > lastCommittedBatchId) {
@@ -1189,12 +1189,9 @@ class MicroBatchExecution(
     // i.e. tasks that execute a source partition.  We merge the offsets and
     // write them to the offset log
     if (trigger.isInstanceOf[RealTimeTrigger]) {
-      val actualLastExecution = execCtx.executionPlan
-
-      val execs = StreamingQueryPlanTraverseHelper
-        .collectFromUnfoldedLatestExecutedPlan(actualLastExecution) {
-          case e: RealTimeStreamScanExec => e
-        }
+      val execs = latestExecPlan.collect {
+        case e: RealTimeStreamScanExec => e
+      }
 
       val endOffsetMap = MutableMap[SparkDataStream, OffsetV2]()
       execs.foreach { e =>
@@ -1242,7 +1239,8 @@ class MicroBatchExecution(
       if (shouldUpdate) {
         // To trigger processAllAvailable() return.
         noNewData = true
-        // We could signal here, but when the test thread sees ProcessAllAvailable(), but
+
+        // We could signal ProcessAllAvailable to finish here, however
         // signaling after commit log will make it less likely that the caller of
         // ProcessAllAvailable() sees offset log written but not commit log.
         needSignalProgressLock = true

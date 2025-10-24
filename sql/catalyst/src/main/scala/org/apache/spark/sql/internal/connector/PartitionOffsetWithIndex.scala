@@ -16,12 +16,9 @@
  */
 package org.apache.spark.sql.internal.connector;
 
-import java.io.Serializable;
-
 import org.apache.spark.sql.connector.read.streaming.PartitionOffset;
 
 /**
  * Internal class for real time mode to pass partition offset from executors to the driver.
  */
-private[sql] case class PartitionOffsetWithIndex(index: Long, partitionOffset: PartitionOffset)
-  extends Serializable;
+private[sql] case class PartitionOffsetWithIndex(index: Long, partitionOffset: PartitionOffset);
