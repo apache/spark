@@ -29,6 +29,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
@@ -2077,6 +2078,34 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Add an [[EventTimeWatermark]] to a logical plan.
+   */
+  private def withWatermark(
+      ctx: WatermarkClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val expression = visitNamedExpression(ctx.namedExpression())
+
+    val namedExpression = expression match {
+      // Need to check this earlier since MultiAlias is also a NamedExpression
+      case _: MultiAlias =>
+        throw new AnalysisException(
+          errorClass = "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE",
+          messageParameters = Map()
+        )
+      case e: NamedExpression => e
+      case e => UnresolvedAlias(e)
+    }
+
+    val delayInterval = visitInterval(ctx.delay)
+
+    val delay = IntervalUtils.fromIntervalString(delayInterval.toString)
+    require(!IntervalUtils.isNegative(delay),
+      s"delay threshold (${delayInterval.toString}) should not be negative.")
+
+    UnresolvedEventTimeWatermark(namedExpression, delay, query)
+  }
+
+  /**
    * Create a single relation referenced in a FROM clause. This method is used when a part of the
    * join condition is nested, for example:
    * {{{
@@ -2255,7 +2284,8 @@ class AstBuilder extends DataTypeAstBuilder
     val relation = createUnresolvedRelation(ctx.identifierReference, Option(ctx.optionsClause))
     val table = mayApplyAliasPlan(
       ctx.tableAlias, relation.optionalMap(ctx.temporalClause)(withTimeTravel))
-    table.optionalMap(ctx.sample)(withSample)
+    val sample = table.optionalMap(ctx.sample)(withSample)
+    sample.optionalMap(ctx.watermarkClause)(withWatermark)
   }
 
   override def visitVersion(ctx: VersionContext): Option[String] = {
@@ -2395,7 +2425,9 @@ class AstBuilder extends DataTypeAstBuilder
 
         val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
 
-        tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
+        val watermarkClause = func.watermarkClause()
+        val tvfWithWatermark = tvfAliases.optionalMap(watermarkClause)(withWatermark)
+        tvfWithWatermark.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
       })
   }
 
@@ -2407,7 +2439,9 @@ class AstBuilder extends DataTypeAstBuilder
       optionsClause = Option(ctx.optionsClause),
       writePrivileges = Seq.empty,
       isStreaming = true)
-    mayApplyAliasPlan(ctx.tableAlias, tableStreamingRelation)
+
+    val tableWithWatermark = tableStreamingRelation.optionalMap(ctx.watermarkClause)(withWatermark)
+    mayApplyAliasPlan(ctx.tableAlias, tableWithWatermark)
   }
 
   /**
@@ -2450,7 +2484,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitAliasedRelation(ctx: AliasedRelationContext): LogicalPlan = withOrigin(ctx) {
     val relation = plan(ctx.relation).optionalMap(ctx.sample)(withSample)
-    mayApplyAliasPlan(ctx.tableAlias, relation)
+    val watermark = relation.optionalMap(ctx.watermarkClause)(withWatermark)
+    mayApplyAliasPlan(ctx.tableAlias, watermark)
   }
 
   /**
@@ -2463,7 +2498,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
     val relation = plan(ctx.query).optionalMap(ctx.sample)(withSample)
-    if (ctx.tableAlias.strictIdentifier == null) {
+    val alias = if (ctx.tableAlias.strictIdentifier == null) {
       // For un-aliased subqueries, use a default alias name that is not likely to conflict with
       // normal subquery names, so that parent operators can only access the columns in subquery by
       // unqualified names. Users can still use this special qualifier to access columns if they
@@ -2472,6 +2507,7 @@ class AstBuilder extends DataTypeAstBuilder
     } else {
       mayApplyAliasPlan(ctx.tableAlias, relation)
     }
+    alias.optionalMap(ctx.watermarkClause)(withWatermark)
   }
 
   /**

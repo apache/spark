@@ -583,6 +583,12 @@
     ],
     "sqlState" : "22KD3"
   },
+  "CANNOT_USE_MULTI_ALIASES_IN_WATERMARK_CLAUSE" : {
+    "message" : [
+      "Multiple aliases are not supported in watermark clause."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
@@ -4984,6 +4990,12 @@
       "Cannot invoke routine <routineName> because the parameter named <parameterName> is required, but the routine call did not supply a value. Please update the routine call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
+  },
+  "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE" : {
+    "message" : [
+      "The watermark clause requires an explicit name if expression is specified, but got <sqlExpr>."
+    ],
+    "sqlState" : "42000"
   },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [

@@ -67,7 +67,7 @@ object SQLConf {
   private[this] val staticConfKeysUpdateLock = new Object
 
   @volatile
-  private[this] var staticConfKeys: java.util.Set[String] = util.Collections.emptySet()
+  private[this] var staticConfKeys: util.Set[String] = util.Set.of()
 
   private def register(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
     require(!sqlConfEntries.containsKey(entry.key),
@@ -5928,7 +5928,47 @@ object SQLConf {
       .version("3.5.0")
       .intConf
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
-      .createWithDefault(64 * 1024 * 1024)
+      .createWithDefault(1024 * 1024)
+
+  val LOCAL_RELATION_CHUNK_SIZE_ROWS =
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY)
+      .doc("The chunk size in number of rows when splitting ChunkedCachedLocalRelation.data " +
+        "into batches. A new chunk is created when either " +
+        "spark.sql.session.localRelationChunkSizeBytes " +
+        "or spark.sql.session.localRelationChunkSizeRows is reached.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "The chunk size in number of rows must be positive")
+      .createWithDefault(10000)
+
+  val LOCAL_RELATION_CHUNK_SIZE_BYTES =
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY)
+      .doc("The chunk size in bytes when splitting ChunkedCachedLocalRelation.data " +
+        "into batches. A new chunk is created when either " +
+        "spark.sql.session.localRelationChunkSizeBytes " +
+        "or spark.sql.session.localRelationChunkSizeRows is reached.")
+      .version("4.1.0")
+      .longConf
+      .checkValue(_ > 0, "The chunk size in bytes must be positive")
+      .createWithDefault(16 * 1024 * 1024L)
+
+  val LOCAL_RELATION_CHUNK_SIZE_LIMIT =
+    buildConf("spark.sql.session.localRelationChunkSizeLimit")
+      .internal()
+      .doc("Limit on how large a single chunk of a ChunkedCachedLocalRelation.data " +
+        "can be in bytes. If the limit is exceeded, an exception is thrown.")
+      .version("4.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("2000MB")
+
+  val LOCAL_RELATION_SIZE_LIMIT =
+    buildConf("spark.sql.session.localRelationSizeLimit")
+      .internal()
+      .doc("Limit on how large ChunkedCachedLocalRelation.data can be in bytes." +
+        "If the limit is exceeded, an exception is thrown.")
+      .version("4.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("3GB")
 
   val DECORRELATE_JOIN_PREDICATE_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
@@ -7173,6 +7213,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def tvfAllowMultipleTableArguments: Boolean = getConf(TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED)
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
+
+  def localRelationChunkSizeLimit: Long = getConf(LOCAL_RELATION_CHUNK_SIZE_LIMIT)
+
+  def localRelationSizeLimit: Long = getConf(LOCAL_RELATION_SIZE_LIMIT)
 
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
 

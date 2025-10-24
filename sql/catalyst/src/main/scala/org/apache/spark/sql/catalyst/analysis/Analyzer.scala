@@ -636,6 +636,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case c: CollectMetrics
             if c.child.resolved && AliasResolution.hasUnresolvedAlias(c.metrics) =>
           c.copy(metrics = AliasResolution.assignAliases(c.metrics))
+
+        case u: UnresolvedEventTimeWatermark
+          if u.child.resolved && AliasResolution.hasUnresolvedAlias(Seq(u.eventTimeColExpr)) =>
+          u.copy(eventTimeColExpr = AliasResolution.assignAliases(Seq(u.eventTimeColExpr)).head)
       }
     }
   }

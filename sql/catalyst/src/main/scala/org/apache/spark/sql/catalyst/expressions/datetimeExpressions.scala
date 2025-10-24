@@ -2806,7 +2806,11 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Try to create the current timestamp with local time zone from year, month, day, hour, min, sec and timezone fields. The function returns NULL on invalid inputs.",
+  usage = """
+    _FUNC_(year, month, day, hour, min, sec[, timezone]) - Try to create the current timestamp with local time zone from year, month, day, hour, min, sec and (optional) timezone fields. The function returns NULL on invalid inputs.
+
+    _FUNC_(date, time[, timezone]) - Try to create the current timestamp with local time zone from date, time and (optional) timezone fields.
+    """,
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2818,6 +2822,8 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
+      * date - a date to represent, from 0001-01-01 to 9999-12-31
+      * time - a local time to represent, from 00:00:00 to 23:59:59.999999
   """,
   examples = """
     Examples:
@@ -2831,6 +2837,10 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
        NULL
       > SELECT _FUNC_(2024, 13, 22, 15, 30, 0);
        NULL
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
+       2014-12-27 21:30:45.887
   """,
   group = "datetime_funcs",
   since = "4.0.0")
@@ -2838,7 +2848,14 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
 object TryMakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
-    if (numArgs == 6 || numArgs == 7) {
+    if (numArgs == 2 || numArgs == 3) {
+      // Overload for: date, time[, timezone].
+      MakeTimestampFromDateTime(
+        expressions(0),
+        Some(expressions(1)),
+        expressions.drop(2).lastOption
+      )
+    } else if (numArgs == 6 || numArgs == 7) {
       MakeTimestamp(
         expressions(0),
         expressions(1),
