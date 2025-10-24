@@ -139,7 +139,7 @@ class InMemoryTable(
       isDistributionStrictlyRequired,
       numRowsPerSplit)
 
-    copiedTable.dataMap.synchronized {
+    dataMap.synchronized {
       dataMap.foreach { case (key, splits) =>
         val copiedSplits = splits.map { bufferedRows =>
           val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
