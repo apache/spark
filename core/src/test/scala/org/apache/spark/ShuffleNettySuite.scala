@@ -31,7 +31,6 @@ abstract class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
   def shouldRunTests: Boolean = true
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.set("spark.shuffle.blockTransferService", "netty")
     conf.set("spark.shuffle.io.mode", ioMode.toString)
   }
 
