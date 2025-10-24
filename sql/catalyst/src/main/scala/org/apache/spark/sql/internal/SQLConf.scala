@@ -2261,7 +2261,7 @@ object SQLConf {
         s"${SKIP_PARTIAL_AGGREGATE_RATIO.key}")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ENABLE_SORT_AGGREGATE_CODEGEN =
     buildConf("spark.sql.codegen.aggregate.sortAggregate.enabled")
