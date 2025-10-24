@@ -459,8 +459,9 @@ class SparkConf(loadDefaults: Boolean)
 
   /** Gets all the avro schemas in the configuration used in the generic Avro record serializer */
   def getAvroSchema: Map[Long, String] = {
-    val f = (k: String) => k.substring(avroNamespace.length).toLong
-    getAllWithPrefix(avroNamespace, f).toMap
+    getAll.filter { case (k, v) => k.startsWith(avroNamespace) }
+      .map { case (k, v) => (k.substring(avroNamespace.length).toLong, v) }
+      .toMap
   }
 
   /** Remove a parameter from the configuration */
@@ -503,8 +504,8 @@ class SparkConf(loadDefaults: Boolean)
    * Get all parameters that start with `prefix`
    */
   def getAllWithPrefix(prefix: String): Array[(String, String)] = {
-    val f = (k: String) => k.substring(prefix.length)
-    getAllWithPrefix(prefix, f)
+    getAll.filter { case (k, v) => k.startsWith(prefix) }
+      .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
   /**
