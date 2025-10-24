@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -224,7 +225,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       nameInCache.length == name.length && nameInCache.zip(name).forall(conf.resolver.tupled)
     }
 
-    plan match {
+    EliminateSubqueryAliases(plan) match {
       case LogicalRelationWithTable(_, Some(catalogTable)) =>
         isSameName(catalogTable.identifier.nameParts)
 
