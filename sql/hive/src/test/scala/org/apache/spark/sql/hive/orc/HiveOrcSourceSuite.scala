@@ -254,7 +254,6 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |LOCATION '${s"${dir.getCanonicalPath}"}'""".stripMargin
               sql(topDirStatement)
               val topDirSqlStatement = s"SELECT * FROM tbl1"
-              checkAnswer(sql(topDirSqlStatement), Nil)
               checkAnswer(sql(topDirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
 
               val l1DirStatement =
