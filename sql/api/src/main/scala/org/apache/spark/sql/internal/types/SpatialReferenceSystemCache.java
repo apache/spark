@@ -66,26 +66,6 @@ public class SpatialReferenceSystemCache extends SingletonBase<SpatialReferenceS
     }
   }
 
-  // Utility method that can be used to check whether an SRID value is valid or not.
-  public boolean isValidSrid(int srid) {
-    return sridToSrs.containsKey(srid);
-  }
-
-  // Utility method that can be used to check whether an SRID value is geographic or not.
-  public boolean isGeographicSrid(int srid) {
-    return isValidSrid(srid) && sridToSrs.get(srid).isGeographic();
-  }
-
-  // Utility method that can be used to check whether a string ID value is valid or not.
-  public boolean isValidStringId(String stringId) {
-    return stringIdToSrs.containsKey(stringId);
-  }
-
-  // Utility method that can be used to check whether a string ID value is geographic or not.
-  public boolean isGeographicStringId(String stringId) {
-    return isValidStringId(stringId) && stringIdToSrs.get(stringId).isGeographic();
-  }
-
   // Returns the SRS corresponding to the input SRID. If not supported, returns `null`.
   public SpatialReferenceSystemInformation getSrsInfo(int srid) {
     return sridToSrs.getOrDefault(srid, null);

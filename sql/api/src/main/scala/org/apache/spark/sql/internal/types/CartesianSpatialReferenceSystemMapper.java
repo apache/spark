@@ -23,11 +23,13 @@ package org.apache.spark.sql.internal.types;
 public class CartesianSpatialReferenceSystemMapper extends SpatialReferenceSystemMapper {
   // Returns the string ID corresponding to the input SRID. If not supported, returns `null`.
   public static String getStringId(int srid) {
-    return srsCache.isValidSrid(srid) ? srsCache.getSrsInfo(srid).stringId() : null;
+    SpatialReferenceSystemInformation srsInfo = srsCache.getSrsInfo(srid);
+    return srsInfo != null ? srsInfo.stringId() : null;
   }
 
   // Returns the SRID corresponding to the input string ID. If not supported, returns `null`.
   public static Integer getSrid(String stringId) {
-    return srsCache.isValidStringId(stringId) ? srsCache.getSrsInfo(stringId).srid() : null;
+    SpatialReferenceSystemInformation srsInfo = srsCache.getSrsInfo(stringId);
+    return srsInfo != null ? srsInfo.srid() : null;
   }
 }
