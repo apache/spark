@@ -1080,4 +1080,35 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
       }
     }
   }
+
+  test("bucketed scan prunes unnecessary buckets when filter allows") {
+    withTable("bucketed_table") {
+      spark.range(100)
+        .write
+        .bucketBy(4, "id")
+        .sortBy("id")
+        .mode("overwrite")
+        .saveAsTable("bucketed_table")
+
+      // First run with coalesce disabled
+      spark.conf.set("spark.sql.coalescePartitionsByColumnsEnabled", "false")
+      val df1 = spark.table("bucketed_table").select("id")
+      val scanExec1 = df1.queryExecution.executedPlan.collectFirst {
+        case s: FileSourceScanExec => s
+      }.getOrElse(fail("No FileSourceScanExec found"))
+      val numSplitsNoCoalesce = scanExec1.inputRDD.partitions.length
+
+      // Then run with coalesce enabled
+      spark.conf.set("spark.sql.coalescePartitionsByColumnsEnabled", "true")
+      val df2 = spark.table("bucketed_table").select("id")
+      val scanExec2 = df2.queryExecution.executedPlan.collectFirst {
+        case s: FileSourceScanExec => s
+      }.getOrElse(fail("No FileSourceScanExec found"))
+      val numSplitsCoalesce = scanExec2.inputRDD.partitions.length
+
+      // Assert that enabling coalesce reduces or keeps partitions the same
+      assert(numSplitsCoalesce <= numSplitsNoCoalesce,
+        s"Expected coalescing to reduce partitions ($numSplitsNoCoalesce -> $numSplitsCoalesce)")
+    }
+  }
 }

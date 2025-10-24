@@ -622,9 +622,35 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Array[PartitionDirectory]): RDD[InternalRow] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
+    val baseSplitBytes =
+      FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions)
+
+    val coalescePartitionsByColumnsEnabled =
+      relation.sparkSession.sessionState.conf.coalescePartitionsByColumnsEnabled
+    logInfo(s"coalescePartitionsByColumnsEnabled value : ${coalescePartitionsByColumnsEnabled}")
+    val maxSplitBytes =
+      if (coalescePartitionsByColumnsEnabled) adjustMaxSplitBytes(baseSplitBytes)
+      else baseSplitBytes
+
+    // Build bucketed files (now split if possible)
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
-        p.files.map(f => PartitionedFileUtil.getPartitionedFile(f, p.values))
+        p.files.flatMap { f =>
+          val isSplitable = relation.fileFormat.isSplitable(
+            relation.sparkSession, relation.options, f.getPath)
+
+          if (isSplitable) {
+            PartitionedFileUtil.splitFiles(
+              sparkSession = relation.sparkSession,
+              file = f,
+              isSplitable = true,
+              maxSplitBytes = maxSplitBytes,
+              partitionValues = p.values
+            )
+          } else {
+            Seq(PartitionedFileUtil.getPartitionedFile(f, p.values))
+          }
+        }
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(f.toPath.getName)
@@ -650,8 +676,19 @@ case class FileSourceScanExec(
         FilePartition(bucketId, partitionedFiles)
       }
     }.getOrElse {
-      Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-        FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
+      val rawPartitions =
+        Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
+          FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
+        }
+
+      // NEW: coalesce by column if enabled
+      if (coalescePartitionsByColumnsEnabled) {
+        val targetPartitions = math.min(rawPartitions.length,
+          relation.sparkSession.sessionState.conf.numShufflePartitions)
+        FilePartitionCoalescer.coalesce(relation.sparkSession, rawPartitions,
+          prunedFilesGroupedToBuckets.values.flatten.toSeq, targetPartitions)
+      } else {
+        rawPartitions
       }
     }
 
@@ -672,9 +709,9 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Array[PartitionDirectory]): RDD[InternalRow] = {
     val openCostInBytes = relation.sparkSession.sessionState.conf.filesOpenCostInBytes
-    val maxSplitBytes =
+    val initialMaxSplitBytes =
       FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions)
-    logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
+    logInfo(s"Planning scan with bin packing, max size: $initialMaxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
     // Filter files with bucket pruning if possible
@@ -686,6 +723,13 @@ case class FileSourceScanExec(
       case _ =>
         _ => true
     }
+
+    val coalescePartitionsByColumnsEnabled =
+      relation.sparkSession.sessionState.conf.coalescePartitionsByColumnsEnabled
+    logInfo(s"coalescePartitionsByColumnsEnabled value is : ${coalescePartitionsByColumnsEnabled}")
+    val maxSplitBytes =
+      if (coalescePartitionsByColumnsEnabled) adjustMaxSplitBytes(initialMaxSplitBytes)
+    else initialMaxSplitBytes
 
     val splitFiles = selectedPartitions.flatMap { partition =>
       partition.files.flatMap { file =>
@@ -708,10 +752,46 @@ case class FileSourceScanExec(
     val partitions =
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
-    new FileScanRDD(relation.sparkSession, readFile, partitions,
+    val finalPartitions =
+    if (coalescePartitionsByColumnsEnabled) {
+      val targetPartitions = math.min(partitions.length,
+        relation.sparkSession.sessionState.conf.numShufflePartitions)
+
+      logInfo(s"targetPartitions value : ${targetPartitions}")
+      FilePartitionCoalescer.coalesce(relation.sparkSession, partitions,
+        splitFiles.toSeq, targetPartitions)
+    } else partitions
+
+    new FileScanRDD(relation.sparkSession, readFile, finalPartitions,
       new StructType(requiredSchema.fields ++ relation.partitionSchema.fields),
       fileConstantMetadataColumns, relation.fileFormat.fileConstantMetadataExtractors,
       new FileSourceOptions(CaseInsensitiveMap(relation.options)))
+  }
+
+  /**
+   * This method adjust the max split bytes based on the columns selected
+   * @param initialSplitBytes
+   * @return adjustedSplitBytes
+   */
+  private def adjustMaxSplitBytes(initialSplitBytes: Long): Long = {
+    val totalRelationSize: Double =
+      relation.dataSchema.map(f => f.dataType.defaultSize).sum.toDouble
+    val selectedColumnsSize: Double =
+      requiredSchema.map(f => f.dataType.defaultSize).sum.toDouble
+
+    val ratio =
+      if (selectedColumnsSize == 0.0 || totalRelationSize == 0.0) 1.0
+      else totalRelationSize / selectedColumnsSize
+
+    val cappedRatio = math.min(ratio, 10.0)
+    val adjustedSplitBytes = (initialSplitBytes * cappedRatio).toLong
+
+    logInfo(
+      s"Adjusting maxSplitBytes from $initialSplitBytes to $adjustedSplitBytes " +
+        s"based on selected schema size: $selectedColumnsSize vs total schema size: " +
+        s"$totalRelationSize (scaling factor: $cappedRatio)"
+    )
+    adjustedSplitBytes
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced

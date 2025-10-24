@@ -237,6 +237,14 @@ object SQLConf {
     }
   }
 
+  val COALESCE_PARTITIONS_BY_COLUMNS =
+    buildConf("spark.sql.ibm.coalescePartitionsByColumns.enabled")
+      .doc(s"When true,Spark will coalesce contiguous shuffle partitions " +
+        s"according to the selected columns, to avoid too many small tasks.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")
@@ -4694,6 +4702,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       defaultNumShufflePartitions
     }
   }
+
+  def coalescePartitionsByColumnsEnabled: Boolean = getConf(COALESCE_PARTITIONS_BY_COLUMNS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
