@@ -58,8 +58,6 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
   }
 
   override def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit = {
-    require(conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
-      "Driver pod name must be set in order to set diagnostics on the driver pod.")
     val diagnostics = SparkStringUtils.abbreviate(StringUtils.stringifyException(throwable),
       KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
     Utils.tryWithResource(clientProvider.create(conf)) { client =>

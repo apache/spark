@@ -1073,7 +1073,7 @@ private[spark] class SparkSubmit extends Logging {
     try {
       if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass)
           && !isThriftServer(args.mainClass) && !isConnectServer(args.mainClass)) {
-        SparkSubmitUtils.getSparkDiagnosticsSetters(args.master, sparkConf)
+        SparkSubmitUtils.getSparkDiagnosticsSetters(args.master)
           .foreach(_.setDiagnostics(throwable, sparkConf))
       }
     } catch {
@@ -1257,8 +1257,7 @@ private[spark] object SparkSubmitUtils {
   }
 
   private[deploy] def getSparkDiagnosticsSetters(
-      master: String,
-      sparkConf: SparkConf): Option[SparkDiagnosticsSetter] = {
+      master: String): Option[SparkDiagnosticsSetter] = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoaders =
       ServiceLoader.load(classOf[SparkDiagnosticsSetter], loader)
