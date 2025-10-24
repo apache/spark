@@ -1302,16 +1302,16 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == 2:
-                batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batches1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batches2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
                 yield (
                     [
                         self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches(batch1).itercolumns())
+                        for i, c in enumerate(pa.Table.from_batches(batches1).itercolumns())
                     ],
                     [
                         self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches(batch2).itercolumns())
+                        for i, c in enumerate(pa.Table.from_batches(batches2).itercolumns())
                     ],
                 )
 
