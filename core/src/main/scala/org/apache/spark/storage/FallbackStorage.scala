@@ -108,9 +108,9 @@ private[storage] class FallbackStorageRpcEndpointRef(conf: SparkConf, hadoopConf
     message match {
       case RemoveShuffle(shuffleId) =>
         FallbackStorage.cleanUp(conf, hadoopConf, Some(shuffleId))
-        Future{true.asInstanceOf[T]}
-      case _ => Future{true.asInstanceOf[T]}
+      case _ => // no-op
     }
+    Future{true.asInstanceOf[T]}
   }
 }
 
