@@ -85,8 +85,14 @@ class InMemoryFileIndex(
   def getCachedPartitionDirToChildrenFiles(): Map[Path, Array[FileStatus]] = {
     val partitionDirs = partitionSpec().partitions.map(_.path) match {
       case seq if seq.nonEmpty => seq.toSet
-      // For non-partitioned tables, we consider the root paths as partition dirs.
-      case _ => Set(rootPaths.head)
+      // For non-partitioned tables or other paths, we consider the root paths as partition
+      // dirs. And if root paths are files, we consider their parent dirs as partition dirs.
+      case _ => rootPaths.map { path =>
+        leafFiles.get(path) match {
+          case Some(_) => path.getParent
+          case None => path
+        }
+      }.toSet
     }
 
     def findParentDir(dir: Path): Option[Path] = {

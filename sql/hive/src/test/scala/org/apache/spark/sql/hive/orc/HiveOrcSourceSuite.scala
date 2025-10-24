@@ -254,11 +254,8 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |LOCATION '${s"${dir.getCanonicalPath}"}'""".stripMargin
               sql(topDirStatement)
               val topDirSqlStatement = s"SELECT * FROM tbl1"
-              if (convertMetastore) {
-                checkAnswer(sql(topDirSqlStatement), Nil)
-              } else {
-                checkAnswer(sql(topDirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
-              }
+              checkAnswer(sql(topDirSqlStatement), Nil)
+              checkAnswer(sql(topDirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
 
               val l1DirStatement =
                 s"""
@@ -270,11 +267,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |LOCATION '${s"${dir.getCanonicalPath}/l1/"}'""".stripMargin
               sql(l1DirStatement)
               val l1DirSqlStatement = s"SELECT * FROM tbl2"
-              if (convertMetastore) {
-                checkAnswer(sql(l1DirSqlStatement), (1 to 2).map(i => Row(i, i, s"orc$i")))
-              } else {
-                checkAnswer(sql(l1DirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
-              }
+              checkAnswer(sql(l1DirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
 
               val l2DirStatement =
                 s"""
@@ -286,11 +279,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                    |LOCATION '${s"${dir.getCanonicalPath}/l1/l2/"}'""".stripMargin
               sql(l2DirStatement)
               val l2DirSqlStatement = s"SELECT * FROM tbl3"
-              if (convertMetastore) {
-                checkAnswer(sql(l2DirSqlStatement), (3 to 4).map(i => Row(i, i, s"orc$i")))
-              } else {
-                checkAnswer(sql(l2DirSqlStatement), (3 to 6).map(i => Row(i, i, s"orc$i")))
-              }
+              checkAnswer(sql(l2DirSqlStatement), (3 to 6).map(i => Row(i, i, s"orc$i")))
 
               val wildcardTopDirStatement =
                 s"""
@@ -303,7 +292,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
               sql(wildcardTopDirStatement)
               val wildcardTopDirSqlStatement = s"SELECT * FROM tbl4"
               if (convertMetastore) {
-                checkAnswer(sql(wildcardTopDirSqlStatement), (1 to 2).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(wildcardTopDirSqlStatement), (1 to 6).map(i => Row(i, i, s"orc$i")))
               } else {
                 checkAnswer(sql(wildcardTopDirSqlStatement), Nil)
               }
