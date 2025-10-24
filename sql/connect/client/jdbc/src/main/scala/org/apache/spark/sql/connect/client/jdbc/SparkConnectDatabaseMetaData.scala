@@ -24,11 +24,9 @@ import org.apache.spark.util.VersionUtils
 
 class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends DatabaseMetaData {
 
-  override def allProceduresAreCallable: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def allProceduresAreCallable: Boolean = false
 
-  override def allTablesAreSelectable: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def allTablesAreSelectable: Boolean = false
 
   override def getURL: String = conn.url
 
@@ -36,17 +34,13 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
 
   override def isReadOnly: Boolean = false
 
-  override def nullsAreSortedHigh: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def nullsAreSortedHigh: Boolean = false
 
-  override def nullsAreSortedLow: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def nullsAreSortedLow: Boolean = false
 
-  override def nullsAreSortedAtStart: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def nullsAreSortedAtStart: Boolean = false
 
-  override def nullsAreSortedAtEnd: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def nullsAreSortedAtEnd: Boolean = false
 
   override def getDatabaseProductName: String = "Apache Spark Connect Server"
 
@@ -60,35 +54,25 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
 
   override def getDriverMinorVersion: Int = VersionUtils.minorVersion(SPARK_VERSION)
 
-  override def usesLocalFiles: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def usesLocalFiles: Boolean = false
 
-  override def usesLocalFilePerTable: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def usesLocalFilePerTable: Boolean = false
 
-  override def supportsMixedCaseIdentifiers: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsMixedCaseIdentifiers: Boolean = false
 
-  override def storesUpperCaseIdentifiers: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def storesUpperCaseIdentifiers: Boolean = false
 
-  override def storesLowerCaseIdentifiers: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def storesLowerCaseIdentifiers: Boolean = false
 
-  override def storesMixedCaseIdentifiers: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def storesMixedCaseIdentifiers: Boolean = false
 
-  override def supportsMixedCaseQuotedIdentifiers: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsMixedCaseQuotedIdentifiers: Boolean = false
 
-  override def storesUpperCaseQuotedIdentifiers: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def storesUpperCaseQuotedIdentifiers: Boolean = false
 
-  override def storesLowerCaseQuotedIdentifiers: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def storesLowerCaseQuotedIdentifiers: Boolean = false
 
-  override def storesMixedCaseQuotedIdentifiers: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def storesMixedCaseQuotedIdentifiers: Boolean = false
 
   override def getIdentifierQuoteString: String = "`"
 
@@ -112,17 +96,13 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
 
   override def getExtraNameCharacters: String = ""
 
-  override def supportsAlterTableWithAddColumn: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsAlterTableWithAddColumn: Boolean = true
 
-  override def supportsAlterTableWithDropColumn: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsAlterTableWithDropColumn: Boolean = true
 
-  override def supportsColumnAliasing: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsColumnAliasing: Boolean = true
 
-  override def nullPlusNonNullIsNull: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def nullPlusNonNullIsNull: Boolean = true
 
   override def supportsConvert: Boolean =
     throw new SQLFeatureNotSupportedException
@@ -130,58 +110,41 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
   override def supportsConvert(fromType: Int, toType: Int): Boolean =
     throw new SQLFeatureNotSupportedException
 
-  override def supportsTableCorrelationNames: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsTableCorrelationNames: Boolean = true
 
-  override def supportsDifferentTableCorrelationNames: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsDifferentTableCorrelationNames: Boolean = false
 
-  override def supportsExpressionsInOrderBy: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsExpressionsInOrderBy: Boolean = true
 
-  override def supportsOrderByUnrelated: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsOrderByUnrelated: Boolean = true
 
   override def supportsGroupBy: Boolean = true
 
-  override def supportsGroupByUnrelated: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsGroupByUnrelated: Boolean = true
 
-  override def supportsGroupByBeyondSelect: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsGroupByBeyondSelect: Boolean = true
 
-  override def supportsLikeEscapeClause: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsLikeEscapeClause: Boolean = true
 
-  override def supportsMultipleResultSets: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsMultipleResultSets: Boolean = false
 
-  override def supportsMultipleTransactions: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsMultipleTransactions: Boolean = false
 
-  override def supportsNonNullableColumns: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsNonNullableColumns: Boolean = true
 
-  override def supportsMinimumSQLGrammar: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsMinimumSQLGrammar: Boolean = true
 
-  override def supportsCoreSQLGrammar: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsCoreSQLGrammar: Boolean = true
 
-  override def supportsExtendedSQLGrammar: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsExtendedSQLGrammar: Boolean = false
 
-  override def supportsANSI92EntryLevelSQL: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsANSI92EntryLevelSQL: Boolean = true
 
-  override def supportsANSI92IntermediateSQL: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsANSI92IntermediateSQL(): Boolean = false
 
-  override def supportsANSI92FullSQL: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsANSI92FullSQL: Boolean = false
 
-  override def supportsIntegrityEnhancementFacility: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsIntegrityEnhancementFacility: Boolean = false
 
   override def supportsOuterJoins: Boolean = true
 
@@ -199,164 +162,114 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
 
   override def getCatalogSeparator: String = "."
 
-  override def supportsSchemasInDataManipulation: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSchemasInDataManipulation: Boolean = true
 
-  override def supportsSchemasInProcedureCalls: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSchemasInProcedureCalls: Boolean = true
 
-  override def supportsSchemasInTableDefinitions: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSchemasInTableDefinitions: Boolean = true
 
-  override def supportsSchemasInIndexDefinitions: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSchemasInIndexDefinitions: Boolean = true
 
   override def supportsSchemasInPrivilegeDefinitions: Boolean =
     throw new SQLFeatureNotSupportedException
 
-  override def supportsCatalogsInDataManipulation: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsCatalogsInDataManipulation: Boolean = true
 
-  override def supportsCatalogsInProcedureCalls: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsCatalogsInProcedureCalls: Boolean = true
 
-  override def supportsCatalogsInTableDefinitions: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsCatalogsInTableDefinitions: Boolean = true
 
-  override def supportsCatalogsInIndexDefinitions: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsCatalogsInIndexDefinitions: Boolean = true
 
   override def supportsCatalogsInPrivilegeDefinitions: Boolean =
     throw new SQLFeatureNotSupportedException
 
-  override def supportsPositionedDelete: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsPositionedDelete: Boolean = false
 
-  override def supportsPositionedUpdate: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsPositionedUpdate: Boolean = false
 
-  override def supportsSelectForUpdate: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSelectForUpdate: Boolean = false
 
-  override def supportsStoredProcedures: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsStoredProcedures: Boolean = true
 
-  override def supportsSubqueriesInComparisons: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSubqueriesInComparisons: Boolean = true
 
-  override def supportsSubqueriesInExists: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSubqueriesInExists: Boolean = true
 
-  override def supportsSubqueriesInIns: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSubqueriesInIns: Boolean = true
 
-  override def supportsSubqueriesInQuantifieds: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSubqueriesInQuantifieds: Boolean = true
 
-  override def supportsCorrelatedSubqueries: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsCorrelatedSubqueries: Boolean = true
 
-  override def supportsUnion: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsUnion: Boolean = true
 
-  override def supportsUnionAll: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsUnionAll: Boolean = true
 
-  override def supportsOpenCursorsAcrossCommit: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsOpenCursorsAcrossCommit: Boolean = false
 
-  override def supportsOpenCursorsAcrossRollback: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsOpenCursorsAcrossRollback: Boolean = false
 
-  override def supportsOpenStatementsAcrossCommit: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsOpenStatementsAcrossCommit: Boolean = false
 
-  override def supportsOpenStatementsAcrossRollback: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsOpenStatementsAcrossRollback: Boolean = false
 
-  override def getMaxBinaryLiteralLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxBinaryLiteralLength: Int = 0
 
-  override def getMaxCharLiteralLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxCharLiteralLength: Int = 0
 
-  override def getMaxColumnNameLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxColumnNameLength: Int = 0
 
-  override def getMaxColumnsInGroupBy: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxColumnsInGroupBy: Int = 0
 
-  override def getMaxColumnsInIndex: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxColumnsInIndex: Int = 0
 
-  override def getMaxColumnsInOrderBy: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxColumnsInOrderBy: Int = 0
 
-  override def getMaxColumnsInSelect: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxColumnsInSelect: Int = 0
 
-  override def getMaxColumnsInTable: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxColumnsInTable: Int = 0
 
-  override def getMaxConnections: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxConnections: Int = 0
 
-  override def getMaxCursorNameLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxCursorNameLength: Int = 0
 
-  override def getMaxIndexLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxIndexLength: Int = 0
 
-  override def getMaxSchemaNameLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxSchemaNameLength: Int = 0
 
-  override def getMaxProcedureNameLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxProcedureNameLength: Int = 0
 
-  override def getMaxCatalogNameLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxCatalogNameLength: Int = 0
 
-  override def getMaxRowSize: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxRowSize: Int = 0
 
-  override def doesMaxRowSizeIncludeBlobs: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def doesMaxRowSizeIncludeBlobs: Boolean = false
 
-  override def getMaxStatementLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxStatementLength: Int = 0
 
-  override def getMaxStatements: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxStatements: Int = 0
 
-  override def getMaxTableNameLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxTableNameLength: Int = 0
 
-  override def getMaxTablesInSelect: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxTablesInSelect: Int = 0
 
-  override def getMaxUserNameLength: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getMaxUserNameLength: Int = 0
 
-  override def getDefaultTransactionIsolation: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getDefaultTransactionIsolation: Int = Connection.TRANSACTION_NONE
 
-  override def supportsTransactions: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsTransactions: Boolean = false
 
   override def supportsTransactionIsolationLevel(level: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+    level == Connection.TRANSACTION_NONE
 
-  override def supportsDataDefinitionAndDataManipulationTransactions: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsDataDefinitionAndDataManipulationTransactions: Boolean = false
 
-  override def supportsDataManipulationTransactionsOnly: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsDataManipulationTransactionsOnly: Boolean = false
 
-  override def dataDefinitionCausesTransactionCommit: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def dataDefinitionCausesTransactionCommit: Boolean = false
 
-  override def dataDefinitionIgnoredInTransactions: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def dataDefinitionIgnoredInTransactions: Boolean = false
 
   override def getProcedures(
       catalog: String,
@@ -452,40 +365,30 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
     throw new SQLFeatureNotSupportedException
 
   override def supportsResultSetType(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+    `type` == ResultSet.TYPE_FORWARD_ONLY
 
   override def supportsResultSetConcurrency(`type`: Int, concurrency: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+    `type` == ResultSet.TYPE_FORWARD_ONLY && concurrency == ResultSet.CONCUR_READ_ONLY
 
-  override def ownUpdatesAreVisible(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def ownUpdatesAreVisible(`type`: Int): Boolean = false
 
-  override def ownDeletesAreVisible(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def ownDeletesAreVisible(`type`: Int): Boolean = false
 
-  override def ownInsertsAreVisible(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def ownInsertsAreVisible(`type`: Int): Boolean = false
 
-  override def othersUpdatesAreVisible(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def othersUpdatesAreVisible(`type`: Int): Boolean = false
 
-  override def othersDeletesAreVisible(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def othersDeletesAreVisible(`type`: Int): Boolean = false
 
-  override def othersInsertsAreVisible(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def othersInsertsAreVisible(`type`: Int): Boolean = false
 
-  override def updatesAreDetected(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def updatesAreDetected(`type`: Int): Boolean = false
 
-  override def deletesAreDetected(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def deletesAreDetected(`type`: Int): Boolean = false
 
-  override def insertsAreDetected(`type`: Int): Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def insertsAreDetected(`type`: Int): Boolean = false
 
-  override def supportsBatchUpdates: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsBatchUpdates: Boolean = false
 
   override def getUDTs(
       catalog: String,
@@ -496,17 +399,14 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
 
   override def getConnection: Connection = conn
 
-  override def supportsSavepoints: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsSavepoints: Boolean = false
 
   override def supportsNamedParameters: Boolean =
     throw new SQLFeatureNotSupportedException
 
-  override def supportsMultipleOpenResults: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsMultipleOpenResults: Boolean = false
 
-  override def supportsGetGeneratedKeys: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsGetGeneratedKeys: Boolean = false
 
   override def getSuperTypes(
       catalog: String,
@@ -543,21 +443,17 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
 
   override def getJDBCMinorVersion: Int = 3
 
-  override def getSQLStateType: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getSQLStateType: Int = DatabaseMetaData.sqlStateSQL
 
-  override def locatorsUpdateCopy: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def locatorsUpdateCopy: Boolean = false
 
   override def supportsStatementPooling: Boolean = false
 
   override def getRowIdLifetime: RowIdLifetime = RowIdLifetime.ROWID_UNSUPPORTED
 
-  override def supportsStoredFunctionsUsingCallSyntax: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def supportsStoredFunctionsUsingCallSyntax: Boolean = false
 
-  override def autoCommitFailureClosesAllResultSets: Boolean =
-    throw new SQLFeatureNotSupportedException
+  override def autoCommitFailureClosesAllResultSets: Boolean = false
 
   override def getClientInfoProperties: ResultSet =
     throw new SQLFeatureNotSupportedException
