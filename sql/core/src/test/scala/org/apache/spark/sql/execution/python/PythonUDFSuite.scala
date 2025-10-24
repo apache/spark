@@ -162,11 +162,65 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(base("a") + 1), pythonTestUDF(count(base("b"))))
     df2.collect()
+    // scalastyle:off println
     val df3 = spark.readStream.format(
       "org.apache.spark.sql.execution.streaming.sources.PythonProfileSourceProvider").load()
-    val q = df3.writeStream.foreachBatch((df: Dataset[Row], batchId: Long) => {
-      df.show(truncate = false)
-    }).start()
+    val q = df3.writeStream.foreachBatch { (df: Dataset[Row], batchId: Long) =>
+        // Clear the console before printing the next batch
+        print("\u001b[2J")  // Clear entire screen
+        print("\u001b[H")   // Move cursor to top-left corner
+
+        df.collect().foreach { row =>
+          val listOfMaps = row.get(0).asInstanceOf[collection.mutable.ArraySeq[Map[String, String]]]
+
+          // Group by thread id and name
+          val groupedByThread = listOfMaps.groupBy(m =>
+            (m.getOrElse("10", "unknown"), m.getOrElse("11", "unknown"))
+          )
+
+          groupedByThread.toSeq.sortBy(_._1._1).foreach { case ((threadId, threadName), funcsAll) =>
+            println(s"\nFunction stats for (Thread) ($threadId - $threadName)\n")
+
+            // Only top 5 rows for readability
+            val funcs = funcsAll.take(5)
+
+            // Dynamic column widths
+            val nameWidth =
+              (funcs.map(_.getOrElse("15", "").length).maxOption.getOrElse(4) max "name".length) + 2
+            val ncallWidth =
+              (funcs.map(_.getOrElse("3", "").length).maxOption.getOrElse(5) max "ncall".length) + 2
+            val timeWidth = 12
+
+            val fmt =
+              s"%-${nameWidth}s %${ncallWidth}s %${timeWidth}s %${timeWidth}s %${timeWidth}s"
+
+            println(fmt.format("name", "ncall", "tsub", "ttot", "tavg"))
+            println("-" * (nameWidth + ncallWidth + timeWidth * 3 + 4))
+
+            funcs.foreach { m =>
+              val name = {
+                val full = m.getOrElse("15", "")
+                if (full.length > nameWidth) "..." + full.takeRight(nameWidth - 3) else full
+              }
+
+              val ncall = m.getOrElse("3", "")
+              val tsub = formatDouble(m.getOrElse("7", ""))
+              val ttot = formatDouble(m.getOrElse("6", ""))
+              val tavg = formatDouble(m.getOrElse("14", ""))
+
+              println(fmt.format(name, ncall, tsub, ttot, tavg))
+            }
+          }
+        }
+
+        // Helper to format numbers as fixed-point
+        def formatDouble(value: String): String = {
+          try f"${value.toDouble}%.6f" catch {
+            case _: Throwable => value
+          }
+        }
+      }.start()
     q.awaitTermination()
+    // scalastyle:on println
   }
 }
