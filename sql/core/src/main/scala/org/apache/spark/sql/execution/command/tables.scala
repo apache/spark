@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -773,7 +774,8 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    val queryExecution = sparkSession.sessionState.executePlan(plan)
+    // DESCRIBE QUERY only needs the schema, so we can skip execution.
+    val queryExecution = sparkSession.sessionState.executePlan(plan, CommandExecutionMode.SKIP)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
     result.toSeq
   }
