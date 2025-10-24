@@ -2203,7 +2203,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val SKIP_PARTIAL_AGGREGATE_MINROWS =
-    buildConf("spark.sql.aggregate.skipPartialAggregate.minNumRows")
+    buildConf("spark.sql.ibm.aggregate.skipPartialAggregate.minNumRows")
       .internal()
       .doc("Number of records after which aggregate operator checks if " +
         "partial aggregation phase can be avoided")
@@ -2217,7 +2217,7 @@ object SQLConf {
   // If the ratio is greater than this threshold, partial aggregation is skipped,
   // since most rows are already aggregating well and shuffle reduction is trivial.
   val SKIP_PARTIAL_AGGREGATE_RATIO =
-    buildConf("spark.sql.aggregate.skipPartialAggregate.aggregateRatio")
+    buildConf("spark.sql.ibm.aggregate.skipPartialAggregate.aggregateRatio")
       .internal()
       .doc("Threshold for skipping partial aggregation based on aggregation success ratio. " +
         "This ratio is computed as (number of rows aggregated successfully /" +
@@ -2226,7 +2226,7 @@ object SQLConf {
       .version("3.1.0")
       .doubleConf
       .checkValue(ratio => ratio > 0 && ratio <= 1.0,
-        "Invalid value for spark.sql.aggregate.skipPartialAggregate.aggregateRatio. " +
+        "Invalid value for spark.sql.ibm.aggregate.skipPartialAggregate.aggregateRatio. " +
           "Valid range is between 0 and 1.0")
       .createWithDefault(0.5)
 
@@ -2237,7 +2237,7 @@ object SQLConf {
   // If this ratio is less than or equal to the threshold, compaction benefit is negligible
   // (i.e., almost every row is unique), so partial aggregation is skipped.
   val SKIP_PARTIAL_AGGREGATE_COMPACTION =
-    buildConf("spark.sql.aggregate.skipPartialAggregate.aggregateCompaction")
+    buildConf("spark.sql.ibm.aggregate.skipPartialAggregate.aggregateCompaction")
       .internal()
       .doc("Threshold for skipping partial aggregation based on compaction effectiveness. " +
         "This ratio is computed as (total number of input rows /" +
@@ -2247,12 +2247,12 @@ object SQLConf {
       .version("3.1.0")
       .doubleConf
       .checkValue(ratio => ratio > 0,
-        "Invalid value for spark.sql.aggregate.skipPartialAggregate.aggregateCompaction. " +
+        "Invalid value for spark.sql.ibm.aggregate.skipPartialAggregate.aggregateCompaction. " +
           "Valid value must be greater than 0")
       .createWithDefault(1.05)
 
   val SKIP_PARTIAL_AGGREGATE_ENABLED =
-    buildConf("spark.sql.aggregate.skipPartialAggregate")
+    buildConf("spark.sql.ibm.aggregate.skipPartialAggregate")
       .internal()
       .doc("When enabled, the partial aggregation is skipped when the following" +
         "two conditions are met. 1. When the total number of records processed is greater" +
