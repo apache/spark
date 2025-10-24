@@ -24,6 +24,7 @@
 - `DataSourceStrategy` → `InsertIntoHadoopFsRelationCommand`
 - Line 212: `sparkSession.sharedState.cacheManager.recacheByPath(sparkSession, outputPath, fs)`
 **CacheManager Method**: `recacheByPath(spark, outputPath, fs)`
+**Cache Invalidation Issue**: ⚠️ **Only works for a LogicalRelation with same path or FileTable**
 **Location**: InsertIntoHadoopFsRelationCommand.scala:212
 
 ### 1.4 SQL INSERT INTO (V1 InsertableRelation)
@@ -31,6 +32,7 @@
 **Execution Path**:
 - `DataSourceStrategy` → `InsertIntoDataSourceCommand`
 - Line 48: `sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)`
+**Cache Invalidation Issue**: ⚠️ **Does not work if read uses V2**
 **CacheManager Method**: `recacheByPlan(spark, LogicalRelation)`
 **Location**: InsertIntoDataSourceCommand.scala:48
 
@@ -63,6 +65,7 @@
 - Line 75: `sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)`
 **CacheManager Method**: `recacheByPlan(spark, LogicalRelation)`
 **Cache Invalidation Issue**: ⚠️ **Only works if a LogicalRelation with same path exists in cache**
+**Cache Invalidation Issue**: ⚠️ **Only works if for a LogicalRelation or FileTable**
 **Location**: SaveIntoDataSourceCommand.scala:75
 
 ### 1.8 DataFrame.write.saveAsTable("table")
@@ -73,52 +76,15 @@
 **CacheManager Method**: 
 - Existing table: `recacheByPlan(spark, DataSourceV2Relation)` or path-based
 - New table: N/A
+**Cache Invalidation Issue**: ⚠️ **Only works if a LogicalRelation with same path exists in cache**
+**Cache Invalidation Issue**: ⚠️ **Only works if for a LogicalRelation or FileTable**
 **Location**: DataFrameWriter.scala:430-511
 
-## 2. UPDATE Operations
+## 2. UPDATE/DELETE/MERGE Operations
 
-### 2.1 SQL UPDATE (V2 Table with Row-level Operations)
-**Operation**: `UPDATE v2_table SET col = value WHERE condition`
-**Execution Path**:
-- `DataSourceV2Strategy` → `UpdateTableExec`
-- Calls: **`refreshCache()`** callback → `cacheManager.recacheByPlan(session, DataSourceV2Relation)`
-**CacheManager Method**: `recacheByPlan(spark, DataSourceV2Relation)`
+Data source dependent. E.g. Delta calls `recacheByPlan(sparkSession, logicalRelation)`
+**Cache Invalidation Issue**: ⚠️ **Does not work if read uses V2**
 
-### 2.2 SQL UPDATE (Hive/V1 Table)
-**Operation**: `UPDATE hive_table SET col = value WHERE condition`
-**Execution Path**:
-- Typically translated to DELETE + INSERT
-- Calls: `CommandUtils.uncacheTableOrView()` + `catalog.refreshTable()`
-**CacheManager Method**: 
-- `uncacheTableOrView()` 
-- Then `recacheByPlan()` via refreshTable
-
-## 3. DELETE Operations
-
-### 3.1 SQL DELETE FROM (V2 Table)
-**Operation**: `DELETE FROM v2_table WHERE condition`
-**Execution Path**:
-- `DataSourceV2Strategy` → `DeleteFromTableExec`
-- Line 250: `refreshCache` callback → `cacheManager.recacheByPlan(session, DataSourceV2Relation)`
-**CacheManager Method**: `recacheByPlan(spark, DataSourceV2Relation)`
-**Location**: DataSourceV2Strategy.scala:245-253
-
-### 3.2 SQL DELETE FROM (Hive/V1 Table)
-**Operation**: `DELETE FROM hive_table WHERE condition`
-**Execution Path**:
-- Similar to UPDATE, calls uncache + refresh
-**CacheManager Method**: 
-- `uncacheTableOrView()`
-- Then `recacheByPlan()` via refreshTable
-
-## 4. MERGE Operations
-
-### 4.1 SQL MERGE INTO (V2 Table)
-**Operation**: `MERGE INTO target USING source ON condition WHEN MATCHED THEN...`
-**Execution Path**:
-- `DataSourceV2Strategy` → `MergeIntoTableExec`
-- Calls: **`refreshCache()`** callback → `cacheManager.recacheByPlan(session, DataSourceV2Relation)`
-**CacheManager Method**: `recacheByPlan(spark, DataSourceV2Relation)`
 
 ## 5. TRUNCATE Operations
 
@@ -159,6 +125,8 @@
 **Execution Path**:
 - Same as 1.3: `InsertIntoHadoopFsRelationCommand`
 **CacheManager Method**: `recacheByPath(spark, outputPath, fs)`
+**Cache Invalidation Issue**: ⚠️ **Only works if a LogicalRelation with same path exists in cache**
+**Cache Invalidation Issue**: ⚠️ **Only works if for a LogicalRelation or FileTable**
 
 ### 6.4 DataFrame.write.mode("overwrite").save(path)
 **Operation**: `df.write.mode("overwrite").parquet(path)`
@@ -195,12 +163,10 @@
 ## Summary of CacheManager Methods Used
 
 ### `recacheByPlan(spark: SparkSession, plan: LogicalPlan)`
-**Used by**:
-- All V2 DML operations (INSERT, UPDATE, DELETE, MERGE, TRUNCATE, OVERWRITE)
+**Issues for**:
+- All DML operations (INSERT, UPDATE, DELETE, MERGE, TRUNCATE, OVERWRITE)
 - V1 InsertableRelation (INSERT)
 - V1 SaveIntoDataSourceCommand (DataFrame.write.save)
-- Hive operations (via catalog.refreshTable)
-- REFRESH TABLE command
 
 **How it works**: 
 - Normalizes the plan
@@ -228,19 +194,4 @@
 **How it works**:
 - Removes cache entries by table/view name
 - Optionally cascades to dependent queries
-
-## Cache Invalidation Issues
-
-### ⚠️ Issue 1: DataFrame.write.save() with cached path
-**Problem**: If you cache a DataFrame from a path, then write to that path using `df.write.save()`, cache may NOT be invalidated
-**Reason**: `SaveIntoDataSourceCommand` calls `recacheByPlan(LogicalRelation)` but your cached entry might have a different LogicalRelation instance
-**Workaround**: Use `spark.catalog.clearCache()` or `REFRESH TABLE`
-
-### ⚠️ Issue 2: External file modifications
-**Problem**: If external processes modify parquet/orc files, cache is stale
-**Reason**: No Spark operation triggered = no cache invalidation
-**Workaround**: Call `REFRESH TABLE` or `spark.catalog.refreshTable()`
-
-### ✅ No Issue: V2 DML operations
-**All V2 operations properly invalidate cache** because they use `refreshCache()` callback with the same `DataSourceV2Relation` that was used for caching.
 
