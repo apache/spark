@@ -243,7 +243,7 @@ object SQLConf {
         s"according to the selected columns, to avoid too many small tasks.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
