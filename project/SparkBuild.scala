@@ -1189,12 +1189,16 @@ object DependencyOverrides {
   lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.4.0-jre")
   lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.20.0")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
-  lazy val settings = jacksonDeps ++ Seq(
+  lazy val awsJavaSdkV2Version = sys.props.get("aws.java.sdk.v2.version").getOrElse("2.29.52")
+  lazy val awsJavaSdkV2Deps =
+    Bom.dependencies("software.amazon.awssdk" % "bom" % awsJavaSdkV2Version)
+  lazy val settings = jacksonDeps ++ awsJavaSdkV2Deps ++ Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides ++= jacksonDeps.key.value,
     dependencyOverrides += "jline" % "jline" % "2.14.6",
     dependencyOverrides += "org.apache.avro" % "avro" % "1.12.1",
-    dependencyOverrides += "org.slf4j" % "slf4j-api" % "2.0.17")
+    dependencyOverrides += "org.slf4j" % "slf4j-api" % "2.0.17",
+    dependencyOverrides ++= awsJavaSdkV2Deps.key.value)
 }
 
 /**
