@@ -36,7 +36,8 @@ import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.util.internal.PlatformDependent;
 
 /**
- * Utilities for creating various Netty constructs based on whether we're using EPOLL or NIO.
+ * Utilities for creating various Netty constructs based on whether we're using NIO, EPOLL,
+ * or KQUEUE.
  */
 public class NettyUtils {
 
