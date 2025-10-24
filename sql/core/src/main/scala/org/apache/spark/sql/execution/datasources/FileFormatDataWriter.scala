@@ -172,6 +172,7 @@ class SingleDirectoryDataWriter(
     val currentPath = committer.newTaskTempFile(
       taskAttemptContext,
       None,
+      None,
       FileNameSpec("", f"-c$fileCounter%03d" + ext))
 
     currentWriter = description.outputWriterFactory.newInstance(
@@ -306,9 +307,10 @@ abstract class BaseDynamicPartitionDataWriter(
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
     val currentPath = if (customPath.isDefined) {
-      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, fileNameSpec)
+      assert(partDir.isDefined, "partDir must be defined when using customPath")
+      committer.newTaskTempFile(taskAttemptContext, partDir, customPath, fileNameSpec)
     } else {
-      committer.newTaskTempFile(taskAttemptContext, partDir, fileNameSpec)
+      committer.newTaskTempFile(taskAttemptContext, partDir, None, fileNameSpec)
     }
 
     currentWriter = description.outputWriterFactory.newInstance(

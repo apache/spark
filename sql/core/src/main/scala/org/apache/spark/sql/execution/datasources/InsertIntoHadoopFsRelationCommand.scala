@@ -75,6 +75,14 @@ case class InsertIntoHadoopFsRelationCommand(
       staticPartitions.size < partitionColumns.length
   }
 
+  private[sql] lazy val isPartitionOverwriteStaticMode: Boolean = {
+    parameters.get(DataSourceUtils.PARTITION_OVERWRITE_MODE)
+      // scalastyle:off caselocale
+      .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase))
+      // scalastyle:on caselocale
+      .getOrElse(conf.partitionOverwriteMode) == PartitionOverwriteMode.STATIC
+  }
+
   override def requiredOrdering: Seq[SortOrder] =
     V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options,
       staticPartitions.size)
@@ -110,6 +118,26 @@ case class InsertIntoHadoopFsRelationCommand(
       initialMatchingPartitions = matchingPartitions.map(_.spec)
       customPartitionLocations = getCustomPartitionLocations(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
+    } else if (mode == SaveMode.Overwrite && isPartitionOverwriteStaticMode) {
+      // In static partition overwrite mode without catalog, we need to delete matching partitions
+      // based on the static partition spec.
+      val globbedPath = staticPartitions match {
+        case s if s.nonEmpty =>
+          new Path(qualifiedOutputPath,
+            PartitioningUtils.getPathFragment(staticPartitions, partitionColumns))
+        case _ => qualifiedOutputPath
+      }
+      val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+      val index = new InMemoryFileIndex(
+        sparkSession, globbedPath::Nil, options, None, fileStatusCache)
+      val partitionSpec = index.inferPartitioning()
+      initialMatchingPartitions = partitionSpec.partitions.map { p =>
+        val pathStr = p.path.toString
+        val components = pathStr.split("/").filter(_.nonEmpty)
+        val start = math.max(0, components.length - partitionSpec.partitionColumns.size)
+        PartitioningUtils.parsePathFragment(
+          components.slice(start, components.length).mkString("/"))
+      }
     }
 
     val jobId = java.util.UUID.randomUUID().toString
@@ -117,7 +145,7 @@ case class InsertIntoHadoopFsRelationCommand(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = outputPath.toString,
-      dynamicPartitionOverwrite = dynamicPartitionOverwrite)
+      mode = mode.name())
 
     val doInsertion = if (mode == SaveMode.Append) {
       true
@@ -129,11 +157,7 @@ case class InsertIntoHadoopFsRelationCommand(
         case (SaveMode.Overwrite, true) =>
           if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
             false
-          } else if (dynamicPartitionOverwrite) {
-            // For dynamic partition overwrite, do not delete partition directories ahead.
-            true
           } else {
-            deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
             true
           }
         case (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
@@ -156,11 +180,13 @@ case class InsertIntoHadoopFsRelationCommand(
               catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
               ifNotExists = true).run(sparkSession)
           }
-          // For dynamic partition overwrite, we never remove partitions but only update existing
-          // ones.
-          if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
-            val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
-            if (deletedPartitions.nonEmpty) {
+        }
+        if (mode == SaveMode.Overwrite && isPartitionOverwriteStaticMode) {
+          val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
+          if (deletedPartitions.nonEmpty) {
+            deletePartitions(fs, qualifiedOutputPath, customPartitionLocations, deletedPartitions,
+              committer)
+            if (partitionsTrackedByCatalog) {
               AlterTableDropPartitionCommand(
                 catalogTable.get.identifier, deletedPartitions.toSeq,
                 ifExists = true, purge = false,
@@ -170,15 +196,6 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
-      // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
-      // will be renamed from staging path to final output path during commit job
-      val committerOutputPath = if (dynamicPartitionOverwrite) {
-        FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
-          .makeQualified(fs.getUri, fs.getWorkingDirectory)
-      } else {
-        qualifiedOutputPath
-      }
-
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
@@ -186,7 +203,7 @@ case class InsertIntoHadoopFsRelationCommand(
           fileFormat = fileFormat,
           committer = committer,
           outputSpec = FileFormatWriter.OutputSpec(
-            committerOutputPath.toString, customPartitionLocations, outputColumns),
+            qualifiedOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
@@ -252,6 +269,28 @@ case class InsertIntoHadoopFsRelationCommand(
       if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
         throw QueryExecutionErrors.cannotClearPartitionDirectoryError(path)
       }
+    }
+  }
+
+  private def deletePartitions(fs: FileSystem, qualifiedOutputPath: Path,
+      customPartitionLocations: Map[TablePartitionSpec, String],
+      tablePartitionSpecs: Set[TablePartitionSpec], committer: FileCommitProtocol): Unit = {
+    for (spec <- tablePartitionSpecs) {
+      val partitionDir = spec.map {
+        case (k, v) => getPartitionPathString(k, v)
+      }.mkString(Path.SEPARATOR)
+      val partitionPath = new Path(qualifiedOutputPath, partitionDir)
+      if (fs.exists(partitionPath) && !committer.deleteWithJob(fs, partitionPath, true)) {
+        throw QueryExecutionErrors.cannotClearOutputDirectoryError(partitionPath)
+      }
+      customPartitionLocations.get(spec).map( customLoc => {
+        assert((staticPartitions.toSet -- spec).isEmpty,
+          "Custom partition location did not match static partitioning keys")
+        val path = new Path(customLoc)
+        if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
+          throw QueryExecutionErrors.cannotClearPartitionDirectoryError(path)
+        }
+      })
     }
   }
 
