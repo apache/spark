@@ -1562,6 +1562,7 @@ class BaseUDFTestsMixin(object):
             logger = logging.getLogger("test")
             print("print to stdout ❤", file=sys.stdout)
             print("print to stderr 😀", file=sys.stderr)
+            logger.warning("custom context", extra={"context": dict(abc=123)})
             try:
                 1 / 0
             except Exception:
@@ -1595,6 +1596,12 @@ class BaseUDFTestsMixin(object):
                     msg="print to stderr 😀",
                     context={"func_name": my_udf.__name__},
                     logger="stderr",
+                ),
+                Row(
+                    level="WARNING",
+                    msg="custom context",
+                    context={"func_name": my_udf.__name__, "abc": "123"},
+                    logger="test",
                 ),
                 Row(
                     level="ERROR",
