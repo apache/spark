@@ -937,8 +937,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
   test("SPARK-54003: concurrent write partition table") {
     withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
-      classOf[RandomDelayForCommitJobCommitProtocol].getName,
-    ) {
+      classOf[RandomDelayForCommitJobCommitProtocol].getName) {
       def concurrentWrite(insertStatement: Int => String,
                           expectedAnswer: Seq[Row],
                           concurrent: Int = 5): Unit = {
@@ -1095,8 +1094,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   test("SPARK-54003: test insert overwrite or into different table") {
     Seq("true", "false").foreach { v =>
       withSQLConf("spark.sql.hive.convertMetastoreParquet" -> v,
-        "hive.exec.dynamic.partition.mode" -> "nonstrict",
-      ) {
+          "hive.exec.dynamic.partition.mode" -> "nonstrict") {
         // 1 Test custom partitioned table
         insertCustomPartitionedTableTest()
 
