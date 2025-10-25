@@ -451,7 +451,17 @@ case class CatalogTable(
    */
   def partitionSchema: StructType = {
     val partitionFields = schema.takeRight(partitionColumnNames.length)
-    assert(partitionFields.map(_.name) == partitionColumnNames)
+    val actualPartitionColumnNames = partitionFields.map(_.name)
+
+    assert(actualPartitionColumnNames == partitionColumnNames,
+      "Corrupted table metadata detected for table " + identifier.unquotedString + ". " +
+      "The partition column names in the table schema " +
+      "do not match the declared partition columns. " +
+      "Table schema columns: [" + schema.fieldNames.mkString(", ") + "] " +
+      "Declared partition columns: [" + partitionColumnNames.mkString(", ") + "] " +
+      "Actual partition columns from schema: " +
+      "[" + actualPartitionColumnNames.mkString(", ") + "]. " +
+      "This indicates corrupted table metadata that needs to be repaired.")
 
     StructType(partitionFields)
   }
