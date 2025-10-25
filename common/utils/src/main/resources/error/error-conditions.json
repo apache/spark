@@ -1820,6 +1820,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "FAILED_TO_EVALUATE_DSV2_PREDICATE" : {
+    "message" : [
+      "Failed to evaluate internalRow on datasource v2 predicate <predicate>, because cannot convert the predicate to Catalyst expression."
+    ],
+    "sqlState" : "42846"
+  },
   "FAILED_TO_LOAD_ROUTINE" : {
     "message" : [
       "Failed to load routine <routineName>."
