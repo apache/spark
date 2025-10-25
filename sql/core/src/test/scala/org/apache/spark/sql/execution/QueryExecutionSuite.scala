@@ -20,6 +20,7 @@ import scala.collection.mutable
 import scala.io.Source
 import scala.util.Try
 
+import org.apache.spark.MapOutputTrackerMaster
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator, SaveMode}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
@@ -320,11 +321,15 @@ class QueryExecutionSuite extends SharedSparkSession {
 
   private def cleanupShuffles(): Unit = {
     val blockManager = spark.sparkContext.env.blockManager
+    val mapOutputTrackerMaster =
+      spark.sparkContext.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     blockManager.diskBlockManager.getAllBlocks().foreach {
       case ShuffleIndexBlockId(shuffleId, _, _) =>
         spark.sparkContext.shuffleDriverComponents.removeShuffle(shuffleId, true)
       case _ =>
     }
+    // Shuffle cleanup should not clean up shuffle metadata on the driver
+    assert(mapOutputTrackerMaster.shuffleStatuses.nonEmpty)
   }
 
   test("SPARK-53413: Cleanup shuffle dependencies for commands") {
