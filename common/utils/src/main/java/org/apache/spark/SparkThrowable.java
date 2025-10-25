@@ -51,6 +51,7 @@ public interface SparkThrowable {
 
   // Portable error identifier across SQL engines
   // If null, error class or SQLSTATE is not set
+  // Deprecated: Override this method to provide explicit SQL state instead of relying on error class reader
   default String getSqlState() {
     return SparkThrowableHelper.getSqlState(this.getCondition());
   }

@@ -242,14 +242,15 @@ object KafkaExceptions {
 private[kafka010] class KafkaIllegalStateException(
     errorClass: String,
     messageParameters: Map[String, String],
-    cause: Throwable = null)
+    cause: Throwable = null,
+    sqlState: Option[String] = None)
   extends IllegalStateException(
     KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
       errorClass, messageParameters), cause)
   with SparkThrowable {
 
   override def getSqlState: String =
-    KafkaExceptionsHelper.errorClassesJsonReader.getSqlState(errorClass)
+    sqlState.getOrElse(KafkaExceptionsHelper.errorClassesJsonReader.getSqlState(errorClass))
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
@@ -262,14 +263,15 @@ private[kafka010] class KafkaIllegalStateException(
 private[kafka010] class KafkaIllegalArgumentException(
     errorClass: String,
     messageParameters: Map[String, String],
-    cause: Throwable = null)
+    cause: Throwable = null,
+    sqlState: Option[String] = None)
   extends IllegalArgumentException(
     KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
       errorClass, messageParameters), cause)
   with SparkThrowable {
 
   override def getSqlState: String =
-    KafkaExceptionsHelper.errorClassesJsonReader.getSqlState(errorClass)
+    sqlState.getOrElse(KafkaExceptionsHelper.errorClassesJsonReader.getSqlState(errorClass))
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
