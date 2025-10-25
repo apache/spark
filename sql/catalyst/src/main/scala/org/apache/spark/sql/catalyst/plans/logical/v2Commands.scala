@@ -545,7 +545,6 @@ case class CreateTableAsSelect(
  * The base command representation for a statement that can be part of a Declarative Pipeline to
  * define a pipeline dataset (MV or ST).
  */
-
 trait CreatePipelineDataset extends Command {
   // The name of the dataset.
   val name: LogicalPlan
@@ -566,7 +565,8 @@ trait CreatePipelineDataset extends Command {
 /**
  * An extension of the base command representation that represents a CTAS style CREATE statement.
  */
-trait CreatePipelineDatasetAsSelect extends BinaryCommand
+trait CreatePipelineDatasetAsSelect
+  extends BinaryCommand
   with CreatePipelineDataset
   with CTEInChildren {
 
@@ -1868,7 +1868,7 @@ case class Call(
  * representation of the matching SQL syntax and cannot be executed. Instead, it is interpreted by
  * the pipelines submodule during a pipeline execution
  *
- * @param name  the name of this flow
+ * @param name the name of this flow
  * @param flowOperation the logical plan of the actual transformation this flow should execute
  * @param comment an optional comment describing this flow
  */

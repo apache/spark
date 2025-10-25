@@ -47,8 +47,6 @@ private[connect] object PipelinesHandler extends Logging {
    *   Command to be handled
    * @param responseObserver
    *   The response observer where the response will be sent
-   * @param sparkSession
-   *   The spark session
    * @param transformRelationFunc
    *   Function used to convert a relation to a LogicalPlan. This is used when determining the
    *   LogicalPlan that a flow returns.
@@ -85,9 +83,7 @@ private[connect] object PipelinesHandler extends Logging {
           defineOutput(cmd.getDefineOutput, sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
         resolvedDataset.catalog.foreach(identifierBuilder.setCatalogName)
-        resolvedDataset.database.foreach { ns =>
-          identifierBuilder.addNamespace(ns)
-        }
+        resolvedDataset.database.foreach(identifierBuilder.addNamespace)
         identifierBuilder.setTableName(resolvedDataset.identifier)
         val identifier = identifierBuilder.build()
         PipelineCommandResult
@@ -114,7 +110,7 @@ private[connect] object PipelinesHandler extends Logging {
           .setDefineFlowResult(
             PipelineCommandResult.DefineFlowResult
               .newBuilder()
-              .setResolvedIdentifier(identifierBuilder)
+              .setResolvedIdentifier(identifier)
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
@@ -135,15 +131,21 @@ private[connect] object PipelinesHandler extends Logging {
     val defaultCatalog = Option
       .when(cmd.hasDefaultCatalog)(cmd.getDefaultCatalog)
       .getOrElse {
-        logInfo(s"No default catalog was supplied. Falling back to the current catalog.")
-        sessionHolder.session.catalog.currentCatalog()
+        val currentCatalog = sessionHolder.session.catalog.currentCatalog()
+        logInfo(
+          "No default catalog was supplied. " +
+            s"Falling back to the current catalog: $currentCatalog.")
+        currentCatalog
       }
 
     val defaultDatabase = Option
       .when(cmd.hasDefaultDatabase)(cmd.getDefaultDatabase)
       .getOrElse {
-        logInfo(s"No default database was supplied. Falling back to the current database.")
-        sessionHolder.session.catalog.currentDatabase
+        val currentDatabase = sessionHolder.session.catalog.currentDatabase
+        logInfo(
+          "No default database was supplied. " +
+            s"Falling back to the current database: $currentDatabase.")
+        currentDatabase
       }
 
     val defaultSqlConf = cmd.getSqlConfMap.asScala.toMap
@@ -229,18 +231,15 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getFileName),
               line = Option.when(output.getSourceCodeLocation.hasLineNumber)(
                 output.getSourceCodeLocation.getLineNumber),
-              objectType = Option(QueryOriginType.View.toString),
+              objectType = Some(QueryOriginType.View.toString),
               objectName = Option(viewIdentifier.unquotedString),
-              language = Option(Python())),
+              language = Some(Python())),
             properties = Map.empty,
             sqlText = None))
         viewIdentifier
       case proto.OutputType.SINK =>
-        val dataflowGraphId = output.getDataflowGraphId
-        val graphElementRegistry =
-          sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
         val identifier = GraphIdentifierManager
-          .parseTableIdentifier(name = output.getOutputName, spark = sessionHolder.session)
+          .parseTableIdentifier(output.getOutputName, sessionHolder.session)
         val sinkDetails = output.getSinkDetails
         graphElementRegistry.registerSink(
           SinkImpl(
@@ -254,7 +253,7 @@ private[connect] object PipelinesHandler extends Logging {
                 output.getSourceCodeLocation.getLineNumber),
               objectType = Option(QueryOriginType.Sink.toString),
               objectName = Option(identifier.unquotedString),
-              language = Option(Python()))))
+              language = Some(Python()))))
         identifier
       case _ =>
         throw new IllegalArgumentException(s"Unknown output type: ${output.getOutputType}")
@@ -285,22 +284,21 @@ private[connect] object PipelinesHandler extends Logging {
 
     val rawDestinationIdentifier = GraphIdentifierManager
       .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session)
-    val flowWritesToView =
-      graphElementRegistry
-        .getViews()
+    val isFlowWriteToView =
+      graphElementRegistry.getViews
         .filter(_.isInstanceOf[TemporaryView])
         .exists(_.identifier == rawDestinationIdentifier)
-    val flowWritesToSink =
+    val isFlowWriteToSink =
       graphElementRegistry.getSinks
         .filter(_.isInstanceOf[Sink])
         .exists(_.identifier == rawDestinationIdentifier)
     // If the flow is created implicitly as part of defining a view or that it writes to a sink,
     // then we do not qualify the flow identifier and the flow destination. This is because
     // views and sinks are not permitted to have multipart
-    val isImplicitFlowForTempView = (isImplicitFlow && flowWritesToView)
+    val isImplicitFlowForTempView = isImplicitFlow && isFlowWriteToView
     val Seq(flowIdentifier, destinationIdentifier) =
       Seq(rawFlowIdentifier, rawDestinationIdentifier).map { rawIdentifier =>
-        if (isImplicitFlowForTempView || flowWritesToSink) {
+        if (isImplicitFlowForTempView || isFlowWriteToSink) {
           rawIdentifier
         } else {
           GraphIdentifierManager
@@ -314,7 +312,7 @@ private[connect] object PipelinesHandler extends Logging {
 
     val relationFlowDetails = flow.getRelationFlowDetails
     graphElementRegistry.registerFlow(
-      new UnresolvedFlow(
+      UnresolvedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = destinationIdentifier,
         func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
@@ -327,9 +325,9 @@ private[connect] object PipelinesHandler extends Logging {
             flow.getSourceCodeLocation.getFileName),
           line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
             flow.getSourceCodeLocation.getLineNumber),
-          objectType = Option(QueryOriginType.Flow.toString),
+          objectType = Some(QueryOriginType.Flow.toString),
           objectName = Option(flowIdentifier.unquotedString),
-          language = Option(Python()))))
+          language = Some(Python()))))
     flowIdentifier
   }
 

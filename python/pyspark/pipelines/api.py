@@ -456,12 +456,12 @@ def create_sink(
     options: Optional[Dict[str, str]] = None,
 ) -> None:
     """
-    Creates a sink that can be targeted by streaming flows, providing a generic destination \
+    Creates a sink that can be targeted by streaming flows, providing a generic destination
     for flows to send data external to the pipeline.
 
     :param name: The name of the sink.
     :param format: The format of the sink, e.g. "parquet".
-    :param options: A dict where the keys are the property names and the values are the \
+    :param options: A dict where the keys are the property names and the values are the
         property values. These properties will be set on the sink.
     """
     if type(name) is not str:

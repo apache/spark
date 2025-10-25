@@ -1376,7 +1376,7 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     if (colConstraints.nonEmpty) {
       throw operationNotAllowed("Pipeline datasets do not currently support column constraints. " +
-        "Please remove and CHECK, UNIQUE, PK, and FK constraints specified on the pipeline " +
+        "Please remove any CHECK, UNIQUE, PK, and FK constraints specified on the pipeline " +
         "dataset.", ctx)
     }
 

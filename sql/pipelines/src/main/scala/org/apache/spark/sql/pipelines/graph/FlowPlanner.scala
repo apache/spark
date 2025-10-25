@@ -31,8 +31,7 @@ import org.apache.spark.sql.streaming.Trigger
 class FlowPlanner(
     graph: DataflowGraph,
     updateContext: PipelineUpdateContext,
-    triggerFor: Flow => Trigger
-) {
+    triggerFor: Flow => Trigger) {
 
   /**
    * Turns a [[Flow]] into an executable [[FlowExecution]].
@@ -76,8 +75,8 @@ class FlowPlanner(
             )
           case _ =>
             throw new UnsupportedOperationException(
-              s"Streaming flow ${sf.identifier} cannot write to non-table destination: " +
-              s"${output.getClass.getSimpleName} (${flow.destinationIdentifier})"
+              s"Unsupported destination type: ${output.getClass.getSimpleName} for " +
+              s"streaming flow ${sf.identifier} (${flow.destinationIdentifier})"
             )
         }
       case _ =>
