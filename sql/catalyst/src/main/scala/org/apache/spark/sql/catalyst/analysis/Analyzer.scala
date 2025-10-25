@@ -1659,7 +1659,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val resolvedBasic = p.projectList.map(resolveExpressionByPlanChildren(_, p))
         // Lateral column alias has higher priority than outer reference.
         val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
-        val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)
+        val resolvedFinal = resolveProjectListLastResort(resolvedWithLCA)
         p.copy(projectList = resolvedFinal.map(_.asInstanceOf[NamedExpression]))
 
       case o: OverwriteByExpression if o.table.resolved =>
@@ -1847,6 +1847,40 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case o => o
         }
         Assignment(resolvedKey, resolvedValue)
+      }
+    }
+
+    /**
+     * If `spark.sql.analyzer.delayLastResortColumnResolution` is set to true, delay resolving a
+     * column with [[resolveColsLast]] until all [[UnresolvedAlias]]es that come before that column
+     * are resolved. This is necessary in order to allow that column to be resolved as a lateral
+     * column alias reference to an [[UnresolvedAlias]], if possible. For example, for a query like:
+     *
+     * {{{
+     * DECLARE a = 'aa';
+     * SELECT 'a', a;
+     * -- result is ('a', 'aa')
+     * }}}
+     *
+     * Without delaying [[resolveColsLastResort]], second 'a' column would be resolved as a
+     * variable instead of being resolved as a lateral column alias reference to
+     * [[UnresolvedAlias]] of literal 'a'. The intended behavior should be the same as for the
+     * following query without variable declaration:
+     *
+     * {{{ SELECT 'a', a; -- result is ('a', 'a') }}}
+     */
+    private def resolveProjectListLastResort(projectList: Seq[Expression]) = {
+      if (conf.getConf(SQLConf.DELAY_LAST_RESORT_COLUMN_RESOLUTION)) {
+        var hasUnresolvedAlias = false
+        projectList.map {
+          case col if hasUnresolvedAlias => col
+          case unresolvedAlias: UnresolvedAlias =>
+            hasUnresolvedAlias = true
+            resolveColsLastResort(unresolvedAlias)
+          case col => resolveColsLastResort(col)
+        }
+      } else {
+        projectList.map(resolveColsLastResort)
       }
     }
 
