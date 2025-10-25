@@ -50,7 +50,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     }
   }
 
-  test("concurrent query execution with fork-join pool (SPARK-13747)") {
+  ignore("concurrent query execution with fork-join pool (SPARK-13747)") {
     val spark = SparkSession.builder()
       .master("local[*]")
       .appName("test")

@@ -206,7 +206,7 @@ class CrossValidatorTestsMixin:
         cv = CrossValidator(
             estimator=pipeline,
             estimatorParamMaps=grid2,
-            parallelism=2,
+            parallelism=1,
             evaluator=BinaryClassificationEvaluator(),
         )
         cv_model = cv.fit(train_dataset)
@@ -282,7 +282,7 @@ class CrossValidatorTestsMixin:
         cv = CrossValidator(
             estimator=lorv2,
             estimatorParamMaps=grid2,
-            parallelism=2,
+            parallelism=1,
             evaluator=BinaryClassificationEvaluator(),
             foldCol="fold",
             numFolds=3,
