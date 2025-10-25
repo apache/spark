@@ -284,6 +284,8 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
   case class WaitUntilBatchProcessed(batchId: Long) extends StreamAction with StreamMustBeRunning
 
+  case object WaitUntilCurrentBatchProcessed extends StreamAction with StreamMustBeRunning
+
   /**
    * Signals that a failure is expected and should not kill the test.
    *
@@ -659,6 +661,20 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
             throw currentStream.exception.get
           }
 
+        case WaitUntilCurrentBatchProcessed =>
+          if (currentStream.exception.isDefined) {
+            throw currentStream.exception.get
+          }
+          val currBatch = currentStream.commitLog.getLatestBatchId().getOrElse(-1L)
+          eventually("Current batch never finishes") {
+            assert(currentStream.commitLog.getLatestBatchId() != None
+              && currentStream.commitLog.getLatestBatchId().get > currBatch)
+
+            // See WaitUntilBatchProcessed for an explanation of why we wait for the progress
+            val latestProgressBatchId =
+              currentStream.recentProgress.lastOption.map(_.batchId).getOrElse(-1L)
+            assert(latestProgressBatchId >= currBatch)
+          }
         case StopStream =>
           verify(currentStream != null, "can not stop a stream that is not running")
           try failAfter(streamingTimeout) {

@@ -1189,12 +1189,9 @@ class MicroBatchExecution(
     // i.e. tasks that execute a source partition.  We merge the offsets and
     // write them to the offset log
     if (trigger.isInstanceOf[RealTimeTrigger]) {
-      val actualLastExecution = execCtx.executionPlan
-
-      val execs = StreamingQueryPlanTraverseHelper
-        .collectFromUnfoldedLatestExecutedPlan(actualLastExecution) {
-          case e: RealTimeStreamScanExec => e
-        }
+      val execs = latestExecPlan.collect {
+        case e: RealTimeStreamScanExec => e
+      }
 
       val endOffsetMap = MutableMap[SparkDataStream, OffsetV2]()
       execs.foreach { e =>

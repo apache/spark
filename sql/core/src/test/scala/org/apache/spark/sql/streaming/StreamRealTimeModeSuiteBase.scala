@@ -50,6 +50,18 @@ trait StreamRealTimeModeSuiteBase extends StreamTest with Matchers {
       "local[10]", // Ensure enough number of cores to ensure concurrent schedule of all tasks.
       "streaming-rtm-context",
       sparkConf.set("spark.sql.testkey", "true")))
+
+  /**
+   * Should only be used in real-time mode where the batch duration is long enough to ensure
+   * eventually does not skip the batch due to long refresh interval.
+   */
+  def waitForTasksToStart(numTasks: Int): Unit = {
+    eventually(timeout(60.seconds)) {
+      val tasksRunning = spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum
+      assert(tasksRunning == numTasks, s"tasksRunning: ${tasksRunning}")
+    }
+  }
 }
 
 /**

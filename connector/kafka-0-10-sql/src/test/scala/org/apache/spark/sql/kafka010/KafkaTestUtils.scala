@@ -405,6 +405,7 @@ class KafkaTestUtils(
     (0 until partitions).foreach { p =>
       waitUntilMetadataIsPropagated(topic, p)
     }
+    logInfo(s"!-- addPartitions: ${topic} ${partitions}")
   }
 
   def sendMessages(topic: String, msgs: Array[String]): Seq[(String, RecordMetadata)] = {
