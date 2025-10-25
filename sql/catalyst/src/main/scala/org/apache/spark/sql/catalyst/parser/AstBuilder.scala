@@ -4333,20 +4333,20 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitExpressionPropertyList(
       ctx: ExpressionPropertyListContext): OptionList = {
     val options = ctx.expressionProperty.asScala.map { property =>
-      val (key, value) = property match {
+      // Extract the key and value using the appropriate visitor based on the property context type.
+      // Both cases require a value, so we can extract it once after the match.
+      val (key, valueCtx) = property match {
         case p: ExpressionPropertyWithKeyAndEqualsContext =>
-          val k = visitPropertyKeyOrStringLit(p.key)
-          val v = Option(p.value).map(expression).getOrElse {
-            operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
-          }
-          (k, v)
+          (visitPropertyKeyOrStringLit(p.key), p.value)
         case p: ExpressionPropertyWithKeyNoEqualsContext =>
-          val k = visitPropertyKeyOrStringLitNoCoalesce(p.key)
-          val v = Option(p.value).map(expression).getOrElse {
-            operationNotAllowed(s"A value must be specified for the key: $k.", ctx)
-          }
-          (k, v)
+          (visitPropertyKeyOrStringLitNoCoalesce(p.key), p.value)
       }
+
+      // Extract the value (same logic for both cases).
+      val value = Option(valueCtx).map(expression(_)).getOrElse {
+        operationNotAllowed(s"A value must be specified for the key: $key.", ctx)
+      }
+
       key -> value
     }.toSeq
     OptionList(options)

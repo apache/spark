@@ -613,6 +613,7 @@ propertyKey
 propertyKeyOrStringLit
     : propertyKey
     | stringLit
+    | stringLit
     ;
 
 propertyKeyOrStringLitNoCoalesce
@@ -633,7 +634,7 @@ expressionPropertyList
 
 expressionProperty
     : key=propertyKeyOrStringLit EQ value=expression                  #expressionPropertyWithKeyAndEquals
-    | key=propertyKeyOrStringLitNoCoalesce value=expression           #expressionPropertyWithKeyNoEquals
+    | key=propertyKeyOrStringLitNoCoalesce value=expression?          #expressionPropertyWithKeyNoEquals
     ;
 
 constantList

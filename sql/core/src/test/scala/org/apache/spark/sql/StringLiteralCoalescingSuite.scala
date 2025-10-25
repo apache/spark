@@ -34,28 +34,25 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
   // Basic String Literal Coalescing Tests
   // ========================================================================
 
-  test("string coalescing in SELECT expressions") {
-    checkAnswer(
-      sql("SELECT 'hello' 'world'"),
-      Row("helloworld")
+  test("string coalescing - basic expressions") {
+    val testCases = Seq(
+      // Two literals
+      ("SELECT 'hello' 'world'", "helloworld"),
+      // Three literals
+      ("SELECT 'one' 'two' 'three'", "onetwothree"),
+      // Mixed quote styles: single and double
+      ("SELECT 'hello' \"world\"", "helloworld"),
+      // Mixed quote styles: multiple
+      ("SELECT \"hello\" 'world' \"!\"", "helloworld!"),
+      // Empty strings: middle empty
+      ("SELECT '' 'hello' ''", "hello"),
+      // Empty strings: start and end empty
+      ("SELECT 'start' '' 'end'", "startend")
     )
 
-    checkAnswer(
-      sql("SELECT 'one' 'two' 'three'"),
-      Row("onetwothree")
-    )
-  }
-
-  test("string coalescing with mixed quote styles") {
-    checkAnswer(
-      sql("SELECT 'hello' \"world\""),
-      Row("helloworld")
-    )
-
-    checkAnswer(
-      sql("SELECT \"hello\" 'world' \"!\""),
-      Row("helloworld!")
-    )
+    testCases.foreach { case (query, expected) =>
+      checkAnswer(sql(query), Row(expected))
+    }
   }
 
   // ========================================================================
@@ -115,29 +112,21 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
   // LIKE and Pattern Matching Tests
   // ========================================================================
 
-  test("string coalescing in LIKE pattern") {
-    checkAnswer(
-      sql("SELECT 'test_value' LIKE 'test' '_value'"),
-      Row(true)
+  test("string coalescing in LIKE patterns") {
+    val testCases = Seq(
+      // Coalescing with underscore wildcard - match
+      ("SELECT 'test_value' LIKE 'test' '_value'", true),
+      // Coalescing with underscore wildcard - no match
+      ("SELECT 'test_value' LIKE 'test' '_xyz'", false),
+      // Coalescing with percent wildcard
+      ("SELECT 'prefix_middle_suffix' LIKE 'prefix' '%' 'suffix'", true),
+      // ESCAPE clause with coalescing
+      ("SELECT 'test%value' LIKE 'test' '\\%' 'value' ESCAPE '\\\\'", true)
     )
 
-    checkAnswer(
-      sql("SELECT 'test_value' LIKE 'test' '_xyz'"),
-      Row(false)
-    )
-
-    checkAnswer(
-      sql("SELECT 'prefix_middle_suffix' LIKE 'prefix' '%' 'suffix'"),
-      Row(true)
-    )
-  }
-
-  test("string coalescing in ESCAPE clause") {
-    // Test escape character coalescing (though typically escape is single char)
-    checkAnswer(
-      sql("SELECT 'test%value' LIKE 'test' '\\%' 'value' ESCAPE '\\\\'"),
-      Row(true)
-    )
+    testCases.foreach { case (query, expected) =>
+      checkAnswer(sql(query), Row(expected))
+    }
   }
 
   test("string coalescing in table options") {
@@ -156,17 +145,21 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
   }
 
   test("string coalescing in SHOW TABLES LIKE pattern") {
-    withTable("test_table_123", "test_table_456", "other_table") {
-      sql("CREATE TABLE test_table_123 (id INT)")
-      sql("CREATE TABLE test_table_456 (id INT)")
-      sql("CREATE TABLE other_table (id INT)")
+    val tableNames = Seq("test_table_123", "test_table_456", "other_table")
+    withTable(tableNames: _*) {
+      tableNames.foreach { tableName =>
+        sql(s"CREATE TABLE $tableName (id INT)")
+      }
 
       // The pattern is coalesced into 'test_table_*' (regex pattern where * matches any chars)
-      val result = sql("SHOW TABLES LIKE 'test' '_table_' '*'").collect()
-      assert(result.length == 2,
-        s"Expected 2 tables, got ${result.length}: ${result.mkString(", ")}")
-      val tableNames = result.map(_.getString(1)).sorted
-      assert(tableNames === Array("test_table_123", "test_table_456"))
+      // SHOW TABLES returns: namespace, tableName, isTemporary
+      checkAnswer(
+        sql("SHOW TABLES LIKE 'test' '_table_' '*'"),
+        Seq(
+          Row("default", "test_table_123", false),
+          Row("default", "test_table_456", false)
+        )
+      )
     }
   }
 
@@ -177,18 +170,6 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
              'two'
     """).collect().head.getString(0)
     assert(result == "lineonetwo")
-  }
-
-  test("string coalescing with empty strings") {
-    checkAnswer(
-      sql("SELECT '' 'hello' ''"),
-      Row("hello")
-    )
-
-    checkAnswer(
-      sql("SELECT 'start' '' 'end'"),
-      Row("startend")
-    )
   }
 
   test("string coalescing in WHERE clause") {
@@ -207,30 +188,96 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
   // R-String (Raw String) Coalescing Tests
   // ========================================================================
 
-  test("string coalescing with R-strings (raw strings)") {
-    // R-strings do not process escape sequences.
-    checkAnswer(
-      sql("""SELECT R'C:\Users\' 'JohnDoe' R'\Documents'"""),
-      Row("""C:\Users\JohnDoe\Documents""")
+  test("R-string detection - basic cases and edge cases") {
+    val testCases = Seq(
+      // Basic cases: uppercase and lowercase R with single/double quotes
+      ("""SELECT R'\n'""", """\n"""),
+      ("""SELECT r'\n'""", """\n"""),
+      ("""SELECT R"\n"""", """\n"""),
+      ("""SELECT r"\n"""", """\n"""),
+      // Edge cases: empty R-string
+      ("""SELECT R''""", ""),
+      // Quote character as content
+      ("""SELECT R"'"""", "'"),
+      ("""SELECT R'"'""", "\""),
+      // Mixed escape sequences
+      ("""SELECT R'\t\n\r\\'""", """\t\n\r\\"""),
+      // Backslashes at start and end
+      ("""SELECT R'\test\'""", """\test\""")
     )
 
-    // Mix R-strings with regular strings
-    checkAnswer(
-      sql("""SELECT 'path: ' R'C:\Windows\System32'"""),
-      Row("""path: C:\Windows\System32""")
+    testCases.foreach { case (query, expected) =>
+      checkAnswer(sql(query), Row(expected))
+    }
+  }
+
+  test("R-string coalescing with regular strings") {
+    val testCases = Seq(
+      // R-string followed by regular string
+      ("""SELECT R'\n' ' tab'""", """\n tab"""),
+      // Regular string followed by R-string
+      ("""SELECT 'newline ' R'\n'""", """newline \n"""),
+      // Multiple R-strings with regular strings interleaved
+      ("""SELECT R'\n' 'text' R'\t' 'more'""", """\ntext\tmore"""),
+      // All R-strings
+      ("""SELECT R'\n' R'\t' R'\r'""", """\n\t\r""")
     )
 
-    // R-strings with double quotes
-    checkAnswer(
-      sql("""SELECT R"C:\Users\" "JohnDoe" R"\Documents""""),
-      Row("""C:\Users\JohnDoe\Documents""")
+    testCases.foreach { case (query, expected) =>
+      checkAnswer(sql(query), Row(expected))
+    }
+  }
+
+  test("R-string detection - Windows paths") {
+    val testCases = Seq(
+      // Windows path with backslashes
+      ("""SELECT R'C:\Users\JohnDoe\Documents\file.txt'""",
+        """C:\Users\JohnDoe\Documents\file.txt"""),
+      // Coalesced Windows paths
+      ("""SELECT R'C:\Users\' 'JohnDoe' R'\Documents'""",
+        """C:\Users\JohnDoe\Documents"""),
+      // Mixed case R prefix with paths
+      ("""SELECT r'C:\Windows\' R'System32'""",
+        """C:\Windows\System32""")
     )
 
-    // Verify backslashes are preserved in R-strings
-    checkAnswer(
-      sql("""SELECT R'\n' '\t' R'\r'"""),
-      Row("""\n\t\r""")
+    testCases.foreach { case (query, expected) =>
+      checkAnswer(sql(query), Row(expected))
+    }
+  }
+
+  test("R-string detection - special characters") {
+    val testCases = Seq(
+      // Dollar signs (should not be treated as escape)
+      ("""SELECT R'$100\n'""", """$100\n"""),
+      // Unicode-like sequences
+      ("""SELECT R'\u0041'""", """\u0041"""),
+      // Regex patterns
+      ("""SELECT R'\d+\.\d+'""", """\d+\.\d+"""),
+      // JSON-like content
+      ("""SELECT R'{"key": "value\n"}'""", """{"key": "value\n"}""")
     )
+
+    testCases.foreach { case (query, expected) =>
+      checkAnswer(sql(query), Row(expected))
+    }
+  }
+
+  test("R-string coalescing - quote preservation") {
+    val testCases = Seq(
+      // Single-quoted R-strings coalesced
+      ("""SELECT R'first' R'second'""", "firstsecond"),
+      // Double-quoted R-strings coalesced
+      ("""SELECT R"first" R"second"""", "firstsecond"),
+      // Mixed single and double R-strings
+      ("""SELECT R'first' R"second"""", "firstsecond"),
+      // R-string with regular string (quote style from first non-R-string)
+      ("""SELECT R'r-str' 'regular'""", "r-strregular")
+    )
+
+    testCases.foreach { case (query, expected) =>
+      checkAnswer(sql(query), Row(expected))
+    }
   }
 
   test("string coalescing in INSERT VALUES") {

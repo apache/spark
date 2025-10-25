@@ -155,6 +155,23 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
+   * Checks if a token's text represents an R-string (raw string literal).
+   *
+   * An R-string has the format `R'...'` or `r"..."` where the first character is 'R' or 'r'
+   * (case-insensitive) followed by a quote character (single or double).
+   *
+   * @param tokenText
+   *   The text content of the token to check.
+   * @return
+   *   `true` if the token represents an R-string, `false` otherwise.
+   */
+  private def isRString(tokenText: String): Boolean = {
+    tokenText.length >= 2 &&
+    (tokenText.charAt(0) == 'R' || tokenText.charAt(0) == 'r') &&
+    (tokenText.charAt(1) == '\'' || tokenText.charAt(1) == '"')
+  }
+
+  /**
    * Creates a CoalescedStringToken from multiple string literal tokens.
    *
    * This method concatenates the raw content of the tokens (with outer quotes removed but escape
@@ -171,24 +188,14 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     val lastToken = tokens.last
 
     // Check if any of the tokens are R-strings.
-    val hasRString = tokens.exists { token =>
-      val text = token.getText
-      text.length >= 2 &&
-      (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
-      (text.charAt(1) == '\'' || text.charAt(1) == '"')
-    }
+    val hasRString = tokens.exists(token => isRString(token.getText))
 
     // Determines the quote character for the coalesced token by finding the first
     // non-R-string token and extracting its quote type. This preserves the original
     // quotation style ('single' or "double") in the coalesced result.
     val quoteChar = {
       val firstNonRToken = tokens
-        .find { token =>
-          val text = token.getText
-          !(text.length >= 2 &&
-            (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
-            (text.charAt(1) == '\'' || text.charAt(1) == '"'))
-        }
+        .find(token => !isRString(token.getText))
         .getOrElse(tokens.head)
 
       val text = firstNonRToken.getText
@@ -205,11 +212,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     val coalescedRawContent = tokens.map { token =>
       val text = token.getText
       // Check if this is an R-string (raw string literal).
-      val isRString = text.length >= 2 &&
-        (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
-        (text.charAt(1) == '\'' || text.charAt(1) == '"')
+      val tokenIsRString = isRString(text)
 
-      if (isRString) {
+      if (tokenIsRString) {
         // For R-strings: Remove R prefix and outer quotes (first 2 chars and last char).
         text.substring(2, text.length - 1)
       } else {
