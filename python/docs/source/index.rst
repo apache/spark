@@ -96,6 +96,7 @@ Spark to be used as a service.
 - :ref:`/getting_started/quickstart_connect.ipynb`
 - |binder_connect|_
 - `Spark Connect Overview <https://spark.apache.org/docs/latest/spark-connect-overview.html>`_
+- `Eager vs Lazy: Spark Connect vs Spark Classic <https://spark.apache.org/docs/latest/spark-connect-gotchas.html>`_
 
 .. _Index Page - Spark SQL and DataFrames:
 
