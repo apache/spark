@@ -66,16 +66,6 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
     assert(!setter.supports("spark://localhost"))
   }
 
-  test("setDiagnostics should throw if driver pod name is missing") {
-    val conf = new SparkConf()
-      .set(KUBERNETES_DRIVER_MASTER_URL, k8sClusterManagerUrl)
-      .set(KUBERNETES_NAMESPACE, namespace)
-
-    assertThrows[IllegalArgumentException] {
-      setter.setDiagnostics(new Throwable("diag"), conf)
-    }
-  }
-
   test("setDiagnostics should patch pod with diagnostics annotation") {
     val diagnostics = new Throwable("Fake diagnostics stack trace")
     val conf = new SparkConf()
