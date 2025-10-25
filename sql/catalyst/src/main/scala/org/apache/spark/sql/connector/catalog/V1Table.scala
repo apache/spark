@@ -22,8 +22,9 @@ import java.util
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table.addV2TableProperties
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.types.StructType
@@ -49,7 +50,6 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   override lazy val schema: StructType = v1Table.schema
 
   override lazy val partitioning: Array[Transform] = {
-    import CatalogV2Implicits._
     val partitions = new mutable.ArrayBuffer[Transform]()
 
     v1Table.partitionColumnNames.foreach { col =>
@@ -108,6 +108,49 @@ private[sql] object V1Table {
       case CatalogTableType.VIEW => Some(TableSummary.VIEW_TABLE_TYPE)
       case _ => None
     }
+  }
+
+  def toCatalogTable(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      t: MetadataOnlyTable): CatalogTable = {
+    val tableType = t.getTableType() match {
+      case TableSummary.VIEW_TABLE_TYPE => CatalogTableType.VIEW
+      case TableSummary.MANAGED_TABLE_TYPE => CatalogTableType.MANAGED
+      case _ => CatalogTableType.EXTERNAL
+    }
+    val viewText = Option(t.getViewText())
+    val (serdeProps, tableProps) = t.getTableProps().asScala.toSeq
+      .partition(_._1.startsWith(TableCatalog.OPTION_PREFIX))
+    val tablePropsMap = tableProps.toMap
+    val (partCols, bucketSpec, clusterBySpec) = t.partitioning().toSeq.convertTransforms
+    CatalogTable(
+      identifier = TableIdentifier(
+        table = ident.name(),
+        database = Some(ident.namespace().lastOption.getOrElse("root")),
+        catalog = Some(catalog.name())),
+      tableType = tableType,
+      storage = CatalogStorageFormat.empty.copy(
+        locationUri = Option(t.getLocation()).map(CatalogUtils.stringToURI),
+        // v2 table properties should be put into the serde properties as well in case
+        // it contains data source options.
+        properties = tablePropsMap ++ serdeProps.map {
+          case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
+        }
+      ),
+      schema = CatalogV2Util.v2ColumnsToStructType(t.columns()),
+      provider = Option(t.getProvider),
+      partitionColumnNames = partCols,
+      bucketSpec = bucketSpec,
+      owner = Option(t.getOwner()).getOrElse("unknown"),
+      createTime = t.getCreateTime(),
+      createVersion = t.getCreateVersion(),
+      viewText = viewText,
+      viewOriginalText = viewText,
+      comment = Option(t.getComment()),
+      collation = Option(t.getCollation()),
+      properties = tablePropsMap ++ clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation)
+    )
   }
 }
 
