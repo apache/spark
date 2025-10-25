@@ -3850,6 +3850,12 @@
     ],
     "sqlState" : "42601"
   },
+  "INVALID_STREAMING_REAL_TIME_MODE_TRIGGER_INTERVAL" : {
+    "message" : [
+      "The real-time trigger interval is set to <interval> ms. This is less than the <minBatchDuration> ms minimum specified by spark.sql.streaming.realTimeMode.minBatchDuration."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
       "Invalid subquery:"
@@ -5551,6 +5557,29 @@
       "Streaming Runner initialization failed. Socket connection timeout. Cause: <msg>"
     ],
     "sqlState" : "XXKST"
+  },
+  "STREAMING_REAL_TIME_MODE" : {
+    "message" : [
+      "Streaming real-time mode has the following limitation:"
+    ],
+    "subClass" : {
+      "ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED" : {
+        "message" : [
+          "Async progress tracking is not supported in real-time mode. Set option asyncProgressTrackingEnabled to false and retry your query."
+        ]
+      },
+      "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
+        "message" : [
+          "Real-time mode does not support union on two or more identical streaming data sources in a single query. This includes scenarios such as referencing the same source DataFrame more than once, or using two data sources with identical configurations for some sources. For Kafka, avoid reusing the same DataFrame and create different ones. Sources provided in the query: <sources>"
+        ]
+      },
+      "INPUT_STREAM_NOT_SUPPORTED" : {
+        "message" : [
+          "The input stream <className> is not supported in Real-time Mode."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
   },
   "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
     "message" : [
