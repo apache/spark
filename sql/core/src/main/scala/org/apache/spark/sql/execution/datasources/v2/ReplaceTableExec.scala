@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.TableSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, TableCatalog, TableInfo}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -36,14 +36,13 @@ case class ReplaceTableExec(
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends LeafV2CommandExec {
+    invalidateCache: (TableCatalog, Identifier) => Unit) extends LeafV2CommandExec {
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
-      val table = catalog.loadTable(ident)
-      invalidateCache(catalog, table, ident)
+      invalidateCache(catalog, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
@@ -68,7 +67,7 @@ case class AtomicReplaceTableExec(
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends LeafV2CommandExec {
+    invalidateCache: (TableCatalog, Identifier) => Unit) extends LeafV2CommandExec {
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
 
@@ -77,8 +76,7 @@ case class AtomicReplaceTableExec(
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(identifier)) {
-      val table = catalog.loadTable(identifier)
-      invalidateCache(catalog, table, identifier)
+      invalidateCache(catalog, identifier)
     }
     val staged = if (orCreate) {
       val tableInfo = new TableInfo.Builder()

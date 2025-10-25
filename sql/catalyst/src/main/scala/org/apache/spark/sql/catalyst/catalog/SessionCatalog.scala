@@ -749,6 +749,13 @@ class SessionCatalog(
   }
 
   /**
+   * Generate a [[View]] operator from the local or global temporary view stored.
+   */
+  def getLocalOrGlobalTempView(name: Seq[String]): Option[View] = {
+    getRawLocalOrGlobalTempView(name).map(getTempViewPlan)
+  }
+
+  /**
    * Return the raw logical plan of a temporary local or global view for the given name.
    */
   def getRawLocalOrGlobalTempView(name: Seq[String]): Option[TemporaryViewRelation] = {

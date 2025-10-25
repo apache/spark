@@ -125,6 +125,41 @@ class InMemoryTable(
     new InMemoryWriterBuilderWithOverWrite(info)
   }
 
+  override def copy(): Table = {
+    val copiedTable = new InMemoryTable(
+      name,
+      columns(),
+      partitioning,
+      properties,
+      constraints,
+      distribution,
+      ordering,
+      numPartitions,
+      advisoryPartitionSize,
+      isDistributionStrictlyRequired,
+      numRowsPerSplit)
+
+    dataMap.synchronized {
+      dataMap.foreach { case (key, splits) =>
+        val copiedSplits = splits.map { bufferedRows =>
+          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
+          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
+          copiedBufferedRows
+        }
+        copiedTable.dataMap.put(key, copiedSplits)
+      }
+    }
+
+    copiedTable.commits ++= commits.map(_.copy())
+
+    copiedTable.setCurrentVersion(currentVersion())
+    if (validatedVersion() != null) {
+      copiedTable.setValidatedVersion(validatedVersion())
+    }
+
+    copiedTable
+  }
+
   class InMemoryWriterBuilderWithOverWrite(override val info: LogicalWriteInfo)
     extends InMemoryWriterBuilder(info) with SupportsOverwrite {
 
