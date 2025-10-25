@@ -60,6 +60,12 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalStringType) {
       return obj.getUTF8String(ordinal);
     }
+    if (physicalDataType instanceof PhysicalGeographyType) {
+      return obj.getGeography(ordinal);
+    }
+    if (physicalDataType instanceof PhysicalGeometryType) {
+      return obj.getGeometry(ordinal);
+    }
     if (physicalDataType instanceof PhysicalDecimalType dt) {
       return obj.getDecimal(ordinal, dt.precision(), dt.scale());
     }

@@ -25,6 +25,8 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 
 /**
  * Row abstraction in {@link ColumnVector}.
@@ -77,6 +79,10 @@ public final class ColumnarRow extends InternalRow {
           row.update(i, getUTF8String(i).copy());
         } else if (pdt instanceof PhysicalBinaryType) {
           row.update(i, getBinary(i));
+        } else if (pdt instanceof PhysicalGeographyType) {
+          row.update(i, getGeography(i));
+        } else if (pdt instanceof PhysicalGeometryType) {
+          row.update(i, getGeometry(i));
         } else if (pdt instanceof PhysicalDecimalType t) {
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
         } else if (pdt instanceof PhysicalStructType t) {
@@ -135,6 +141,16 @@ public final class ColumnarRow extends InternalRow {
   @Override
   public byte[] getBinary(int ordinal) {
     return data.getChild(ordinal).getBinary(rowId);
+  }
+
+  @Override
+  public GeographyVal getGeography(int ordinal) {
+    return data.getChild(ordinal).getGeography(rowId);
+  }
+
+  @Override
+  public GeometryVal getGeometry(int ordinal) {
+    return data.getChild(ordinal).getGeometry(rowId);
   }
 
   @Override
