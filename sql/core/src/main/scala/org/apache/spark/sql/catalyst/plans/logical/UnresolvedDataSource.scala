@@ -27,7 +27,8 @@ case class UnresolvedDataSource(
     userSpecifiedSchema: Option[StructType],
     options: CaseInsensitiveMap[String],
     override val isStreaming: Boolean,
-    paths: Seq[String])
+    paths: Seq[String],
+    userProvidedName: Option[String] = None)
   extends UnresolvedLeafNode {
 
   override def simpleString(maxFields: Int): String = toString

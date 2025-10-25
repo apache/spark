@@ -37,44 +37,142 @@ import org.apache.spark.sql.internal.SQLConf._
 
 
 /**
- * An ordered collection of offsets, used to track the progress of processing data from one or more
+ * A collection of named offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
+ *
+ * All sources are tracked by name - either user-provided names or auto-generated names
+ * from sourceId.
  */
-case class OffsetSeq(offsets: Seq[Option[OffsetV2]], metadata: Option[OffsetSeqMetadata] = None) {
+case class OffsetSeq(
+    offsets: Map[String, OffsetV2],
+    metadata: Option[OffsetSeqMetadata] = None) {
 
   /**
-   * Unpacks an offset into [[StreamProgress]] by associating each offset with the ordered list of
-   * sources.
+   * Unpacks offsets into [[StreamProgress]] by associating each named offset with the
+   * corresponding source from the ordered list.
    *
-   * This method is typically used to associate a serialized offset with actual sources (which
-   * cannot be serialized).
+   * @deprecated Use toStreamProgress(namedSources: Map[String, SparkDataStream]) instead
    */
+  @deprecated("Use toStreamProgress with named sources map", "3.6.0")
   def toStreamProgress(sources: Seq[SparkDataStream]): StreamProgress = {
-    assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
-      s"checkpoint offsets and now there are [${sources.size}] sources requested by the query. " +
-      s"Cannot continue.")
-    new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
+    val sourceOffsetPairs = sources.zipWithIndex.flatMap { case (source, index) =>
+      offsets.get(index.toString).map(offset => (source, offset))
+    }
+    new StreamProgress ++ sourceOffsetPairs
   }
 
-  override def toString: String =
-    offsets.map(_.map(_.json).getOrElse("-")).mkString("[", ", ", "]")
+  /**
+   * Unpacks named offsets into [[StreamProgress]] by associating each named offset with the
+   * corresponding source.
+   *
+   * @param namedSources Map from source name to SparkDataStream
+   * @return The StreamProgress containing the offset mapping
+   */
+  def toStreamProgress(namedSources: Map[String, SparkDataStream]): StreamProgress = {
+    // Map existing checkpoint offsets to current sources
+    val existingSourceOffsets = offsets.flatMap { case (name, offset) =>
+      namedSources.get(name) match {
+        case Some(source) => Some((source, offset))
+        case None =>
+          // Source from checkpoint no longer exists in current query - ignore
+          None
+      }
+    }
+
+    // For source evolution: identify new sources not in checkpoint and start them from beginning
+    val newSources = namedSources.values.filterNot { source =>
+      offsets.exists { case (name, _) => namedSources.get(name).contains(source) }
+    }
+
+    // New sources start with null offset (beginning)
+    val newSourceOffsets = newSources.map(source => (source, null.asInstanceOf[OffsetV2]))
+
+    new StreamProgress ++ (existingSourceOffsets ++ newSourceOffsets)
+  }
+
+  /**
+   * Returns the named offsets map.
+   */
+  def getNamedOffsets: Map[String, OffsetV2] = offsets
+
+  override def toString: String = {
+    offsets.map { case (name, offset) => s"$name: ${offset.json}" }.mkString("{", ", ", "}")
+  }
 }
 
 object OffsetSeq {
 
   /**
    * Returns a [[OffsetSeq]] with a variable sequence of offsets.
-   * `nulls` in the sequence are converted to `None`s.
+   * @deprecated Use fillNamed instead for explicit source naming
    */
-  def fill(offsets: OffsetV2*): OffsetSeq = OffsetSeq.fill(None, offsets: _*)
+  @deprecated("Use fillNamed with explicit source names", "3.6.0")
+  def fill(offsets: OffsetV2*): OffsetSeq = fill(None, offsets: _*)
 
   /**
    * Returns a [[OffsetSeq]] with metadata and a variable sequence of offsets.
-   * `nulls` in the sequence are converted to `None`s.
+   * @deprecated Use fillNamed instead for explicit source naming
    */
+  @deprecated("Use fillNamed with explicit source names", "3.6.0")
   def fill(metadata: Option[String], offsets: OffsetV2*): OffsetSeq = {
-    OffsetSeq(offsets.map(Option(_)), metadata.map(OffsetSeqMetadata.apply))
+    val namedOffsets = offsets.zipWithIndex.filter(_._1 != null).map {
+      case (offset, index) => index.toString -> offset
+    }.toMap
+    OffsetSeq(namedOffsets, metadata.map(OffsetSeqMetadata.apply))
+  }
+
+  /**
+   * Creates an OffsetSeq with named sources and metadata.
+   *
+   * @param metadata Optional metadata string
+   * @param namedOffsets Map from source name to offset
+   * @return OffsetSeq with named sources
+   */
+  def fillNamed(metadata: Option[String], namedOffsets: Map[String, OffsetV2]): OffsetSeq = {
+    OffsetSeq(namedOffsets, metadata.map(OffsetSeqMetadata.apply))
+  }
+
+  /**
+   * Creates an OffsetSeq with named sources.
+   * This is used for new V2 format checkpoints.
+   *
+   * @param namedOffsets Map from source name to offset
+   * @return OffsetSeq with named sources
+   */
+  def fillNamed(namedOffsets: Map[String, OffsetV2]): OffsetSeq = {
+    fillNamed(None, namedOffsets)
+  }
+
+  /**
+   * Creates an OffsetSeq from source names, automatically generating ordinal names
+   * for sources without explicit names.
+   *
+   * @param metadata Optional metadata string
+   * @param sources Sequence of (sourceName, offset) pairs where sourceName may be None
+   * @return OffsetSeq with appropriate naming
+   */
+  def fromSources(metadata: Option[String], sources: Seq[(Option[String], OffsetV2)]): OffsetSeq = {
+    val namedSources = sources.zipWithIndex.collect {
+      case ((Some(name), offset), _) => name -> offset
+      case ((None, offset), index) => index.toString -> offset
+    }.toMap
+
+    fillNamed(metadata, namedSources)
+  }
+
+  /**
+   * Validates a source name according to the naming rules.
+   *
+   * @param name The source name to validate
+   * @throws IllegalArgumentException if the name is invalid
+   */
+  def validateSourceName(name: String): Unit = {
+    require(name != null && name.nonEmpty, "Source name cannot be null or empty")
+    require(name.length <= 64, s"Source name '$name' exceeds maximum length of 64 characters")
+    require(name.matches("^[a-zA-Z0-9_-]+$"),
+      s"Source name '$name' contains invalid characters. Only alphanumeric, underscore, " +
+      "and hyphen characters are allowed")
   }
 }
 
