@@ -94,7 +94,8 @@ object SqlResourceSuite {
         1 -> JobExecutionStatus.SUCCEEDED),
       stages = Set[Int](),
       metricValues = getMetricValues(),
-      errorMessage = None
+      errorMessage = None,
+      sqlScriptId = None
     )
   }
 
@@ -217,7 +218,8 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
       jobs = Map.empty[Int, JobExecutionStatus],
       stages = Set[Int](),
       metricValues = getMetricValues(),
-      errorMessage = Some("now you see me, now you don't"))
+      errorMessage = Some("now you see me, now you don't"),
+      sqlScriptId = None)
     val executionData =
       sqlResource invokePrivate prepareExecutionData(
         d,
