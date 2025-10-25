@@ -281,6 +281,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
     // allow the user to set the batch size for the BatchedSerializer on UDFs
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)
+    envVars.put("PYSPARK_RUNTIME_PROFILE", true.toString)
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 

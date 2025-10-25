@@ -38,7 +38,9 @@ import org.apache.spark.internal.config.Python.PYTHON_FACTORY_IDLE_WORKER_MAX_PO
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
-case class PythonWorker(channel: SocketChannel) {
+case class PythonWorker(
+    channel: SocketChannel,
+    extraChannel: Option[SocketChannel] = None) {
 
   private[this] var selectorOpt: Option[Selector] = None
   private[this] var selectionKeyOpt: Option[SelectionKey] = None
@@ -68,6 +70,7 @@ case class PythonWorker(channel: SocketChannel) {
   def stop(): Unit = synchronized {
     closeSelector()
     Option(channel).foreach(_.close())
+    extraChannel.foreach(_.close())
   }
 }
 
@@ -129,6 +132,10 @@ private[spark] class PythonWorkerFactory(
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
 
+  def getAllDaemonWorkers: Seq[(PythonWorker, ProcessHandle)] = self.synchronized {
+    daemonWorkers.filter { case (_, handle) => handle.isAlive}.toSeq
+  }
+
   def create(): (PythonWorker, Option[ProcessHandle]) = {
     if (useDaemon) {
       self.synchronized {
@@ -163,22 +170,36 @@ private[spark] class PythonWorkerFactory(
   private def createThroughDaemon(): (PythonWorker, Option[ProcessHandle]) = {
 
     def createWorker(): (PythonWorker, Option[ProcessHandle]) = {
-      val socketChannel = if (isUnixDomainSock) {
+      val mainChannel = if (isUnixDomainSock) {
         SocketChannel.open(UnixDomainSocketAddress.of(daemonSockPath))
       } else {
         SocketChannel.open(new InetSocketAddress(daemonHost, daemonPort))
       }
+
+      val extraChannel = if (envVars.getOrElse("PYSPARK_RUNTIME_PROFILE", "false").toBoolean) {
+        if (isUnixDomainSock) {
+          Some(SocketChannel.open(UnixDomainSocketAddress.of(daemonSockPath)))
+        } else {
+          Some(SocketChannel.open(new InetSocketAddress(daemonHost, daemonPort)))
+        }
+      } else {
+        None
+      }
+
       // These calls are blocking.
-      val pid = new DataInputStream(Channels.newInputStream(socketChannel)).readInt()
+      val pid = new DataInputStream(Channels.newInputStream(mainChannel)).readInt()
       if (pid < 0) {
         throw new IllegalStateException("Python daemon failed to launch worker with code " + pid)
       }
       val processHandle = ProcessHandle.of(pid).orElseThrow(
         () => new IllegalStateException("Python daemon failed to launch worker.")
       )
-      authHelper.authToServer(socketChannel)
-      socketChannel.configureBlocking(false)
-      val worker = PythonWorker(socketChannel)
+
+      authHelper.authToServer(mainChannel)
+      mainChannel.configureBlocking(false)
+      extraChannel.foreach(_.configureBlocking(true))
+
+      val worker = PythonWorker(mainChannel, extraChannel)
       daemonWorkers.put(worker, processHandle)
       (worker.refresh(), Some(processHandle))
     }
@@ -271,7 +292,7 @@ private[spark] class PythonWorkerFactory(
         if (!blockingMode) {
           socketChannel.configureBlocking(false)
         }
-        val worker = PythonWorker(socketChannel)
+        val worker = PythonWorker(socketChannel, None)
         self.synchronized {
           simpleWorkers.put(worker, workerProcess)
         }
