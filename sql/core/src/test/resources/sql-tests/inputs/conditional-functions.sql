@@ -35,4 +35,7 @@ SELECT zeroifnull(null),
 
 SELECT zeroifnull('abc');
 
+-- Timezone should be applied recursively
+SELECT NANVL('123', NULL);
+
 DROP TABLE conditional_t;

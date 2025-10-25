@@ -127,3 +127,306 @@ struct<x:int,y:int,all:int>
 -- !query output
 1	1	1
 2	2	1
+
+
+-- !query
+CREATE TEMPORARY VIEW vcol(col2 STRING) AS VALUES ('{"str": "test"}')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT timestamp(col2:str) FROM vcol GROUP BY timestamp(col2:str)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`vcol`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 36,
+    "fragment" : "vcol"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW vcol2(col1 STRUCT<a: STRING>, a STRING) AS VALUES (named_struct('a', 'nested'), 'outer')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT col1.a, a FROM vcol2 ORDER BY a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`vcol2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 27,
+    "fragment" : "vcol2"
+  } ]
+}
+
+
+-- !query
+SELECT col1.a, a FROM vcol2 ORDER BY col1.a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`vcol2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 27,
+    "fragment" : "vcol2"
+  } ]
+}
+
+
+-- !query
+SELECT DISTINCT(col1.a:b.c AS out1, col1.a:b.d AS out2) FROM vcol2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`vcol2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 66,
+    "fragment" : "vcol2"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW vcol3(col1 INT, col2 INT) AS VALUES (1, 2), (3, 4)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT col1 FROM vcol3 GROUP BY col1 HAVING MAX(col2) == (SELECT 1 WHERE MAX(col2) = 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`vcol3`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 22,
+    "fragment" : "vcol3"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM vcol3 GROUP BY col1 HAVING (SELECT 1 WHERE MAX(col2) = 1) == MAX(col2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`vcol3`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 22,
+    "fragment" : "vcol3"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM vcol3 GROUP BY col1 HAVING (SELECT 1 WHERE MAX(col2) = 1) == (SELECT 1 WHERE MAX(col2) = 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`vcol3`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 22,
+    "fragment" : "vcol3"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM vcol3 GROUP BY col1 HAVING bool_or(col2 = 1) AND bool_or(col2 = 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`vcol3`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 22,
+    "fragment" : "vcol3"
+  } ]
+}
+
+
+-- !query
+SELECT 1 GROUP BY COALESCE(1, 1) HAVING COALESCE(1, 1) = 1  OR COALESCE(1, 1) IS NOT NULL
+-- !query schema
+struct<1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT col1 FROM vcol3 t1 GROUP BY col1 HAVING (
+    SELECT MAX(t2.col1) FROM vcol3 t2 WHERE t2.col1 == MAX(t1.col1) GROUP BY t2.col1 HAVING (
+        SELECT t3.col1 FROM vcol3 t3 WHERE t3.col1 == MAX(t2.col1)
+    )
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`vcol3`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 22,
+    "fragment" : "vcol3"
+  } ]
+}
+
+
+-- !query
+DROP VIEW vcol
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`vcol`"
+  }
+}
+
+
+-- !query
+DROP VIEW vcol2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`vcol2`"
+  }
+}
+
+
+-- !query
+DROP VIEW vcol3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`vcol3`"
+  }
+}

@@ -136,6 +136,13 @@ Project [zeroifnull(abc) AS zeroifnull(abc)#x]
 
 
 -- !query
+SELECT NANVL('123', NULL)
+-- !query analysis
+Project [nanvl(cast(123 as double), cast(cast(null as string) as double)) AS nanvl(123, NULL)#x]
++- OneRowRelation
+
+
+-- !query
 DROP TABLE conditional_t
 -- !query analysis
 DropTable false, false

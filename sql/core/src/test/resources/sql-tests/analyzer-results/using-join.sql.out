@@ -836,3 +836,160 @@ WithCTE
                :  +- CTERelationRef xxxx, true, [key#x], false, false, 1
                +- SubqueryAlias t2
                   +- CTERelationRef xxxx, true, [key#x], false, false, 1
+
+
+-- !query
+CREATE TEMPORARY VIEW using_t1(col1 BOOLEAN) AS VALUES (true), (false)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT *
+FROM
+    ( SELECT col1 FROM using_t1 ) LEFT JOIN ( SELECT col1 FROM using_t1 ) b USING(col1)
+WHERE b.col1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`using_t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 45,
+    "fragment" : "using_t1"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW using_t2(col1 TIMESTAMP, col2 STRING) AS SELECT CURRENT_TIMESTAMP(), 'str'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT col2 AS alias FROM using_t2 as t1_1 LEFT ANTI JOIN using_t2 as t1_2 ON t1_1.col1 = t1_2.col1 ORDER BY col2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`using_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 34,
+    "fragment" : "using_t2"
+  } ]
+}
+
+
+-- !query
+SELECT col2 AS alias FROM using_t2 as t1_1 LEFT SEMI JOIN using_t2 as t1_2 ON t1_1.col1 = t1_2.col1 ORDER BY col2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`using_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 34,
+    "fragment" : "using_t2"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM using_t2 as t1_1 LEFT SEMI JOIN using_t2 as t1_2 ORDER BY col2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`using_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 25,
+    "fragment" : "using_t2"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM using_t2 as t1_1 LEFT SEMI JOIN using_t2 as t1_2 GROUP BY ALL HAVING MIN(col2) > ''
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`using_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 25,
+    "fragment" : "using_t2"
+  } ]
+}
+
+
+-- !query
+DROP VIEW using_t1
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`using_t1`"
+  }
+}
+
+
+-- !query
+DROP VIEW using_t2
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`using_t2`"
+  }
+}

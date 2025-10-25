@@ -163,6 +163,14 @@ abc
 
 
 -- !query
+SELECT NANVL('123', NULL)
+-- !query schema
+struct<nanvl(123, NULL):double>
+-- !query output
+123.0
+
+
+-- !query
 DROP TABLE conditional_t
 -- !query schema
 struct<>

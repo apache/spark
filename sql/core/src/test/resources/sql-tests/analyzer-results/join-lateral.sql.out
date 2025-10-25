@@ -3065,6 +3065,63 @@ Project [1 AS 1#x]
 
 
 -- !query
+SELECT DATE'2025-01-01' AS lateral, try_add(lateral, INTERVAL 1 year)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT col1:a AS a, a:b AS b, a:c AS c FROM VALUES ('1') AS t(col1)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Cannot find main error class 'COLUMN_IS_NOT_VARIANT_TYPE'"
+  }
+}
+
+
+-- !query
+SELECT LEN(LOWER('X')) AS a, 1 AS b, b AS c GROUP BY LOWER('X') ORDER BY LOWER('X')
+-- !query analysis
+Project [a#x, b#x, c#x]
++- Sort [lower(X)#x ASC NULLS FIRST], true
+   +- Project [len(lower(X)#x) AS a#x, b#x, b#x AS c#x, lower(X)#x AS lower(X)#x]
+      +- Project [lower(X)#x, 1 AS b#x]
+         +- Aggregate [lower(X)], [lower(X) AS lower(X)#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT LEN(LOWER('X')) AS a, 1 AS b, b AS c GROUP BY LOWER('X') HAVING LOWER('X') = 'x'
+-- !query analysis
+Project [a#x, b#x, c#x]
++- Filter (lower(X)#x = x)
+   +- Project [len(lower(X)#x) AS a#x, b#x, b#x AS c#x, lower(X)#x AS lower(X)#x]
+      +- Project [lower(X)#x, 1 AS b#x]
+         +- Aggregate [lower(X)], [lower(X) AS lower(X)#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT col1.field, field FROM VALUES(named_struct('field', 1))
+-- !query analysis
+Project [field#x, field#x]
++- Project [col1#x, col1#x.field AS field#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT col1.field, field FROM VALUES(map('field', 1))
+-- !query analysis
+Project [field#x, field#x]
++- Project [col1#x, col1#x[field] AS field#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
 DROP VIEW t1
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`t1`, false, true, false

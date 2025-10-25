@@ -1198,3 +1198,63 @@ SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8))
 -- !query analysis
 Project [cast(23:59:59.999999 as decimal(14,8)) AS CAST(TIME '23:59:59.999999' AS DECIMAL(14,8))#x]
 +- OneRowRelation
+
+
+-- !query
+CREATE TEMPORARY VIEW t_cast_rec(col3 MAP<BIGINT, DOUBLE>) AS SELECT MAP(CAST(1 AS BIGINT), 1.0)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT col3.field FROM t_cast_rec
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_cast_rec`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 33,
+    "fragment" : "t_cast_rec"
+  } ]
+}
+
+
+-- !query
+DROP VIEW t_cast_rec
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`t_cast_rec`"
+  }
+}
+
+
+-- !query
+SELECT NULL:a AS b
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Cannot find main error class 'COLUMN_IS_NOT_VARIANT_TYPE'"
+  }
+}

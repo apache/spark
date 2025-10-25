@@ -20,7 +20,15 @@ CREATE TABLE ids (id INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "LOCATION_ALREADY_EXISTS",
+  "sqlState" : "42710",
+  "messageParameters" : {
+    "identifier" : "`spark_catalog`.`default`.`ids`",
+    "location" : "'file:/home/vladimir.golubev/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/ids'"
+  }
+}
 
 
 -- !query
@@ -171,21 +179,43 @@ SELECT * EXCEPT (name, data) FROM tbl_view
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`ids`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 15,
+    "fragment" : "ids"
+  } ]
+}
 
 
 -- !query
 SELECT * FROM ids
 -- !query schema
-struct<id:int>
+struct<>
 -- !query output
-10
-20
-30
-40
-50
-60
-70
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`ids`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 17,
+    "fragment" : "ids"
+  } ]
+}
 
 
 -- !query
@@ -193,7 +223,21 @@ SELECT * EXCEPT (ids.id) FROM ids
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`ids`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 33,
+    "fragment" : "ids"
+  } ]
+}
 
 
 -- !query

@@ -268,6 +268,44 @@ WITH `a.b.c` AS (
 )
 SELECT * FROM `a.b.c`;
 
+-- Expression ID assignment in CTE with JOIN
+CREATE TEMPORARY VIEW t_cte_join(col1 TIMESTAMP, col2 STRING, col3 MAP<BIGINT, DOUBLE>, col4 STRING) AS SELECT CURRENT_TIMESTAMP(), 'str', MAP(1, 1.0), 'val';
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t_cte_join) SELECT t_cte_join.col1 FROM t_cte_join JOIN cte1 USING (col1)
+);
+
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t_cte_join) SELECT cte1.col1 FROM t_cte_join JOIN cte1 USING (col1)
+);
+
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t_cte_join) SELECT t_cte_join.col1 FROM cte1 JOIN t_cte_join USING (col1)
+);
+
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t_cte_join) SELECT cte1.col1 FROM cte1 JOIN t_cte_join USING (col1)
+);
+
+-- Duplicates in UNION under CTE
+CREATE TEMPORARY VIEW t_cte_union(col1 INT, col2 STRING) AS VALUES (1, 'a'), (2, 'b');
+
+WITH cte AS (
+    SELECT col1, col1 FROM t_cte_union
+    UNION
+    SELECT col1, col1 FROM t_cte_union
+)
+SELECT col1 FROM cte;
+
+WITH cte AS (
+    SELECT col2, col2, col2 FROM t_cte_union
+    UNION ALL
+    SELECT col2, col2, col2 FROM t_cte_union
+)
+SELECT * FROM cte;
+
+DROP VIEW IF EXISTS t_cte_join;
+DROP VIEW IF EXISTS t_cte_union;
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

@@ -89,3 +89,26 @@ SELECT 1 AS col FROM testData GROUP BY `col`;
 
 -- GROUP BY attribute takes precedence over alias
 SELECT 1 AS a FROM testData GROUP BY `a`;
+
+-- Replacing SortOrder expression with alias from below
+CREATE TEMPORARY VIEW t_alias_test AS SELECT * FROM VALUES(1,2,3);
+SELECT col1, col1 AS a FROM t_alias_test GROUP BY col1 ORDER BY col1 ASC;
+SELECT col1 AS a, col1 FROM t_alias_test GROUP BY col1 ORDER BY col1 ASC;
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM t_alias_test GROUP BY make_date(col1, col2, col3) ORDER BY make_date(col1, col2, col3);
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM t_alias_test GROUP BY 1 ORDER BY ZEROIFNULL(SUM(col1));
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM t_alias_test GROUP BY col1 ORDER BY CASE WHEN col1 = 1 THEN 1 END ASC;
+
+-- Replacing Having condition with alias from below
+SELECT col1, col1 AS a FROM t_alias_test GROUP BY col1 HAVING col1 > 0;
+SELECT col1 AS a, col1 FROM t_alias_test GROUP BY col1 HAVING col1 > 0;
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM t_alias_test GROUP BY make_date(col1, col2, col3) HAVING make_date(col1, col2, col3) > '2025-01-01';
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM t_alias_test GROUP BY 1 HAVING ZEROIFNULL(SUM(col1)) > 0;
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM t_alias_test GROUP BY col1 HAVING CASE WHEN col1 = 1 THEN 1 END = 1;
+
+-- Priority of aliases when replacing them in ORDER BY/ HAVING should be determined by name
+SELECT col1+1 AS ltrl2, col1+1 AS ltrl1 FROM t_alias_test GROUP BY col1+1 ORDER BY col1+1;
+
+-- GROUP BY alias cannot reference nested fields
+SELECT col1 AS a FROM VALUES (NAMED_STRUCT('f1', 1)) GROUP BY a.f1;
+
+DROP VIEW t_alias_test;

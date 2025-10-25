@@ -1032,6 +1032,184 @@ WithCTE
 
 
 -- !query
+CREATE TEMPORARY VIEW t_cte_join(col1 TIMESTAMP, col2 STRING, col3 MAP<BIGINT, DOUBLE>, col4 STRING) AS SELECT CURRENT_TIMESTAMP(), 'str', MAP(1, 1.0), 'val'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t_cte_join) SELECT t_cte_join.col1 FROM t_cte_join JOIN cte1 USING (col1)
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_cte_join`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 87,
+    "stopIndex" : 96,
+    "fragment" : "t_cte_join"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t_cte_join) SELECT cte1.col1 FROM t_cte_join JOIN cte1 USING (col1)
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_cte_join`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 81,
+    "stopIndex" : 90,
+    "fragment" : "t_cte_join"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t_cte_join) SELECT t_cte_join.col1 FROM cte1 JOIN t_cte_join USING (col1)
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_cte_join`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 56,
+    "fragment" : "t_cte_join"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t_cte_join) SELECT cte1.col1 FROM cte1 JOIN t_cte_join USING (col1)
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_cte_join`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 56,
+    "fragment" : "t_cte_join"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW t_cte_union(col1 INT, col2 STRING) AS VALUES (1, 'a'), (2, 'b')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+WITH cte AS (
+    SELECT col1, col1 FROM t_cte_union
+    UNION
+    SELECT col1, col1 FROM t_cte_union
+)
+SELECT col1 FROM cte
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_cte_union`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 42,
+    "stopIndex" : 52,
+    "fragment" : "t_cte_union"
+  } ]
+}
+
+
+-- !query
+WITH cte AS (
+    SELECT col2, col2, col2 FROM t_cte_union
+    UNION ALL
+    SELECT col2, col2, col2 FROM t_cte_union
+)
+SELECT * FROM cte
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_cte_union`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 58,
+    "fragment" : "t_cte_union"
+  } ]
+}
+
+
+-- !query
+DROP VIEW IF EXISTS t_cte_join
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`t_cte_join`, true, true, false
+
+
+-- !query
+DROP VIEW IF EXISTS t_cte_union
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`t_cte_union`, true, true, false
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
 DropTempViewCommand t

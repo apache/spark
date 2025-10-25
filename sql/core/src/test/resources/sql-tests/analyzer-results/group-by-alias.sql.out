@@ -543,3 +543,178 @@ Aggregate [a#x], [1 AS a#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
                +- LocalRelation [a#x, b#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW t_alias_test AS SELECT * FROM VALUES(1,2,3)
+-- !query analysis
+CreateViewCommand `t_alias_test`, SELECT * FROM VALUES(1,2,3), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x, col3#x]
+      +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1, col1 AS a FROM t_alias_test GROUP BY col1 ORDER BY col1 ASC
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Aggregate [col1#x], [col1#x, col1#x AS a#x]
+   +- SubqueryAlias t_alias_test
+      +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+            +- Project [col1#x, col2#x, col3#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1 AS a, col1 FROM t_alias_test GROUP BY col1 ORDER BY col1 ASC
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Aggregate [col1#x], [col1#x AS a#x, col1#x]
+   +- SubqueryAlias t_alias_test
+      +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+            +- Project [col1#x, col2#x, col3#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM t_alias_test GROUP BY make_date(col1, col2, col3) ORDER BY make_date(col1, col2, col3)
+-- !query analysis
+Sort [a#x ASC NULLS FIRST], true
++- Project [a#x, a#x AS b#x]
+   +- Project [make_date(col1, col2, col3)#x, make_date(col1, col2, col3)#x AS a#x]
+      +- Aggregate [make_date(col1#x, col2#x, col3#x, true)], [make_date(col1#x, col2#x, col3#x, true) AS make_date(col1, col2, col3)#x]
+         +- SubqueryAlias t_alias_test
+            +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+                  +- Project [col1#x, col2#x, col3#x]
+                     +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM t_alias_test GROUP BY 1 ORDER BY ZEROIFNULL(SUM(col1))
+-- !query analysis
+Sort [zeroifnull(sum(col1))#xL ASC NULLS FIRST], true
++- Project [a#x, (cast(1#x as double) / cast(a#x as double)) AS b#x, zeroifnull(sum(col1#x)) AS zeroifnull(sum(col1))#xL]
+   +- Project [1#x, sum(col1)#xL, 1#x AS a#x]
+      +- Aggregate [1], [1 AS 1#x, sum(col1#x) AS sum(col1)#xL]
+         +- SubqueryAlias t_alias_test
+            +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+                  +- Project [col1#x, col2#x, col3#x]
+                     +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM t_alias_test GROUP BY col1 ORDER BY CASE WHEN col1 = 1 THEN 1 END ASC
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [col1#x], [col1#x AS a#x, sum(col2#x) AS b#xL, CASE WHEN (col1#x = 1) THEN 1 END AS c#x]
+   +- SubqueryAlias t_alias_test
+      +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+            +- Project [col1#x, col2#x, col3#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1, col1 AS a FROM t_alias_test GROUP BY col1 HAVING col1 > 0
+-- !query analysis
+Filter (col1#x > 0)
++- Aggregate [col1#x], [col1#x, col1#x AS a#x]
+   +- SubqueryAlias t_alias_test
+      +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+            +- Project [col1#x, col2#x, col3#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1 AS a, col1 FROM t_alias_test GROUP BY col1 HAVING col1 > 0
+-- !query analysis
+Filter (col1#x > 0)
++- Aggregate [col1#x], [col1#x AS a#x, col1#x]
+   +- SubqueryAlias t_alias_test
+      +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+            +- Project [col1#x, col2#x, col3#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM t_alias_test GROUP BY make_date(col1, col2, col3) HAVING make_date(col1, col2, col3) > '2025-01-01'
+-- !query analysis
+Filter (a#x > cast(2025-01-01 as date))
++- Project [a#x, a#x AS b#x]
+   +- Project [make_date(col1, col2, col3)#x, make_date(col1, col2, col3)#x AS a#x]
+      +- Aggregate [make_date(col1#x, col2#x, col3#x, true)], [make_date(col1#x, col2#x, col3#x, true) AS make_date(col1, col2, col3)#x]
+         +- SubqueryAlias t_alias_test
+            +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+                  +- Project [col1#x, col2#x, col3#x]
+                     +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM t_alias_test GROUP BY 1 HAVING ZEROIFNULL(SUM(col1)) > 0
+-- !query analysis
+Filter (zeroifnull(sum(col1))#xL > cast(0 as bigint))
++- Project [a#x, (cast(1#x as double) / cast(a#x as double)) AS b#x, zeroifnull(sum(col1#x)) AS zeroifnull(sum(col1))#xL]
+   +- Project [1#x, sum(col1)#xL, 1#x AS a#x]
+      +- Aggregate [1], [1 AS 1#x, sum(col1#x) AS sum(col1)#xL]
+         +- SubqueryAlias t_alias_test
+            +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+                  +- Project [col1#x, col2#x, col3#x]
+                     +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM t_alias_test GROUP BY col1 HAVING CASE WHEN col1 = 1 THEN 1 END = 1
+-- !query analysis
+Filter (c#x = 1)
++- Aggregate [col1#x], [col1#x AS a#x, sum(col2#x) AS b#xL, CASE WHEN (col1#x = 1) THEN 1 END AS c#x]
+   +- SubqueryAlias t_alias_test
+      +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+            +- Project [col1#x, col2#x, col3#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1+1 AS ltrl2, col1+1 AS ltrl1 FROM t_alias_test GROUP BY col1+1 ORDER BY col1+1
+-- !query analysis
+Sort [ltrl2#x ASC NULLS FIRST], true
++- Aggregate [(col1#x + 1)], [(col1#x + 1) AS ltrl2#x, (col1#x + 1) AS ltrl1#x]
+   +- SubqueryAlias t_alias_test
+      +- View (`t_alias_test`, [col1#x, col2#x, col3#x])
+         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+            +- Project [col1#x, col2#x, col3#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1 AS a FROM VALUES (NAMED_STRUCT('f1', 1)) GROUP BY a.f1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`a`.`f1`",
+    "proposal" : "`col1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 66,
+    "fragment" : "a.f1"
+  } ]
+}
+
+
+-- !query
+DROP VIEW t_alias_test
+-- !query analysis
+DropTempViewCommand t_alias_test

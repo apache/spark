@@ -27,12 +27,13 @@ AS tbl_view(id, name, data), false, false, LocalTempView, UNSUPPORTED, true
 -- !query
 CREATE TABLE ids (id INT) USING CSV
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
+  "errorClass" : "LOCATION_ALREADY_EXISTS",
+  "sqlState" : "42710",
   "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`ids`"
+    "identifier" : "`spark_catalog`.`default`.`ids`",
+    "location" : "'file:/home/vladimir.golubev/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/ids'"
   }
 }
 
@@ -170,31 +171,61 @@ Project [id#x, data#x]
 INSERT INTO ids
 SELECT * EXCEPT (name, data) FROM tbl_view
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/ids, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/ids], Append, `spark_catalog`.`default`.`ids`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/ids), [id]
-+- Project [id#x AS id#x]
-   +- Project [id#x]
-      +- SubqueryAlias tbl_view
-         +- View (`tbl_view`, [id#x, name#x, data#x])
-            +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
-               +- Project [id#x, name#x, data#x]
-                  +- SubqueryAlias tbl_view
-                     +- LocalRelation [id#x, name#x, data#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`ids`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 15,
+    "fragment" : "ids"
+  } ]
+}
 
 
 -- !query
 SELECT * FROM ids
 -- !query analysis
-Project [id#x]
-+- SubqueryAlias spark_catalog.default.ids
-   +- Relation spark_catalog.default.ids[id#x] csv
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`ids`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 17,
+    "fragment" : "ids"
+  } ]
+}
 
 
 -- !query
 SELECT * EXCEPT (ids.id) FROM ids
 -- !query analysis
-Project
-+- SubqueryAlias spark_catalog.default.ids
-   +- Relation spark_catalog.default.ids[id#x] csv
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`ids`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 33,
+    "fragment" : "ids"
+  } ]
+}
 
 
 -- !query

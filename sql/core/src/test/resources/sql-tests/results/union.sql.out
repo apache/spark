@@ -221,6 +221,167 @@ struct<col1:int,col2:int,col3:int,col4:bigint>
 
 
 -- !query
+CREATE TEMPORARY VIEW t3_union(col1 INT) AS VALUES (1), (2), (3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT col1 FROM t3_union WHERE (col1, col1) IN (SELECT col1, col1 UNION SELECT col1, col1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t3_union`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 25,
+    "fragment" : "t3_union"
+  } ]
+}
+
+
+-- !query
+SELECT col1, TRIM(col2), col1 FROM t2 UNION SELECT col1, col2, col1 FROM t2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`col1`",
+    "proposal" : "`c1`, `c2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "col1"
+  } ]
+}
+
+
+-- !query
+SELECT col1, TRIM(col2), col1 FROM t2 MINUS SELECT col1, col2, col1 FROM t2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`col1`",
+    "proposal" : "`c1`, `c2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "col1"
+  } ]
+}
+
+
+-- !query
+SELECT col1, LTRIM(col2), col1 FROM t2 MINUS SELECT col1, col2, col1 FROM t2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`col1`",
+    "proposal" : "`c1`, `c2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "col1"
+  } ]
+}
+
+
+-- !query
+SELECT col1, RTRIM(col2), col1 FROM t2 EXCEPT SELECT col1, col2, col1 FROM t2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`col1`",
+    "proposal" : "`c1`, `c2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "col1"
+  } ]
+}
+
+
+-- !query
+SELECT col1, LOWER(col2), col1 FROM t2 INTERSECT SELECT col1, col2, col1 FROM t2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`col1`",
+    "proposal" : "`c1`, `c2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "col1"
+  } ]
+}
+
+
+-- !query
+DROP VIEW IF EXISTS t3_union
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP VIEW IF EXISTS t1
 -- !query schema
 struct<>

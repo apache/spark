@@ -113,3 +113,10 @@ FROM
 GROUP BY
   ALL
 ;
+
+-- LCA attributes shouldn't be counted in UNRESOLVED_GROUP_BY_ALL validation
+CREATE TEMPORARY VIEW data_all(col1 INT) AS VALUES (1), (2), (3);
+SELECT COUNT(col1) as alias, SUM(col1) + alias FROM data_all GROUP BY ALL;
+SELECT COUNT(col1) as alias, SUM(col1) + alias, SUM(col1) + col1 FROM data_all GROUP BY ALL;
+
+DROP VIEW data_all;

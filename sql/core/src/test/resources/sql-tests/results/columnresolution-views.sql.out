@@ -133,3 +133,116 @@ DROP VIEW global_temp.view1
 struct<>
 -- !query output
 
+
+
+-- !query
+CREATE TABLE IF NOT EXISTS t6_view(col1 CHAR(10)) USING DELTA
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkClassNotFoundException
+{
+  "errorClass" : "DATA_SOURCE_NOT_FOUND",
+  "sqlState" : "42K02",
+  "messageParameters" : {
+    "provider" : "DELTA"
+  }
+}
+
+
+-- !query
+SET spark.sql.readSideCharPadding = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.readSideCharPadding	false
+
+
+-- !query
+SET spark.sql.legacy.noCharPaddingInPredicate = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.noCharPaddingInPredicate	true
+
+
+-- !query
+CREATE OR REPLACE VIEW testView AS SELECT col1 FROM t6_view WHERE col1 = 'ABCD      '
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t6_view`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 59,
+    "fragment" : "t6_view"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.legacy.noCharPaddingInPredicate = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.noCharPaddingInPredicate	false
+
+
+-- !query
+SELECT * FROM testView
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`testView`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "testView"
+  } ]
+}
+
+
+-- !query
+DROP VIEW testView
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`testView`"
+  }
+}
+
+
+-- !query
+DROP TABLE t6_view
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`t6_view`"
+  }
+}

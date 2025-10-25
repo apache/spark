@@ -67,6 +67,19 @@ UNION ALL
 SELECT col2, col2, null AS col3, col4
 FROM jsonTable;
 
+-- UNION with outer references in a subquery
+CREATE TEMPORARY VIEW t3_union(col1 INT) AS VALUES (1), (2), (3);
+SELECT col1 FROM t3_union WHERE (col1, col1) IN (SELECT col1, col1 UNION SELECT col1, col1);
+
+-- SetOperationLike output deduplication across different branches should be done only in context of UNION
+SELECT col1, TRIM(col2), col1 FROM t2 UNION SELECT col1, col2, col1 FROM t2;
+SELECT col1, TRIM(col2), col1 FROM t2 MINUS SELECT col1, col2, col1 FROM t2;
+SELECT col1, LTRIM(col2), col1 FROM t2 MINUS SELECT col1, col2, col1 FROM t2;
+SELECT col1, RTRIM(col2), col1 FROM t2 EXCEPT SELECT col1, col2, col1 FROM t2;
+SELECT col1, LOWER(col2), col1 FROM t2 INTERSECT SELECT col1, col2, col1 FROM t2;
+
+DROP VIEW IF EXISTS t3_union;
+
 -- Clean-up
 DROP VIEW IF EXISTS t1;
 DROP VIEW IF EXISTS t2;

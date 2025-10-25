@@ -1717,6 +1717,59 @@ kitten	sitTing
 
 
 -- !query
+CREATE TEMPORARY VIEW tcoll(col4 STRING COLLATE SR_LATN_SRB) AS SELECT 'test'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT CASE WHEN col4 = 'XX' THEN 'XX' ELSE col4 END FROM tcoll
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`tcoll`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 63,
+    "fragment" : "tcoll"
+  } ]
+}
+
+
+-- !query
+DROP VIEW tcoll
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`tcoll`"
+  }
+}
+
+
+-- !query
 drop table t1
 -- !query schema
 struct<>

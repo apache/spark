@@ -184,3 +184,18 @@ SELECT
   RANK() OVER (PARTITION BY col1 / 5, col2 % 2 ORDER BY AVG(col1)) as rank_in_bucket
 FROM VALUES (5, 1), (7, 3), (10, 2), (12, 4), (15, 1) AS t(col1, col2)
 GROUP BY col1 / 5, col2 % 2, col1, col2;
+
+-- Preserve tags after type coercing aggregate expression children
+CREATE TEMPORARY VIEW t_agg_test(col1 TIMESTAMP) AS SELECT CURRENT_TIMESTAMP();
+SELECT MEAN(col1) FROM t_agg_test;
+DROP VIEW t_agg_test;
+
+-- Attributes under Last, First, AnyValue can be resolved using the hidden output.
+CREATE TEMPORARY VIEW t_agg_test2(col1 TIMESTAMP, col2 STRING) AS SELECT CURRENT_TIMESTAMP(), 'test';
+SELECT col1 FROM t_agg_test2 GROUP BY ALL HAVING first(col2) = 'a';
+SELECT col1 FROM t_agg_test2 GROUP BY col1 HAVING EXISTS (SELECT first(t_agg_test2.col2) == 0);
+SELECT col1 FROM t_agg_test2 GROUP BY ALL HAVING last(col2) = 'a';
+SELECT col1 FROM t_agg_test2 GROUP BY col1 HAVING EXISTS (SELECT last(t_agg_test2.col2) == 0);
+SELECT col1 FROM t_agg_test2 GROUP BY ALL HAVING any_value(col2) = 'a';
+SELECT col1 FROM t_agg_test2 GROUP BY col1 HAVING EXISTS (SELECT any_value(t_agg_test2.col2) == 0);
+DROP VIEW t_agg_test2;

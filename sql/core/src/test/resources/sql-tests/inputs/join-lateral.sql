@@ -552,6 +552,20 @@ left join
      order by t_inner.b1,t_inner.b2 desc limit 1
  ) as lateral_table;
 
+-- lateralAliasReference(_) should be exposed in schema to stay compatible with fixed-point
+SELECT DATE'2025-01-01' AS lateral, try_add(lateral, INTERVAL 1 year);
+
+-- Register only top-level aliases for LCA resolution
+SELECT col1:a AS a, a:b AS b, a:c AS c FROM VALUES ('1') AS t(col1);
+
+-- Update references to match fixed-point plan when realiasing expressions in LCA resolution
+SELECT LEN(LOWER('X')) AS a, 1 AS b, b AS c GROUP BY LOWER('X') ORDER BY LOWER('X');
+SELECT LEN(LOWER('X')) AS a, 1 AS b, b AS c GROUP BY LOWER('X') HAVING LOWER('X') = 'x';
+
+-- LCA referencing nested field
+SELECT col1.field, field FROM VALUES(named_struct('field', 1));
+SELECT col1.field, field FROM VALUES(map('field', 1));
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;

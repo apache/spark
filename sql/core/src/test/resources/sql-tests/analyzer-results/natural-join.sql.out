@@ -678,3 +678,228 @@ Project [k#x, v1#x, k#x, v2#x, k#x, v3#x, k#x, v4#x]
                +- Project [k#x, v4#x]
                   +- SubqueryAlias nt4
                      +- LocalRelation [k#x, v4#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW nat_t2(col1 INT, col2 STRING) AS VALUES (1, 'a'), (2, 'b')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT * FROM nat_t2 as t2_1 LEFT JOIN nat_t2 as t2_2 ON t2_1.col1 = t2_2.col1
+    NATURAL JOIN nat_t2 as t2_3
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`nat_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 20,
+    "fragment" : "nat_t2"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM nat_t2 as t2_1 RIGHT JOIN nat_t2 as t2_2 ON t2_1.col1 = t2_2.col1
+    NATURAL JOIN nat_t2 as t2_3
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`nat_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 20,
+    "fragment" : "nat_t2"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM nat_t2 as t2_1 CROSS JOIN nat_t2 as t2_2 ON t2_1.col1 = t2_2.col1
+    NATURAL JOIN nat_t2 as t2_3
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`nat_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 20,
+    "fragment" : "nat_t2"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM nat_t2 as t2_1 INNER JOIN nat_t2 as t2_2 ON t2_1.col1 = t2_2.col1
+    NATURAL JOIN nat_t2 as t2_3
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`nat_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 20,
+    "fragment" : "nat_t2"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW nat_t3(col1 INT) AS VALUES (1), (2), (3)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW nat_t4(col1 INT, col2 STRING) AS VALUES (1, 'x'), (2, 'y')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT 1 FROM nat_t2 NATURAL JOIN nat_t3 JOIN nat_t4 ON nat_t4.col1 = nat_t3.col1 WHERE nat_t4.col2 = 'x'
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`nat_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 20,
+    "fragment" : "nat_t2"
+  } ]
+}
+
+
+-- !query
+SELECT 1 FROM nat_t2 NATURAL JOIN nat_t3 JOIN nat_t4 ON nat_t4.col1 = nat_t3.col1 GROUP BY nat_t4.col2 HAVING nat_t4.col2 = 'x'
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`nat_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 20,
+    "fragment" : "nat_t2"
+  } ]
+}
+
+
+-- !query
+SELECT 1 FROM nat_t2 NATURAL JOIN nat_t3 JOIN nat_t4 ON nat_t4.col1 = nat_t3.col1 ORDER BY nat_t4.col2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`nat_t2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 20,
+    "fragment" : "nat_t2"
+  } ]
+}
+
+
+-- !query
+DROP VIEW nat_t2
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`nat_t2`"
+  }
+}
+
+
+-- !query
+DROP VIEW nat_t3
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`nat_t3`"
+  }
+}
+
+
+-- !query
+DROP VIEW nat_t4
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`nat_t4`"
+  }
+}

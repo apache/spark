@@ -1906,6 +1906,61 @@ struct<1:int>
 
 
 -- !query
+SELECT DATE'2025-01-01' AS lateral, try_add(lateral, INTERVAL 1 year)
+-- !query schema
+struct<lateral:date,try_add(lateralAliasReference(lateral), INTERVAL '1' YEAR):date>
+-- !query output
+2025-01-01	2026-01-01
+
+
+-- !query
+SELECT col1:a AS a, a:b AS b, a:c AS c FROM VALUES ('1') AS t(col1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Cannot find main error class 'COLUMN_IS_NOT_VARIANT_TYPE'"
+  }
+}
+
+
+-- !query
+SELECT LEN(LOWER('X')) AS a, 1 AS b, b AS c GROUP BY LOWER('X') ORDER BY LOWER('X')
+-- !query schema
+struct<a:int,b:int,c:int>
+-- !query output
+1	1	1
+
+
+-- !query
+SELECT LEN(LOWER('X')) AS a, 1 AS b, b AS c GROUP BY LOWER('X') HAVING LOWER('X') = 'x'
+-- !query schema
+struct<a:int,b:int,c:int>
+-- !query output
+1	1	1
+
+
+-- !query
+SELECT col1.field, field FROM VALUES(named_struct('field', 1))
+-- !query schema
+struct<field:int,field:int>
+-- !query output
+1	1
+
+
+-- !query
+SELECT col1.field, field FROM VALUES(map('field', 1))
+-- !query schema
+struct<field:int,field:int>
+-- !query output
+1	1
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

@@ -410,3 +410,20 @@ SET VARIABLE title = 'variable references -- test constant folding';
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT 'a INT';
 SELECT from_json('{"a": 1}', var1);
 DROP TEMPORARY VARIABLE var1;
+
+-- Session variable name precedence
+CREATE TEMPORARY VIEW t_var(col1 INT, col2 INT) AS VALUES (1, 2), (3, 4);
+DECLARE all = 1;
+DECLARE a = 1;
+
+-- Precedence with group by ALL
+SELECT col1, SUM(col2) FROM t_var GROUP BY ALL;
+SELECT col1, SUM(col2) FROM t_var GROUP BY ALL ORDER BY ALL;
+SELECT col1, col2 FROM t_var ORDER BY ALL;
+
+-- Precedence with group by alias
+SELECT col1 AS a, SUM(col2) FROM t_var GROUP BY a;
+
+DROP TEMP VARIABLE a;
+DROP TEMP VARIABLE all;
+DROP VIEW t_var;

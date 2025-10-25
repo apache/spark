@@ -503,3 +503,197 @@ Project [bucket#x, parity#x, avg_col1#x, rank_in_bucket#x]
       +- Aggregate [(cast(col1#x as double) / cast(5 as double)), (col2#x % 2), col1#x, col2#x], [(cast(col1#x as double) / cast(5 as double)) AS bucket#x, (col2#x % 2) AS parity#x, avg(col1#x) AS avg_col1#x, avg(col1#x) AS _w0#x, (cast(col1#x as double) / cast(5 as double)) AS _w1#x, (col2#x % 2) AS _w2#x]
          +- SubqueryAlias t
             +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW t_agg_test(col1 TIMESTAMP) AS SELECT CURRENT_TIMESTAMP()
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT MEAN(col1) FROM t_agg_test
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_agg_test`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 33,
+    "fragment" : "t_agg_test"
+  } ]
+}
+
+
+-- !query
+DROP VIEW t_agg_test
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`t_agg_test`"
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW t_agg_test2(col1 TIMESTAMP, col2 STRING) AS SELECT CURRENT_TIMESTAMP(), 'test'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+SELECT col1 FROM t_agg_test2 GROUP BY ALL HAVING first(col2) = 'a'
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_agg_test2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 28,
+    "fragment" : "t_agg_test2"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM t_agg_test2 GROUP BY col1 HAVING EXISTS (SELECT first(t_agg_test2.col2) == 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_agg_test2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 28,
+    "fragment" : "t_agg_test2"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM t_agg_test2 GROUP BY ALL HAVING last(col2) = 'a'
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_agg_test2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 28,
+    "fragment" : "t_agg_test2"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM t_agg_test2 GROUP BY col1 HAVING EXISTS (SELECT last(t_agg_test2.col2) == 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_agg_test2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 28,
+    "fragment" : "t_agg_test2"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM t_agg_test2 GROUP BY ALL HAVING any_value(col2) = 'a'
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_agg_test2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 28,
+    "fragment" : "t_agg_test2"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM t_agg_test2 GROUP BY col1 HAVING EXISTS (SELECT any_value(t_agg_test2.col2) == 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_agg_test2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 28,
+    "fragment" : "t_agg_test2"
+  } ]
+}
+
+
+-- !query
+DROP VIEW t_agg_test2
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`t_agg_test2`"
+  }
+}

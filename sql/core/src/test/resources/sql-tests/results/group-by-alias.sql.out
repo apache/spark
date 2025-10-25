@@ -467,3 +467,130 @@ struct<a:int>
 1
 1
 1
+
+
+-- !query
+CREATE TEMPORARY VIEW t_alias_test AS SELECT * FROM VALUES(1,2,3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT col1, col1 AS a FROM t_alias_test GROUP BY col1 ORDER BY col1 ASC
+-- !query schema
+struct<col1:int,a:int>
+-- !query output
+1	1
+
+
+-- !query
+SELECT col1 AS a, col1 FROM t_alias_test GROUP BY col1 ORDER BY col1 ASC
+-- !query schema
+struct<a:int,col1:int>
+-- !query output
+1	1
+
+
+-- !query
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM t_alias_test GROUP BY make_date(col1, col2, col3) ORDER BY make_date(col1, col2, col3)
+-- !query schema
+struct<a:date,b:date>
+-- !query output
+0001-02-03	0001-02-03
+
+
+-- !query
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM t_alias_test GROUP BY 1 ORDER BY ZEROIFNULL(SUM(col1))
+-- !query schema
+struct<a:int,b:double,zeroifnull(sum(col1)):bigint>
+-- !query output
+1	1.0	1
+
+
+-- !query
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM t_alias_test GROUP BY col1 ORDER BY CASE WHEN col1 = 1 THEN 1 END ASC
+-- !query schema
+struct<a:int,b:bigint,c:int>
+-- !query output
+1	2	1
+
+
+-- !query
+SELECT col1, col1 AS a FROM t_alias_test GROUP BY col1 HAVING col1 > 0
+-- !query schema
+struct<col1:int,a:int>
+-- !query output
+1	1
+
+
+-- !query
+SELECT col1 AS a, col1 FROM t_alias_test GROUP BY col1 HAVING col1 > 0
+-- !query schema
+struct<a:int,col1:int>
+-- !query output
+1	1
+
+
+-- !query
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM t_alias_test GROUP BY make_date(col1, col2, col3) HAVING make_date(col1, col2, col3) > '2025-01-01'
+-- !query schema
+struct<a:date,b:date>
+-- !query output
+
+
+
+-- !query
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM t_alias_test GROUP BY 1 HAVING ZEROIFNULL(SUM(col1)) > 0
+-- !query schema
+struct<a:int,b:double,zeroifnull(sum(col1)):bigint>
+-- !query output
+1	1.0	1
+
+
+-- !query
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM t_alias_test GROUP BY col1 HAVING CASE WHEN col1 = 1 THEN 1 END = 1
+-- !query schema
+struct<a:int,b:bigint,c:int>
+-- !query output
+1	2	1
+
+
+-- !query
+SELECT col1+1 AS ltrl2, col1+1 AS ltrl1 FROM t_alias_test GROUP BY col1+1 ORDER BY col1+1
+-- !query schema
+struct<ltrl2:int,ltrl1:int>
+-- !query output
+2	2
+
+
+-- !query
+SELECT col1 AS a FROM VALUES (NAMED_STRUCT('f1', 1)) GROUP BY a.f1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`a`.`f1`",
+    "proposal" : "`col1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 66,
+    "fragment" : "a.f1"
+  } ]
+}
+
+
+-- !query
+DROP VIEW t_alias_test
+-- !query schema
+struct<>
+-- !query output
+

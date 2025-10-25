@@ -227,3 +227,11 @@ SELECT CAST(time '23:59:59.9' AS decimal(6, 0));
 SELECT CAST(time '23:59:59.999' AS decimal(8, 2));
 SELECT CAST(time '23:59:59.999999' AS decimal(11, 5));
 SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8));
+
+-- Type coercion is applied to recursive data types
+CREATE TEMPORARY VIEW t_cast_rec(col3 MAP<BIGINT, DOUBLE>) AS SELECT MAP(CAST(1 AS BIGINT), 1.0);
+SELECT col3.field FROM t_cast_rec;
+DROP VIEW t_cast_rec;
+
+-- Apply type coercion to semi_structured_extract
+SELECT NULL:a AS b;

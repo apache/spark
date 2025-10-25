@@ -2327,3 +2327,138 @@ DROP TEMPORARY VARIABLE var1
 -- !query analysis
 DropVariable false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
+
+
+-- !query
+CREATE TEMPORARY VIEW t_var(col1 INT, col2 INT) AS VALUES (1, 2), (3, 4)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ": missing 'USING'"
+  }
+}
+
+
+-- !query
+DECLARE all = 1
+-- !query analysis
+CreateVariable defaultvalueexpression(1, 1), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.all
+
+
+-- !query
+DECLARE a = 1
+-- !query analysis
+CreateVariable defaultvalueexpression(1, 1), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.a
+
+
+-- !query
+SELECT col1, SUM(col2) FROM t_var GROUP BY ALL
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_var`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 33,
+    "fragment" : "t_var"
+  } ]
+}
+
+
+-- !query
+SELECT col1, SUM(col2) FROM t_var GROUP BY ALL ORDER BY ALL
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_var`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 33,
+    "fragment" : "t_var"
+  } ]
+}
+
+
+-- !query
+SELECT col1, col2 FROM t_var ORDER BY ALL
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_var`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 28,
+    "fragment" : "t_var"
+  } ]
+}
+
+
+-- !query
+SELECT col1 AS a, SUM(col2) FROM t_var GROUP BY a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`t_var`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 38,
+    "fragment" : "t_var"
+  } ]
+}
+
+
+-- !query
+DROP TEMP VARIABLE a
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.a
+
+
+-- !query
+DROP TEMP VARIABLE all
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.all
+
+
+-- !query
+DROP VIEW t_var
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`t_var`"
+  }
+}

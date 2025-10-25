@@ -93,3 +93,20 @@ WITH
 SELECT t1.key
 FROM t1 FULL OUTER JOIN t2 USING (key)
 WHERE t1.key NOT LIKE 'bb.%';
+
+-- ResolvesNameByHiddenOutput.retainOriginalOutput shouldn't change NameScope output
+CREATE TEMPORARY VIEW using_t1(col1 BOOLEAN) AS VALUES (true), (false);
+SELECT *
+FROM
+    ( SELECT col1 FROM using_t1 ) LEFT JOIN ( SELECT col1 FROM using_t1 ) b USING(col1)
+WHERE b.col1;
+
+-- Regular join hidden output should be main output ++ old metadata output
+CREATE TEMPORARY VIEW using_t2(col1 TIMESTAMP, col2 STRING) AS SELECT CURRENT_TIMESTAMP(), 'str';
+SELECT col2 AS alias FROM using_t2 as t1_1 LEFT ANTI JOIN using_t2 as t1_2 ON t1_1.col1 = t1_2.col1 ORDER BY col2;
+SELECT col2 AS alias FROM using_t2 as t1_1 LEFT SEMI JOIN using_t2 as t1_2 ON t1_1.col1 = t1_2.col1 ORDER BY col2;
+SELECT col1 FROM using_t2 as t1_1 LEFT SEMI JOIN using_t2 as t1_2 ORDER BY col2;
+SELECT col1 FROM using_t2 as t1_1 LEFT SEMI JOIN using_t2 as t1_2 GROUP BY ALL HAVING MIN(col2) > '';
+
+DROP VIEW using_t1;
+DROP VIEW using_t2;

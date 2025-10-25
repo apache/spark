@@ -75,3 +75,25 @@ SELECT * FROM nt1 natural join nt2 join nt3 on nt1.k = nt3.k;
 SELECT * FROM nt1 natural join nt2 join nt3 on nt2.k = nt3.k;
 
 SELECT nt1.*, nt2.*, nt3.*, nt4.* FROM nt1 natural join nt2 natural join nt3 natural join nt4;
+
+-- Join names should be computed as intersection of names of the left and right sides.
+CREATE TEMPORARY VIEW nat_t2(col1 INT, col2 STRING) AS VALUES (1, 'a'), (2, 'b');
+SELECT * FROM nat_t2 as t2_1 LEFT JOIN nat_t2 as t2_2 ON t2_1.col1 = t2_2.col1
+    NATURAL JOIN nat_t2 as t2_3;
+SELECT * FROM nat_t2 as t2_1 RIGHT JOIN nat_t2 as t2_2 ON t2_1.col1 = t2_2.col1
+    NATURAL JOIN nat_t2 as t2_3;
+SELECT * FROM nat_t2 as t2_1 CROSS JOIN nat_t2 as t2_2 ON t2_1.col1 = t2_2.col1
+    NATURAL JOIN nat_t2 as t2_3;
+SELECT * FROM nat_t2 as t2_1 INNER JOIN nat_t2 as t2_2 ON t2_1.col1 = t2_2.col1
+    NATURAL JOIN nat_t2 as t2_3;
+
+-- Retain original join output under Project/Aggregate/Filter
+CREATE TEMPORARY VIEW nat_t3(col1 INT) AS VALUES (1), (2), (3);
+CREATE TEMPORARY VIEW nat_t4(col1 INT, col2 STRING) AS VALUES (1, 'x'), (2, 'y');
+SELECT 1 FROM nat_t2 NATURAL JOIN nat_t3 JOIN nat_t4 ON nat_t4.col1 = nat_t3.col1 WHERE nat_t4.col2 = 'x';
+SELECT 1 FROM nat_t2 NATURAL JOIN nat_t3 JOIN nat_t4 ON nat_t4.col1 = nat_t3.col1 GROUP BY nat_t4.col2 HAVING nat_t4.col2 = 'x';
+SELECT 1 FROM nat_t2 NATURAL JOIN nat_t3 JOIN nat_t4 ON nat_t4.col1 = nat_t3.col1 ORDER BY nat_t4.col2;
+
+DROP VIEW nat_t2;
+DROP VIEW nat_t3;
+DROP VIEW nat_t4;
