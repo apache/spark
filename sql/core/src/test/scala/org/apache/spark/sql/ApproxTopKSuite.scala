@@ -736,17 +736,19 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-52798: string vs boolean - fail at combine") {
-    val seq1 = Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'")
-    val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
-    withView("accumulation1", "accumulation2", "unioned") {
-      setupMixedTypeAccumulation(seq1, seq2)
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
-        },
-        condition = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
-        parameters = Map("type1" -> toSQLType(StringType), "type2" -> toSQLType(BooleanType))
-      )
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      val seq1 = Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'")
+      val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
+      withView("accumulation1", "accumulation2", "unioned") {
+        setupMixedTypeAccumulation(seq1, seq2)
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
+          },
+          condition = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
+          parameters = Map("type1" -> toSQLType(StringType), "type2" -> toSQLType(BooleanType))
+        )
+      }
     }
   }
 

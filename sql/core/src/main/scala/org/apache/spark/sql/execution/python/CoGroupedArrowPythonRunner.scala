@@ -19,20 +19,14 @@ package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
 
-import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.ipc.ArrowStreamWriter
-
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.arrow.ArrowWriterWrapper
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.Utils
-
 
 /**
  * Python UDF Runner for cogrouped udfs. It sends Arrow bathes from two different DataFrames,
@@ -68,6 +62,12 @@ class CoGroupedArrowPythonRunner(
   override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
+  private val maxRecordsPerBatch: Int = {
+    val v = SQLConf.get.arrowMaxRecordsPerBatch
+    if (v > 0) v else Int.MaxValue
+  }
+  private val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
+
   protected def newWriter(
       env: SparkEnv,
       worker: PythonWorker,
@@ -76,6 +76,11 @@ class CoGroupedArrowPythonRunner(
       context: TaskContext): Writer = {
 
     new Writer(env, worker, inputIterator, partitionIndex, context) {
+
+      private var nextBatchInLeftGroup: Iterator[InternalRow] = null
+      private var nextBatchInRightGroup: Iterator[InternalRow] = null
+      private var leftGroupArrowWriter: ArrowWriterWrapper = null
+      private var rightGroupArrowWriter: ArrowWriterWrapper = null
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
 
@@ -89,52 +94,81 @@ class CoGroupedArrowPythonRunner(
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
       }
 
+      /**
+       * Writes the input iterator to the Arrow stream. We slice the input iterator into multiple
+       * small batches contain at most `arrowMaxRecordsPerBatch` records.
+       */
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
-        // For each we first send the number of dataframes in each group then send
-        // first df, then send second df.  End of data is marked by sending 0.
-        if (inputIterator.hasNext) {
-          val startData = dataOut.size()
-          dataOut.writeInt(2)
-          val (nextLeft, nextRight) = inputIterator.next()
-          writeGroup(nextLeft, leftSchema, dataOut, "left")
-          writeGroup(nextRight, rightSchema, dataOut, "right")
-
-          val deltaData = dataOut.size() - startData
-          pythonMetrics("pythonDataSent") += deltaData
-          true
-        } else {
-          dataOut.writeInt(0)
-          false
-        }
-      }
-
-      private def writeGroup(
-          group: Iterator[InternalRow],
-          schema: StructType,
-          dataOut: DataOutputStream,
-          name: String): Unit = {
-        val arrowSchema =
-          ArrowUtils.toArrowSchema(
-            schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes)
-        val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
-        val root = VectorSchemaRoot.create(arrowSchema, allocator)
-
-        Utils.tryWithSafeFinally {
-          val writer = new ArrowStreamWriter(root, null, dataOut)
-          val arrowWriter = ArrowWriter.create(root)
-          writer.start()
-
-          while (group.hasNext) {
-            arrowWriter.write(group.next())
+        val startData = dataOut.size()
+        // We use null checks for nextBatchInLeftGroup and nextBatchInRightGroup as a way
+        // to indicate that the iterator has been consumed.
+        // This is because the inputIterator can output empty iterators that need to be
+        // written to the stream.
+        if (nextBatchInLeftGroup == null && nextBatchInRightGroup == null) {
+          if (inputIterator.hasNext) {
+            // For each cogroup,
+            // first send the number of dataframes in each group,
+            // then send first df, then send second df.
+            // End of data is marked by sending 0.
+            dataOut.writeInt(2)
+            val (nextLeft, nextRight) = inputIterator.next()
+            nextBatchInLeftGroup = nextLeft
+            nextBatchInRightGroup = nextRight
+          } else {
+            // All the input has been consumed.
+            dataOut.writeInt(0)
+            return false
           }
-          arrowWriter.finish()
-          writer.writeBatch()
-          writer.end()
-        }{
-          root.close()
-          allocator.close()
         }
+
+        var numRowsInBatch: Int = 0
+        if (nextBatchInLeftGroup != null) {
+          if (leftGroupArrowWriter == null) {
+            leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(leftSchema,
+              timeZoneId, pythonExec + " (left)", errorOnDuplicatedFieldNames = true,
+              largeVarTypes, dataOut, context)
+          }
+          numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
+            leftGroupArrowWriter.arrowWriter,
+            leftGroupArrowWriter.streamWriter,
+            nextBatchInLeftGroup,
+            maxBytesPerBatch,
+            maxRecordsPerBatch)
+
+          if (!nextBatchInLeftGroup.hasNext) {
+            leftGroupArrowWriter.streamWriter.end()
+            leftGroupArrowWriter.close()
+            nextBatchInLeftGroup = null
+            leftGroupArrowWriter = null
+          }
+        } else if (nextBatchInRightGroup != null) {
+          if (rightGroupArrowWriter == null) {
+            rightGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(rightSchema,
+              timeZoneId, pythonExec + " (right)", errorOnDuplicatedFieldNames = true,
+              largeVarTypes, dataOut, context)
+          }
+          numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
+            rightGroupArrowWriter.arrowWriter,
+            rightGroupArrowWriter.streamWriter,
+            nextBatchInRightGroup,
+            maxBytesPerBatch,
+            maxRecordsPerBatch)
+          if (!nextBatchInRightGroup.hasNext) {
+            rightGroupArrowWriter.streamWriter.end()
+            rightGroupArrowWriter.close()
+            nextBatchInRightGroup = null
+            rightGroupArrowWriter = null
+          }
+        } else {
+          assert(assertion = false, "Either left or right iterator must be non-empty.")
+        }
+        // With CoGroupedIterator, we can have empty groups for one of the sides if a grouping
+        // key exists in one side but not in the other side.
+        assert(0 <= numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
+
+        val deltaData = dataOut.size() - startData
+        pythonMetrics("pythonDataSent") += deltaData
+        true
       }
     }
   }
