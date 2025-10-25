@@ -88,9 +88,10 @@ class InMemoryFileIndex(
       // For non-partitioned tables or other paths, we consider the root paths as partition
       // dirs. And if root paths are files, we consider their parent dirs as partition dirs.
       case _ => rootPaths.map { path =>
-        leafFiles.get(path) match {
-          case Some(_) => path.getParent
-          case None => path
+        val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
+        leafFiles.get(qualifiedPath) match {
+          case Some(_) => qualifiedPath.getParent
+          case None => qualifiedPath
         }
       }.toSet
     }
