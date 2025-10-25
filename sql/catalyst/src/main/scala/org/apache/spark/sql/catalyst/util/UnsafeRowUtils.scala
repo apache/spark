@@ -17,10 +17,28 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
+
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types._
 
 object UnsafeRowUtils {
+
+  private final val getPadding: (UnsafeRow, Int, Int) => Long = {
+    if (nativeOrder().equals(BIG_ENDIAN)) {
+       (row: UnsafeRow, index: Int, bitShift: Int) => row.getLong(index) << bitShift
+    } else {
+       (row: UnsafeRow, index: Int, bitShift: Int) => row.getLong(index) >> bitShift
+    }
+  }
+
+  private final val getPaddingBoolean: (UnsafeRow, Int) => Long = {
+    if (nativeOrder().equals(BIG_ENDIAN)) {
+       (row: UnsafeRow, index: Int) => row.getLong(index) & 0xFEFFFFFFFFFFFFFFL
+    } else {
+       (row: UnsafeRow, index: Int) => row.getLong(index) >> 1
+    }
+  }
 
   /**
    * Use the following rules to check the integrity of the UnsafeRow:
@@ -74,23 +92,23 @@ object UnsafeRowUtils {
       case (field, index) if UnsafeRow.isFixedLength(field.dataType) && !row.isNullAt(index) =>
         field.dataType match {
           case BooleanType =>
-            if ((row.getLong(index) >> 1) != 0L) {
+            if (getPaddingBoolean(row, index) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case ByteType =>
-            if ((row.getLong(index) >> 8) != 0L) {
+            if (getPadding(row, index, 8) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case ShortType =>
-            if ((row.getLong(index) >> 16) != 0L) {
+            if (getPadding(row, index, 16) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case IntegerType =>
-            if ((row.getLong(index) >> 32) != 0L) {
+            if (getPadding(row, index, 32) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case FloatType =>
-            if ((row.getLong(index) >> 32) != 0L) {
+            if (getPadding(row, index, 32) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case _ =>
