@@ -885,6 +885,40 @@ abstract class SchemaPruningSuite
     }
   }
 
+  testSchemaPruning(
+    "SPARK-47230: chained POSEXPLODE with SELECT * on session requests prunes to thin schema") {
+    withDataSourceTable(sessions, "sessions_data") {
+      val query = sql(
+        """
+          |WITH exploded_data AS (
+          |  SELECT *,
+          |    request.available AS request_available
+          |  FROM sessions_data
+          |  LATERAL VIEW OUTER posexplode(requests) t1 AS requestIdx, request
+          |  LATERAL VIEW OUTER posexplode(request.servedItems) t2 AS servedItemIdx, servedItem
+          |)
+          |SELECT
+          |  publisherId,
+          |  max(endOfSession) AS endOfSession,
+          |  sum(CASE WHEN request.available THEN 1 ELSE 0 END) AS available_requests,
+          |  sum(CASE WHEN request.clientMode = 'mobile' THEN 1 ELSE 0 END) AS mobile_requests,
+          |  sum(CASE WHEN coalesce(servedItem.clicked, false) THEN 1 ELSE 0 END) AS clicked_items,
+          |  sum(servedItem.revenue) AS revenue_total
+          |FROM exploded_data
+          |GROUP BY publisherId
+          |""".stripMargin)
+
+      checkScan(query,
+        "struct<publisherId:bigint,endOfSession:bigint," +
+          "requests:array<struct<available:boolean,clientMode:string," +
+          "servedItems:array<struct<clicked:boolean,revenue:double>>>>>")
+
+      checkAnswer(query.orderBy("publisherId"),
+        Row(100L, 1234567890L, 2L, 2L, 2L, 25.0) ::
+        Row(200L, 1234567900L, 1L, 1L, 0L, null) :: Nil)
+    }
+  }
+
   // TODO SPARK-47230: Re-enable when MapType pruning with chained generators is fixed
   // Currently disabled due to expression ID conflict when pruning map value types
   // testSchemaPruning("SPARK-47230: CTE with SELECT * over 2 chained generators with contacts")

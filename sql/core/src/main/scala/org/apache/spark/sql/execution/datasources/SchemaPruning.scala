@@ -101,60 +101,53 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
         projectList.foreach {
           case attr: AttributeReference if generatorOutputIds.contains(attr.exprId) =>
-            // scalastyle:off println
-            println(s"DEBUG: Found direct AttributeReference to generator output: " +
-              s"${attr.name} (exprId: ${attr.exprId}, dataType: ${attr.dataType})")
-            // scalastyle:on println
+            // SPARK-47230: Check if this struct is used in another generator's child
+            // (chained generator pattern) - if so, don't mark for full preservation
+            val usedInChildGenerator = plan.exists {
+              case Generate(childGen, _, _, _, _, _) if childGen != generator =>
+                childGen.children.exists { child =>
+                  child.find {
+                    case a: AttributeReference => a.exprId == attr.exprId
+                    case _ => false
+                  }.isDefined
+                }
+              case _ => false
+            }
 
             // This is a direct selection of generator output (e.g., SELECT friend)
             // IMPORTANT: Only trigger full struct preservation if this is a STRUCT attribute
             // For PosExplode, the first output is position (IntegerType), second is the struct
             // We should only preserve full struct for the struct output, not the position
             attr.dataType match {
-              case _: StructType =>
-                // scalastyle:off println
-                println(s"DEBUG: Attribute is StructType, triggering full preservation")
-                // scalastyle:on println
-
+              case _: StructType if !usedInChildGenerator =>
                 // Trace back to find the root column
                 generator match {
                   case e: Explode =>
-                    // scalastyle:off println
-                    println(s"DEBUG: Tracing Explode child: ${e.child}")
-                    // scalastyle:on println
                     traceArrayAccess(e.child).foreach { case (rootCol, _) =>
-                      // scalastyle:off println
-                      println(s"DEBUG: Adding to columnsNeedingFullPreservation: $rootCol")
-                      // scalastyle:on println
                       columnsNeedingFullPreservation += rootCol
                     }
                   case pe: PosExplode =>
-                    // scalastyle:off println
-                    println(s"DEBUG: Tracing PosExplode child: ${pe.child}")
-                    // scalastyle:on println
                     traceArrayAccess(pe.child).foreach { case (rootCol, _) =>
-                      // scalastyle:off println
-                      println(s"DEBUG: Adding to columnsNeedingFullPreservation: $rootCol")
-                      // scalastyle:on println
                       columnsNeedingFullPreservation += rootCol
                     }
                   case _ =>
-                    // scalastyle:off println
-                    println(s"DEBUG: Generator is neither Explode nor PosExplode")
-                    // scalastyle:on println
                 }
               case _ =>
-                // scalastyle:off println
-                println(s"DEBUG: Attribute is NOT StructType (${attr.dataType}), " +
-                  s"skipping full preservation")
-                // scalastyle:on println
             }
 
           case Alias(attr: AttributeReference, _) if generatorOutputIds.contains(attr.exprId) =>
-            // scalastyle:off println
-            println(s"DEBUG: Found Alias wrapping AttributeReference to generator output: " +
-              s"${attr.name} (exprId: ${attr.exprId}, dataType: ${attr.dataType})")
-            // scalastyle:on println
+            // SPARK-47230: Check if this struct is used in another generator's child
+            // (chained generator pattern) - if so, don't mark for full preservation
+            val usedInChildGenerator = plan.exists {
+              case Generate(childGen, _, _, _, _, _) if childGen != generator =>
+                childGen.children.exists { child =>
+                  child.find {
+                    case a: AttributeReference => a.exprId == attr.exprId
+                    case _ => false
+                  }.isDefined
+                }
+              case _ => false
+            }
 
             // This is a direct selection of generator output wrapped in Alias
             // (e.g., SELECT friend AS friend in LATERAL EXPLODE syntax)
@@ -162,43 +155,20 @@ object SchemaPruning extends Rule[LogicalPlan] {
             // For PosExplode, the first output is position (IntegerType), second is the struct
             // We should only preserve full struct for the struct output, not the position
             attr.dataType match {
-              case _: StructType =>
-                // scalastyle:off println
-                println(s"DEBUG: Attribute is StructType, triggering full preservation")
-                // scalastyle:on println
-
+              case _: StructType if !usedInChildGenerator =>
                 // Trace back to find the root column
                 generator match {
                   case e: Explode =>
-                    // scalastyle:off println
-                    println(s"DEBUG: Tracing Explode child: ${e.child}")
-                    // scalastyle:on println
                     traceArrayAccess(e.child).foreach { case (rootCol, _) =>
-                      // scalastyle:off println
-                      println(s"DEBUG: Adding to columnsNeedingFullPreservation: $rootCol")
-                      // scalastyle:on println
                       columnsNeedingFullPreservation += rootCol
                     }
                   case pe: PosExplode =>
-                    // scalastyle:off println
-                    println(s"DEBUG: Tracing PosExplode child: ${pe.child}")
-                    // scalastyle:on println
                     traceArrayAccess(pe.child).foreach { case (rootCol, _) =>
-                      // scalastyle:off println
-                      println(s"DEBUG: Adding to columnsNeedingFullPreservation: $rootCol")
-                      // scalastyle:on println
                       columnsNeedingFullPreservation += rootCol
                     }
                   case _ =>
-                    // scalastyle:off println
-                    println(s"DEBUG: Generator is neither Explode nor PosExplode")
-                    // scalastyle:on println
                 }
               case _ =>
-                // scalastyle:off println
-                println(s"DEBUG: Attribute is NOT StructType (${attr.dataType}), " +
-                  s"skipping full preservation")
-                // scalastyle:on println
             }
 
           case other =>
