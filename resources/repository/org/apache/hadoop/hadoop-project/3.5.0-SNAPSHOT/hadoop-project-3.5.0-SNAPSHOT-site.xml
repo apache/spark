@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<project name="Hadoop">
+  <bannerLeft>
+    <name>Hadoop</name>
+    <src>http://hadoop.apache.org/images/hadoop-logo.jpg</src>
+    <href>http://hadoop.apache.org/</href>
+  </bannerLeft>
+  <bannerRight>
+    <src>http://www.apache.org/images/asf_logo_wide.png</src>
+    <href>http://www.apache.org/</href>
+  </bannerRight>
+
+  <publishDate position="right"/>
+  <version position="right"/>
+
+  <skin>
+    <groupId>org.apache.maven.skins</groupId>
+    <artifactId>maven-stylus-skin</artifactId>
+    <version>${maven-stylus-skin.version}</version>
+  </skin>
+
+  <body>
+    <links position="left">
+      <item name="Wiki" href="http://wiki.apache.org/hadoop" />
+      <item name="git" href="https://gitbox.apache.org/repos/asf/hadoop.git" />
+    </links>
+
+    <menu name="General" inherit="top">
+      <item name="Overview" href="index.html"/>
+      <item name="Single Node Setup" href="hadoop-project-dist/hadoop-common/SingleCluster.html"/>
+      <item name="Cluster Setup" href="hadoop-project-dist/hadoop-common/ClusterSetup.html"/>
+      <item name="Commands Reference" href="hadoop-project-dist/hadoop-common/CommandsManual.html"/>
+      <item name="FileSystem Shell" href="hadoop-project-dist/hadoop-common/FileSystemShell.html"/>
+      <item name="Compatibility Specification" href="hadoop-project-dist/hadoop-common/Compatibility.html"/>
+      <item name="Downstream Developer's Guide" href="hadoop-project-dist/hadoop-common/DownstreamDev.html"/>
+      <item name="Admin Compatibility Guide" href="hadoop-project-dist/hadoop-common/AdminCompatibilityGuide.html"/>
+      <item name="Interface Classification" href="hadoop-project-dist/hadoop-common/InterfaceClassification.html"/>
+      <item name="FileSystem Specification"
+        href="hadoop-project-dist/hadoop-common/filesystem/index.html"/>
+    </menu>
+
+    <menu name="Common" inherit="top">
+      <item name="CLI Mini Cluster" href="hadoop-project-dist/hadoop-common/CLIMiniCluster.html"/>
+      <item name="Fair Call Queue" href="hadoop-project-dist/hadoop-common/FairCallQueue.html"/>
+      <item name="Native Libraries" href="hadoop-project-dist/hadoop-common/NativeLibraries.html"/>
+      <item name="Proxy User" href="hadoop-project-dist/hadoop-common/Superusers.html"/>
+      <item name="Rack Awareness" href="hadoop-project-dist/hadoop-common/RackAwareness.html"/>
+      <item name="Secure Mode" href="hadoop-project-dist/hadoop-common/SecureMode.html"/>
+      <item name="Service Level Authorization" href="hadoop-project-dist/hadoop-common/ServiceLevelAuth.html"/>
+      <item name="HTTP Authentication" href="hadoop-project-dist/hadoop-common/HttpAuthentication.html"/>
+      <item name="Credential Provider API" href="hadoop-project-dist/hadoop-common/CredentialProviderAPI.html"/>
+      <item name="Hadoop KMS" href="hadoop-kms/index.html"/>
+      <item name="Tracing" href="hadoop-project-dist/hadoop-common/Tracing.html"/>
+      <item name="Unix Shell Guide" href="hadoop-project-dist/hadoop-common/UnixShellGuide.html"/>
+      <item name="Registry" href="hadoop-project-dist/hadoop-common/registry/index.html"/>
+      <item name="Async Profiler" href="hadoop-project-dist/hadoop-common/AsyncProfilerServlet.html" />
+    </menu>
+    
+    <menu name="HDFS" inherit="top">
+      <item name="Architecture" href="hadoop-project-dist/hadoop-hdfs/HdfsDesign.html"/>
+      <item name="User Guide" href="hadoop-project-dist/hadoop-hdfs/HdfsUserGuide.html"/>
+      <item name="Commands Reference" href="hadoop-project-dist/hadoop-hdfs/HDFSCommands.html"/>
+      <item name="NameNode HA With QJM" href="hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html"/>
+      <item name="NameNode HA With NFS" href="hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithNFS.html"/>
+      <item name="Observer NameNode" href="hadoop-project-dist/hadoop-hdfs/ObserverNameNode.html"/>
+      <item name="Federation" href="hadoop-project-dist/hadoop-hdfs/Federation.html"/>
+      <item name="ViewFs" href="hadoop-project-dist/hadoop-hdfs/ViewFs.html"/>
+      <item name="ViewFsOverloadScheme" href="hadoop-project-dist/hadoop-hdfs/ViewFsOverloadScheme.html"/>
+      <item name="Snapshots" href="hadoop-project-dist/hadoop-hdfs/HdfsSnapshots.html"/>
+      <item name="Edits Viewer" href="hadoop-project-dist/hadoop-hdfs/HdfsEditsViewer.html"/>
+      <item name="Image Viewer" href="hadoop-project-dist/hadoop-hdfs/HdfsImageViewer.html"/>
+      <item name="Permissions and HDFS" href="hadoop-project-dist/hadoop-hdfs/HdfsPermissionsGuide.html"/>
+      <item name="Quotas and HDFS" href="hadoop-project-dist/hadoop-hdfs/HdfsQuotaAdminGuide.html"/>
+      <item name="libhdfs (C API)" href="hadoop-project-dist/hadoop-hdfs/LibHdfs.html"/>
+      <item name="WebHDFS (REST API)" href="hadoop-project-dist/hadoop-hdfs/WebHDFS.html"/>
+      <item name="HttpFS" href="hadoop-hdfs-httpfs/index.html"/>
+      <item name="Short Circuit Local Reads" 
+          href="hadoop-project-dist/hadoop-hdfs/ShortCircuitLocalReads.html"/>
+      <item name="Centralized Cache Management" href="hadoop-project-dist/hadoop-hdfs/CentralizedCacheManagement.html"/>
+      <item name="NFS Gateway" href="hadoop-project-dist/hadoop-hdfs/HdfsNfsGateway.html"/>
+      <item name="Rolling Upgrade" href="hadoop-project-dist/hadoop-hdfs/HdfsRollingUpgrade.html"/>
+      <item name="Extended Attributes" href="hadoop-project-dist/hadoop-hdfs/ExtendedAttributes.html"/>
+      <item name="Transparent Encryption" href="hadoop-project-dist/hadoop-hdfs/TransparentEncryption.html"/>
+      <item name="Multihoming" href="hadoop-project-dist/hadoop-hdfs/HdfsMultihoming.html"/>
+      <item name="Storage Policies" href="hadoop-project-dist/hadoop-hdfs/ArchivalStorage.html"/>
+      <item name="Memory Storage Support" href="hadoop-project-dist/hadoop-hdfs/MemoryStorage.html"/>
+      <item name="Synthetic Load Generator" href="hadoop-project-dist/hadoop-hdfs/SLGUserGuide.html"/>
+      <item name="Erasure Coding" href="hadoop-project-dist/hadoop-hdfs/HDFSErasureCoding.html"/>
+      <item name="Disk Balancer" href="hadoop-project-dist/hadoop-hdfs/HDFSDiskbalancer.html"/>
+      <item name="Upgrade Domain" href="hadoop-project-dist/hadoop-hdfs/HdfsUpgradeDomain.html"/>
+      <item name="DataNode Admin" href="hadoop-project-dist/hadoop-hdfs/HdfsDataNodeAdminGuide.html"/>
+      <item name="Router Federation" href="hadoop-project-dist/hadoop-hdfs-rbf/HDFSRouterFederation.html"/>
+      <item name="Provided Storage" href="hadoop-project-dist/hadoop-hdfs/HdfsProvidedStorage.html"/>
+    </menu>
+
+    <menu name="MapReduce" inherit="top">
+      <item name="Tutorial" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html"/>
+      <item name="Commands Reference" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapredCommands.html"/>
+      <item name="Compatibility with 1.x" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduce_Compatibility_Hadoop1_Hadoop2.html"/>
+      <item name="Encrypted Shuffle" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/EncryptedShuffle.html"/>
+      <item name="Pluggable Shuffle/Sort" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/PluggableShuffleAndPluggableSort.html"/>
+      <item name="Distributed Cache Deploy" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/DistributedCacheDeploy.html"/>
+      <item name="Support for YARN Shared Cache" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/SharedCacheSupport.html"/>
+    </menu>
+
+    <menu name="MapReduce REST APIs" inherit="top">
+      <item name="MR Application Master" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapredAppMasterRest.html"/>
+      <item name="MR History Server" href="hadoop-mapreduce-client/hadoop-mapreduce-client-hs/HistoryServerRest.html"/>
+    </menu>
+
+    <menu name="YARN" inherit="top">
+      <item name="Architecture" href="hadoop-yarn/hadoop-yarn-site/YARN.html"/>
+      <item name="Commands Reference" href="hadoop-yarn/hadoop-yarn-site/YarnCommands.html"/>
+      <item name="Capacity Scheduler" href="hadoop-yarn/hadoop-yarn-site/CapacityScheduler.html"/>
+      <item name="Fair Scheduler" href="hadoop-yarn/hadoop-yarn-site/FairScheduler.html"/>
+      <item name="ResourceManager Restart" href="hadoop-yarn/hadoop-yarn-site/ResourceManagerRestart.html"/>
+      <item name="ResourceManager HA" href="hadoop-yarn/hadoop-yarn-site/ResourceManagerHA.html"/>
+      <item name="Resource Model" href="hadoop-yarn/hadoop-yarn-site/ResourceModel.html"/>
+      <item name="Node Labels" href="hadoop-yarn/hadoop-yarn-site/NodeLabel.html"/>
+      <item name="Node Attributes" href="hadoop-yarn/hadoop-yarn-site/NodeAttributes.html"/>
+      <item name="Web Application Proxy" href="hadoop-yarn/hadoop-yarn-site/WebApplicationProxy.html"/>
+      <item name="Timeline Server" href="hadoop-yarn/hadoop-yarn-site/TimelineServer.html"/>
+      <item name="Timeline Service V.2" href="hadoop-yarn/hadoop-yarn-site/TimelineServiceV2.html"/>
+      <item name="Writing YARN Applications" href="hadoop-yarn/hadoop-yarn-site/WritingYarnApplications.html"/>
+      <item name="YARN Application Security" href="hadoop-yarn/hadoop-yarn-site/YarnApplicationSecurity.html"/>
+      <item name="NodeManager" href="hadoop-yarn/hadoop-yarn-site/NodeManager.html"/>
+      <item name="Running Applications in Docker Containers" href="hadoop-yarn/hadoop-yarn-site/DockerContainers.html"/>
+      <item name="Running Applications in runC Containers" href="hadoop-yarn/hadoop-yarn-site/RuncContainers.html"/>
+      <item name="Using CGroups" href="hadoop-yarn/hadoop-yarn-site/NodeManagerCgroups.html"/>
+      <item name="Secure Containers" href="hadoop-yarn/hadoop-yarn-site/SecureContainer.html"/>
+      <item name="Reservation System" href="hadoop-yarn/hadoop-yarn-site/ReservationSystem.html"/>
+      <item name="Graceful Decommission" href="hadoop-yarn/hadoop-yarn-site/GracefulDecommission.html"/>
+      <item name="Opportunistic Containers" href="hadoop-yarn/hadoop-yarn-site/OpportunisticContainers.html"/>
+      <item name="YARN Federation" href="hadoop-yarn/hadoop-yarn-site/Federation.html"/>
+      <item name="Shared Cache" href="hadoop-yarn/hadoop-yarn-site/SharedCache.html"/>
+      <item name="Using GPU" href="hadoop-yarn/hadoop-yarn-site/UsingGpus.html"/>
+      <item name="Using FPGA" href="hadoop-yarn/hadoop-yarn-site/UsingFPGA.html"/>
+      <item name="Placement Constraints" href="hadoop-yarn/hadoop-yarn-site/PlacementConstraints.html"/>
+      <item name="YARN UI2" href="hadoop-yarn/hadoop-yarn-site/YarnUI2.html"/>
+    </menu>
+
+    <menu name="YARN REST APIs" inherit="top">
+      <item name="Introduction" href="hadoop-yarn/hadoop-yarn-site/WebServicesIntro.html"/>
+      <item name="Resource Manager" href="hadoop-yarn/hadoop-yarn-site/ResourceManagerRest.html"/>
+      <item name="Node Manager" href="hadoop-yarn/hadoop-yarn-site/NodeManagerRest.html"/>
+      <item name="Timeline Server" href="hadoop-yarn/hadoop-yarn-site/TimelineServer.html#Timeline_Server_REST_API_v1"/>
+      <item name="Timeline Service V.2" href="hadoop-yarn/hadoop-yarn-site/TimelineServiceV2.html#Timeline_Service_v.2_REST_API"/>
+    </menu>
+
+    <menu name="YARN Service" inherit="top">
+      <item name="Overview" href="hadoop-yarn/hadoop-yarn-site/yarn-service/Overview.html"/>
+      <item name="QuickStart" href="hadoop-yarn/hadoop-yarn-site/yarn-service/QuickStart.html"/>
+      <item name="Concepts" href="hadoop-yarn/hadoop-yarn-site/yarn-service/Concepts.html"/>
+      <item name="Yarn Service API" href="hadoop-yarn/hadoop-yarn-site/yarn-service/YarnServiceAPI.html"/>
+      <item name="Service Discovery" href="hadoop-yarn/hadoop-yarn-site/yarn-service/ServiceDiscovery.html"/>
+      <item name="System Services" href="hadoop-yarn/hadoop-yarn-site/yarn-service/SystemServices.html"/>
+    </menu>
+
+    <menu name="Hadoop Compatible File Systems" inherit="top">
+      <item name="Aliyun OSS" href="hadoop-aliyun/tools/hadoop-aliyun/index.html"/>
+      <item name="Amazon S3" href="hadoop-aws/tools/hadoop-aws/index.html"/>
+      <item name="Azure Blob Storage" href="hadoop-azure/index.html"/>
+      <item name="Azure Data Lake Storage"
+            href="hadoop-azure-datalake/index.html"/>
+      <item name="Tencent COS" href="hadoop-cos/cloud-storage/index.html"/>
+      <item name="Huaweicloud OBS" href="hadoop-huaweicloud/index.html"/>
+      <item name="VolcanoEngine TOS" href="hadoop-tos/cloud-storage/index.html"/>
+    </menu>
+
+    <menu name="Auth" inherit="top">
+      <item name="Overview" href="hadoop-auth/index.html"/>
+      <item name="Examples" href="hadoop-auth/Examples.html"/>
+      <item name="Configuration" href="hadoop-auth/Configuration.html"/>
+      <item name="Building" href="hadoop-auth/BuildingIt.html"/>
+    </menu>
+
+    <menu name="Tools" inherit="top">
+      <item name="Hadoop Streaming" href="hadoop-streaming/HadoopStreaming.html"/>
+      <item name="Hadoop Archives" href="hadoop-archives/HadoopArchives.html"/>
+      <item name="Hadoop Archive Logs" href="hadoop-archive-logs/HadoopArchiveLogs.html"/>
+      <item name="DistCp" href="hadoop-distcp/DistCp.html"/>
+      <item name="HDFS Federation Balance" href="hadoop-federation-balance/HDFSFederationBalance.html"/>
+      <item name="GridMix" href="hadoop-gridmix/GridMix.html"/>
+      <item name="Rumen" href="hadoop-rumen/Rumen.html"/>
+      <item name="Resource Estimator Service" href="hadoop-resourceestimator/ResourceEstimator.html"/>
+      <item name="Scheduler Load Simulator" href="hadoop-sls/SchedulerLoadSimulator.html"/>
+      <item name="Hadoop Benchmarking" href="hadoop-project-dist/hadoop-common/Benchmarking.html"/>
+      <item name="Dynamometer" href="hadoop-dynamometer/Dynamometer.html"/>
+    </menu>
+
+    <menu name="Reference" inherit="top">
+      <item name="Changelog and Release Notes" href="hadoop-project-dist/hadoop-common/release/"/>
+      <item name="Java API docs" href="api/index.html"/>
+      <item name="Unix Shell API" href="hadoop-project-dist/hadoop-common/UnixShellAPI.html"/>
+      <item name="Metrics" href="hadoop-project-dist/hadoop-common/Metrics.html"/>
+    </menu>
+    
+    <menu name="Configuration" inherit="top">
+      <item name="core-default.xml" href="hadoop-project-dist/hadoop-common/core-default.xml"/>
+      <item name="hdfs-default.xml" href="hadoop-project-dist/hadoop-hdfs/hdfs-default.xml"/>
+      <item name="hdfs-rbf-default.xml" href="hadoop-project-dist/hadoop-hdfs-rbf/hdfs-rbf-default.xml"/>
+      <item name="mapred-default.xml" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/mapred-default.xml"/>
+      <item name="yarn-default.xml" href="hadoop-yarn/hadoop-yarn-common/yarn-default.xml"/>
+      <item name="kms-default.xml" href="hadoop-kms/kms-default.html"/>
+      <item name="httpfs-default.xml" href="hadoop-hdfs-httpfs/httpfs-default.html"/>
+      <item name="Deprecated Properties" href="hadoop-project-dist/hadoop-common/DeprecatedProperties.html"/>
+    </menu>
+
+  </body>
+
+</project>

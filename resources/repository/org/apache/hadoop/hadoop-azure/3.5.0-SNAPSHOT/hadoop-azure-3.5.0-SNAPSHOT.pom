@@ -1,0 +1,955 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License. See accompanying LICENSE file.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.hadoop</groupId>
+    <artifactId>hadoop-project</artifactId>
+    <version>3.5.0-SNAPSHOT</version>
+    <relativePath>../../hadoop-project</relativePath>
+  </parent>
+  <artifactId>hadoop-azure</artifactId>
+  <name>Apache Hadoop Azure support</name>
+  <description>
+    This module contains code to support integration with Azure.
+    Currently this consists of a filesystem client to read data from
+    and write data to Azure Storage.
+  </description>
+  <packaging>jar</packaging>
+
+  <properties>
+    <file.encoding>UTF-8</file.encoding>
+    <downloadSources>true</downloadSources>
+    <hadoop.tmp.dir>${project.build.directory}/test</hadoop.tmp.dir>
+    <!-- are scale tests enabled ? -->
+    <fs.azure.scale.test.enabled>unset</fs.azure.scale.test.enabled>
+    <!-- Size in MB of huge files. -->
+    <fs.azure.scale.test.huge.filesize>unset</fs.azure.scale.test.huge.filesize>
+    <!-- Size in MB of the partion size in huge file uploads. -->
+    <fs.azure.scale.test.huge.partitionsize>unset</fs.azure.scale.test.huge.partitionsize>
+    <!-- Timeout in seconds for scale tests.-->
+    <fs.azure.scale.test.timeout>7200</fs.azure.scale.test.timeout>
+    <fs.azure.scale.test.list.performance.threads>10</fs.azure.scale.test.list.performance.threads>
+    <fs.azure.scale.test.list.performance.files>1000</fs.azure.scale.test.list.performance.files>
+    <!-- http connection pool size; passed down as a system property -->
+    <http.maxConnections>100</http.maxConnections>
+  </properties>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <configuration>
+          <xmlOutput>true</xmlOutput>
+          <excludeFilterFile>${basedir}/dev-support/findbugs-exclude.xml
+          </excludeFilterFile>
+          <effort>Max</effort>
+        </configuration>
+      </plugin>
+      <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-checkstyle-plugin</artifactId>
+          <configuration>
+            <!-- To run with the default Sun ruleset, 
+                 comment out the configLocation line -->
+            <configLocation>src/config/checkstyle.xml</configLocation>
+            <suppressionsLocation>src/config/checkstyle-suppressions.xml</suppressionsLocation>
+          </configuration>
+          
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>deplist</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>list</goal>
+            </goals>
+            <configuration>
+              <!-- build a shellprofile -->
+              <outputFile>${project.basedir}/target/hadoop-tools-deps/${project.artifactId}.tools-optional.txt</outputFile>
+            </configuration>
+          </execution>
+        </executions>
+       </plugin>
+
+    </plugins>
+
+
+    <!--
+       The following is to suppress a m2e warning in eclipse
+       (m2e doesn't know how to handle maven-enforcer:enforce, so we have to tell m2e to ignore it)
+       see: https://stackoverflow.com/questions/13040788/how-to-elimate-the-maven-enforcer-plugin-goal-enforce-is-ignored-by-m2e-wa
+    -->
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.eclipse.m2e</groupId>
+          <artifactId>lifecycle-mapping</artifactId>
+          <version>1.0.0</version>
+          <configuration>
+            <lifecycleMappingMetadata>
+              <pluginExecutions>
+                <pluginExecution>
+                  <pluginExecutionFilter>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <versionRange>[1.0.0,)</versionRange>
+                    <goals>
+                      <goal>enforce</goal>
+                    </goals>
+                  </pluginExecutionFilter>
+                  <action>
+                    <ignore />
+                  </action>
+                </pluginExecution>
+              </pluginExecutions>
+            </lifecycleMappingMetadata>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+  </build>
+
+  <!-- see hadoop-project/pom.xml for version number declarations -->
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    
+    <dependency>
+      <groupId>com.microsoft.azure</groupId>
+      <artifactId>azure-storage</artifactId>
+      <scope>compile</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-lang3</artifactId>
+        </exclusion>
+        <!-- comes with hadoop-common -->
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hadoop.thirdparty</groupId>
+      <artifactId>hadoop-shaded-guava</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-util-ajax</artifactId>
+      <scope>compile</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.wildfly.openssl</groupId>
+      <artifactId>wildfly-openssl</artifactId>
+      <scope>compile</scope>
+    </dependency>
+
+    <!--com.fasterxml.jackson is used by WASB, not ABFS-->
+    <!--transitive dependency from Azure SDK-->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <!--transitive dependency from hadoop-common-->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+    
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!--
+    the mapreduce-client-core module is compiled against for the
+    manifest committer support. It is not needed on the classpath
+    except when using this committer, so it only tagged as
+    "provided".
+    It is not exported as a transitive dependency of the JAR.
+    Applications which wish to to use the manifest committer
+    will need to explicity add the mapreduce JAR to their classpath.
+    This is already done by MapReduce and Spark.
+    -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <!--
+    These are only added to the classpath for tests,
+    and are not exported by the test JAR as transitive
+    dependencies.
+    -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-server-tests</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-hs</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-examples</artifactId>
+      <scope>test</scope>
+      <type>jar</type>
+    </dependency>
+    <!-- artifacts needed to bring up a Mini MR Yarn cluster-->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-app</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-app</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-distcp</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-distcp</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+
+    <dependency>
+      <groupId>ch.qos.reload4j</groupId>
+      <artifactId>reload4j</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>jakarta.ws.rs</groupId>
+      <artifactId>jakarta.ws.rs-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Used to create SSL certs for a secure Keystore -->
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest-library</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <profiles>
+    <profile>
+      <id>parallel-tests-wasb</id>
+      <activation>
+        <property>
+          <name>parallel-tests</name>
+          <value>wasb</value>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-maven-plugins</artifactId>
+            <executions>
+              <execution>
+                <id>parallel-tests-createdir</id>
+                <goals>
+                  <goal>parallel-tests-createdir</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>default-test</id>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <forkCount>${testsThreadCount}</forkCount>
+                  <reuseForks>false</reuseForks>
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+                    <test.unique.fork.id>fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.huge.huge.partitionsize>${fs.azure.scale.test.huge.partitionsize}</fs.azure.scale.test.huge.huge.partitionsize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                    <!-- http connection pool size -->
+                    <http.maxConnections>${http.maxConnections}</http.maxConnections>                  </systemPropertyVariables>
+                  <includes>
+                    <include>**/azure/Test*.java</include>
+                    <include>**/azure/**/Test*.java</include>
+                  </includes>
+                  <excludes>
+                    <exclude>**/azure/**/TestRollingWindowAverage*.java</exclude>
+                  </excludes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>serialized-test-wasb</id>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <forkCount>1</forkCount>
+                  <reuseForks>false</reuseForks>
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+                    <test.unique.fork.id>fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.huge.huge.partitionsize>${fs.azure.scale.test.huge.partitionsize}</fs.azure.scale.test.huge.huge.partitionsize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                    <!-- http connection pool size -->
+                    <http.maxConnections>${http.maxConnections}</http.maxConnections>
+                  </systemPropertyVariables>
+                  <includes>
+                    <include>**/azure/**/TestRollingWindowAverage*.java</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>default-integration-test-wasb</id>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <forkCount>${testsThreadCount}</forkCount>
+                  <reuseForks>false</reuseForks>
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <!-- Tell tests that they are being executed in parallel -->
+                    <test.parallel.execution>true</test.parallel.execution>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+
+                    <!-- Due to a Maven quirk, setting this to just -->
+                    <!-- surefire.forkNumber won't do the parameter -->
+                    <!-- substitution.  Putting a prefix in front of it like -->
+                    <!-- "fork-" makes it work. -->
+                    <test.unique.fork.id>fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <!-- Propagate scale parameters -->
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.huge.huge.partitionsize>${fs.azure.scale.test.huge.partitionsize}</fs.azure.scale.test.huge.huge.partitionsize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                  </systemPropertyVariables>
+                  <!-- Some tests cannot run in parallel-->
+                  <includes>
+                    <include>**/azure/ITest*.java</include>
+                    <include>**/azure/**/ITest*.java</include>
+                  </includes>
+                  <excludes>
+                    <exclude>**/azure/ITestNativeFileSystemStatistics.java</exclude>
+                  </excludes>
+                </configuration>
+              </execution>
+              <!-- Do a sequential run for tests that cannot handle -->
+              <!-- parallel execution. -->
+              <execution>
+                <id>sequential-integration-tests-wasb</id>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <test.parallel.execution>false</test.parallel.execution>
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.huge.huge.partitionsize>${fs.azure.scale.test.huge.partitionsize}</fs.azure.scale.test.huge.huge.partitionsize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                  </systemPropertyVariables>
+                  <includes>
+                    <include>**/azure/ITestNativeFileSystemStatistics.java</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
+      <id>parallel-tests-abfs</id>
+      <activation>
+        <property>
+          <name>parallel-tests</name>
+          <value>abfs</value>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-maven-plugins</artifactId>
+            <executions>
+              <execution>
+                <id>parallel-tests-createdir</id>
+                <goals>
+                  <goal>parallel-tests-createdir</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>default-test</id>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <forkCount>${testsThreadCount}</forkCount>
+                  <reuseForks>false</reuseForks>
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+                    <test.unique.fork.id>fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.huge.huge.partitionsize>${fs.azure.scale.test.huge.partitionsize}</fs.azure.scale.test.huge.huge.partitionsize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                  </systemPropertyVariables>
+                  <includes>
+                    <include>**/azurebfs/Test*.java</include>
+                    <include>**/azurebfs/**/Test*.java</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>integration-test-abfs-parallel-classesAndMethods</id>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <forkCount>${testsThreadCount}</forkCount>
+                  <reuseForks>true</reuseForks>
+                  <parallel>both</parallel>
+                  <threadCount>${testsThreadCount}</threadCount>
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <!-- Tell tests that they are being executed in parallel -->
+                    <test.parallel.execution>true</test.parallel.execution>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+                    <!-- Due to a Maven quirk, setting this to just -->
+                    <!-- surefire.forkNumber won't do the parameter -->
+                    <!-- substitution.  Putting a prefix in front of it like -->
+                    <!-- "fork-" makes it work. -->
+                    <test.unique.fork.id>fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <!-- Propagate scale parameters -->
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <!-- http connection pool size -->
+                    <http.maxConnections>${http.maxConnections}</http.maxConnections>
+                  </systemPropertyVariables>
+
+                  <includes>
+                    <include>**/azurebfs/ITest*.java</include>
+                    <include>**/azurebfs/**/ITest*.java</include>
+                  </includes>
+                  <excludes>
+                    <exclude>**/azurebfs/contract/ITest*.java</exclude>
+                    <exclude>**/azurebfs/ITestAzureBlobFileSystemE2EScale.java</exclude>
+                    <exclude>**/azurebfs/ITestAbfsReadWriteAndSeek.java</exclude>
+                    <exclude>**/azurebfs/ITestAzureBlobFileSystemListStatus.java</exclude>
+                    <exclude>**/azurebfs/extensions/ITestAbfsDelegationTokens.java</exclude>
+                    <exclude>**/azurebfs/ITestSmallWriteOptimization.java</exclude>
+                    <exclude>**/azurebfs/ITestAbfsStreamStatistics*.java</exclude>
+                    <exclude>**/azurebfs/services/ITestReadBufferManager.java</exclude>
+                    <exclude>**/azurebfs/commit/*.java</exclude>
+                  </excludes>
+
+                </configuration>
+              </execution>
+              <execution>
+                <id>integration-test-abfs-parallel-classes</id>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <forkCount>${testsThreadCount}</forkCount>
+                  <reuseForks>false</reuseForks>
+                  <!--NOTICE: hadoop contract tests methods can not be ran in parallel-->
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <!-- Tell tests that they are being executed in parallel -->
+                    <test.parallel.execution>true</test.parallel.execution>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+
+                    <!-- Due to a Maven quirk, setting this to just -->
+                    <!-- surefire.forkNumber won't do the parameter -->
+                    <!-- substitution.  Putting a prefix in front of it like -->
+                    <!-- "fork-" makes it work. -->
+                    <test.unique.fork.id>fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <!-- Propagate scale parameters -->
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                  </systemPropertyVariables>
+                  <includes>
+                    <include>**/azurebfs/ITestAzureBlobFileSystemE2EScale.java</include>
+                    <include>**/azurebfs/ITestAbfsReadWriteAndSeek.java</include>
+                    <include>**/azurebfs/ITestAzureBlobFileSystemListStatus.java</include>
+                    <include>**/azurebfs/extensions/ITestAbfsDelegationTokens.java</include>
+                    <include>**/azurebfs/ITestSmallWriteOptimization.java</include>
+                    <include>**/azurebfs/services/ITestReadBufferManager.java</include>
+                    <include>**/azurebfs/ITestAbfsStreamStatistics*.java</include>
+                    <include>**/azurebfs/commit/*.java</include>
+                  </includes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>integration-test-abfs-sequential-contract-classes</id>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <!--NOTICE: hadoop contract tests methods can not be run in parallel-->
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <!-- Tell tests that they are being executed sequentially -->
+                    <test.parallel.execution>false</test.parallel.execution>
+                    <!-- Propagate scale parameters -->
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                    <!-- http connection pool size -->
+                    <http.maxConnections>${http.maxConnections}</http.maxConnections>
+                  </systemPropertyVariables>
+                  <includes>
+                    <include>**/azurebfs/contract/ITest*.java</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
+      <id>parallel-tests</id>
+      <activation>
+        <property>
+          <name>parallel-tests</name>
+          <value>both</value>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-maven-plugins</artifactId>
+            <executions>
+              <execution>
+                <id>parallel-tests-createdir</id>
+                <goals>
+                  <goal>parallel-tests-createdir</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>default-test</id>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <forkCount>${testsThreadCount}</forkCount>
+                  <reuseForks>false</reuseForks>
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+                    <test.unique.fork.id>fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.huge.huge.partitionsize>${fs.azure.scale.test.huge.partitionsize}</fs.azure.scale.test.huge.huge.partitionsize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                  </systemPropertyVariables>
+                  <includes>
+                    <include>**/Test*.java</include>
+                  </includes>
+                  <excludes>
+                    <exclude>**/TestRollingWindowAverage*.java</exclude>
+                  </excludes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>serialized-test</id>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <forkCount>1</forkCount>
+                  <reuseForks>false</reuseForks>
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+                    <test.unique.fork.id>fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.huge.huge.partitionsize>${fs.azure.scale.test.huge.partitionsize}</fs.azure.scale.test.huge.huge.partitionsize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                  </systemPropertyVariables>
+                  <includes>
+                    <include>**/TestRollingWindowAverage*.java</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>default-integration-test</id>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <forkCount>${testsThreadCount}</forkCount>
+                  <reuseForks>false</reuseForks>
+                  <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <!-- Tell tests that they are being executed in parallel -->
+                    <test.parallel.execution>true</test.parallel.execution>
+                    <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
+                    <test.build.dir>${test.build.dir}/${surefire.forkNumber}</test.build.dir>
+                    <hadoop.tmp.dir>${hadoop.tmp.dir}/${surefire.forkNumber}</hadoop.tmp.dir>
+
+                    <!-- Due to a Maven quirk, setting this to just -->
+                    <!-- surefire.forkNumber won't do the parameter -->
+                    <!-- substitution.  Putting a prefix in front of it like -->
+                    <!-- "fork-" makes it work. -->
+                    <test.unique.fork.id>fork-000${surefire.forkNumber}</test.unique.fork.id>
+                    <!-- Propagate scale parameters -->
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.huge.huge.partitionsize>${fs.azure.scale.test.huge.partitionsize}</fs.azure.scale.test.huge.huge.partitionsize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                    <!-- http connection pool size -->
+                    <http.maxConnections>${http.maxConnections}</http.maxConnections>
+                  </systemPropertyVariables>
+                  <!-- Some tests cannot run in parallel.  Tests that cover -->
+                  <!-- access to the root directory must run in isolation -->
+                  <!-- from anything else that could modify the bucket. -->
+                  <!-- azure tests that cover multi-part upload must run in -->
+                  <!-- isolation, because the file system is configured to -->
+                  <!-- purge existing multi-part upload data on -->
+                  <!-- initialization.  MiniYARNCluster has not yet been -->
+                  <!-- changed to handle parallel test execution gracefully. -->
+                  <!-- Exclude all of these tests from parallel execution, -->
+                  <!-- and instead run them sequentially in a separate -->
+                  <!-- Surefire execution step later. -->
+                  <includes>
+                    <include>**/ITest*.java</include>
+                  </includes>
+                  <excludes>
+                    <exclude>**/ITestFileSystemOperationsExceptionHandlingMultiThreaded.java</exclude>
+                    <exclude>**/ITestFileSystemOperationsWithThreads.java</exclude>
+                    <exclude>**/ITestOutOfBandAzureBlobOperationsLive.java</exclude>
+                    <exclude>**/ITestNativeAzureFileSystemAuthorizationWithOwner.java</exclude>
+                    <exclude>**/ITestNativeAzureFileSystemConcurrencyLive.java</exclude>
+                    <exclude>**/ITestNativeAzureFileSystemLive.java</exclude>
+                    <exclude>**/ITestNativeAzureFSPageBlobLive.java</exclude>
+                    <exclude>**/ITestAzureBlobFileSystemRandomRead.java</exclude>
+                    <exclude>**/ITestWasbRemoteCallHelper.java</exclude>
+                    <exclude>**/ITestBlockBlobInputStream.java</exclude>
+                    <exclude>**/ITestWasbAbfsCompatibility.java</exclude>
+                    <exclude>**/ITestNativeFileSystemStatistics.java</exclude>
+                  </excludes>
+                </configuration>
+              </execution>
+              <!-- Do a sequential run for tests that cannot handle -->
+              <!-- parallel execution. -->
+              <execution>
+                <id>sequential-integration-tests</id>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                  <systemPropertyVariables>
+                    <test.parallel.execution>false</test.parallel.execution>
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.huge.huge.partitionsize>${fs.azure.scale.test.huge.partitionsize}</fs.azure.scale.test.huge.huge.partitionsize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                    <!-- http connection pool size -->
+                    <http.maxConnections>${http.maxConnections}</http.maxConnections>                  </systemPropertyVariables>
+                  <includes>
+                    <include>**/ITestWasbAbfsCompatibility.java</include>
+                    <include>**/ITestFileSystemOperationsExceptionHandlingMultiThreaded.java</include>
+                    <include>**/ITestFileSystemOperationsWithThreads.java</include>
+                    <include>**/ITestOutOfBandAzureBlobOperationsLive.java</include>
+                    <include>**/ITestNativeAzureFileSystemAuthorizationWithOwner.java</include>
+                    <include>**/ITestNativeAzureFileSystemConcurrencyLive.java</include>
+                    <include>**/ITestNativeAzureFileSystemLive.java</include>
+                    <include>**/ITestNativeAzureFSPageBlobLive.java</include>
+                    <include>**/ITestAzureBlobFileSystemRandomRead.java</include>
+                    <include>**/ITestWasbRemoteCallHelper.java</include>
+                    <include>**/ITestBlockBlobInputStream.java</include>
+                    <include>**/ITestNativeFileSystemStatistics.java</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
+      <id>sequential-tests</id>
+      <activation>
+        <property>
+          <name>!parallel-tests</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+                </goals>
+                <configuration>
+                  <systemPropertyVariables>
+                    <!-- Propagate scale parameters -->
+                    <fs.azure.scale.test.enabled>${fs.azure.scale.test.enabled}</fs.azure.scale.test.enabled>
+                    <fs.azure.scale.test.huge.filesize>${fs.azure.scale.test.huge.filesize}</fs.azure.scale.test.huge.filesize>
+                    <fs.azure.scale.test.timeout>${fs.azure.scale.test.timeout}</fs.azure.scale.test.timeout>
+                    <fs.azure.scale.test.list.performance.threads>${fs.azure.scale.test.list.performance.threads}</fs.azure.scale.test.list.performance.threads>
+                    <fs.azure.scale.test.list.performance.files>${fs.azure.scale.test.list.performance.files}</fs.azure.scale.test.list.performance.files>
+                    <!-- http connection pool size -->
+                    <http.maxConnections>${http.maxConnections}</http.maxConnections>
+                  </systemPropertyVariables>
+                  <forkedProcessTimeoutInSeconds>${fs.azure.scale.test.timeout}</forkedProcessTimeoutInSeconds>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!-- Turn on scale tests-->
+    <profile>
+      <id>scale</id>
+      <activation>
+        <property>
+          <name>scale</name>
+        </property>
+      </activation>
+      <properties>
+        <fs.azure.scale.test.enabled>true</fs.azure.scale.test.enabled>
+      </properties>
+    </profile>
+  </profiles>
+</project>

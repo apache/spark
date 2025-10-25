@@ -29,8 +29,8 @@ import scala.jdk.CollectionConverters._
 import jakarta.servlet.{FilterChain, FilterConfig, ServletContext, ServletException, ServletOutputStream, ServletRequest, ServletResponse}
 import jakarta.servlet.http.{Cookie, HttpServlet, HttpServletRequest, HttpServletResponse}
 import jakarta.ws.rs.core.MediaType
+import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.server.{Server, ServerConnector}
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
@@ -272,9 +272,9 @@ class AmIpFilterSuite extends SparkFunSuite {
 
     override def encodeRedirectURL(url: String): String = url
 
-    override def encodeUrl(url: String): String = null
+    def encodeUrl(url: String): String = null
 
-    override def encodeRedirectUrl(url: String): String = null
+    def encodeRedirectUrl(url: String): String = null
 
     @throws[IOException]
     override def sendError(sc: Int, msg: String): Unit = {}
@@ -284,7 +284,7 @@ class AmIpFilterSuite extends SparkFunSuite {
 
     override def setStatus(status: Int): Unit = this.status = status
 
-    override def setStatus(sc: Int, sm: String): Unit = {}
+    def setStatus(sc: Int, sm: String): Unit = {}
 
     override def getStatus: Int = 0
 
