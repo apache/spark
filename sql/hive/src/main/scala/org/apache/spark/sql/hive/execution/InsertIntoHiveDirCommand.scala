@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.util.concurrent.Callable
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
@@ -25,6 +27,7 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.config._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -34,6 +37,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Command for writing the results of `query` to file system.
@@ -122,13 +126,25 @@ case class InsertIntoHiveDirCommand(
       }
 
       val dfs = tmpPath.getFileSystem(hadoopConf)
-      dfs.listStatus(tmpPath).foreach {
-        tmpFile =>
-          if (isLocal) {
-            dfs.copyToLocalFile(tmpFile.getPath, writeToPath)
-          } else {
-            dfs.rename(tmpFile.getPath, writeToPath)
-          }
+      val tmpFiles = dfs.listStatus(tmpPath)
+
+      val numThreads = sparkSession.sparkContext.conf.get(FILES_RENAME_NUM_THREADS)
+      val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "hive-dir-rename")
+      try {
+        val renameTasks = tmpFiles.map { tmpFile =>
+          pool.submit(new Callable[Unit] {
+            override def call(): Unit = {
+              if (isLocal) {
+                dfs.copyToLocalFile(tmpFile.getPath, writeToPath)
+              } else {
+                dfs.rename(tmpFile.getPath, writeToPath)
+              }
+            }
+          })
+        }
+        renameTasks.foreach(_.get())
+      } finally {
+        pool.shutdown()
       }
     } catch {
       case e: Throwable =>
