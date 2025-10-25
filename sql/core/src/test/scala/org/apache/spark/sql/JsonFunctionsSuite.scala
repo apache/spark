@@ -1456,6 +1456,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(null))
   }
 
+  test("function get_json_object - nested") {
+    val data = Seq("""{"a": {"b": 100}}""").toDF("json")
+    val df = data.selectExpr(
+      "get_json_object(get_json_object(json, '$.a'), '$.b')",
+      "get_json_object(get_json_object(json, '$.a'), '$. b')",
+      "get_json_object(get_json_object(json, '$.a'), '.b')")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    checkAnswer(df, Row("100", "100", null))
+  }
+
   test("function json_tuple - field names foldable") {
     withTempView("t") {
       val json = """{"a":1, "b":2, "c":3}"""
