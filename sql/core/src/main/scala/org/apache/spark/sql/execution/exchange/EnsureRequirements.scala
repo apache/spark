@@ -208,7 +208,7 @@ case class EnsureRequirements(
             }
 
             child match {
-              case ShuffleExchangeExec(_, c, so, ps) =>
+              case ShuffleExchangeExec(_, c, so, ps, _) =>
                 ShuffleExchangeExec(newPartitioning, c, so, ps)
               case _ => ShuffleExchangeExec(newPartitioning, child)
             }
@@ -739,7 +739,7 @@ case class EnsureRequirements(
 
   def apply(plan: SparkPlan): SparkPlan = {
     val newPlan = plan.transformUp {
-      case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin, _)
+      case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin, _, _)
           if optimizeOutRepartition &&
             (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
         def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
