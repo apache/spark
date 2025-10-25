@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -5086,6 +5088,124 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "false") {
       checkAnswer(sql(query), Row(1, 2))
+    }
+  }
+
+  test("SPARK-28098: query non-partitioned data from subdirectories") {
+    withTempPath(dir => {
+      withTable("t") {
+        // load external data, then query
+        Seq(1, 2).toDF("v").write.format("parquet").mode("overwrite")
+          .save((s"${dir}/sub1/sub2"))
+        Seq(3, 4).toDF("v").write.format("parquet").mode("overwrite")
+          .save((s"${dir}/sub3"))
+        spark.sql(s"create external table t (v INT) using parquet location '${dir}'")
+        checkAnswer(spark.sql("select * from t"), Row(1)::Row(2)::Row(3)::Row(4)::Nil)
+
+        // insert data and move to subdirectory, then query
+        spark.sql("insert overwrite table t select 5 as v")
+        val srcPath = new Path(dir.getAbsolutePath)
+        val dstPath = new Path(dir.getAbsolutePath, "sub4")
+        val fs = srcPath.getFileSystem(spark.sessionState.newHadoopConf())
+        fs.mkdirs(dstPath)
+        for (file <- fs.listStatus(srcPath)) {
+          if (!file.getPath.getName.startsWith("sub")) {
+            val srcFilePath = new Path(srcPath, file.getPath.getName)
+            val dstFilePath = new Path(dstPath, file.getPath.getName)
+            fs.rename(srcFilePath, dstFilePath)
+          }
+        }
+        checkAnswer(spark.sql("select * from t"), Row(5))
+      }
+    })
+  }
+
+  test("SPARK-28098: query partitioned data from subdirectories") {
+    withTempPath(dir => {
+      withTable("t") {
+        sql("create table t (v int, p1 int, p2 int) " +
+          s"using parquet partitioned by (p1, p2) location '${dir}'")
+
+        // generate data in subdirectory and add partition
+        Seq(1, 2).toDF("v").write.format("parquet").mode("overwrite")
+          .save((s"file:///${dir}/p1=1/p2=1/sub1/sub2"))
+        sql("alter table t add partition (p1=1, p2=1) location " +
+          s"'file:///${dir}/p1=1/p2=1'")
+        Seq(3, 4).toDF("v").write.format("parquet").mode("overwrite")
+          .save((s"file:///${dir}/p1=1/p2=2/sub3"))
+        sql("alter table t add partition (p1=1, p2=2) location " +
+          s"'file:///${dir}/p1=1/p2=2'")
+
+        // insert data to partition then move to subdirectory
+        sql("insert into t partition (p1=2, p2=2) select 5 as v")
+        val srcPath = new Path(dir.getAbsolutePath, "p1=2/p2=2")
+        val dstPath = new Path(dir.getAbsolutePath, "p1=2/p2=2/sub4/sub5")
+        val fs = srcPath.getFileSystem(spark.sessionState.newHadoopConf())
+        fs.mkdirs(dstPath)
+        for (file <- fs.listStatus(srcPath)) {
+          if (!file.getPath.getName.startsWith("sub")) {
+            val srcFilePath = new Path(srcPath, file.getPath.getName)
+            val dstFilePath = new Path(dstPath, file.getPath.getName)
+            fs.rename(srcFilePath, dstFilePath)
+          }
+        }
+
+        // check answer
+        checkAnswer(spark.sql("select * from t where p1=1"),
+          Row(1, 1, 1)::Row(2, 1, 1)::Row(3, 1, 2)::Row(4, 1, 2)::Nil)
+        checkAnswer(spark.sql("select * from t where p1=1 and p2=1"),
+          Row(1, 1, 1)::Row(2, 1, 1)::Nil)
+        checkAnswer(spark.sql("select * from t where p1=1 and p2=2"),
+          Row(3, 1, 2)::Row(4, 1, 2)::Nil)
+        checkAnswer(spark.sql("select * from t where p1=2 and p2=2"), Row(5, 2, 2))
+        checkAnswer(spark.sql("select * from t"),
+          Row(1, 1, 1)::Row(2, 1, 1)::Row(3, 1, 2)::Row(4, 1, 2)::Row(5, 2, 2)::Nil)
+      }
+    })
+  }
+
+  test("SPARK-28098: query non-catalog partitioned table from subdirectories") {
+    withTempPath { path =>
+      // insert data to partition then move to subdirectory
+      Seq((1, 1, 1)).toDF("i", "p1", "p2")
+        .write.partitionBy("p1", "p2").parquet(path.getAbsolutePath)
+      val srcPath = new Path(path.getAbsolutePath, "p1=1/p2=1")
+      val dstPath = new Path(path.getAbsolutePath, "p1=1/p2=1/sub1/sub2")
+      val fs = srcPath.getFileSystem(spark.sessionState.newHadoopConf())
+      fs.mkdirs(dstPath)
+      for (file <- fs.listStatus(srcPath)) {
+        if (!file.getPath.getName.startsWith("sub")) {
+          val srcFilePath = new Path(srcPath, file.getPath.getName)
+          val dstFilePath = new Path(dstPath, file.getPath.getName)
+          fs.rename(srcFilePath, dstFilePath)
+        }
+      }
+
+      // check answer
+      checkAnswer(spark.read.parquet(path.getAbsolutePath).where("p1=1"), Row(1, 1, 1))
+      checkAnswer(spark.read.parquet(path.getAbsolutePath).where("p1=1 and p2=1"), Row(1, 1, 1))
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1, 1))
+    }
+  }
+
+  test("SPARK-28098: query non-catalog non-partitioned table from subdirectories") {
+    withTempPath { path =>
+      // insert data to partition then move to subdirectory
+      Seq(1).toDF("i").write.parquet(path.getAbsolutePath)
+      val srcPath = new Path(path.getAbsolutePath)
+      val dstPath = new Path(path.getAbsolutePath, "sub1/sub2")
+      val fs = srcPath.getFileSystem(spark.sessionState.newHadoopConf())
+      fs.mkdirs(dstPath)
+      for (file <- fs.listStatus(srcPath)) {
+        if (!file.getPath.getName.startsWith("sub")) {
+          val srcFilePath = new Path(srcPath, file.getPath.getName)
+          val dstFilePath = new Path(dstPath, file.getPath.getName)
+          fs.rename(srcFilePath, dstFilePath)
+        }
+      }
+
+      // check answer
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1))
     }
   }
 }
