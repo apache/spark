@@ -470,6 +470,17 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("direct")
 
+  val KUBERNETES_EXECUTOR_POD_SNAPSHOT_SOURCES =
+    ConfigBuilder("spark.kubernetes.executor.pod.snapshotSources")
+      .doc("Class names of pod snapshot sources implementing " +
+        "ExecutorPodsCustomSnapshotSource. This is a developer API. Comma separated. " +
+        "If not specified, the default snapshot sources, ExecutorPodsWatchSnapshotSource " +
+        "and ExecutorPodsPollingSnapshotSource are used.")
+      .version("4.1.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
@@ -548,6 +559,24 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_EXECUTOR_LISTER_POLLING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.listerPollingInterval")
+      .doc("Interval between polls against the Kubernetes informer cache to inspect the " +
+        "state of executors.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, "informer lister polling interval must be a" +
+        " positive time value.")
+      .createWithDefaultString("30s")
+
+  val KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.informerResyncInterval")
+      .doc("Interval between informer cache resync")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval >= 0, "informer resync interval must not be a negative" +
+        " time value.")
+      .createWithDefaultString("0s")
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
