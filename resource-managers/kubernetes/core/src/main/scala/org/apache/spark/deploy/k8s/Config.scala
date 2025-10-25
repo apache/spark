@@ -803,6 +803,14 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
       .createWithDefaultString("20s")
 
+  val KUBERNETES_ANNOTATE_EXIT_EXCEPTION =
+    ConfigBuilder("spark.kubernetes.driver.annotateExitException")
+      .doc("If set to true, Spark will store the exit exception failed applications in" +
+        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."
