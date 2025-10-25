@@ -29,6 +29,52 @@ WITH t(col) AS (SELECT listagg(col1, NULL) FROM (VALUES (X'DEAD'), (X'BEEF'))) S
 WITH t(col) AS (SELECT listagg(col1, X'42') FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(col, X'42'), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF') FROM t;
 WITH t(col1, col2) AS (SELECT listagg(col1), listagg(col2, ',') FROM df2) SELECT len(col1), regexp_count(col1, '1'), regexp_count(col1, '2'), regexp_count(col1, '3'), len(col2), regexp_count(col2, 'true'), regexp_count(col1, 'false') FROM t;
 
+-- Additional test cases are needed for distinct aggregations that include `ListAgg`.
+-- These tests are used to verify that `RewriteDistinctAggregates` works correctly.
+
+-- Test case for handling two distinct LISTAGG aggregations.
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2)
+FROM df;
+
+-- Test case for handling two distinct LISTAGG aggregations with only one delimiter specified.
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2, '|') WITHIN GROUP (ORDER BY col2)
+FROM df;
+
+-- Test case for handling two distinct LISTAGG aggregations with different orderings.
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2 DESC)
+FROM df;
+
+-- Test case for handling two distinct LISTAGG aggregations with different orderings and nulls.
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST)
+FROM df;
+
+-- Test case for handling two distinct LISTAGG aggregations with different orderings and nulls, with a filter.
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2 DESC NULLS LAST)
+FROM df WHERE col1 > 'a' AND col2 > 'b';
+
+-- Test cases for handling distinct LISTAGG with other different aggregations (e.g. COUNT DISTINCT).
+SELECT
+  LISTAGG(DISTINCT col1) WITHIN GROUP (ORDER BY col1),
+  COUNT(DISTINCT col2)
+FROM df;
+
+SELECT
+  col1,
+  LISTAGG(DISTINCT col2) WITHIN GROUP (ORDER BY col2 DESC),
+  COUNT(DISTINCT col3)
+FROM (VALUES ('A', 'x', '1'), ('A', 'y', '2'), ('B', 'y', '2'), ('B', 'z', '3')) AS tbl(col1, col2, col3)
+GROUP BY col1;
+
 -- Error cases
 SELECT listagg(c1) FROM (VALUES (ARRAY('a', 'b'))) AS t(c1);
 SELECT listagg(c1, ', ') FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1);
