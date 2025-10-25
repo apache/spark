@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types;
 
-import org.apache.spark.sql.internal.types.SpatialReferenceSystemMapper;
+import org.apache.spark.sql.internal.types.GeographicSpatialReferenceSystemMapper;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -62,9 +62,9 @@ public class JavaGeographyTypeSuite {
 
   @Test
   public void geographyTypeWithSpecifiedValidCrsTest() {
-    // Valid CRS values for GEOGRAPHY. Note that only 4326 is supported for now.
-    int srid = GeographyType.GEOGRAPHY_DEFAULT_SRID();
-    Stream.of("OGC:CRS84", "EPSG:4326").forEach(crs -> {
+    // Valid CRS values for GEOGRAPHY. Note that only "OGC:CRS84" is supported for now.
+    Stream.of("OGC:CRS84").forEach(crs -> {
+      Integer srid = GeographicSpatialReferenceSystemMapper.getSrid(crs);
       DataType geographyType = DataTypes.createGeographyType(crs);
       Assertions.assertEquals("GEOGRAPHY(" + srid + ")", geographyType.sql());
       Assertions.assertEquals("geography(" + srid + ")", geographyType.typeName());
