@@ -264,7 +264,7 @@ public class JavaUtils {
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    if (isUnix && filter == null && !(isMac && isTesting())) {
+    if (shouldTryUnixNativeRm()) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
@@ -689,6 +689,16 @@ public class JavaUtils {
    */
   public static boolean isTesting() {
     return System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null;
+  }
+
+  /**
+   * Indicates whether Unix native rm binaries should be tried.
+   */
+  public static boolean shouldTryUnixNativeRm() {
+    Boolean shouldSkipUnixNativeRm = Boolean.parseBoolean(
+      System.getProperty("spark.skipUnixNativeRm", "false")
+    );
+    return isUnix && filter == null && !(shouldSkipUnixNativeRm) && !(isMac && isTesting());
   }
 
   /**
