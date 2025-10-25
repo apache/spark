@@ -2627,8 +2627,8 @@ object SQLConf {
 
   val STATEFUL_SHUFFLE_PARTITIONS_INTERNAL =
     buildConf("spark.sql.streaming.internal.stateStore.partitions")
-      .doc("WARN: This is used internally and not intended to be a user facing one. This config " +
-        "can be removed without support of compatibility in any time. " +
+      .doc("WARN: This config is used internally and is not intended to be user-facing. This " +
+        "config can be removed without support of compatibility in any time. " +
         "DO NOT USE THIS CONFIG DIRECTLY AND USE THE CONFIG `spark.sql.shuffle.partitions`. " +
         "The default number of partitions to use when shuffling data for stateful operations. " +
         "If not specified, this config picks up the value of `spark.sql.shuffle.partitions`. " +
