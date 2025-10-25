@@ -50,7 +50,8 @@ class StreamingTestsForeachBatchMixin:
             # it should use the spark session within given DataFrame, as microbatch execution will
             # clone the session which is no longer same with the session used to start the
             # streaming query
-            assert len(batch_df.sparkSession.sql("SELECT * FROM updates").collect()) == 2
+            # After SPARK-28098, we can also read files in deeper nested directories.
+            assert len(batch_df.sparkSession.sql("SELECT * FROM updates").collect()) == 12
             # Write a table to verify on the repl/client side.
             batch_df.write.format("parquet").saveAsTable("test_table2")
 
@@ -59,7 +60,8 @@ class StreamingTestsForeachBatchMixin:
             q = df.writeStream.foreachBatch(collectBatch).start()
             q.processAllAvailable()
             collected = self.spark.sql("SELECT * FROM test_table2").collect()
-            self.assertTrue(len(collected[0]), 2)
+            # After SPARK-28098, we can also read files in deeper nested directories.
+            self.assertTrue(len(collected[0]), 12)
         finally:
             if q:
                 q.stop()
@@ -223,7 +225,20 @@ class StreamingTestsForeachBatchMixin:
 
             collected = self.spark.sql("select * from " + table_name).collect()
             results = [row["result"] for row in collected]
-            self.assertEqual(sorted(results), ["hello", "this"])
+            # After SPARK-28098, we can also read files in deeper nested directories.
+            expected = ["2024-05-24 15:03:20;1",
+                        "2024-05-24 15:03:21;2",
+                        "2024-05-24 15:03:24;3",
+                        "2024-05-24 15:03:25;3",
+                        "2024-05-24 15:03:31;1",
+                        "2024-05-24 15:03:31;4",
+                        "2024-05-24 15:03:32;3",
+                        "2024-05-24 15:03:45;2",
+                        "2024-05-24 15:03:46;5",
+                        "2024-05-24 15:03:50;6",
+                        "hello",
+                        "this"]
+            self.assertEqual(sorted(results), expected)
 
 
 class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestCase):
