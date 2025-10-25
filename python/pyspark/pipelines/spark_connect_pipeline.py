@@ -57,7 +57,7 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
             continue
         elif "pipeline_event_result" not in result.keys():
             raise PySparkValueError(
-                "Pipeline logs stream handler received an unexpected result: " f"{result}"
+                f"Pipeline logs stream handler received an unexpected result: {result}"
             )
         else:
             event = result["pipeline_event_result"].event
