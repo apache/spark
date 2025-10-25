@@ -155,7 +155,7 @@ abstract class StreamExecution(
   protected def sources: Seq[SparkDataStream]
 
   /** Isolated spark session to run the batches with. */
-  protected val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
+  protected[sql] val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
 
   /**
    * Manages the metadata from this checkpoint location.
@@ -318,6 +318,16 @@ abstract class StreamExecution(
           // SPARK-53941: AQE does not make sense for continuous processing, disable it.
           logWarning("Disabling AQE since the query runs with continuous mode.")
           sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+        }
+
+        sparkSessionForStream.conf.get(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL) match {
+          case Some(_) => // no-op
+          case None =>
+            // Take the default value of `spark.sql.shuffle.partitions`.
+            val shufflePartitionValue = sparkSessionForStream.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+            sparkSessionForStream.conf.set(
+              SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key,
+              shufflePartitionValue)
         }
 
         getLatestExecutionContext().updateStatusMessage("Initializing sources")
