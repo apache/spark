@@ -96,6 +96,7 @@ from pyspark.worker_util import (
     setup_spark_files,
     utf8_deserializer,
 )
+from pyspark.logger.worker_io import capture_outputs
 
 try:
     import memory_profiler  # noqa: F401
@@ -2116,7 +2117,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 if len(args) == 0:
                     for _ in range(num_rows):
                         yield (
-                            verify_result(pd.DataFrame(check_return_value(func()))),
+                            verify_result(pd.DataFrame(list(check_return_value(func())))),
                             arrow_return_type,
                             return_type,
                         )
@@ -2126,7 +2127,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     row_tuples = zip(*args)
                     for row in row_tuples:
                         yield (
-                            verify_result(pd.DataFrame(check_return_value(func(*row)))),
+                            verify_result(pd.DataFrame(list(check_return_value(func(*row))))),
                             arrow_return_type,
                             return_type,
                         )
@@ -3261,10 +3262,11 @@ def main(infile, outfile):
                 if hasattr(out_iter, "close"):
                     out_iter.close()
 
-        if profiler:
-            profiler.profile(process)
-        else:
-            process()
+        with capture_outputs():
+            if profiler:
+                profiler.profile(process)
+            else:
+                process()
 
         # Reset task context to None. This is a guard code to avoid residual context when worker
         # reuse.
