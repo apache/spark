@@ -33,6 +33,7 @@ import org.apache.spark.util.Utils
  *    will be used for tasks on executors.
  * 2. Implementations should have a constructor with 2 or 3 arguments:
  *      (jobId: String, path: String) or
+ *      (jobId: String, path: String, mode: String) or
  *      (jobId: String, path: String, dynamicPartitionOverwrite: Boolean)
  * 3. A committer should not be reused across multiple Spark jobs.
  *
@@ -128,6 +129,12 @@ abstract class FileCommitProtocol extends Logging {
     }
   }
 
+  def newTaskTempFile(taskContext: TaskAttemptContext, partDir: Option[String],
+                      customPath: Option[String], spec: FileNameSpec): String = {
+    throw new UnsupportedOperationException(s"${getClass.getSimpleName}.newTaskTempFile" +
+      s" does not support set both partDir and customPath")
+  }
+
   /**
    * Similar to newTaskTempFile(), but allows files to committed to an absolute output location.
    * Depending on the implementation, there may be weaker guarantees around adding files this way.
@@ -211,26 +218,36 @@ object FileCommitProtocol extends Logging {
       className: String,
       jobId: String,
       outputPath: String,
-      dynamicPartitionOverwrite: Boolean = false): FileCommitProtocol = {
+      dynamicPartitionOverwrite: Boolean = false,
+      mode: String = ""): FileCommitProtocol = {
 
     logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
-      s" dynamic=$dynamicPartitionOverwrite")
+      s" dynamic=$dynamicPartitionOverwrite, mode=$mode")
     val clazz = Utils.classForName[FileCommitProtocol](className)
-    // First try the constructor with arguments (jobId: String, outputPath: String,
-    // dynamicPartitionOverwrite: Boolean).
+    // First try the constructor with arguments (jobId: String, outputPath: String, mode: String).
     // If that doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
-      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
-      logDebug("Using (String, String, Boolean) constructor")
-      ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[String])
+      logDebug("Using (String, String, String) constructor")
+      ctor.newInstance(jobId, outputPath, mode)
     } catch {
       case _: NoSuchMethodException =>
-        logDebug("Falling back to (String, String) constructor")
-        require(!dynamicPartitionOverwrite,
-          "Dynamic Partition Overwrite is enabled but" +
-            s" the committer ${className} does not have the appropriate constructor")
-        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
-        ctor.newInstance(jobId, outputPath)
+        try {
+          logDebug("Falling back to (String, String, Boolean) constructor")
+          val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String],
+            classOf[Boolean])
+          logDebug("Using (String, String, Boolean) constructor")
+          ctor.newInstance(jobId, outputPath,
+            dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+        } catch {
+          case _: NoSuchMethodException =>
+            logDebug("Falling back to (String, String) constructor")
+            require(!dynamicPartitionOverwrite,
+              "Dynamic Partition Overwrite is enabled but" +
+                s" the committer ${className} does not have the appropriate constructor")
+            val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
+            ctor.newInstance(jobId, outputPath)
+        }
     }
   }
 
