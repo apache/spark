@@ -463,6 +463,7 @@ class ExecutorPodsAllocator(
         kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
       try {
         addOwnerReference(createdExecutorPod, resources)
+        kubernetesClient.resourceList(resources: _*).forceConflicts().serverSideApply()
         resources
           .filter(_.getKind == "PersistentVolumeClaim")
           .foreach { resource =>
