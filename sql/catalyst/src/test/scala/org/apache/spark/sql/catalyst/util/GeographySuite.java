@@ -64,7 +64,7 @@ class GeographyTest {
 
   @Test
   void testDefaultSrid() {
-    assertEquals(0, Geography.DEFAULT_SRID);
+    assertEquals(4326, Geography.DEFAULT_SRID);
   }
 
   /** Tests for Geography WKB parsing. */

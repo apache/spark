@@ -29,7 +29,7 @@ public final class Geography implements Geo {
   /** Geography constants. */
 
   // The default SRID value for GEOGRAPHY values.
-  public static int DEFAULT_SRID = 0;
+  public static int DEFAULT_SRID = 4326;
 
   /** Geography constructors and factory methods. */
 
