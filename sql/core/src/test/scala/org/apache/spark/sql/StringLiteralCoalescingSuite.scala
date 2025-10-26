@@ -44,9 +44,9 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
       ("SELECT 'hello' \"world\"", "helloworld"),
       // Mixed quote styles: multiple
       ("SELECT \"hello\" 'world' \"!\"", "helloworld!"),
-      // Empty strings: middle empty
-      ("SELECT '' 'hello' ''", "hello"),
       // Empty strings: start and end empty
+      ("SELECT '' 'hello' ''", "hello"),
+      // Empty strings: middle empty
       ("SELECT 'start' '' 'end'", "startend")
     )
 
@@ -191,19 +191,19 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
   test("R-string detection - basic cases and edge cases") {
     val testCases = Seq(
       // Basic cases: uppercase and lowercase R with single/double quotes
-      ("""SELECT R'\n'""", """\n"""),
-      ("""SELECT r'\n'""", """\n"""),
-      ("""SELECT R"\n"""", """\n"""),
-      ("""SELECT r"\n"""", """\n"""),
+      ("""SELECT R'\n'""", raw"\n"),
+      ("""SELECT r'\n'""", raw"\n"),
+      ("""SELECT R"\n"""", raw"\n"),
+      ("""SELECT r"\n"""", raw"\n"),
       // Edge cases: empty R-string
       ("""SELECT R''""", ""),
       // Quote character as content
       ("""SELECT R"'"""", "'"),
       ("""SELECT R'"'""", "\""),
       // Mixed escape sequences
-      ("""SELECT R'\t\n\r\\'""", """\t\n\r\\"""),
+      ("""SELECT R'\t\n\r\\'""", raw"\t\n\r\\"),
       // Backslashes at start and end
-      ("""SELECT R'\test\'""", """\test\""")
+      ("""SELECT R'\test\'""", raw"""\test\""")
     )
 
     testCases.foreach { case (query, expected) =>
@@ -214,13 +214,13 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
   test("R-string coalescing with regular strings") {
     val testCases = Seq(
       // R-string followed by regular string
-      ("""SELECT R'\n' ' tab'""", """\n tab"""),
+      ("""SELECT R'\n' ' tab'""", raw"\n tab"),
       // Regular string followed by R-string
-      ("""SELECT 'newline ' R'\n'""", """newline \n"""),
+      ("""SELECT 'newline ' R'\n'""", raw"newline \n"),
       // Multiple R-strings with regular strings interleaved
-      ("""SELECT R'\n' 'text' R'\t' 'more'""", """\ntext\tmore"""),
+      ("""SELECT R'\n' 'text' R'\t' 'more'""", raw"\ntext\tmore"),
       // All R-strings
-      ("""SELECT R'\n' R'\t' R'\r'""", """\n\t\r""")
+      ("""SELECT R'\n' R'\t' R'\r'""", raw"\n\t\r")
     )
 
     testCases.foreach { case (query, expected) =>
@@ -232,13 +232,13 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
     val testCases = Seq(
       // Windows path with backslashes
       ("""SELECT R'C:\Users\JohnDoe\Documents\file.txt'""",
-        """C:\Users\JohnDoe\Documents\file.txt"""),
+        raw"C:\Users\JohnDoe\Documents\file.txt"),
       // Coalesced Windows paths
       ("""SELECT R'C:\Users\' 'JohnDoe' R'\Documents'""",
-        """C:\Users\JohnDoe\Documents"""),
+        raw"C:\Users\JohnDoe\Documents"),
       // Mixed case R prefix with paths
       ("""SELECT r'C:\Windows\' R'System32'""",
-        """C:\Windows\System32""")
+        raw"C:\Windows\System32")
     )
 
     testCases.foreach { case (query, expected) =>
@@ -249,13 +249,13 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
   test("R-string detection - special characters") {
     val testCases = Seq(
       // Dollar signs (should not be treated as escape)
-      ("""SELECT R'$100\n'""", """$100\n"""),
+      ("""SELECT R'$100\n'""", raw"$$100\n"),
       // Unicode-like sequences
-      ("""SELECT R'\u0041'""", """\u0041"""),
+      ("""SELECT R'\u0041'""", raw"\u0041"),
       // Regex patterns
-      ("""SELECT R'\d+\.\d+'""", """\d+\.\d+"""),
+      ("""SELECT R'\d+\.\d+'""", raw"\d+\.\d+"),
       // JSON-like content
-      ("""SELECT R'{"key": "value\n"}'""", """{"key": "value\n"}""")
+      ("""SELECT R'{"key": "value\n"}'""", raw"""{"key": "value\n"}""")
     )
 
     testCases.foreach { case (query, expected) =>

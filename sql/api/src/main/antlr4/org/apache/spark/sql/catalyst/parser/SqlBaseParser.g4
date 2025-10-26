@@ -613,7 +613,6 @@ propertyKey
 propertyKeyOrStringLit
     : propertyKey
     | stringLit
-    | stringLit
     ;
 
 propertyKeyOrStringLitNoCoalesce
