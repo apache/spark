@@ -823,6 +823,7 @@ public enum LogKeys implements LogKey {
   TIMEOUT,
   TIMER,
   TIMESTAMP,
+  TIMESTAMP_COLUMN_NAME,
   TIME_UNITS,
   TIP,
   TOKEN,

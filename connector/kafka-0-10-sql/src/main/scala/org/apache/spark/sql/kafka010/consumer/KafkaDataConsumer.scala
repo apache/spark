@@ -63,6 +63,13 @@ private[kafka010] class InternalKafkaConsumer(
   private[consumer] var kafkaParamsWithSecurity: ju.Map[String, Object] = _
   private val consumer = createConsumer()
 
+  def poll(pollTimeoutMs: Long): ju.List[ConsumerRecord[Array[Byte], Array[Byte]]] = {
+    val p = consumer.poll(Duration.ofMillis(pollTimeoutMs))
+    val r = p.records(topicPartition)
+    logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
+    r
+  }
+
   /**
    * Poll messages from Kafka starting from `offset` and returns a pair of "list of consumer record"
    * and "offset after poll". The list of consumer record may be empty if the Kafka consumer fetches
@@ -131,7 +138,7 @@ private[kafka010] class InternalKafkaConsumer(
     c
   }
 
-  private def seek(offset: Long): Unit = {
+  def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $groupId $topicPartition $offset")
     consumer.seek(topicPartition, offset)
   }
@@ -229,6 +236,19 @@ private[consumer] case class FetchedRecord(
 }
 
 /**
+ * This class keeps returning the next records. If no new record is available, it will keep
+ * polling until timeout. It is used by KafkaBatchPartitionReader.nextWithTimeout(), to reduce
+ * seeking overhead in real time mode.
+ */
+private[sql] trait KafkaDataConsumerIterator {
+  /**
+   * Return the next record
+   * @return None if no new record is available after `timeoutMs`.
+   */
+  def nextWithTimeout(timeoutMs: Long): Option[ConsumerRecord[Array[Byte], Array[Byte]]]
+}
+
+/**
  * This class helps caller to read from Kafka leveraging consumer pool as well as fetched data pool.
  * This class throws error when data loss is detected while reading from Kafka.
  *
@@ -271,6 +291,82 @@ private[kafka010] class KafkaDataConsumer(
   private var totalRecordsRead: Long = 0
   // Starting timestamp when the consumer is created.
   private var startTimestampNano: Long = System.nanoTime()
+
+  /**
+   * Get an iterator that can return the next entry. It is used exclusively for real-time
+   * mode.
+   *
+   * It is called by KafkaBatchPartitionReader.nextWithTimeout(). Unlike get(), there is no
+   * out-of-bound check in this function. Since there is no endOffset given, we assume anything
+   * record is valid to return as long as it is at or after `offset`.
+   *
+   * @param startOffsets, the starting positions to read from, inclusive.
+   */
+  def getIterator(offset: Long): KafkaDataConsumerIterator = {
+    new KafkaDataConsumerIterator {
+      private var fetchedRecordList
+          : Option[ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]]] = None
+      private val consumer = getOrRetrieveConsumer()
+      private var firstRecord = true
+      private var _currentOffset: Long = offset - 1
+
+      private def fetchedRecordListHasNext(): Boolean = {
+        fetchedRecordList.map(_.hasNext).getOrElse(false)
+      }
+
+      override def nextWithTimeout(
+          timeoutMs: Long): Option[ConsumerRecord[Array[Byte], Array[Byte]]] = {
+        var timeLeftMs = timeoutMs
+
+        def timeAndDeductFromTimeLeftMs[T](body: => T): Unit = {
+          // To reduce timing the same operator twice, we reuse the timing results for
+          // totalTimeReadNanos and for timeoutMs.
+          val prevTime = totalTimeReadNanos
+          timeNanos {
+            body
+          }
+          timeLeftMs -= (totalTimeReadNanos - prevTime) / 1000000
+        }
+
+        if (firstRecord) {
+          timeAndDeductFromTimeLeftMs {
+            consumer.seek(offset)
+            firstRecord = false
+          }
+        }
+        while (!fetchedRecordListHasNext() && timeLeftMs > 0) {
+          timeAndDeductFromTimeLeftMs {
+            try {
+              val records = consumer.poll(timeLeftMs)
+              numPolls += 1
+              if (!records.isEmpty) {
+                numRecordsPolled += records.size
+                fetchedRecordList = Some(records.listIterator)
+              }
+            } catch {
+              case ex: OffsetOutOfRangeException =>
+                if (_currentOffset != -1) {
+                  throw ex
+                } else {
+                  Thread.sleep(10) // retry until the source partition is populated
+                  assert(offset == 0)
+                  consumer.seek(offset)
+                }
+            }
+          }
+        }
+        if (fetchedRecordListHasNext()) {
+          totalRecordsRead += 1
+          val nextRecord = fetchedRecordList.get.next()
+          assert(nextRecord.offset > _currentOffset, "Kafka offset should be incremental.")
+          _currentOffset = nextRecord.offset
+          Some(nextRecord)
+        } else {
+          None
+        }
+      }
+    }
+  }
 
   /**
    * Get the record for the given offset if available.
