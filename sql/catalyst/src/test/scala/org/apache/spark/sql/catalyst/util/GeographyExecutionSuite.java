@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Test suite for the Geography server-side execution class.
  */
-class GeographyTest {
+class GeographyExecutionTest {
 
   // A sample Geography byte array for testing purposes.
   private final byte[] testGeographyVal = new byte[] {

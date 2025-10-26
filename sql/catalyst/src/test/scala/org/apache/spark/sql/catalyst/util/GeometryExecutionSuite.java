@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Test suite for the Geometry server-side execution class.
  */
-class GeometryTest {
+class GeometryExecutionTest {
 
   // A sample Geometry byte array for testing purposes.
   private final byte[] testGeometryVal = new byte[] {
