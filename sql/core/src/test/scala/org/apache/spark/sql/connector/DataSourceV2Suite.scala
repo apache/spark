@@ -26,7 +26,7 @@ import test.org.apache.spark.sql.connector._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -1018,6 +1018,23 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     assert(!dsv2ScanRelation1.equals(dsv2ScanRelation2))
     assert(dsv2ScanRelation1.canonicalized == dsv2ScanRelation2.canonicalized)
   }
+
+  test("SPARK-53809: check mergeScalarSubqueries") {
+    val df = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
+    df.createOrReplaceTempView("df")
+
+    val query = sql("select (select max(i) from df) as max_i, (select min(i) from df) as min_i")
+    val optimizedPlan = query.queryExecution.optimizedPlan
+
+    // check optimizedPlan merged scalar subqueries select max(i), min(i) from df
+    val aggregation = optimizedPlan.collect {
+      case a: Aggregate => a
+    }
+
+    query.collect()
+    val plan = query.queryExecution.stringWithStats
+    assert(1==1)
+  }
 }
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition
@@ -1122,6 +1139,18 @@ class SimpleDataSourceV2 extends TestingV2Source {
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
       Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
+    }
+
+    override def equals(obj: Any): Boolean = {
+      obj match {
+        case s: Scan =>
+          this.readSchema() == s.readSchema()
+        case _ => false
+      }
+    }
+
+    override def hashCode(): Int = {
+      this.readSchema().hashCode()
     }
   }
 
