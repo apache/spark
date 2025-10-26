@@ -26,6 +26,7 @@ import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 
 import org.apache.spark.{CleanerListener, SparkRuntimeException}
+import org.apache.spark.SparkConf
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
@@ -34,6 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
@@ -56,6 +58,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
 
   setupTestData()
 
@@ -1851,6 +1856,42 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         spark.sql("CACHE TABLE SPARK_52684 AS SELECT raise_error('SPARK-52684') AS c1")
       }
       assert(!spark.catalog.tableExists("SPARK_52684"))
+    }
+  }
+
+  test("uncache DSv2 table via cache manager correctly uncaches views with logical plans") {
+    val t = "testcat.tbl"
+    withTable(t, "v") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // cache table
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // create and cache view
+      spark.table(t).select("id").createOrReplaceTempView("v")
+      sql("SELECT * FROM v").cache()
+      assertCached(sql("SELECT * FROM v"))
+      checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2)))
+
+      // must invalidate only table, view must remain cached (cascade = false)
+      spark.sharedState.cacheManager.uncacheTableOrView(
+        spark,
+        Seq("testcat", "tbl"),
+        cascade = false)
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertCached(sql("SELECT * FROM v"))
+
+      // must invalidate view (cascade = true)
+      spark.sharedState.cacheManager.uncacheTableOrView(
+        spark,
+        Seq("testcat", "tbl"),
+        cascade = true)
+
+      // verify view is not cached anymore
+      assertNotCached(sql("SELECT * FROM v"))
     }
   }
 }

@@ -14,22 +14,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import unittest
 
-from pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state import (
-    GroupedApplyInPandasWithStateTestsMixin,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.sql.tests.pandas.streaming.test_transform_with_state import (
+    TransformWithStateInPySparkTestsMixin,
 )
-from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class GroupedApplyInPandasWithStateTests(
-    GroupedApplyInPandasWithStateTestsMixin, ReusedConnectTestCase
+class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateInPySparkTestsMixin):
+    @classmethod
+    def conf(cls):
+        cfg = super().conf()
+        cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
+        return cfg
+
+
+class TransformWithStateInPySparkWithCheckpointV2Tests(
+    TransformWithStateInPySparkWithCheckpointV2TestsMixin, ReusedSQLTestCase
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map_with_state import *  # noqa: F401,E501
+    from pyspark.sql.tests.pandas.streaming.test_transform_with_state_checkpoint_v2 import *  # noqa: F401,E501
 
     try:
         import xmlrunner
