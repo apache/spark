@@ -752,18 +752,21 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
     _use_large_var_types = use_large_var_types(runner_conf)
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
-    def wrapped(key_series, value_series):
+    def wrapped(key_series_list, value_series_gen):
         import pandas as pd
 
-        # Convert the series list into an iterator of DataFrames
-        # For now, we yield a single DataFrame from the group data
+        # value_series_gen is a generator that yields multiple lists of Series (one per batch)
+        # Convert each list of Series into a DataFrame
         def dataframe_iter():
-            yield pd.concat(value_series, axis=1)
+            for value_series in value_series_gen:
+                yield pd.concat(value_series, axis=1)
 
+        # Extract key from the first batch
         if len(argspec.args) == 1:
             result = f(dataframe_iter())
         elif len(argspec.args) == 2:
-            key = tuple(s[0] for s in key_series)
+            # key_series_list is a list of Series for the key columns from the first batch
+            key = tuple(s[0] for s in key_series_list)
             result = f(key, dataframe_iter())
 
         def verify_element(df):
@@ -2948,13 +2951,23 @@ def read_udfs(pickleSer, infile, eval_type):
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        # Create function like this:
-        #   mapper a: f([a[0]], [a[0], a[1]])
-        # The wrapper will convert the values into an iterator of DataFrames
+        # Create mapper similar to Arrow iterator:
+        # `a` is an iterator of Series lists (one list per batch, containing all columns)
+        # Materialize first batch to get keys, then create generator for value batches
         def mapper(a):
-            keys = [a[o] for o in parsed_offsets[0][0]]
-            vals = [a[o] for o in parsed_offsets[0][1]]
-            return f(keys, vals)
+            import itertools
+            
+            series_iter = iter(a)
+            # Need to materialize the first series list to get the keys
+            first_series_list = next(series_iter)
+
+            keys = [first_series_list[o] for o in parsed_offsets[0][0]]
+            value_series_gen = (
+                [series_list[o] for o in parsed_offsets[0][1]]
+                for series_list in itertools.chain((first_series_list,), series_iter)
+            )
+
+            return f(keys, value_series_gen)
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
