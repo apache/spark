@@ -1248,7 +1248,10 @@ class BaseUDFTestsMixin(object):
                 time.sleep(2)
                 return str(x)
 
-            with self.assertRaisesRegex(Exception, "Python worker exited unexpectedly"):
+            with self.assertRaisesRegex(
+                Exception,
+                "Python worker process terminated due to idle timeout \\(timeout: 1 seconds\\)",
+            ):
                 self.spark.range(1).select(f("id")).show()
 
     def test_err_udf_init(self):

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.python
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
-import java.nio.file.{Files => JavaFiles}
 import java.util.HashMap
 import java.util.concurrent.TimeUnit
 
@@ -118,7 +117,8 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
 
       val dataIn = new DataInputStream(new BufferedInputStream(
         new WorkerInputStream(
-          worker, bufferStream.toByteBuffer, handle, idleTimeoutSeconds, killOnIdleTimeout),
+          worker, bufferStream.toByteBuffer, handle,
+          faultHandlerEnabled, idleTimeoutSeconds, killOnIdleTimeout),
         bufferSize))
 
       val res = receiveFromPython(dataIn)
@@ -136,13 +136,6 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
 
       res
     } catch {
-      case e: IOException if faultHandlerEnabled && pid.isDefined &&
-        JavaFiles.exists(faultHandlerLogPath(pid.get)) =>
-        val path = faultHandlerLogPath(pid.get)
-        val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
-        JavaFiles.deleteIfExists(path)
-        throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
-
       case e: IOException if !faultHandlerEnabled =>
         throw new SparkException(
           s"Python worker exited unexpectedly (crashed). " +
@@ -151,7 +144,11 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
             "the better Python traceback.", e)
 
       case e: IOException =>
-        throw new SparkException("Python worker exited unexpectedly (crashed)", e)
+        val base = "Python worker exited unexpectedly (crashed)"
+        val msg = tryReadFaultHandlerLog(faultHandlerEnabled, pid)
+          .map(error => s"$base: $error")
+          .getOrElse(base)
+        throw new SparkException(msg, e)
     } finally {
       try {
         bufferStream.close()
@@ -176,6 +173,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       worker: PythonWorker,
       buffer: ByteBuffer,
       handle: Option[ProcessHandle],
+      faultHandlerEnabled: Boolean,
       idleTimeoutSeconds: Long,
       killOnIdleTimeout: Boolean) extends InputStream {
 
@@ -241,6 +239,14 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
             worker.selectionKey.interestOps(SelectionKey.OP_READ)
           }
         }
+      }
+      if (n == -1 && pythonWorkerKilled) {
+        val base = "Python worker process terminated due to idle timeout " +
+          s"(timeout: $idleTimeoutSeconds seconds)"
+        val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
+          .map(error => s"$base: $error")
+          .getOrElse(base)
+        throw new SparkException(msg)
       }
       n
     }
