@@ -44,82 +44,6 @@ import org.apache.spark.util.Utils
 class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  test("adjustedMaxSplitBytes scales with selected schema size") {
-    withTempDir { dir =>
-      val path = dir.getAbsolutePath
-      // Create large parquet with many columns
-      val df = spark.range(0, 10000000)
-        .withColumn("col1", $"id" * 2)
-        .withColumn("col2", $"id" * 3)
-        .withColumn("col3", $"id" * 4)
-
-      // Overwrite mode so Spark can safely write inside the temp dir
-      df.write.mode("overwrite").parquet(path)
-
-      // Read with full schema
-      val fullScan = spark.read.parquet(path).queryExecution.executedPlan.collect {
-        case f: FileSourceScanExec => f
-      }.head
-
-      val fullPartitions = fullScan.inputRDD.partitions.length
-
-      // Read with fewer columns (should produce fewer splits due to larger adjustedMaxSplitBytes)
-      val prunedScan = spark.read.parquet(path).select("id").queryExecution.executedPlan.collect {
-        case f: FileSourceScanExec => f
-      }.head
-
-      val prunedPartitions = prunedScan.inputRDD.partitions.length
-
-      assert(prunedPartitions < fullPartitions,
-        s"Expected fewer partitions when selecting fewer columns, got " +
-          s"$prunedPartitions vs $fullPartitions")
-    }
-  }
-
-  test("partition coalescer respects numShufflePartitions") {
-    withTempDir { dir =>
-      val path = dir.getAbsolutePath
-      spark.range(0, 10000000).repartition(10).write.mode("overwrite").parquet(path)
-
-      spark.conf.set("spark.sql.ibm.coalescePartitionsByColumns.enabled", true)
-
-      // Force small split size so we start with many partitions
-      spark.conf.set("spark.sql.files.maxPartitionBytes", 1024 * 1024) // 1MB
-      spark.conf.set("spark.sql.files.openCostInBytes", 1024 * 1024)   // 1MB
-      spark.conf.set("spark.sql.shuffle.partitions", 2)
-
-      val scan = spark.read.parquet(path).queryExecution.executedPlan.collect {
-        case f: FileSourceScanExec => f
-      }.head
-
-      val partitions = scan.inputRDD.partitions.length
-      assert(partitions <= 2, s"Expected coalesced partitions <= " +
-        s"shuffle partitions, got $partitions")
-    }
-  }
-
-  test("partition coalescer does not coalesce when coalescePartitionsByColumns is false") {
-    withTempDir { dir =>
-      val path = dir.getAbsolutePath
-      spark.range(0, 10000000).repartition(10).write.mode("overwrite").parquet(path)
-
-      spark.conf.set("spark.sql.ibm.coalescePartitionsByColumns.enabled", false)
-
-      // Force small split size so we start with many partitions
-      spark.conf.set("spark.sql.files.maxPartitionBytes", 1024 * 1024) // 1MB
-      spark.conf.set("spark.sql.files.openCostInBytes", 1024 * 1024)   // 1MB
-      spark.conf.set("spark.sql.shuffle.partitions", 2)
-
-      val scan = spark.read.parquet(path).queryExecution.executedPlan.collect {
-        case f: FileSourceScanExec => f
-      }.head
-
-      val partitions = scan.inputRDD.partitions.length
-      assert(partitions > 2, s"Expected coalesced partitions <= " +
-        s"shuffle partitions, got $partitions")
-    }
-  }
-
   protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
 
   test("unpartitioned table, single partition") {
@@ -698,6 +622,83 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.FILES_MAX_PARTITION_NUM.key -> "200000") {
       val partitions = FilePartition.getFilePartitions(spark, files, maxPartitionBytes)
       assert(partitions.size === defaultPartitions.size)
+    }
+  }
+
+  test("adjustedMaxSplitBytes scales with selected schema size") {
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      // Create large parquet with many columns
+      val df = spark.range(0, 10000000)
+        .withColumn("col1", $"id" * 2)
+        .withColumn("col2", $"id" * 3)
+        .withColumn("col3", $"id" * 4)
+
+      spark.conf.set("spark.sql.ibm.coalescePartitionsByColumns.enabled", true)
+      // Overwrite mode so Spark can safely write inside the temp dir
+      df.write.mode("overwrite").parquet(path)
+
+      // Read with full schema
+      val fullScan = spark.read.parquet(path).queryExecution.executedPlan.collect {
+        case f: FileSourceScanExec => f
+      }.head
+
+      val fullPartitions = fullScan.inputRDD.partitions.length
+
+      // Read with fewer columns (should produce fewer splits due to larger adjustedMaxSplitBytes)
+      val prunedScan = spark.read.parquet(path).select("id").queryExecution.executedPlan.collect {
+        case f: FileSourceScanExec => f
+      }.head
+
+      val prunedPartitions = prunedScan.inputRDD.partitions.length
+
+      assert(prunedPartitions < fullPartitions,
+        s"Expected fewer partitions when selecting fewer columns, got " +
+          s"$prunedPartitions vs $fullPartitions")
+    }
+  }
+
+  test("partition coalescer respects numShufflePartitions") {
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(0, 10000000).repartition(10).write.mode("overwrite").parquet(path)
+
+      spark.conf.set("spark.sql.ibm.coalescePartitionsByColumns.enabled", true)
+
+      // Force small split size so we start with many partitions
+      spark.conf.set("spark.sql.files.maxPartitionBytes", 1024 * 1024) // 1MB
+      spark.conf.set("spark.sql.files.openCostInBytes", 1024 * 1024)   // 1MB
+      spark.conf.set("spark.sql.shuffle.partitions", 2)
+
+      val scan = spark.read.parquet(path).queryExecution.executedPlan.collect {
+        case f: FileSourceScanExec => f
+      }.head
+
+      val partitions = scan.inputRDD.partitions.length
+      assert(partitions <= 2, s"Expected coalesced partitions <= " +
+        s"shuffle partitions, got $partitions")
+    }
+  }
+
+  test("partition coalescer does not coalesce when coalescePartitionsByColumns is false") {
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(0, 10000000).repartition(10).write.mode("overwrite").parquet(path)
+
+      spark.conf.set("spark.sql.ibm.coalescePartitionsByColumns.enabled", false)
+
+      // Force small split size so we start with many partitions
+      spark.conf.set("spark.sql.files.maxPartitionBytes", 1024 * 1024) // 1MB
+      spark.conf.set("spark.sql.files.openCostInBytes", 1024 * 1024)   // 1MB
+      spark.conf.set("spark.sql.shuffle.partitions", 2)
+
+      val scan = spark.read.parquet(path).queryExecution.executedPlan.collect {
+        case f: FileSourceScanExec => f
+      }.head
+
+      val partitions = scan.inputRDD.partitions.length
+      assert(partitions > 2, s"Expected coalesced partitions <= " +
+        s"shuffle partitions, got $partitions")
     }
   }
 
