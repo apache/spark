@@ -227,20 +227,22 @@ class PandasGroupedOpsMixin:
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))  # doctest: +SKIP
-        >>> def sum_func(
+        >>> def filter_func(
         ...     batches: Iterator[pd.DataFrame]
         ... ) -> Iterator[pd.DataFrame]:  # doctest: +SKIP
-        ...     total = 0
         ...     for batch in batches:
-        ...         total += batch['v'].sum()
-        ...     yield pd.DataFrame({"v": [total]})
+        ...         # Process and yield each batch independently
+        ...         filtered = batch[batch['v'] > 2.0]
+        ...         if not filtered.empty:
+        ...             yield filtered[['v']]
         >>> df.groupby("id").applyInPandas(
-        ...     sum_func, schema="v double").show()  # doctest: +SKIP
+        ...     filter_func, schema="v double").show()  # doctest: +SKIP
         +----+
         |   v|
         +----+
         | 3.0|
-        |18.0|
+        | 5.0|
+        |10.0|
         +----+
 
         Alternatively, the user can pass a function that takes two arguments.
@@ -249,21 +251,24 @@ class PandasGroupedOpsMixin:
         data types. The data will still be passed in as an iterator of `pandas.DataFrame`.
 
         >>> from typing import Iterator, Tuple, Any  # doctest: +SKIP
-        >>> def sum_func(
+        >>> def transform_func(
         ...     key: Tuple[Any, ...], batches: Iterator[pd.DataFrame]
         ... ) -> Iterator[pd.DataFrame]:  # doctest: +SKIP
-        ...     total = 0
         ...     for batch in batches:
-        ...         total += batch['v'].sum()
-        ...     yield pd.DataFrame({"id": [key[0]], "v": [total]})
+        ...         # Yield transformed results for each batch
+        ...         result = batch.assign(id=key[0], v_doubled=batch['v'] * 2)
+        ...         yield result[['id', 'v_doubled']]
         >>> df.groupby("id").applyInPandas(
-        ...     sum_func, schema="id long, v double").show()  # doctest: +SKIP
-        +---+----+
-        | id|   v|
-        +---+----+
-        |  1| 3.0|
-        |  2|18.0|
-        +---+----+
+        ...     transform_func, schema="id long, v_doubled double").show()  # doctest: +SKIP
+        +---+----------+
+        | id|v_doubled |
+        +---+----------+
+        |  1|       2.0|
+        |  1|       4.0|
+        |  2|       6.0|
+        |  2|      10.0|
+        |  2|      20.0|
+        +---+----------+
 
         Notes
         -----
