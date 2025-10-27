@@ -79,7 +79,7 @@ case class ApproxTopK(
     maxItemsTracked: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[ItemsSketch[Any]]
+  extends TypedImperativeAggregate[ApproxTopKAggregateBuffer[Any]]
   with ImplicitCastInputTypes
   with TernaryLike[Expression] {
 
@@ -137,25 +137,30 @@ case class ApproxTopK(
 
   override def dataType: DataType = ApproxTopK.getResultDataType(itemDataType)
 
-  override def createAggregationBuffer(): ItemsSketch[Any] = {
+  override def createAggregationBuffer(): ApproxTopKAggregateBuffer[Any] = {
     val maxMapSize = ApproxTopK.calMaxMapSize(maxItemsTrackedVal)
-    ApproxTopK.createAggregationBuffer(expr, maxMapSize)
+    val sketch = ApproxTopK.createItemsSketch(expr, maxMapSize)
+    new ApproxTopKAggregateBuffer[Any](sketch, 0L)
   }
 
-  override def update(buffer: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] =
-    ApproxTopK.updateSketchBuffer(expr, buffer, input)
+  override def update(buffer: ApproxTopKAggregateBuffer[Any], input: InternalRow):
+    ApproxTopKAggregateBuffer[Any] =
+    buffer.update(expr, input)
 
-  override def merge(buffer: ItemsSketch[Any], input: ItemsSketch[Any]): ItemsSketch[Any] =
+  override def merge(
+      buffer: ApproxTopKAggregateBuffer[Any],
+      input: ApproxTopKAggregateBuffer[Any]):
+    ApproxTopKAggregateBuffer[Any] =
     buffer.merge(input)
 
-  override def eval(buffer: ItemsSketch[Any]): GenericArrayData =
-    ApproxTopK.genEvalResult(buffer, kVal, itemDataType)
+  override def eval(buffer: ApproxTopKAggregateBuffer[Any]): GenericArrayData =
+    buffer.eval(kVal, itemDataType)
 
-  override def serialize(buffer: ItemsSketch[Any]): Array[Byte] =
-    buffer.toByteArray(ApproxTopK.genSketchSerDe(itemDataType))
+  override def serialize(buffer: ApproxTopKAggregateBuffer[Any]): Array[Byte] =
+    buffer.serialize(ApproxTopK.genSketchSerDe(itemDataType))
 
-  override def deserialize(storageFormat: Array[Byte]): ItemsSketch[Any] =
-    ItemsSketch.getInstance(Memory.wrap(storageFormat), ApproxTopK.genSketchSerDe(itemDataType))
+  override def deserialize(storageFormat: Array[Byte]): ApproxTopKAggregateBuffer[Any] =
+    ApproxTopKAggregateBuffer.deserialize(storageFormat, ApproxTopK.genSketchSerDe(itemDataType))
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -214,7 +219,7 @@ object ApproxTopK {
 
   def getResultDataType(itemDataType: DataType): DataType = {
     val resultEntryType = StructType(
-      StructField("item", itemDataType, nullable = false) ::
+      StructField("item", itemDataType, nullable = true) ::
         StructField("count", LongType, nullable = false) :: Nil)
     ArrayType(resultEntryType, containsNull = false)
   }
@@ -238,7 +243,7 @@ object ApproxTopK {
     math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
   }
 
-  def createAggregationBuffer(itemExpression: Expression, maxMapSize: Int): ItemsSketch[Any] = {
+  def createItemsSketch(itemExpression: Expression, maxMapSize: Int): ItemsSketch[Any] = {
     itemExpression.dataType match {
       case _: BooleanType =>
         new ItemsSketch[Boolean](maxMapSize).asInstanceOf[ItemsSketch[Any]]
@@ -253,54 +258,6 @@ object ApproxTopK {
       case _: DecimalType =>
         new ItemsSketch[Decimal](maxMapSize).asInstanceOf[ItemsSketch[Any]]
     }
-  }
-
-  def updateSketchBuffer(
-      itemExpression: Expression,
-      buffer: ItemsSketch[Any],
-      input: InternalRow): ItemsSketch[Any] = {
-    val v = itemExpression.eval(input)
-    if (v != null) {
-      itemExpression.dataType match {
-        case _: BooleanType => buffer.update(v.asInstanceOf[Boolean])
-        case _: ByteType => buffer.update(v.asInstanceOf[Byte])
-        case _: ShortType => buffer.update(v.asInstanceOf[Short])
-        case _: IntegerType => buffer.update(v.asInstanceOf[Int])
-        case _: LongType => buffer.update(v.asInstanceOf[Long])
-        case _: FloatType => buffer.update(v.asInstanceOf[Float])
-        case _: DoubleType => buffer.update(v.asInstanceOf[Double])
-        case _: DateType => buffer.update(v.asInstanceOf[Int])
-        case _: TimestampType => buffer.update(v.asInstanceOf[Long])
-        case _: TimestampNTZType => buffer.update(v.asInstanceOf[Long])
-        case st: StringType =>
-          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-          buffer.update(cKey.toString)
-        case _: DecimalType => buffer.update(v.asInstanceOf[Decimal])
-      }
-    }
-    buffer
-  }
-
-  def genEvalResult(
-      itemsSketch: ItemsSketch[Any],
-      k: Int,
-      itemDataType: DataType): GenericArrayData = {
-    val items = itemsSketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
-    val resultLength = math.min(items.length, k)
-    val result = new Array[AnyRef](resultLength)
-    for (i <- 0 until resultLength) {
-      val row = items(i)
-      itemDataType match {
-        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
-             _: LongType | _: FloatType | _: DoubleType | _: DecimalType |
-             _: DateType | _: TimestampType | _: TimestampNTZType =>
-          result(i) = InternalRow.apply(row.getItem, row.getEstimate)
-        case _: StringType =>
-          val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
-          result(i) = InternalRow.apply(item, row.getEstimate)
-      }
-    }
-    new GenericArrayData(result)
   }
 
   def genSketchSerDe(dataType: DataType): ArrayOfItemsSerDe[Any] = {
@@ -328,7 +285,7 @@ object ApproxTopK {
 
   def dataTypeToDDL(dataType: DataType): String = dataType match {
     case _: StringType =>
-      // Hide collation information in DDL format
+      // Hide collation information in DDL format, otherwise CollationExpressionWalkerSuite fails
       s"item string not null"
     case other =>
       StructField("item", other, nullable = false).toDDL
@@ -366,6 +323,145 @@ object ApproxTopK {
     } else {
       TypeCheckSuccess
     }
+  }
+}
+
+/**
+ * In internal class used as the aggregation buffer for ApproxTopK.
+ *
+ * @param sketch    the ItemsSketch instance for counting not-null items
+ * @param nullCount the count of null items
+ */
+class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullCount: Long) {
+  def update(itemExpression: Expression, input: InternalRow): ApproxTopKAggregateBuffer[T] = {
+    val v = itemExpression.eval(input)
+    if (v != null) {
+      itemExpression.dataType match {
+        case _: BooleanType =>
+          sketch.asInstanceOf[ItemsSketch[Boolean]].update(v.asInstanceOf[Boolean])
+        case _: ByteType =>
+          sketch.asInstanceOf[ItemsSketch[Byte]].update(v.asInstanceOf[Byte])
+        case _: ShortType =>
+          sketch.asInstanceOf[ItemsSketch[Short]].update(v.asInstanceOf[Short])
+        case _: IntegerType =>
+          sketch.asInstanceOf[ItemsSketch[Int]].update(v.asInstanceOf[Int])
+        case _: LongType =>
+          sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
+        case _: FloatType =>
+          sketch.asInstanceOf[ItemsSketch[Float]].update(v.asInstanceOf[Float])
+        case _: DoubleType =>
+          sketch.asInstanceOf[ItemsSketch[Double]].update(v.asInstanceOf[Double])
+        case _: DateType =>
+          sketch.asInstanceOf[ItemsSketch[Int]].update(v.asInstanceOf[Int])
+        case _: TimestampType =>
+          sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
+        case _: TimestampNTZType =>
+          sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
+        case st: StringType =>
+          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
+          sketch.asInstanceOf[ItemsSketch[String]].update(cKey.toString)
+        case _: DecimalType =>
+          sketch.asInstanceOf[ItemsSketch[Decimal]].update(v.asInstanceOf[Decimal])
+      }
+    } else {
+      nullCount += 1
+    }
+    this
+  }
+
+  def merge(other: ApproxTopKAggregateBuffer[T]): ApproxTopKAggregateBuffer[T] = {
+    sketch.merge(other.sketch)
+    nullCount += other.nullCount
+    this
+  }
+
+  /**
+   * Serialize the buffer into bytes.
+   * The format is:
+   * [sketch bytes][null count (8 bytes Long)]
+   */
+  def serialize(serDe: ArrayOfItemsSerDe[T]): Array[Byte] = {
+    val sketchBytes = sketch.toByteArray(serDe)
+    val result = new Array[Byte](sketchBytes.length + java.lang.Long.BYTES)
+    val byteBuffer = java.nio.ByteBuffer.wrap(result)
+    byteBuffer.put(sketchBytes)
+    byteBuffer.putLong(nullCount)
+    result
+  }
+
+  /**
+   * Evaluate the buffer and return top K items (including null) with their estimated frequency.
+   * The result is sorted by frequency in descending order.
+   */
+  def eval(k: Int, itemDataType: DataType): GenericArrayData = {
+    // frequent items from sketch
+    val frequentItems = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
+    // total number of frequent items (including null, if any)
+    val itemsLength = frequentItems.length + (if (nullCount > 0) 1 else 0)
+    // actual number of items to return
+    val resultLength = math.min(itemsLength, k)
+    val result = new Array[AnyRef](resultLength)
+
+    // variable pointers for merging frequent items and nullCount into result
+    var fiIndex = 0 // pointer for frequentItems
+    var resultIndex = 0 // pointer for result
+    var isNullAdded = false // whether nullCount has been added to result
+
+    // helper function to get nullCount estimate: if nullCount has been added, return Long.MinValue
+    // so that it won't be added again; otherwise return nullCount
+    @inline def getNullEstimate: Long = if (!isNullAdded) nullCount else Long.MinValue
+
+    // looping until result is full or run out of frequent items
+    while (resultIndex < resultLength && fiIndex < frequentItems.length) {
+      val curFrequentItem = frequentItems(fiIndex)
+      val itemEstimate = curFrequentItem.getEstimate
+      val nullEstimate = getNullEstimate
+
+      val (item, estimate) = if (nullEstimate > itemEstimate) {
+        // insert (null, nullCount) into result
+        isNullAdded = true
+        (null, nullCount.toLong)
+      } else {
+        // insert frequent item into result
+        val item: Any = itemDataType match {
+          case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
+               _: LongType | _: FloatType | _: DoubleType | _: DecimalType |
+               _: DateType | _: TimestampType | _: TimestampNTZType =>
+            curFrequentItem.getItem
+          case _: StringType =>
+            UTF8String.fromString(curFrequentItem.getItem.asInstanceOf[String])
+        }
+        fiIndex += 1 // move to next frequent item
+        (item, itemEstimate)
+      }
+      result(resultIndex) = InternalRow(item, estimate)
+      resultIndex += 1 // move to next result position
+    }
+
+    // in case there is still space in result and nullCount > 0 has not been added
+    if (resultIndex < resultLength && nullCount > 0 && !isNullAdded) {
+      result(resultIndex) = InternalRow(null, nullCount.toLong)
+    }
+
+    new GenericArrayData(result)
+  }
+}
+
+object ApproxTopKAggregateBuffer {
+  /**
+   * Deserialize the buffer from bytes.
+   * The format is:
+   * [sketch bytes][null count (8 bytes)]
+   */
+  def deserialize(bytes: Array[Byte], serDe: ArrayOfItemsSerDe[Any]):
+  ApproxTopKAggregateBuffer[Any] = {
+    val byteBuffer = java.nio.ByteBuffer.wrap(bytes)
+    val sketchBytesLength = bytes.length - 8
+    val sketchBytes = new Array[Byte](sketchBytesLength)
+    byteBuffer.get(sketchBytes, 0, sketchBytesLength)
+    val nullCount = byteBuffer.getLong(sketchBytesLength)
+    val deserializedSketch = ItemsSketch.getInstance(Memory.wrap(sketchBytes), serDe)
+    new ApproxTopKAggregateBuffer[Any](deserializedSketch, nullCount)
   }
 }
 
@@ -408,7 +504,7 @@ case class ApproxTopKAccumulate(
     maxItemsTracked: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[ItemsSketch[Any]]
+  extends TypedImperativeAggregate[ApproxTopKAggregateBuffer[Any]]
   with ImplicitCastInputTypes
   with BinaryLike[Expression] {
 
@@ -448,18 +544,23 @@ case class ApproxTopKAccumulate(
 
   override def dataType: DataType = ApproxTopK.getSketchStateDataType(itemDataType)
 
-  override def createAggregationBuffer(): ItemsSketch[Any] = {
+  override def createAggregationBuffer(): ApproxTopKAggregateBuffer[Any] = {
     val maxMapSize = ApproxTopK.calMaxMapSize(maxItemsTrackedVal)
-    ApproxTopK.createAggregationBuffer(expr, maxMapSize)
+    val sketch = ApproxTopK.createItemsSketch(expr, maxMapSize)
+    new ApproxTopKAggregateBuffer[Any](sketch, 0L)
   }
 
-  override def update(buffer: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] =
-    ApproxTopK.updateSketchBuffer(expr, buffer, input)
+  override def update(buffer: ApproxTopKAggregateBuffer[Any], input: InternalRow):
+    ApproxTopKAggregateBuffer[Any] =
+    buffer.update(expr, input)
 
-  override def merge(buffer: ItemsSketch[Any], input: ItemsSketch[Any]): ItemsSketch[Any] =
+  override def merge(
+      buffer: ApproxTopKAggregateBuffer[Any],
+      input: ApproxTopKAggregateBuffer[Any]):
+    ApproxTopKAggregateBuffer[Any] =
     buffer.merge(input)
 
-  override def eval(buffer: ItemsSketch[Any]): Any = {
+  override def eval(buffer: ApproxTopKAggregateBuffer[Any]): Any = {
     val sketchBytes = serialize(buffer)
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(itemDataType)
     InternalRow.apply(
@@ -469,11 +570,11 @@ case class ApproxTopKAccumulate(
       UTF8String.fromString(itemDataTypeDDL))
   }
 
-  override def serialize(buffer: ItemsSketch[Any]): Array[Byte] =
-    buffer.toByteArray(ApproxTopK.genSketchSerDe(itemDataType))
+  override def serialize(buffer: ApproxTopKAggregateBuffer[Any]): Array[Byte] =
+    buffer.serialize(ApproxTopK.genSketchSerDe(itemDataType))
 
-  override def deserialize(storageFormat: Array[Byte]): ItemsSketch[Any] =
-    ItemsSketch.getInstance(Memory.wrap(storageFormat), ApproxTopK.genSketchSerDe(itemDataType))
+  override def deserialize(storageFormat: Array[Byte]): ApproxTopKAggregateBuffer[Any] =
+    ApproxTopKAggregateBuffer.deserialize(storageFormat, ApproxTopK.genSketchSerDe(itemDataType))
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -500,10 +601,10 @@ case class ApproxTopKAccumulate(
  * @param maxItemsTracked the maximum number of items tracked in the sketch
  */
 class CombineInternal[T](
-    sketch: ItemsSketch[T],
+    sketchWithNullCount: ApproxTopKAggregateBuffer[T],
     var itemDataType: DataType,
     var maxItemsTracked: Int) {
-  def getSketch: ItemsSketch[T] = sketch
+  def getSketchWithNullCount: ApproxTopKAggregateBuffer[T] = sketchWithNullCount
 
   def getItemDataType: DataType = itemDataType
 
@@ -545,6 +646,9 @@ class CombineInternal[T](
     }
   }
 
+  def updateSketchWithNullCount(otherSketchWithNullCount: ApproxTopKAggregateBuffer[T]): Unit =
+    sketchWithNullCount.merge(otherSketchWithNullCount)
+
   /**
    * Serialize the CombineInternal instance to a byte array.
    * Serialization format:
@@ -554,18 +658,18 @@ class CombineInternal[T](
    *     sketchBytes
    */
   def serialize(): Array[Byte] = {
-    val sketchBytes = sketch.toByteArray(
+    val sketchWithNullCountBytes = sketchWithNullCount.serialize(
       ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]])
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(itemDataType)
     val ddlBytes: Array[Byte] = itemDataTypeDDL.getBytes(StandardCharsets.UTF_8)
     val byteArray = new Array[Byte](
-      sketchBytes.length + Integer.BYTES + Integer.BYTES + ddlBytes.length)
+      sketchWithNullCountBytes.length + Integer.BYTES + Integer.BYTES + ddlBytes.length)
 
     val byteBuffer = ByteBuffer.wrap(byteArray)
     byteBuffer.putInt(maxItemsTracked)
     byteBuffer.putInt(ddlBytes.length)
     byteBuffer.put(ddlBytes)
-    byteBuffer.put(sketchBytes)
+    byteBuffer.put(sketchWithNullCountBytes)
     byteArray
   }
 }
@@ -592,9 +696,9 @@ object CombineInternal {
     // read sketchBytes
     val sketchBytes = new Array[Byte](buffer.length - Integer.BYTES - Integer.BYTES - ddlLength)
     byteBuffer.get(sketchBytes)
-    val sketch = ItemsSketch.getInstance(
-      Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
-    new CombineInternal[Any](sketch, itemDataType, maxItemsTracked)
+    val sketchWithNullCount = ApproxTopKAggregateBuffer.deserialize(
+      sketchBytes, ApproxTopK.genSketchSerDe(itemDataType))
+    new CombineInternal[Any](sketchWithNullCount, itemDataType, maxItemsTracked)
   }
 }
 
@@ -689,7 +793,7 @@ case class ApproxTopKCombine(
     if (combineSizeSpecified) {
       val maxMapSize = ApproxTopK.calMaxMapSize(maxItemsTrackedVal)
       new CombineInternal[Any](
-        new ItemsSketch[Any](maxMapSize),
+        new ApproxTopKAggregateBuffer[Any](new ItemsSketch[Any](maxMapSize), 0L),
         null,
         maxItemsTrackedVal)
     } else {
@@ -698,7 +802,7 @@ case class ApproxTopKCombine(
       // The actual maxItemsTracked will be checked during the updates.
       val maxMapSize = ApproxTopK.calMaxMapSize(ApproxTopK.MAX_ITEMS_TRACKED_LIMIT)
       new CombineInternal[Any](
-        new ItemsSketch[Any](maxMapSize),
+        new ApproxTopKAggregateBuffer[Any](new ItemsSketch[Any](maxMapSize), 0L),
         null,
         ApproxTopK.VOID_MAX_ITEMS_TRACKED)
     }
@@ -719,9 +823,9 @@ case class ApproxTopKCombine(
     // update itemDataType (throw error if not match)
     buffer.updateItemDataType(inputItemDataType)
     // update sketch
-    val inputSketch = ItemsSketch.getInstance(
-      Memory.wrap(inputSketchBytes), ApproxTopK.genSketchSerDe(buffer.getItemDataType))
-    buffer.getSketch.merge(inputSketch)
+    val inputSketchWithNullCount = ApproxTopKAggregateBuffer.deserialize(
+      inputSketchBytes, ApproxTopK.genSketchSerDe(inputItemDataType))
+    buffer.updateSketchWithNullCount(inputSketchWithNullCount)
     buffer
   }
 
@@ -732,14 +836,14 @@ case class ApproxTopKCombine(
     buffer.updateMaxItemsTracked(combineSizeSpecified, input.getMaxItemsTracked)
     // update itemDataType (throw error if not match)
     buffer.updateItemDataType(input.getItemDataType)
-    // update sketch
-    buffer.getSketch.merge(input.getSketch)
+    // update sketchWithNullCount
+    buffer.getSketchWithNullCount.merge(input.getSketchWithNullCount)
     buffer
   }
 
   override def eval(buffer: CombineInternal[Any]): Any = {
-    val sketchBytes =
-      buffer.getSketch.toByteArray(ApproxTopK.genSketchSerDe(buffer.getItemDataType))
+    val sketchBytes = buffer.getSketchWithNullCount
+      .serialize(ApproxTopK.genSketchSerDe(buffer.getItemDataType))
     val maxItemsTracked = buffer.getMaxItemsTracked
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(buffer.getItemDataType)
     InternalRow.apply(

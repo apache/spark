@@ -18,21 +18,12 @@
 import unittest
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql.tests.pandas.test_pandas_transform_with_state import (
+from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import (
     TransformWithStateInPandasTestsMixin,
-    TransformWithStateInPySparkTestsMixin,
 )
 
 
 class TransformWithStateInPandasWithCheckpointV2TestsMixin(TransformWithStateInPandasTestsMixin):
-    @classmethod
-    def conf(cls):
-        cfg = super().conf()
-        cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
-        return cfg
-
-
-class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateInPySparkTestsMixin):
     @classmethod
     def conf(cls):
         cfg = super().conf()
@@ -46,14 +37,8 @@ class TransformWithStateInPandasWithCheckpointV2Tests(
     pass
 
 
-class TransformWithStateInPySparkWithCheckpointV2Tests(
-    TransformWithStateInPySparkWithCheckpointV2TestsMixin, ReusedSQLTestCase
-):
-    pass
-
-
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_transform_with_state_checkpoint_v2 import *  # noqa: F401,E501
+    from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_checkpoint_v2 import *  # noqa: F401,E501
 
     try:
         import xmlrunner
