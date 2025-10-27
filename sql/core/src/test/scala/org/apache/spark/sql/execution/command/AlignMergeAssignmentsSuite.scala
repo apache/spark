@@ -690,20 +690,24 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
              |""".stripMargin)
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
-        val e = intercept[AnalysisException] {
-          parseAndResolve(
+        val plan5 = parseAndResolve(
             s"""MERGE INTO nested_struct_table t USING nested_struct_table src
                |ON t.i = src.i
                |$clause THEN
-               | UPDATE SET s.n_s = named_struct('dn_i', 1)
-               |""".stripMargin
-          )
-        }
-        checkError(
-          exception = e,
-          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-          parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
-        )
+               | UPDATE SET s.n_s = named_struct('dn_i', 2L)
+               |""".stripMargin)
+        // No null check for dn_i as it is explicitly set
+        assertNoNullCheckExists(plan5)
+
+        // dn_i is a required field but not provided
+        assertAnalysisException(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+             |ON t.i = src.i
+             |$clause THEN
+             | UPDATE SET s.n_s = named_struct('dn_l', 2L)
+             |""".stripMargin,
+          "Cannot write incompatible data for the table ``: " +
+            "Cannot find data for the output column `s`.`n_s`.`dn_i`")
 
         // ANSI mode does NOT allow string to int casts
         assertAnalysisException(
@@ -836,29 +840,41 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
              |""".stripMargin)
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
+        // strict mode does not allow int to big_int casts
+        assertAnalysisException(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+             |ON t.i = src.i
+             |$clause THEN
+             | UPDATE SET s.n_s = named_struct('dn_i', 2L)
+             |""".stripMargin,
+          "Cannot safely cast")
+
+        // dn_i is a required field but not provided
+        assertAnalysisException(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+             |ON t.i = src.i
+             |$clause THEN
+             | UPDATE SET s.n_s = named_struct('dn_l', 2L)
+             |""".stripMargin,
+          "Cannot write incompatible data for the table ``: " +
+            "Cannot find data for the output column `s`.`n_s`.`dn_i`")
+
+        // dn_i is a required field but not provided
         val e = intercept[AnalysisException] {
           parseAndResolve(
             s"""MERGE INTO nested_struct_table t USING nested_struct_table src
                |ON t.i = src.i
                |$clause THEN
-               | UPDATE SET s.n_s = named_struct('dn_i', 1)
-               |""".stripMargin
-          )
+               | UPDATE SET s.n_s = named_struct('dn_l', 2L)
+               |""".stripMargin)
         }
         checkError(
           exception = e,
           condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-          parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
+          parameters = Map(
+            "tableName" -> "``",
+            "colName" -> "`s`.`n_s`.`dn_i`")
         )
-
-        // strict mode does NOT allow string to int casts
-        assertAnalysisException(
-          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
-             |ON t.i = src.i
-             |$clause THEN
-             | UPDATE SET s.n_s = named_struct('dn_i', 'string-value', 'dn_l', 1L)
-             |""".stripMargin,
-          "Cannot safely cast")
 
         // strict mode does not allow long to int casts
         assertAnalysisException(
