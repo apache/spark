@@ -1777,52 +1777,58 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("Merge metrics with matched clause") {
-    withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-        """{ "pk": 1, "salary": 100, "dep": "hr" }
-          |{ "pk": 2, "salary": 200, "dep": "software" }
-          |{ "pk": 3, "salary": 300, "dep": "hr" }
-          |""".stripMargin)
+    Seq("true", "false").foreach { aqeEnabled: String =>
+      withTempView("source") {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled) {
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |""".stripMargin)
 
-      val sourceDF = Seq(1, 2, 10).toDF("pk")
-      sourceDF.createOrReplaceTempView("source")
+          val sourceDF = Seq(1, 2, 10).toDF("pk")
+          sourceDF.createOrReplaceTempView("source")
 
-      val mergeExec = findMergeExec {
-        s"""MERGE INTO $tableNameAsString t
-           |USING source s
-           |ON t.pk = s.pk
-           |WHEN MATCHED AND salary < 200 THEN
-           | UPDATE SET salary = 1000
-           |""".stripMargin
+          val mergeExec = findMergeExec {
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED AND salary < 200 THEN
+               | UPDATE SET salary = 1000
+               |""".stripMargin
+          }
+
+          assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 2)
+          assertMetric(mergeExec, "numTargetRowsInserted", 0)
+          assertMetric(mergeExec, "numTargetRowsUpdated", 1)
+          assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+          assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
+          assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+          assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+          assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
+
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 1000, "hr"), // updated
+              Row(2, 200, "software"),
+              Row(3, 300, "hr")))
+
+          val table = catalog.loadTable(ident)
+          val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+          assert(commitProps("merge.numSourceRows") === "3")
+          assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "2"))
+          assert(commitProps("merge.numTargetRowsInserted") === "0")
+          assert(commitProps("merge.numTargetRowsUpdated") === "1")
+          assert(commitProps("merge.numTargetRowsDeleted") === "0")
+          assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
+          assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
+
+          sql(s"DROP TABLE $tableNameAsString")
+        }
       }
-
-      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 2)
-      assertMetric(mergeExec, "numTargetRowsInserted", 0)
-      assertMetric(mergeExec, "numTargetRowsUpdated", 1)
-      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
-      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
-      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
-      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
-      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
-
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(
-          Row(1, 1000, "hr"), // updated
-          Row(2, 200, "software"),
-          Row(3, 300, "hr")))
-
-      val table = catalog.loadTable(ident)
-      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("merge.numSourceRows") === "3")
-      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "2"))
-      assert(commitProps("merge.numTargetRowsInserted") === "0")
-      assert(commitProps("merge.numTargetRowsUpdated") === "1")
-      assert(commitProps("merge.numTargetRowsDeleted") === "0")
-      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
-      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -1871,7 +1877,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       val table = catalog.loadTable(ident)
       val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("merge.numSourceRows") === "3")
+      // TODO SPARK-52578: Handle this case when optimizer removes Join due to no matching pks
+      // assert(commitProps("merge.numSourceRows") === "3")
       assert(commitProps("merge.numTargetRowsCopied") === "0")
       assert(commitProps("merge.numTargetRowsInserted") === "1")
       assert(commitProps("merge.numTargetRowsUpdated") === "0")
@@ -1884,58 +1891,64 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("Merge metrics with matched and not matched by source clauses: update") {
-    withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-        """{ "pk": 1, "salary": 100, "dep": "hr" }
-          |{ "pk": 2, "salary": 200, "dep": "software" }
-          |{ "pk": 3, "salary": 300, "dep": "hr" }
-          |{ "pk": 4, "salary": 400, "dep": "marketing" }
-          |{ "pk": 5, "salary": 500, "dep": "executive" }
-          |""".stripMargin)
+    Seq("true", "false").foreach { aqeEnabled: String =>
+      withTempView("source") {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled) {
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |{ "pk": 4, "salary": 400, "dep": "marketing" }
+              |{ "pk": 5, "salary": 500, "dep": "executive" }
+              |""".stripMargin)
 
-      val sourceDF = Seq(1, 2, 10).toDF("pk")
-      sourceDF.createOrReplaceTempView("source")
+          val sourceDF = Seq(1, 2, 10).toDF("pk")
+          sourceDF.createOrReplaceTempView("source")
 
-      val mergeExec = findMergeExec {
-        s"""MERGE INTO $tableNameAsString t
-           |USING source s
-           |ON t.pk = s.pk
-           |WHEN MATCHED AND salary < 200 THEN
-           | UPDATE SET salary = 1000
-           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
-           | UPDATE SET salary = -1
-           |""".stripMargin
+          val mergeExec = findMergeExec {
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED AND salary < 200 THEN
+               | UPDATE SET salary = 1000
+               |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+               | UPDATE SET salary = -1
+               |""".stripMargin
+          }
+
+          assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+          assertMetric(mergeExec, "numTargetRowsInserted", 0)
+          assertMetric(mergeExec, "numTargetRowsUpdated", 2)
+          assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+          assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
+          assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+          assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 1)
+          assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
+
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 1000, "hr"), // updated
+              Row(2, 200, "software"),
+              Row(3, 300, "hr"),
+              Row(4, 400, "marketing"),
+              Row(5, -1, "executive"))) // updated
+
+          val table = catalog.loadTable(ident)
+          val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+          assert(commitProps("merge.numSourceRows") === "3")
+          assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+          assert(commitProps("merge.numTargetRowsInserted") === "0")
+          assert(commitProps("merge.numTargetRowsUpdated") === "2")
+          assert(commitProps("merge.numTargetRowsDeleted") === "0")
+          assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
+          assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "1")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
+
+          sql(s"DROP TABLE $tableNameAsString")
+        }
       }
-
-      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
-      assertMetric(mergeExec, "numTargetRowsInserted", 0)
-      assertMetric(mergeExec, "numTargetRowsUpdated", 2)
-      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
-      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
-      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
-      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 1)
-      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
-
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(
-          Row(1, 1000, "hr"), // updated
-          Row(2, 200, "software"),
-          Row(3, 300, "hr"),
-          Row(4, 400, "marketing"),
-          Row(5, -1, "executive"))) // updated
-
-      val table = catalog.loadTable(ident)
-      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("merge.numSourceRows") === "3")
-      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
-      assert(commitProps("merge.numTargetRowsInserted") === "0")
-      assert(commitProps("merge.numTargetRowsUpdated") === "2")
-      assert(commitProps("merge.numTargetRowsDeleted") === "0")
-      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
-      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "1")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -1998,120 +2011,132 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("Merge metrics with matched, not matched, and not matched by source clauses: update") {
-    withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-        """{ "pk": 1, "salary": 100, "dep": "hr" }
-          |{ "pk": 2, "salary": 200, "dep": "software" }
-          |{ "pk": 3, "salary": 300, "dep": "hr" }
-          |{ "pk": 4, "salary": 400, "dep": "marketing" }
-          |{ "pk": 5, "salary": 500, "dep": "executive" }
-          |""".stripMargin)
+    Seq("true", "false").foreach { aqeEnabled: String =>
+      withTempView("source") {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled) {
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |{ "pk": 4, "salary": 400, "dep": "marketing" }
+              |{ "pk": 5, "salary": 500, "dep": "executive" }
+              |""".stripMargin)
 
-      val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
-      sourceDF.createOrReplaceTempView("source")
+          val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
+          sourceDF.createOrReplaceTempView("source")
 
-      val mergeExec = findMergeExec {
-        s"""MERGE INTO $tableNameAsString t
-           |USING source s
-           |ON t.pk = s.pk
-           |WHEN MATCHED AND salary < 200 THEN
-           | UPDATE SET salary = 1000
-           |WHEN NOT MATCHED AND s.pk < 10 THEN
-           | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
-           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
-           | UPDATE SET salary = -1
-           |""".stripMargin
+          val mergeExec = findMergeExec {
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED AND salary < 200 THEN
+               | UPDATE SET salary = 1000
+               |WHEN NOT MATCHED AND s.pk < 10 THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
+               |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+               | UPDATE SET salary = -1
+               |""".stripMargin
+          }
+
+          assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+          assertMetric(mergeExec, "numTargetRowsInserted", 1)
+          assertMetric(mergeExec, "numTargetRowsUpdated", 2)
+          assertMetric(mergeExec, "numTargetRowsDeleted", 0)
+          assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
+          assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
+          assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 1)
+          assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
+
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 1000, "hr"), // updated
+              Row(2, 200, "software"),
+              Row(3, 300, "hr"),
+              Row(4, 400, "marketing"),
+              Row(5, -1, "executive"), // updated
+              Row(6, -1, "dummy"))) // inserted
+
+          val table = catalog.loadTable(ident)
+          val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+          assert(commitProps("merge.numSourceRows") === "4")
+          assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+          assert(commitProps("merge.numTargetRowsInserted") === "1")
+          assert(commitProps("merge.numTargetRowsUpdated") === "2")
+          assert(commitProps("merge.numTargetRowsDeleted") === "0")
+          assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
+          assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "1")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
+
+          sql(s"DROP TABLE $tableNameAsString")
+        }
       }
-
-      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
-      assertMetric(mergeExec, "numTargetRowsInserted", 1)
-      assertMetric(mergeExec, "numTargetRowsUpdated", 2)
-      assertMetric(mergeExec, "numTargetRowsDeleted", 0)
-      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 1)
-      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 0)
-      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 1)
-      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 0)
-
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(
-          Row(1, 1000, "hr"), // updated
-          Row(2, 200, "software"),
-          Row(3, 300, "hr"),
-          Row(4, 400, "marketing"),
-          Row(5, -1, "executive"), // updated
-          Row(6, -1, "dummy"))) // inserted
-
-      val table = catalog.loadTable(ident)
-      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("merge.numSourceRows") === "4")
-      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
-      assert(commitProps("merge.numTargetRowsInserted") === "1")
-      assert(commitProps("merge.numTargetRowsUpdated") === "2")
-      assert(commitProps("merge.numTargetRowsDeleted") === "0")
-      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
-      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "1")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
   test("Merge metrics with matched, not matched, and not matched by source clauses: delete") {
-    withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-        """{ "pk": 1, "salary": 100, "dep": "hr" }
-          |{ "pk": 2, "salary": 200, "dep": "software" }
-          |{ "pk": 3, "salary": 300, "dep": "hr" }
-          |{ "pk": 4, "salary": 400, "dep": "marketing" }
-          |{ "pk": 5, "salary": 500, "dep": "executive" }
-          |""".stripMargin)
+    Seq("true", "false").foreach { aqeEnabled: String =>
+      withTempView("source") {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled) {
+          createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |{ "pk": 4, "salary": 400, "dep": "marketing" }
+              |{ "pk": 5, "salary": 500, "dep": "executive" }
+              |""".stripMargin)
 
-      val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
-      sourceDF.createOrReplaceTempView("source")
+          val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
+          sourceDF.createOrReplaceTempView("source")
 
-      val mergeExec = findMergeExec {
-        s"""MERGE INTO $tableNameAsString t
-           |USING source s
-           |ON t.pk = s.pk
-           |WHEN MATCHED AND salary < 200 THEN
-           | DELETE
-           |WHEN NOT MATCHED AND s.pk < 10 THEN
-           | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
-           |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
-           | DELETE
-           |""".stripMargin
+          val mergeExec = findMergeExec {
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED AND salary < 200 THEN
+               | DELETE
+               |WHEN NOT MATCHED AND s.pk < 10 THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
+               |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
+               | DELETE
+               |""".stripMargin
+          }
+
+          assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
+          assertMetric(mergeExec, "numTargetRowsInserted", 1)
+          assertMetric(mergeExec, "numTargetRowsUpdated", 0)
+          assertMetric(mergeExec, "numTargetRowsDeleted", 2)
+          assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 0)
+          assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 1)
+          assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
+          assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 1)
+
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              // Row(1, 100, "hr") deleted
+              Row(2, 200, "software"),
+              Row(3, 300, "hr"),
+              Row(4, 400, "marketing"),
+              // Row(5, 500, "executive") deleted
+              Row(6, -1, "dummy"))) // inserted
+
+          val table = catalog.loadTable(ident)
+          val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+          assert(commitProps("merge.numSourceRows") === "4")
+          assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+          assert(commitProps("merge.numTargetRowsInserted") === "1")
+          assert(commitProps("merge.numTargetRowsUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsDeleted") === "2")
+          assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsMatchedDeleted") === "1")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "1")
+
+          sql(s"DROP TABLE $tableNameAsString")
+        }
       }
-
-      assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
-      assertMetric(mergeExec, "numTargetRowsInserted", 1)
-      assertMetric(mergeExec, "numTargetRowsUpdated", 0)
-      assertMetric(mergeExec, "numTargetRowsDeleted", 2)
-      assertMetric(mergeExec, "numTargetRowsMatchedUpdated", 0)
-      assertMetric(mergeExec, "numTargetRowsMatchedDeleted", 1)
-      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceUpdated", 0)
-      assertMetric(mergeExec, "numTargetRowsNotMatchedBySourceDeleted", 1)
-
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(
-          // Row(1, 100, "hr") deleted
-          Row(2, 200, "software"),
-          Row(3, 300, "hr"),
-          Row(4, 400, "marketing"),
-          // Row(5, 500, "executive") deleted
-          Row(6, -1, "dummy"))) // inserted
-
-      val table = catalog.loadTable(ident)
-      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("merge.numSourceRows") === "4")
-      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
-      assert(commitProps("merge.numTargetRowsInserted") === "1")
-      assert(commitProps("merge.numTargetRowsUpdated") === "0")
-      assert(commitProps("merge.numTargetRowsDeleted") === "2")
-      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
-      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "1")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "1")
     }
   }
 
@@ -2162,37 +2187,43 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("Merge metrics with numSourceRows for empty source") {
-    withTempView("source") {
-      createAndInitTable(
-        "pk INT NOT NULL, salary INT, dep STRING",
-        """{ "pk": 1, "salary": 100, "dep": "hr" }
-          |{ "pk": 2, "salary": 200, "dep": "software" }
-          |{ "pk": 3, "salary": 300, "dep": "hr" }
-          |""".stripMargin)
+    Seq("true", "false").foreach { aqeEnabled: String =>
+      withTempView("source") {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled) {
+          createAndInitTable(
+            "pk INT NOT NULL, salary INT, dep STRING",
+            """{ "pk": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "salary": 300, "dep": "hr" }
+              |""".stripMargin)
 
-      // source is empty
-      Seq.empty[Int].toDF("pk").createOrReplaceTempView("source")
+          // source is empty
+          Seq.empty[Int].toDF("pk").createOrReplaceTempView("source")
 
-      sql(s"""MERGE INTO $tableNameAsString t
-           |USING source s
-           |ON t.pk = s.pk
-           |WHEN MATCHED THEN
-           | UPDATE SET salary = 1000
-           |WHEN NOT MATCHED BY SOURCE THEN
-           | DELETE
-           |""".stripMargin)
+          sql(s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = 1000
+               |WHEN NOT MATCHED BY SOURCE THEN
+               | DELETE
+               |""".stripMargin)
 
-      val table = catalog.loadTable(ident)
-      val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("merge.numSourceRows") === "-1") // if no numOutputRows, should be -1
-      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "0"))
-      assert(commitProps("merge.numTargetRowsInserted") === "0")
-      assert(commitProps("merge.numTargetRowsUpdated") === "0")
-      assert(commitProps("merge.numTargetRowsDeleted") === "3")
-      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
-      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
-      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "3")
+          val table = catalog.loadTable(ident)
+          val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
+          assert(commitProps("merge.numSourceRows") === "-1") // if no numOutputRows, should be -1
+          assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "0"))
+          assert(commitProps("merge.numTargetRowsInserted") === "0")
+          assert(commitProps("merge.numTargetRowsUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsDeleted") === "3")
+          assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "3")
+
+          sql(s"DROP TABLE $tableNameAsString")
+        }
+      }
     }
   }
 

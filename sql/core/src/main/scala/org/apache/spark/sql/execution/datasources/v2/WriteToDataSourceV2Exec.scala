@@ -495,32 +495,37 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   }
 
   private def getNumSourceRows(mergeRowsExec: MergeRowsExec): Long = {
-    def isTargetTableScan(plan: SparkPlan): Boolean = {
+    def hasTargetTable(plan: SparkPlan): Boolean = {
       collectFirst(plan) {
-        case scan: BatchScanExec if scan.table.isInstanceOf[RowLevelOperationTable] => true
-      }.getOrElse(false)
+        case scan @ BatchScanExec(_, _, _, _, _: RowLevelOperationTable, _) => scan
+      }.isDefined
     }
 
-    val joinOpt = collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
+    def findSourceScan(join: BaseJoinExec): Option[SparkPlan] = {
+      val leftHasTarget = hasTargetTable(join.left)
+      val rightHasTarget = hasTargetTable(join.right)
 
-    joinOpt.flatMap { join =>
-      val leftIsTarget = isTargetTableScan(join.left)
-      val rightIsTarget = isTargetTableScan(join.right)
-
-      val sourceChild = if (leftIsTarget) {
+      val sourceSide = if (leftHasTarget) {
         Some(join.right)
-      } else if (rightIsTarget) {
+      } else if (rightHasTarget) {
         Some(join.left)
       } else {
         None
       }
 
-      sourceChild.flatMap { child =>
-        collectFirst(child) {
-          case plan if plan.metrics.contains("numOutputRows") => plan
-        }.flatMap(_.metrics.get("numOutputRows").map(_.value))
+      sourceSide.flatMap { side =>
+        collectFirst(side) {
+          case source if source.metrics.contains("numOutputRows") =>
+          source
+        }
       }
-    }.getOrElse(-1L)
+    }
+
+    (for {
+      join <- collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
+      sourceScan <- findSourceScan(join)
+      metric <- sourceScan.metrics.get("numOutputRows")
+    } yield metric.value).getOrElse(-1L)
   }
 }
 
