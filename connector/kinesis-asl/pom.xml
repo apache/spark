@@ -73,7 +73,6 @@
     <dependency>
       <groupId>javax.xml.bind</groupId>
       <artifactId>jaxb-api</artifactId>
-      <version>2.3.1</version>
       <scope>test</scope>
     </dependency>
     <!-- manage this up explicitly to match Spark; com.amazonaws:aws-java-sdk-pom specifies
