@@ -197,7 +197,8 @@ abstract class AbstractCommandBuilder {
           if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL")) && project.equals("sql/core")) {
             continue;
           }
-          if (isBeeLine && project.equals("sql/core")) {
+          if (isBeeLine && "1".equals(getenv("SPARK_CONNECT_BEELINE")) &&
+              project.equals("sql/core")) {
             continue;
           }
           // SPARK-49534: The assumption here is that if `spark-hive_xxx.jar` is not in the
@@ -246,13 +247,13 @@ abstract class AbstractCommandBuilder {
         }
       }
 
-      if (isRemote || isBeeLine) {
+      if (isRemote || (isBeeLine && "1".equals(getenv("SPARK_CONNECT_BEELINE")))) {
         for (File f: new File(jarsDir).listFiles()) {
-          // Exclude Spark Classic SQL and Spark Connect server jars
-          // if we're in Spark Connect Shell. Also exclude Spark SQL API and
-          // Spark Connect Common which Spark Connect client shades.
-          // Then, we add the Spark Connect shell and its dependencies in connect-repl
-          // See also SPARK-48936.
+          // Exclude Spark Classic SQL and Spark Connect server jars if we're in
+          // Spark Connect Shell or BeeLine with Connect JDBC driver. Also exclude
+          // Spark SQL API and Spark Connect Common which Spark Connect client shades.
+          // Then, we add the Spark Connect shell and its dependencies in connect-repl.
+          // See also SPARK-48936, SPARK-54002.
           if (f.isDirectory() && f.getName().equals("connect-repl")) {
             addToClassPath(cp, join(File.separator, f.toString(), "*"));
           } else if (
