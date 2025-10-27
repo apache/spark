@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.unsafe.types.GeometryVal;
 
+import java.util.Arrays;
+
 // Catalyst-internal server-side execution wrapper for GEOMETRY.
 public final class Geometry implements Geo {
 
@@ -51,7 +53,7 @@ public final class Geometry implements Geo {
     return new Geometry(value);
   }
 
-  /** Geometry getters. */
+  /** Geometry getters and instance methods. */
 
   // Returns the underlying physical type value of this Geometry instance.
   public GeometryVal getValue() {
@@ -59,8 +61,14 @@ public final class Geometry implements Geo {
   }
 
   // Returns the byte array containing the GEOMETRY representation/encoding.
-  byte[] getBytes() {
+  public byte[] getBytes() {
     return value.getBytes();
+  }
+
+  // Returns a copy of this geometry.
+  public Geometry copy() {
+    byte[] bytes = getBytes();
+    return Geometry.fromBytes(Arrays.copyOf(bytes, bytes.length));
   }
 
   /** Geometry WKB parsing. */

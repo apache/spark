@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.unsafe.types.GeographyVal;
 
+import java.util.Arrays;
+
 // Catalyst-internal server-side execution wrapper for GEOGRAPHY.
 public final class Geography implements Geo {
 
@@ -51,7 +53,7 @@ public final class Geography implements Geo {
     return new Geography(value);
   }
 
-  /** Geography getters. */
+  /** Geography getters and instance methods. */
 
   // Returns the underlying physical type value of this Geography instance.
   public GeographyVal getValue() {
@@ -59,8 +61,14 @@ public final class Geography implements Geo {
   }
 
   // Returns the byte array containing the GEOGRAPHY representation/encoding.
-  byte[] getBytes() {
+  public byte[] getBytes() {
     return value.getBytes();
+  }
+
+  // Returns a copy of this geometry.
+  public Geography copy() {
+    byte[] bytes = getBytes();
+    return Geography.fromBytes(Arrays.copyOf(bytes, bytes.length));
   }
 
   /** Geography WKB parsing. */

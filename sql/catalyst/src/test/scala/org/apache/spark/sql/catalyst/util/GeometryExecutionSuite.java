@@ -60,6 +60,14 @@ class GeometryExecutionTest {
     assertArrayEquals(testGeometryVal, geometry.getBytes());
   }
 
+  @Test
+  void testCopy() {
+    Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    Geometry geometryCopy = geometry.copy();
+    assertNotNull(geometryCopy);
+    assertArrayEquals(geometry.getBytes(), geometryCopy.getBytes());
+  }
+
   /** Tests for Geometry constants. */
 
   @Test

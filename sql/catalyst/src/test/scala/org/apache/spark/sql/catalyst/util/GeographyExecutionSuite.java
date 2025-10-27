@@ -60,6 +60,14 @@ class GeographyExecutionTest {
     assertArrayEquals(testGeographyVal, geography.getBytes());
   }
 
+  @Test
+  void testCopy() {
+    Geography geography = Geography.fromBytes(testGeographyVal);
+    Geography geographyCopy = geography.copy();
+    assertNotNull(geographyCopy);
+    assertArrayEquals(geography.getBytes(), geographyCopy.getBytes());
+  }
+
   /** Tests for Geography constants. */
 
   @Test
@@ -139,20 +147,20 @@ class GeographyExecutionTest {
 
   @Test
   void testToWkbUnsupported() {
-    Geography geometry = Geography.fromBytes(testGeographyVal);
+    Geography geography = Geography.fromBytes(testGeographyVal);
     UnsupportedOperationException exception = assertThrows(
       UnsupportedOperationException.class,
-      geometry::toWkb
+      geography::toWkb
     );
     assertEquals("Geography WKB conversion is not yet supported.", exception.getMessage());
   }
 
   @Test
   void testToEwkbUnsupported() {
-    Geography geometry = Geography.fromBytes(testGeographyVal);
+    Geography geography = Geography.fromBytes(testGeographyVal);
     UnsupportedOperationException exception = assertThrows(
       UnsupportedOperationException.class,
-      geometry::toEwkb
+      geography::toEwkb
     );
     assertEquals("Geography EWKB conversion is not yet supported.", exception.getMessage());
   }
@@ -161,20 +169,20 @@ class GeographyExecutionTest {
 
   @Test
   void testToWktUnsupported() {
-    Geography geometry = Geography.fromBytes(testGeographyVal);
+    Geography geography = Geography.fromBytes(testGeographyVal);
     UnsupportedOperationException exception = assertThrows(
       UnsupportedOperationException.class,
-      geometry::toWkt
+      geography::toWkt
     );
     assertEquals("Geography WKT conversion is not yet supported.", exception.getMessage());
   }
 
   @Test
   void testToEwktUnsupported() {
-    Geography geometry = Geography.fromBytes(testGeographyVal);
+    Geography geography = Geography.fromBytes(testGeographyVal);
     UnsupportedOperationException exception = assertThrows(
       UnsupportedOperationException.class,
-      geometry::toEwkt
+      geography::toEwkt
     );
     assertEquals("Geography EWKT conversion is not yet supported.", exception.getMessage());
   }
