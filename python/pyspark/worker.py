@@ -751,6 +751,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
     _use_large_var_types = use_large_var_types(runner_conf)
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
+    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
 
     def wrapped(key_series, value_series):
         import pandas as pd
@@ -766,16 +767,17 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
             key = tuple(s[0] for s in key_series)
             result_iter = f(key, dataframe_iter())
 
-        def verify_element(df):
+        # Return a list of tuples (dataframe, arrow_type) for each result dataframe
+        result_list = []
+        for df in result_iter:
             verify_pandas_result(
                 df, return_type, _assign_cols_by_name, truncate_return_schema=False
             )
-            return df
+            result_list.append((df, arrow_return_type))
+        
+        return result_list
 
-        yield from map(verify_element, result_iter)
-
-    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
-    return lambda k, v: (wrapped(k, v), arrow_return_type)
+    return lambda k, v: wrapped(k, v)
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
