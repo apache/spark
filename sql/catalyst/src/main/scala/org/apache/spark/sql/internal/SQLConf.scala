@@ -5347,7 +5347,7 @@ object SQLConf {
     buildConf("spark.sql.variant.shredding.maxSchemaWidth")
       .internal()
       .doc("Maximum number of shredded fields to create when inferring a schema for Variant")
-      .version("4.2.0")
+      .version("4.1.0")
       .intConf
       .createWithDefault(300)
 
@@ -5356,7 +5356,7 @@ object SQLConf {
       .internal()
       .doc("Maximum depth in Variant value to traverse when inferring a schema. " +
            "Any array/object below this depth will be shredded as a single binary.")
-      .version("4.2.0")
+      .version("4.1.0")
       .intConf
       .createWithDefault(50)
 
@@ -5364,7 +5364,7 @@ object SQLConf {
     buildConf("spark.sql.variant.inferShreddingSchema")
       .internal()
       .doc("Infer shredding schema when writing Variant columns in Parquet tables.")
-      .version("4.2.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
