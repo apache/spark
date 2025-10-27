@@ -2304,7 +2304,7 @@ private[spark] object Utils
       case e: MultiException =>
         e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
-        (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
+        (e.getMessage != null && e.getMessage.matches("bind.*failed.*")) ||
           isBindCollision(e.getCause)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false
