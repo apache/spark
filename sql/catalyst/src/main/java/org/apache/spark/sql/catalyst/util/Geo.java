@@ -18,6 +18,26 @@ package org.apache.spark.sql.catalyst.util;
 
 // Helper interface for the APIs expected from top-level GEOMETRY and GEOGRAPHY classes.
 interface Geo {
-  // Returns the SRID value of the geo object.
+
+  /** Binary converters. */
+
+  // Returns the Well-Known Binary (WKB) representation of the geo object.
+  byte[] toWkb();
+
+  // Returns the Extended Well-Known Binary (EWKB) representation of the geo object.
+  byte[] toEwkb();
+
+  /** Textual converters. */
+
+  // Returns the Well-Known Text (WKT) representation of the geo object.
+  byte[] toWkt();
+
+  // Returns the Extended Well-Known Text (EWKT) representation of the geo object.
+  byte[] toEwkt();
+
+  /** Other methods. */
+
+  // Returns the Spatial Reference Identifier (SRID) value of the geo object.
   int srid();
+
 }

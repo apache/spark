@@ -101,31 +101,35 @@ public final class Geometry implements Geo {
     throw new UnsupportedOperationException("Geometry EWKT parsing is not yet supported.");
   }
 
-  /** Geometry WKB and EWKB converters. */
+  /** Geometry binary standard format converters: WKB and EWKB. */
 
+  @Override
   public byte[] toWkb() {
     // Once WKB conversion is implemented, it should support NDR and XDR endianness.
     throw new UnsupportedOperationException("Geometry WKB conversion is not yet supported.");
   }
 
+  @Override
   public byte[] toEwkb() {
     // Once EWKB conversion is implemented, it should support NDR and XDR endianness.
     throw new UnsupportedOperationException("Geometry EWKB conversion is not yet supported.");
   }
 
-  /** Geometry WKT and EWKT converters. */
+  /** Geometry textual standard format converters: WKT and EWKT. */
 
+  @Override
   public byte[] toWkt() {
     // Once WKT conversion is implemented, it should support various precisions.
     throw new UnsupportedOperationException("Geometry WKT conversion is not yet supported.");
   }
 
+  @Override
   public byte[] toEwkt() {
     // Once EWKT conversion is implemented, it should support various precisions.
     throw new UnsupportedOperationException("Geometry EWKT conversion is not yet supported.");
   }
 
-  /** Instance methods, inherited from the `Geo` interface. */
+  /** Other instance methods, inherited from the `Geo` interface. */
 
   @Override
   public int srid() {
