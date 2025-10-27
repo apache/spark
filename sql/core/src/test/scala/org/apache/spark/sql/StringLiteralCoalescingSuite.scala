@@ -212,14 +212,16 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
   }
 
   test("R-string coalescing with regular strings") {
+    // NOTE: With per-token escape processing, each token is processed individually
+    // before concatenation, which correctly preserves R-string semantics even when mixing.
     val testCases = Seq(
-      // R-string followed by regular string
+      // R-string followed by regular string - only regular part processes escapes
       ("""SELECT R'\n' ' tab'""", raw"\n tab"),
-      // Regular string followed by R-string
+      // Regular string followed by R-string - only regular part processes escapes
       ("""SELECT 'newline ' R'\n'""", raw"newline \n"),
-      // Multiple R-strings with regular strings interleaved
+      // Multiple R-strings with regular strings interleaved - only regular parts process escapes
       ("""SELECT R'\n' 'text' R'\t' 'more'""", raw"\ntext\tmore"),
-      // All R-strings
+      // All R-strings - NO escape processing (all are raw)
       ("""SELECT R'\n' R'\t' R'\r'""", raw"\n\t\r")
     )
 
@@ -228,15 +230,35 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("R-string mixing with escapes in regular string - correctly preserves semantics") {
+    // This test verifies that mixing R-strings with regular strings works correctly
+    // when each token's escape sequences are processed individually before concatenation.
+    //
+    // Expected behavior: 'hello\n' should process \n, R'world\t' should NOT process \t
+    // Result: "hello<NEWLINE>world\t" (first part has newline, second has literal backslash-t)
+
+    checkAnswer(
+      sql("""SELECT 'hello\n' R'world\t'"""),
+      Row("hello\n" + raw"world\t")  // First \n processed, second \t NOT processed
+    )
+
+    // More complex mixing: regular, R-string, regular
+    checkAnswer(
+      sql("""SELECT 'start\n' R'mid\t' 'end\r'"""),
+      Row("start\n" + raw"mid\t" + "end\r")  // Only regular strings process escapes
+    )
+  }
+
   test("R-string detection - Windows paths") {
     val testCases = Seq(
-      // Windows path with backslashes
+      // Windows path with backslashes - all R-strings, no escape processing
       ("""SELECT R'C:\Users\JohnDoe\Documents\file.txt'""",
         raw"C:\Users\JohnDoe\Documents\file.txt"),
-      // Coalesced Windows paths
+      // Mixing R-strings with regular strings - each part processed individually
+      // R-string parts keep backslashes, regular string parts DON'T have escapes to process
       ("""SELECT R'C:\Users\' 'JohnDoe' R'\Documents'""",
         raw"C:\Users\JohnDoe\Documents"),
-      // Mixed case R prefix with paths
+      // Both are R-strings - NO escape processing (all are raw)
       ("""SELECT r'C:\Windows\' R'System32'""",
         raw"C:\Windows\System32")
     )
@@ -408,13 +430,14 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
 
   test("property string coalescing - R-strings in properties") {
     withTable("t") {
-      // R-strings should work in property values
-      // Use a valid option key instead of 'path' to avoid URI validation issues
+      // R-strings mixed with regular strings - each part processed individually
+      // R-string parts keep backslashes, regular string parts process escapes
       sql("""CREATE TABLE t (id INT) USING parquet
              OPTIONS('myoption' R'C:\Users\' 'data')""")
 
       val createStmt = sql("SHOW CREATE TABLE t").collect().head.getString(0)
-      assert(createStmt.contains("""C:\Users\data"""))
+      // Backslashes are preserved in R-string parts when using per-token processing
+      assert(createStmt.contains(raw"C:\Users\data"))
     }
   }
 
@@ -738,17 +761,19 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
   }
 
   test("parameter marker coalescing with R-strings") {
-    // R-strings with parameters
+    // R-strings with parameters - each part processed individually
+    // R-string parts keep backslashes, parameter values are used as-is
     checkAnswer(
       spark.sql("""SELECT R'C:\Users\' :username R'\Documents'""",
         Map("username" -> "JohnDoe")),
-      Row("""C:\Users\JohnDoe\Documents""")
+      Row(raw"C:\Users\JohnDoe\Documents")
     )
 
-    // Mix parameter with R-string and regular string
+    // Mix parameter with R-string and regular string - each part processed individually
+    // R-string part keeps literal backslashes
     checkAnswer(
       spark.sql("""SELECT :prefix R'\path\to\file'""", Map("prefix" -> "Location: ")),
-      Row("""Location: \path\to\file""")
+      Row(raw"Location: \path\to\file")
     )
   }
 

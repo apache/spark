@@ -3656,7 +3656,13 @@ class AstBuilder extends DataTypeAstBuilder
   private def createString(ctx: StringLiteralContext): String = {
     // We need to unescape based on configuration.
     val token = visitStringLit(ctx.stringLit())
-    if (conf.escapedStringLiterals) {
+
+    // Check if this is a PreprocessedCoalescedStringToken (escape processing already done)
+    if (token.isInstanceOf[org.apache.spark.sql.catalyst.parser.PreprocessedCoalescedStringToken]) {
+      // Already processed during coalescing, strip quotes and return
+      val text = token.getText
+      text.substring(1, text.length - 1)  // Remove outer quotes
+    } else if (conf.escapedStringLiterals) {
       stringWithoutUnescape(token)
     } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
       stringIgnoreQuoteQuote(token)
