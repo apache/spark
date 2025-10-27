@@ -408,7 +408,7 @@ class WindowPandasUDFTestsMixin:
                 with self.subTest(bound=bound, query_no=i):
                     assertDataFrameEqual(windowed, df.withColumn("wm", sf.mean(df.v).over(w)))
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -436,7 +436,7 @@ class WindowPandasUDFTestsMixin:
         df = self.data
         weighted_mean = self.pandas_agg_weighted_mean_udf
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -504,7 +504,7 @@ class WindowPandasUDFTestsMixin:
                 with self.subTest(bound=bound, query_no=i):
                     assertDataFrameEqual(windowed, df.withColumn("wm", sf.mean(df.v).over(w)))
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 

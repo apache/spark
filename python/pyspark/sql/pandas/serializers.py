@@ -854,6 +854,8 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
     int_to_decimal_coercion_enabled : bool
         If True, applies additional coercions in Python before converting to Arrow
         This has performance penalties.
+    binary_as_bytes : bool
+        If True, binary type will be deserialized as bytes, otherwise as bytearray.
     """
 
     def __init__(
@@ -861,7 +863,8 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         timezone,
         safecheck,
         input_types,
-        int_to_decimal_coercion_enabled=False,
+        int_to_decimal_coercion_enabled,
+        binary_as_bytes,
     ):
         super().__init__(
             timezone=timezone,
@@ -871,6 +874,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         )
         self._input_types = input_types
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
+        self._binary_as_bytes = binary_as_bytes
 
     def load_stream(self, stream):
         """
@@ -887,7 +891,9 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
             List of columns containing list of Python values.
         """
         converters = [
-            ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True)
+            ArrowTableToRowsConversion._create_converter(
+                dt, none_on_identity=True, binary_as_bytes=self._binary_as_bytes
+            )
             for dt in self._input_types
         ]
 
@@ -1296,16 +1302,16 @@ class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == 2:
-                batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batches1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batches2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
                 yield (
                     [
                         self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches(batch1).itercolumns())
+                        for i, c in enumerate(pa.Table.from_batches(batches1).itercolumns())
                     ],
                     [
                         self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches(batch2).itercolumns())
+                        for i, c in enumerate(pa.Table.from_batches(batches2).itercolumns())
                     ],
                 )
 

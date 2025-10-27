@@ -44,6 +44,7 @@ public enum LogKeys implements LogKey {
   APP_ID,
   APP_NAME,
   APP_STATE,
+  AQE_PLAN,
   ARCHIVE_NAME,
   ARGS,
   ARTIFACTS,

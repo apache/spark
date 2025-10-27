@@ -35,6 +35,12 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 object EvaluatePython {
 
+  /**
+   * Wrapper class for byte arrays that should be pickled as Python bytes instead of bytearray.
+   * This is a marker class that tells the pickler to use bytes() constructor.
+   */
+  private[python] class BytesWrapper(val data: Array[Byte])
+
   def needConversionInPython(dt: DataType): Boolean = dt match {
     case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
          | _: TimeType => true
@@ -49,39 +55,52 @@ object EvaluatePython {
   /**
    * Helper for converting from Catalyst type to java type suitable for Pickle.
    */
-  def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
-    case (null, _) => null
+  def toJava(
+      obj: Any,
+      dataType: DataType,
+      binaryAsBytes: Boolean): Any = {
+    (obj, dataType) match {
+      case (null, _) => null
 
-    case (row: InternalRow, struct: StructType) =>
-      val values = new Array[Any](row.numFields)
-      var i = 0
-      while (i < row.numFields) {
-        values(i) = toJava(row.get(i, struct.fields(i).dataType), struct.fields(i).dataType)
-        i += 1
-      }
-      new GenericRowWithSchema(values, struct)
+      case (row: InternalRow, struct: StructType) =>
+        val values = new Array[Any](row.numFields)
+        var i = 0
+        while (i < row.numFields) {
+          val field = struct.fields(i)
+          values(i) = toJava(row.get(i, field.dataType), field.dataType, binaryAsBytes)
+          i += 1
+        }
+        new GenericRowWithSchema(values, struct)
 
-    case (a: ArrayData, array: ArrayType) =>
-      val values = new java.util.ArrayList[Any](a.numElements())
-      a.foreach(array.elementType, (_, e) => {
-        values.add(toJava(e, array.elementType))
-      })
-      values
+      case (a: ArrayData, array: ArrayType) =>
+        val values = new java.util.ArrayList[Any](a.numElements())
+        a.foreach(array.elementType, (_, e) => {
+          values.add(toJava(e, array.elementType, binaryAsBytes))
+        })
+        values
 
-    case (map: MapData, mt: MapType) =>
-      val jmap = new java.util.HashMap[Any, Any](map.numElements())
-      map.foreach(mt.keyType, mt.valueType, (k, v) => {
-        jmap.put(toJava(k, mt.keyType), toJava(v, mt.valueType))
-      })
-      jmap
+      case (map: MapData, mt: MapType) =>
+        val jmap = new java.util.HashMap[Any, Any](map.numElements())
+        map.foreach(mt.keyType, mt.valueType, (k, v) => {
+          jmap.put(toJava(k, mt.keyType, binaryAsBytes), toJava(v, mt.valueType, binaryAsBytes))
+        })
+        jmap
 
-    case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType)
+      case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType, binaryAsBytes)
 
-    case (d: Decimal, _) => d.toJavaBigDecimal
+      case (d: Decimal, _) => d.toJavaBigDecimal
 
-    case (s: UTF8String, _: StringType) => s.toString
+      case (s: UTF8String, _: StringType) => s.toString
 
-    case (other, _) => other
+      case (bytes: Array[Byte], BinaryType) =>
+        if (binaryAsBytes) {
+          new BytesWrapper(bytes)
+        } else {
+          bytes
+        }
+
+      case (other, _) => other
+    }
   }
 
   /**
@@ -249,6 +268,37 @@ object EvaluatePython {
   }
 
   /**
+   * Pickler for BytesWrapper that pickles byte arrays as Python bytes using bytes() builtin.
+   * Structure: bytes(bytearray_data) where bytearray_data is pickled by razorvine's
+   * default pickler.
+   */
+  private class BytesWrapperPickler extends IObjectPickler {
+
+    private val cls = classOf[BytesWrapper]
+
+    def register(): Unit = {
+      Pickler.registerCustomPickler(cls, this)
+    }
+
+    def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      // Pickle structure: bytes(bytearray_value)
+      // GLOBAL 'builtins' 'bytes'
+      out.write(Opcodes.GLOBAL)
+      out.write("builtins\nbytes\n".getBytes(StandardCharsets.UTF_8))
+
+      // Pickle the wrapped byte array data using razorvine's built-in pickler
+      val wrapper = obj.asInstanceOf[BytesWrapper]
+      pickler.save(wrapper.data)
+
+      // TUPLE1 creates a 1-tuple: (bytearray_value,)
+      out.write(Opcodes.TUPLE1)
+
+      // REDUCE calls bytes(bytearray_value)
+      out.write(Opcodes.REDUCE)
+    }
+  }
+
+  /**
    * Pickler for external row.
    */
   private class RowPickler extends IObjectPickler {
@@ -299,6 +349,7 @@ object EvaluatePython {
         SerDeUtil.initialize()
         new StructTypePickler().register()
         new RowPickler().register()
+        new BytesWrapperPickler().register()
         registered = true
       }
     }

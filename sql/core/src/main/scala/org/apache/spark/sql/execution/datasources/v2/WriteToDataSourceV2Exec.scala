@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.lang
-import java.util
-
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
@@ -34,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -456,9 +453,12 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       )
 
-      val operationMetrics = getOperationMetrics(query)
+      val writeSummary = getWriteSummary(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      batchWrite.commit(messages, operationMetrics)
+      writeSummary match {
+        case Some(summary) => batchWrite.commit(messages, summary)
+        case None => batchWrite.commit(messages)
+      }
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
@@ -481,16 +481,21 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     Nil
   }
 
-  private def getOperationMetrics(query: SparkPlan): util.Map[String, lang.Long] = {
-    collectFirst(query) { case m: MergeRowsExec => m } match {
-      case Some(mergeRowsExec) =>
-        val mergeMetrics = mergeRowsExec.metrics.map {
-          case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value)
-        }
-        val numSourceRows = getNumSourceRows(mergeRowsExec)
-        (mergeMetrics + ("merge.numSourceRows" -> lang.Long.valueOf(numSourceRows))).asJava
-      case None =>
-        Map.empty[String, lang.Long].asJava
+  private def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
+    collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
+      val metrics = n.metrics
+      val numSourceRows = getNumSourceRows(n)
+      MergeSummaryImpl(
+        getNumSourceRows(n),
+        metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsInserted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsMatchedUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsMatchedDeleted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsNotMatchedBySourceUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L)
+      )
     }
   }
 

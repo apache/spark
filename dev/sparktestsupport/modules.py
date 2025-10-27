@@ -437,6 +437,7 @@ connect = Module(
     sbt_test_goals=[
         "connect/test",
         "connect-client-jvm/test",
+        "connect-client-jdbc/test",
     ],
 )
 
@@ -574,6 +575,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_session",
         "pyspark.sql.tests.test_subquery",
         "pyspark.sql.tests.test_types",
+        "pyspark.sql.tests.test_geographytype",
+        "pyspark.sql.tests.test_geometrytype",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_udf_combinations",
         "pyspark.sql.tests.test_udf_profiler",
@@ -659,8 +662,14 @@ pyspark_structured_streaming = Module(
         "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
         "pyspark.sql.tests.streaming.test_streaming_listener",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
-        "pyspark.sql.tests.pandas.test_pandas_transform_with_state",
-        "pyspark.sql.tests.pandas.test_pandas_transform_with_state_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable_checkpoint_v2",  # noqa: E501
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable_checkpoint_v2",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -1179,9 +1188,11 @@ pyspark_structured_streaming_connect = Module(
         "pyspark.sql.tests.connect.streaming.test_parity_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach_batch",
-        "pyspark.sql.tests.connect.streaming.test_parity_transform_with_state_pyspark",
-        "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map_with_state",
-        "pyspark.sql.tests.connect.pandas.test_parity_pandas_transform_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_grouped_map_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state_state_variable",  # noqa: E501
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state_state_variable",  # noqa: E501
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there

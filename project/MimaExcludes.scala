@@ -45,7 +45,10 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.collection.PrimitiveKeyOpenHashMap*"),
 
     // [SPARK-54041][SQL] Enable Direct Passthrough Partitioning in the DataFrame API
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.repartitionById")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.repartitionById"),
+
+    // [SPARK-54001][CONNECT] Replace block copying with ref-counting in ArtifactManager cloning
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.artifact.ArtifactManager.cachedBlockIdList")
   )
 
   // Default exclude rules

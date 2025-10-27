@@ -46,6 +46,7 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLi
 import org.apache.spark.sql.execution.exchange.{REQUIRED_BY_STATEFUL_OPERATOR, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MetricsReporter, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.{MemorySink, TestForeachWriter}
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStoreCheckpointLocationNotEmpty}
@@ -230,7 +231,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     clock = new StreamManualClock
 
     /** Custom MemoryStream that waits for manual clock to reach a time */
-    val inputData = new MemoryStream[Int](0, sqlContext) {
+    val inputData = new MemoryStream[Int](0, spark) {
 
       private def dataAdded: Boolean = currentOffset.offset != -1
 
@@ -627,7 +628,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         // The number of leaves in the trigger's logical plan should be same as the executed plan.
         require(
           q.lastExecution.logical.collectLeaves().length ==
-            q.lastExecution.executedPlan.collectLeaves().length)
+            StreamingQueryPlanTraverseHelper
+              .collectFromUnfoldedPlan(q.lastExecution.executedPlan) {
+                case n if n.children.isEmpty => n
+              }.length)
 
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)
@@ -1474,6 +1478,184 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(shuffleOpt.head.shuffleOrigin === REQUIRED_BY_STATEFUL_OPERATOR)
       }
     )
+  }
+
+  test("SPARK-53942: changing the number of stateful shuffle partitions via config") {
+    val stream = MemoryStream[Int]
+
+    val df = stream.toDF()
+      .groupBy("value")
+      .count()
+
+    withTempDir { checkpointDir =>
+      withSQLConf(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> 10.toString) {
+        assert(
+          spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+            != spark.conf.get(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).get
+        )
+
+        testStream(df, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(stream, 1, 2, 3),
+          ProcessAllAvailable(),
+          AssertOnQuery { q =>
+            // This also proves the path of downgrade; we use the same entry name to persist the
+            // stateful shuffle partitions, hence it is compatible with older Spark versions.
+            assert(
+              q.offsetLog.offsetSeqMetadataForBatchId(0).get.conf
+                .get(SQLConf.SHUFFLE_PARTITIONS.key) === Some("10"))
+
+            val stateOps = q.lastExecution.executedPlan.collect {
+              case s: StateStoreSaveExec => s
+            }
+
+            val stateStoreSave = stateOps.head
+            assert(stateStoreSave.stateInfo.get.numPartitions === 10)
+            true
+          }
+        )
+      }
+
+      // Trying to change the number of stateful shuffle partitions, which should be ignored.
+      withSQLConf(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> 3.toString) {
+        testStream(df, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(stream, 4, 5),
+          ProcessAllAvailable(),
+          Execute { q =>
+            assert(
+              q.offsetLog.offsetSeqMetadataForBatchId(1).get.conf
+                .get(SQLConf.SHUFFLE_PARTITIONS.key) === Some("10"))
+
+            val stateOps = q.lastExecution.executedPlan.collect {
+              case s: StateStoreSaveExec => s
+            }
+
+            val stateStoreSave = stateOps.head
+            // This shouldn't change to 3.
+            assert(stateStoreSave.stateInfo.get.numPartitions === 10)
+          }
+        )
+      }
+    }
+  }
+
+  test("SPARK-53942: changing the number of stateless shuffle partitions via config") {
+    val inputData = MemoryStream[(String, Int)]
+    val dfStream = inputData.toDF()
+      .select($"_1".as("key"), $"_2".as("value"))
+
+    val dfBatch = spark.createDataFrame(Seq(("a", "aux1"), ("b", "aux2"), ("c", "aux3")))
+      .toDF("key", "aux")
+
+    val joined = dfStream.join(dfBatch, "key")
+
+    withTempDir { checkpointDir =>
+      withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> 1.toString,
+        // We should disable AQE to have deterministic number of shuffle partitions.
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        // Also disable broadcast hash join.
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, ("a", 1), ("b", 2)),
+          ProcessAllAvailable(),
+          Execute { q =>
+            // The value of stateful shuffle partitions in offset log follows the
+            // stateless shuffle partitions if it's not specified explicitly.
+            assert(
+              q.sparkSessionForStream.conf.get(
+                SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL) === Some(1))
+            assert(
+              q.offsetLog.offsetSeqMetadataForBatchId(0).get.conf
+                .get(SQLConf.SHUFFLE_PARTITIONS.key) === Some("1"))
+
+            val shuffles = q.lastExecution.executedPlan.collect {
+              case s: ShuffleExchangeExec => s
+            }
+
+            val shuffle = shuffles.head
+            assert(shuffle.numPartitions === 1)
+          }
+        )
+      }
+
+      // Trying to change the number of stateless shuffle partitions, which should be honored.
+      withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> 5.toString,
+        // We should disable AQE to have deterministic number of shuffle partitions.
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        // Also disable broadcast hash join.
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, ("c", 3)),
+          ProcessAllAvailable(),
+          Execute { q =>
+            // Changing the number of stateless shuffle partitions should not change the number
+            // of stateful shuffle partitions if it's available in offset log.
+            assert(
+              q.sparkSessionForStream.conf.get(
+                SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL) === Some(1))
+            assert(
+              q.offsetLog.offsetSeqMetadataForBatchId(1).get.conf
+                .get(SQLConf.SHUFFLE_PARTITIONS.key) === Some("1"))
+
+            val shuffles = q.lastExecution.executedPlan.collect {
+              case s: ShuffleExchangeExec => s
+            }
+
+            val shuffle = shuffles.head
+            assert(shuffle.numPartitions === 5)
+          }
+        )
+      }
+    }
+  }
+
+  test("SPARK-53942: stateful shuffle partitions are retained from old checkpoint") {
+    val input = MemoryStream[Int]
+    val df1 = input.toDF()
+      .select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
+        $"value" * 3 as Symbol("value"))
+    val dedup = df1.dropDuplicates("key1", "key2")
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-4.0.1-dedup-spark-53942/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    input.addData(1, 1, 2, 3, 4)
+
+    // Trying to change the number of stateless shuffle partitions, which should be no op
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      testStream(dedup)(
+        // scalastyle:off line.size.limit
+        /*
+          Note: The checkpoint was generated using the following input in Spark version 4.0.1, with
+          shuffle partitions = 5
+          AddData(inputData, 1, 1, 2, 3, 4),
+          CheckAnswer((1, 2, 3), (2, 4, 6), (3, 6, 9), (4, 8, 12))
+         */
+        // scalastyle:on line.size.limit
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(input, 2, 3, 3, 4, 5),
+        CheckAnswer((5, 10, 15)),
+        Execute { q =>
+          val shuffles = q.lastExecution.executedPlan.collect {
+            case s: ShuffleExchangeExec => s
+          }
+
+          val shuffle = shuffles.head
+          assert(shuffle.numPartitions === 5)
+        },
+        StopStream
+      )
+    }
   }
 
   private val TEST_PROVIDERS = Seq(
