@@ -26,6 +26,8 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   private var operationId: String = _
   private var resultSet: SparkConnectResultSet = _
 
+  private var limitRow: Int = 0
+
   @volatile private var closed: Boolean = false
 
   override def isClosed: Boolean = closed
@@ -86,7 +88,10 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
     operationId = null
     resultSet = null
 
-    val df = conn.spark.sql(sql)
+    var df = conn.spark.sql(sql)
+    if (limitRow > 0) {
+      df = df.limit(limitRow)
+    }
     val sparkResult = df.collectResult()
     operationId = sparkResult.operationId
     if (hasResultSet(sparkResult)) {
@@ -111,11 +116,17 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
 
   override def getMaxRows: Int = {
     checkOpen()
-    0
+    this.limitRow
   }
 
-  override def setMaxRows(max: Int): Unit =
-    throw new SQLFeatureNotSupportedException
+  override def setMaxRows(max: Int): Unit = {
+    checkOpen()
+
+    if (max < 0) {
+      throw new SQLException("The max rows must be zero or a positive integer.")
+    }
+    this.limitRow = max
+  }
 
   override def setEscapeProcessing(enable: Boolean): Unit =
     throw new SQLFeatureNotSupportedException
