@@ -65,7 +65,7 @@ public final class Geography implements Geo {
     return value.getBytes();
   }
 
-  // Returns a copy of this geometry.
+  // Returns a copy of this geography.
   public Geography copy() {
     byte[] bytes = getBytes();
     return Geography.fromBytes(Arrays.copyOf(bytes, bytes.length));
