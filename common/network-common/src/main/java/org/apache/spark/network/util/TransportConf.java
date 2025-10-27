@@ -87,9 +87,9 @@ public class TransportConf {
     return module;
   }
 
-  /** IO mode: NIO, EPOLL, or KQUEUE */
+  /** IO mode: NIO, EPOLL, KQUEUE, or AUTO */
   public String ioMode() {
-    String defaultIOMode = conf.get(SPARK_NETWORK_DEFAULT_IO_MODE_KEY, "NIO");
+    String defaultIOMode = conf.get(SPARK_NETWORK_DEFAULT_IO_MODE_KEY, "AUTO");
     return conf.get(SPARK_NETWORK_IO_MODE_KEY, defaultIOMode).toUpperCase(Locale.ROOT);
   }
 
