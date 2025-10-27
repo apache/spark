@@ -392,12 +392,22 @@ private[kafka010] class KafkaDataConsumer(
       .getOrElse("")
     val walTime = System.nanoTime() - startTimestampNano
 
+    // Get task context information for correlation with executor logs
+    val taskCtx = TaskContext.get()
+    val taskContextInfo = if (taskCtx != null) {
+      log" for taskId=${MDC(TASK_ATTEMPT_ID, taskCtx.taskAttemptId())} " +
+        log"partitionId=${MDC(PARTITION_ID, taskCtx.partitionId())}"
+    } else {
+      log"."
+    }
+
     logInfo(log"From Kafka ${MDC(CONSUMER, kafkaMeta)} read " +
       log"${MDC(NUM_RECORDS_READ, totalRecordsRead)} records through " +
       log"${MDC(NUM_KAFKA_PULLS, numPolls)} polls " +
       log"(polled out ${MDC(NUM_KAFKA_RECORDS_PULLED, numRecordsPolled)} records), " +
       log"taking ${MDC(TOTAL_TIME_READ, totalTimeReadNanos / NANOS_PER_MILLIS.toDouble)} ms, " +
-      log"during time span of ${MDC(TIME, walTime / NANOS_PER_MILLIS.toDouble)} ms."
+      log"during time span of ${MDC(TIME, walTime / NANOS_PER_MILLIS.toDouble)} ms" +
+      taskContextInfo
     )
 
     releaseConsumer()
