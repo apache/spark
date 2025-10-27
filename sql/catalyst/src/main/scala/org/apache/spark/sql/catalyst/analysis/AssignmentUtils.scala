@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, Expression, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -121,7 +122,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val actualAttr = restoreActualType(attr)
         val value = matchingAssignments.head.value
         TableOutputResolver.resolveUpdate(
-          "", value, actualAttr, conf, err => errors += err, colPath, true)
+          "", value, actualAttr, conf, err => errors += err, colPath, DefaultValueFillMode.RECURSE)
       }
       Assignment(attr, resolvedValue)
     }
@@ -166,7 +167,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     } else if (exactAssignments.nonEmpty) {
       val value = exactAssignments.head.value
       TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath,
-        fillDefaultValue = true)
+        DefaultValueFillMode.RECURSE)
     } else {
       applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath)
     }
