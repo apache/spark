@@ -18,8 +18,6 @@ package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.unsafe.types.GeometryVal;
 
-import java.nio.ByteOrder;
-
 // Catalyst-internal server-side execution wrapper for GEOMETRY.
 public final class Geometry implements Geo {
 
