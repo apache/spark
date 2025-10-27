@@ -28,6 +28,11 @@ import org.apache.spark.annotation.Evolving;
 public interface MergeSummary extends WriteSummary {
 
   /**
+   * Returns the number of source rows.
+   */
+  long numSourceRows();
+
+  /**
    * Returns the number of target rows copied unmodified because they did not match any action.
    */
   long numTargetRowsCopied();

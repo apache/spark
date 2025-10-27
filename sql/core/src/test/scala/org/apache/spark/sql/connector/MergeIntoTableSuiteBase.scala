@@ -1814,19 +1814,21 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               Row(1, 1000, "hr"), // updated
               Row(2, 200, "software"),
               Row(3, 300, "hr")))
+        }
 
-      val mergeSummary = getMergeSummary()
-      assert(mergeSummary.numSourceRows === 3L)
-      assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 2L))
-      assert(mergeSummary.numTargetRowsInserted === 0L)
-      assert(mergeSummary.numTargetRowsUpdated === 1L)
-      assert(mergeSummary.numTargetRowsDeleted === 0L)
-      assert(mergeSummary.numTargetRowsMatchedUpdated === 1L)
-      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
-      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
-      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
+        val mergeSummary = getMergeSummary()
+        assert(mergeSummary.numSourceRows === 3L)
+        assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 2L))
+        assert(mergeSummary.numTargetRowsInserted === 0L)
+        assert(mergeSummary.numTargetRowsUpdated === 1L)
+        assert(mergeSummary.numTargetRowsDeleted === 0L)
+        assert(mergeSummary.numTargetRowsMatchedUpdated === 1L)
+        assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
 
-      sql(s"DROP TABLE $tableNameAsString")
+        sql(s"DROP TABLE $tableNameAsString")
+      }
     }
   }
 
@@ -1875,7 +1877,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       val mergeSummary = getMergeSummary()
       // TODO SPARK-52578: Handle this case when optimizer removes Join due to no matching pks
-      assert(commitProps("merge.numSourceRows") === (if (deltaMerge) 3L else -1L))
+      assert(mergeSummary.numSourceRows === (if (deltaMerge) 3L else -1L))
       assert(mergeSummary.numTargetRowsCopied === 0L)
       assert(mergeSummary.numTargetRowsInserted === 1L)
       assert(mergeSummary.numTargetRowsUpdated === 0L)
@@ -1930,19 +1932,21 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               Row(3, 300, "hr"),
               Row(4, 400, "marketing"),
               Row(5, -1, "executive"))) // updated
+        }
 
-      val mergeSummary = getMergeSummary()
-      assert(mergeSummary.numSourceRows === 3L)
-      assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
-      assert(mergeSummary.numTargetRowsInserted === 0L)
-      assert(mergeSummary.numTargetRowsUpdated === 2L)
-      assert(mergeSummary.numTargetRowsDeleted === 0L)
-      assert(mergeSummary.numTargetRowsMatchedUpdated === 1L)
-      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
-      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 1L)
-      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
+        val mergeSummary = getMergeSummary()
+        assert(mergeSummary.numSourceRows === 3L)
+        assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
+        assert(mergeSummary.numTargetRowsInserted === 0L)
+        assert(mergeSummary.numTargetRowsUpdated === 2L)
+        assert(mergeSummary.numTargetRowsDeleted === 0L)
+        assert(mergeSummary.numTargetRowsMatchedUpdated === 1L)
+        assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 1L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
 
-      sql(s"DROP TABLE $tableNameAsString")
+        sql(s"DROP TABLE $tableNameAsString")
+      }
     }
   }
 
@@ -2049,19 +2053,21 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               Row(4, 400, "marketing"),
               Row(5, -1, "executive"), // updated
               Row(6, -1, "dummy"))) // inserted
+        }
 
-      val mergeSummary = getMergeSummary()
-      assert(mergeSummary.numSourceRows === 4L)
-      assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
-      assert(mergeSummary.numTargetRowsInserted === 1L)
-      assert(mergeSummary.numTargetRowsUpdated === 2L)
-      assert(mergeSummary.numTargetRowsDeleted === 0L)
-      assert(mergeSummary.numTargetRowsMatchedUpdated === 1L)
-      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
-      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 1L)
-      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
+        val mergeSummary = getMergeSummary()
+        assert(mergeSummary.numSourceRows === 4L)
+        assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
+        assert(mergeSummary.numTargetRowsInserted === 1L)
+        assert(mergeSummary.numTargetRowsUpdated === 2L)
+        assert(mergeSummary.numTargetRowsDeleted === 0L)
+        assert(mergeSummary.numTargetRowsMatchedUpdated === 1L)
+        assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 1L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
 
-      sql(s"DROP TABLE $tableNameAsString")
+        sql(s"DROP TABLE $tableNameAsString")
+      }
     }
   }
 
@@ -2111,19 +2117,21 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               Row(4, 400, "marketing"),
               // Row(5, 500, "executive") deleted
               Row(6, -1, "dummy"))) // inserted
+        }
 
-      val mergeSummary = getMergeSummary()
-      assert(mergeSummary.numSourceRows === 4L)
-      assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
-      assert(mergeSummary.numTargetRowsInserted === 1L)
-      assert(mergeSummary.numTargetRowsUpdated === 0L)
-      assert(mergeSummary.numTargetRowsDeleted === 2L)
-      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
-      assert(mergeSummary.numTargetRowsMatchedDeleted === 1L)
-      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
-      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 1L)
+        val mergeSummary = getMergeSummary()
+        assert(mergeSummary.numSourceRows === 4L)
+        assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
+        assert(mergeSummary.numTargetRowsInserted === 1L)
+        assert(mergeSummary.numTargetRowsUpdated === 0L)
+        assert(mergeSummary.numTargetRowsDeleted === 2L)
+        assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+        assert(mergeSummary.numTargetRowsMatchedDeleted === 1L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 1L)
 
-      sql(s"DROP TABLE $tableNameAsString")
+        sql(s"DROP TABLE $tableNameAsString")
+      }
     }
   }
 
@@ -2195,17 +2203,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                | DELETE
                |""".stripMargin)
 
-          val table = catalog.loadTable(ident)
-          val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-          assert(commitProps("merge.numSourceRows") === "-1") // if no numOutputRows, should be -1
-          assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "0"))
-          assert(commitProps("merge.numTargetRowsInserted") === "0")
-          assert(commitProps("merge.numTargetRowsUpdated") === "0")
-          assert(commitProps("merge.numTargetRowsDeleted") === "3")
-          assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
-          assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
-          assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
-          assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "3")
+          val mergeSummary = getMergeSummary()
+          assert(mergeSummary.numSourceRows === -1L) // if no numOutputRows, should be -1
+          assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 0L))
+          assert(mergeSummary.numTargetRowsInserted === 0L)
+          assert(mergeSummary.numTargetRowsUpdated === 0L)
+          assert(mergeSummary.numTargetRowsDeleted === 3L)
+          assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+          assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+          assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+          assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 3L)
 
           sql(s"DROP TABLE $tableNameAsString")
         }

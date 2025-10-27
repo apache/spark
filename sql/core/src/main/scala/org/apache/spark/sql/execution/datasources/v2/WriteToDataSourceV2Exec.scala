@@ -486,7 +486,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
       val metrics = n.metrics
       val numSourceRows = getNumSourceRows(n)
       MergeSummaryImpl(
-        getNumSourceRows(n),
+        numSourceRows,
         metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
         metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
         metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
