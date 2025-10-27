@@ -27,8 +27,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 sealed trait TimeTravelSpec
 
-case class AsOfTimestamp(timestamp: Long) extends TimeTravelSpec
-case class AsOfVersion(version: String) extends TimeTravelSpec
+case class AsOfTimestamp(timestamp: Long) extends TimeTravelSpec {
+  override def toString: String = s"TIMESTAMP AS OF $timestamp"
+}
+
+case class AsOfVersion(version: String) extends TimeTravelSpec {
+  override def toString: String = s"VERSION AS OF '$version'"
+}
 
 object TimeTravelSpec {
   def create(
