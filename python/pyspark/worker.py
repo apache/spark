@@ -751,7 +751,6 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
     _use_large_var_types = use_large_var_types(runner_conf)
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
-    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
 
     def wrapped(key_series, value_series):
         import pandas as pd
@@ -762,22 +761,21 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
             yield pd.concat(value_series, axis=1)
 
         if len(argspec.args) == 1:
-            result_iter = f(dataframe_iter())
+            result = f(dataframe_iter())
         elif len(argspec.args) == 2:
             key = tuple(s[0] for s in key_series)
-            result_iter = f(key, dataframe_iter())
+            result = f(key, dataframe_iter())
 
-        # Return a list of tuples (dataframe, arrow_type) for each result dataframe
-        result_list = []
-        for df in result_iter:
+        def verify_element(df):
             verify_pandas_result(
                 df, return_type, _assign_cols_by_name, truncate_return_schema=False
             )
-            result_list.append((df, arrow_return_type))
-        
-        return result_list
+            return df
 
-    return lambda k, v: wrapped(k, v)
+        yield from map(verify_element, result)
+
+    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
+    return lambda k, v: (wrapped(k, v), arrow_return_type)
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
@@ -2667,11 +2665,16 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamAggArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
             ser = GroupPandasUDFSerializer(
+                timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
+            )
+        elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
+            from pyspark.sql.pandas.serializers import GroupPandasIterUDFSerializer
+            
+            ser = GroupPandasIterUDFSerializer(
                 timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
             )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
