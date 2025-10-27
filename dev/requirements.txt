@@ -76,8 +76,8 @@ graphviz==0.20.3
 flameprof==0.4
 
 # TorchDistributor dependencies
-torch; python_version < '3.14'
-torchvision; python_version < '3.14'
+torch
+torchvision
 torcheval
 
 # DeepspeedTorchDistributor dependencies
