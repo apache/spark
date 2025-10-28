@@ -1717,6 +1717,28 @@ kitten	sitTing
 
 
 -- !query
+SELECT CASE WHEN utf8_lcase = 'XX' THEN 'XX' ELSE utf8_lcase END FROM t1
+-- !query schema
+struct<CASE WHEN (utf8_lcase = 'XX' collate UTF8_LCASE) THEN 'XX' collate UTF8_LCASE ELSE utf8_lcase END:string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day.
+SQL
+Something else. Nothing here.
+a
+aBcDCbA
+aaAaAAaA
+aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA
+abc
+efd2
+i̇o
+sitTing
+İo
+İo
+İo
+
+
+-- !query
 drop table t1
 -- !query schema
 struct<>
