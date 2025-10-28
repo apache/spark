@@ -139,7 +139,8 @@ class RelationResolution(override val catalogManager: CatalogManager)
                 ident,
                 table,
                 u.clearWritePrivileges.options,
-                u.isStreaming
+                u.isStreaming,
+                finalTimeTravelSpec
               )
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
               u.getTagValue(LogicalPlan.PLAN_ID_TAG)
@@ -162,7 +163,8 @@ class RelationResolution(override val catalogManager: CatalogManager)
       ident: Identifier,
       table: Option[Table],
       options: CaseInsensitiveStringMap,
-      isStreaming: Boolean): Option[LogicalPlan] = {
+      isStreaming: Boolean,
+      timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     table.map {
       // To utilize this code path to execute V1 commands, e.g. INSERT,
       // either it must be session catalog, or tracksPartitionsInCatalog
@@ -189,6 +191,7 @@ class RelationResolution(override val catalogManager: CatalogManager)
 
       case table =>
         if (isStreaming) {
+          assert(timeTravelSpec.isEmpty, "time travel is not allowed in streaming")
           val v1Fallback = table match {
             case withFallback: V2TableWithV1Fallback =>
               Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
@@ -210,7 +213,7 @@ class RelationResolution(override val catalogManager: CatalogManager)
         } else {
           SubqueryAlias(
             catalog.name +: ident.asMultipartIdentifier,
-            DataSourceV2Relation.create(table, Some(catalog), Some(ident), options)
+            DataSourceV2Relation.create(table, Some(catalog), Some(ident), options, timeTravelSpec)
           )
         }
     }

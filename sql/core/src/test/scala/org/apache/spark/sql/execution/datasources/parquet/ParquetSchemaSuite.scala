@@ -3172,6 +3172,204 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
            |}
          """).stripMargin,
       returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-53535: missing struct with only map field, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional group _1 (MAP) {
+          |      repeated group key_value {
+          |        required boolean key;
+          |        optional group value {
+          |          optional binary _1;
+          |          optional int32 _2;
+          |        }
+          |      }
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _1 (MAP) {
+           |      repeated group key_value {
+           |        required boolean key;
+           |        optional group value {
+           |          optional int32 _2;
+           |        }
+           |      }
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-53535: missing struct with cheap map and more expensive array field, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional group _1 (MAP) {
+          |      repeated group key_value {
+          |        required boolean key;
+          |        optional group value {
+          |          optional binary _1;
+          |          optional int32 _2;
+          |        }
+          |      }
+          |    }
+          |    optional group _2 (LIST) {
+          |      repeated group list {
+          |        optional binary element;
+          |      }
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _1 (MAP) {
+           |      repeated group key_value {
+           |        required boolean key;
+           |        optional group value {
+           |          optional int32 _2;
+           |        }
+           |      }
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-53535: missing struct with expensive map with cheap fields and primitive array, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional group _1 (MAP) {
+          |      repeated group key_value {
+          |        required boolean key;
+          |        optional group value {
+          |          optional binary _1;
+          |          optional int32 _2;
+          |        }
+          |      }
+          |    }
+          |    optional group _2 (LIST) {
+          |      repeated group list {
+          |        optional int32 element;
+          |      }
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _2 (LIST) {
+           |      repeated group list {
+           |        optional int32 element;
+           |      }
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-53535: missing struct where map is not picked due to max repetition level, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional group _1 (MAP) {
+          |      repeated group key_value {
+          |        optional group key (LIST) {
+          |          repeated group list {
+          |            optional int32 element;
+          |          }
+          |        }
+          |        optional group value (LIST) {
+          |          repeated group list {
+          |            optional group element (LIST) {
+          |              repeated group list {
+          |                optional group element (LIST) {
+          |                  repeated group list {
+          |                    optional int32 element;
+          |                  }
+          |                }
+          |              }
+          |            }
+          |          }
+          |        }
+          |      }
+          |    }
+          |    optional group _2 (LIST) {
+          |      repeated group list {
+          |        optional group element (LIST) {
+          |          repeated group list {
+          |            optional int32 element;
+          |          }
+          |        }
+          |      }
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _2 (LIST) {
+           |      repeated group list {
+           |        optional group element (LIST) {
+           |          repeated group list {
+           |            optional int32 element;
+           |          }
+           |        }
+           |      }
+           |    }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
   }
 
   testSchemaClipping(
@@ -3202,7 +3400,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |      }
         |    }
         |  }
-        |  optional group pickArrayOrMap {
+        |  optional group pickArrayOverMap {
         |    optional group arrayOfArray (LIST) {
         |      repeated group list {
         |        optional group element (LIST) {
@@ -3215,6 +3413,23 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |    optional group arrayOfLong (LIST) {
         |      repeated group list {
         |        optional int64 element;
+        |      }
+        |    }
+        |    optional group map (MAP) {
+        |      repeated group key_value {
+        |        required int32 key;
+        |        required binary value (UTF8);
+        |      }
+        |    }
+        |  }
+        |  optional group pickMapOverArray {
+        |    optional group arrayOfArray (LIST) {
+        |      repeated group list {
+        |        optional group element (LIST) {
+        |          repeated group list {
+        |            optional boolean element;
+        |          }
+        |        }
         |      }
         |    }
         |    optional group map (MAP) {
@@ -3239,7 +3454,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       .add("pickShortestType1", new StructType().add("missingColumn", IntegerType))
       .add("pickShortestType2", new StructType().add("missingColumn", IntegerType))
       .add("dontPickArrayOrMap", new StructType().add("missingColumn", IntegerType))
-      .add("pickArrayOrMap", new StructType().add("missingColumn", IntegerType))
+      .add("pickArrayOverMap", new StructType().add("missingColumn", IntegerType))
+      .add("pickMapOverArray", new StructType().add("missingColumn", IntegerType))
       .add("structNesting", new StructType().add("missingColumn", IntegerType)),
     expectedSchema =
       """message root {
@@ -3255,11 +3471,20 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |    optional int32 missingColumn;
         |    optional int64 long;
         |  }
-        |  optional group pickArrayOrMap {
+        |  optional group pickArrayOverMap {
+        |    optional int32 missingColumn;
+        |    optional group arrayOfLong (LIST) {
+        |      repeated group list {
+        |        optional int64 element;
+        |      }
+        |    }
+        |  }
+        |  optional group pickMapOverArray {
         |    optional int32 missingColumn;
         |    optional group map (MAP) {
         |      repeated group key_value {
         |        required int32 key;
+        |        required binary value (UTF8);
         |      }
         |    }
         |  }

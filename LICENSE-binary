@@ -231,7 +231,6 @@ com.univocity:univocity-parsers
 com.zaxxer:HikariCP
 commons-cli:commons-cli
 commons-codec:commons-codec
-commons-collections:commons-collections
 commons-dbcp:commons-dbcp
 commons-io:commons-io
 commons-lang:commons-lang
