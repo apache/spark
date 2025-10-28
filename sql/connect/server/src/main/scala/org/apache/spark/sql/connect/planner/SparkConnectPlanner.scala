@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.planner
 
 import java.util.{HashMap, Properties, UUID}
 
-import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -1608,7 +1607,7 @@ class SparkConnectPlanner(
 
     schemaOpt match {
       case None =>
-        logical.LocalRelation(attributes, ArraySeq.unsafeWrapArray(data.map(_.copy()).toArray))
+        logical.LocalRelation(attributes, data.map(_.copy()).toArray.toImmutableArraySeq)
       case Some(schema) =>
         def normalize(dt: DataType): DataType = dt match {
           case udt: UserDefinedType[_] => normalize(udt.sqlType)

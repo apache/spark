@@ -429,8 +429,7 @@ private[sql] class SparkConnectClient(
   }
 
   /**
-   * Cache the given local relation Arrow stream from a local file and return its hashes. The file
-   * is streamed in chunks and does not need to fit in memory.
+   * Cache the given local relation in chunks on the server and return its hashes.
    *
    * This method batches artifact status checks and uploads to minimize RPC overhead.
    */
