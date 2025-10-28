@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import java.util
 import java.util.Collections
 
 import scala.jdk.CollectionConverters._
@@ -29,6 +30,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSel
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
+import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
@@ -1641,6 +1644,70 @@ class DataSourceV2DataFrameSuite
       val readDF2 = spark.table(t)
       assertCached(readDF2)
       checkAnswer(readDF2, Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"), Row(4L, "d")))
+    }
+  }
+
+  test("SPARK-54022: caching table via Dataset API should pin table state") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT, category STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10, 'A'), (2, 20, 'B'), (3, 30, 'A')")
+
+      // cache table
+      spark.table(t).cache()
+
+      // verify caching works as expected
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // modify table directly to mimic external changes
+      val table = catalog("testcat").loadTable(ident, util.Set.of(TableWritePrivilege.DELETE))
+      table.asInstanceOf[TruncatableTable].truncateTable()
+
+      // verify external changes have no impact on cached state
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // add more data within session that should invalidate cache
+      sql(s"INSERT INTO $t VALUES (10, 100, 'x')")
+
+      // table should be re-cached correctly
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(10, 100, "x")))
+    }
+  }
+
+  test("SPARK-54022: caching a query via Dataset API should not pin table state") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT, category STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10, 'A'), (2, 20, 'B'), (3, 30, 'A')")
+
+      // cache query on top of table
+      val df = spark.table(t).select("id")
+      df.cache()
+
+      // verify query caching works as expected
+      assertCached(spark.table(t).select("id"))
+      checkAnswer(spark.table(t).select("id"), Seq(Row(1), Row(2), Row(3)))
+
+      // verify table itself is not cached
+      assertNotCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // modify table directly to mimic external changes
+      val table = catalog("testcat").loadTable(ident, util.Set.of(TableWritePrivilege.DELETE))
+      table.asInstanceOf[TruncatableTable].truncateTable()
+
+      // verify cached DataFrame is unaffected by external changes
+      assertCached(df)
+      checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+
+      // verify external changes are reflected correctly when table is queried
+      assertNotCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq.empty)
     }
   }
 

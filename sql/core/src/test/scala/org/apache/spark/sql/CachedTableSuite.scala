@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.util
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.HashSet
@@ -41,6 +42,8 @@ import org.apache.spark.sql.connector.catalog.CatalogPlugin
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
+import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
@@ -2561,6 +2564,38 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map("relationName" -> "`non_existent`"),
       context = ExpectedContext("non_existent", 14, 25))
+  }
+
+  test("SPARK-54022: caching table via CACHE TABLE should pin table state") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT, category STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10, 'A'), (2, 20, 'B'), (3, 30, 'A')")
+
+      // cache table
+      sql(s"CACHE TABLE $t")
+
+      // verify caching works as expected
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // modify table directly to mimic external changes
+      val tableCatalog = catalog("testcat").asTableCatalog
+      val table = tableCatalog.loadTable(ident, util.Set.of(TableWritePrivilege.DELETE))
+      table.asInstanceOf[TruncatableTable].truncateTable()
+
+      // verify this has no impact on cached state
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // add more data within session that should invalidate cache
+      sql(s"INSERT INTO $t VALUES (10, 100, 'x')")
+
+      // table should be re-cached correctly
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(10, 100, "x")))
+    }
   }
 
   private def cacheManager = spark.sharedState.cacheManager
