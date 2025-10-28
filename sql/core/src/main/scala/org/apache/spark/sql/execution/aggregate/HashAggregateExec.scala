@@ -514,7 +514,7 @@ case class HashAggregateExec(
           s"$thisPlan.getTaskContext().taskMemoryManager(), " +
           s"$thisPlan.getEmptyAggregationBuffer());"
         (iter, create)
-       }
+      }
     } else ("", "")
 
     // Generates the code to register a cleanup task with TaskContext to ensure that memory
