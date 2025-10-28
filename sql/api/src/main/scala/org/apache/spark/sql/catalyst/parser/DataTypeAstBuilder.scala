@@ -20,7 +20,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.antlr.v4.runtime.Token
+import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
@@ -106,11 +106,71 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     Option(ctx).map(visit(_).asInstanceOf[Token]).orNull
 
   /**
-   * Create a multi-part identifier.
+   * Get the identifier parts from a context, handling both regular identifiers and
+   * IDENTIFIER('literal'). This method is used to support identifier-lite syntax where
+   * IDENTIFIER('string') is folded at parse time. For qualified identifiers like
+   * IDENTIFIER('`catalog`.`schema`'), this will parse the string and return multiple parts.
+   *
+   * Subclasses should override this method to provide actual parsing logic.
+   */
+  protected def getIdentifierParts(ctx: ParserRuleContext): Seq[String] = {
+    ctx match {
+      case idLitCtx: IdentifierLiteralContext =>
+        // For IDENTIFIER('literal'), extract the string literal value and parse it
+        val literalValue = string(visitStringLit(idLitCtx.stringLit()))
+        // This base implementation just returns the literal as a single part
+        // Subclasses should override to parse qualified identifiers
+        Seq(literalValue)
+      case _ =>
+        // For regular identifiers, just return the text as a single part
+        Seq(ctx.getText)
+    }
+  }
+
+  /**
+   * Get the text of a SINGLE identifier, handling both regular identifiers and
+   * IDENTIFIER('literal'). This method REQUIRES that the identifier be unqualified (single part
+   * only). If IDENTIFIER('qualified.name') is used where a single identifier is required, this
+   * will error.
+   */
+  protected def getIdentifierText(ctx: ParserRuleContext): String = {
+    val parts = getIdentifierParts(ctx)
+    if (parts.size > 1) {
+      ctx match {
+        case idLitCtx: IdentifierLiteralContext =>
+          val literalValue = string(visitStringLit(idLitCtx.stringLit()))
+          // Use existing error: IDENTIFIER_TOO_MANY_NAME_PARTS with limit=1
+          throw new ParseException(
+            errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+            messageParameters = Map("identifier" -> literalValue, "limit" -> "1"),
+            ctx)
+        case _ =>
+          // This shouldn't happen for regular identifiers in strictIdentifier context
+          throw new IllegalStateException(
+            s"Expected single identifier but got qualified name: ${parts.mkString(".")}")
+      }
+    }
+    parts.head
+  }
+
+  /**
+   * Create a multi-part identifier. Handles identifier-lite with qualified identifiers like
+   * IDENTIFIER('`cat`.`schema`').table
    */
   override def visitMultipartIdentifier(ctx: MultipartIdentifierContext): Seq[String] =
     withOrigin(ctx) {
-      ctx.parts.asScala.map(_.getText).toSeq
+      ctx.parts.asScala.flatMap { part =>
+        // Each part can be an errorCapturingIdentifier, which contains an identifier
+        // The identifier can be a strictIdentifier which might be an identifierLiteral
+        val identifierCtx = part.identifier()
+        if (identifierCtx != null && identifierCtx.strictIdentifier() != null) {
+          // getIdentifierParts handles both regular identifiers (returns Seq with 1 element)
+          // and identifier-lite (may return multiple parts if the literal is qualified)
+          getIdentifierParts(identifierCtx.strictIdentifier())
+        } else {
+          Seq(part.getText)
+        }
+      }.toSeq
     }
 
   /**
@@ -296,7 +356,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
 
     StructField(
-      name = colName.getText,
+      name = getIdentifierText(colName.identifier.strictIdentifier()),
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = NULL == null,
       metadata = builder.build())

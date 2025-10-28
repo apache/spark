@@ -119,6 +119,25 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Override the base getIdentifierParts to properly parse qualified identifiers in
+   * IDENTIFIER('literal') contexts. Uses CatalystSqlParser to handle qualified identifiers
+   * like IDENTIFIER('`catalog`.`schema`') which should be parsed as Seq("catalog", "schema").
+   */
+  override protected def getIdentifierParts(ctx: ParserRuleContext): Seq[String] = {
+    ctx match {
+      case idLitCtx: IdentifierLiteralContext =>
+        // For IDENTIFIER('literal'), extract the string literal value and parse it
+        val literalValue = string(visitStringLit(idLitCtx.stringLit()))
+        // Parse the string as a multi-part identifier
+        // (e.g., "`cat`.`schema`" -> Seq("cat", "schema"))
+        CatalystSqlParser.parseMultipartIdentifier(literalValue)
+      case _ =>
+        // For regular identifiers, just return the text as a single part
+        Seq(ctx.getText)
+    }
+  }
+
+  /**
    * Retrieves the original input text for a given parser context, preserving all whitespace and
    * formatting.
    *
@@ -2544,9 +2563,11 @@ class AstBuilder extends DataTypeAstBuilder
 
   /**
    * Create a Sequence of Strings for an identifier list.
+   * Note: Each identifier in the list is kept as a single string, even if it's a qualified
+   * identifier-lite (e.g., IDENTIFIER('a.b') stays as "a.b", not split into parts).
    */
   override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
-    ctx.ident.asScala.map(_.getText).toSeq
+    ctx.ident.asScala.map(id => getIdentifierText(id.identifier.strictIdentifier())).toSeq
   }
 
   /* ********************************************************************************************
@@ -2554,18 +2575,54 @@ class AstBuilder extends DataTypeAstBuilder
    * ******************************************************************************************** */
   /**
    * Create a [[TableIdentifier]] from a 'tableName' or 'databaseName'.'tableName' pattern.
+   * Handles identifier-lite with qualified identifiers.
    */
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
-    TableIdentifier(ctx.table.getText, Option(ctx.db).map(_.getText))
+    // Get the table parts (may be multiple if using qualified identifier-lite)
+    val tableParts = getIdentifierParts(ctx.table.identifier.strictIdentifier())
+
+    // Get the database parts if present
+    val dbParts = Option(ctx.db).map(db => getIdentifierParts(db.identifier.strictIdentifier()))
+
+    // Combine db and table parts
+    val allParts = dbParts.getOrElse(Seq.empty) ++ tableParts
+
+    // TableIdentifier expects (table, database) where database is optional
+    // If we have multiple parts, the last is the table, everything before is the database path
+    allParts match {
+      case Seq(table) => TableIdentifier(table, None)
+      case parts if parts.size >= 2 =>
+        TableIdentifier(parts.last, Some(parts.dropRight(1).mkString(".")))
+      case _ =>
+        throw new IllegalStateException(s"Invalid table identifier: ${ctx.getText}")
+    }
   }
 
   /**
    * Create a [[FunctionIdentifier]] from a 'functionName' or 'databaseName'.'functionName' pattern.
+   * Handles identifier-lite with qualified identifiers.
    */
   override def visitFunctionIdentifier(
       ctx: FunctionIdentifierContext): FunctionIdentifier = withOrigin(ctx) {
-    FunctionIdentifier(ctx.function.getText, Option(ctx.db).map(_.getText))
+    // Get the function parts (may be multiple if using qualified identifier-lite)
+    val functionParts = getIdentifierParts(ctx.function.identifier.strictIdentifier())
+
+    // Get the database parts if present
+    val dbParts = Option(ctx.db).map(db => getIdentifierParts(db.identifier.strictIdentifier()))
+
+    // Combine db and function parts
+    val allParts = dbParts.getOrElse(Seq.empty) ++ functionParts
+
+    // FunctionIdentifier expects (function, database) where database is optional
+    // If we have multiple parts, the last is the function, everything before is the database path
+    allParts match {
+      case Seq(function) => FunctionIdentifier(function, None)
+      case parts if parts.size >= 2 =>
+        FunctionIdentifier(parts.last, Some(parts.dropRight(1).mkString(".")))
+      case _ =>
+        throw new IllegalStateException(s"Invalid function identifier: ${ctx.getText}")
+    }
   }
 
   /* ********************************************************************************************
@@ -4033,7 +4090,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: ColDefinitionContext): ColumnAndConstraint = withOrigin(ctx) {
     import ctx._
 
-    val name: String = colName.getText
+    val name: String = getIdentifierText(colName.identifier.strictIdentifier())
     // Check that no duplicates exist among any CREATE TABLE column options specified.
     var nullable = true
     var defaultExpression: Option[DefaultExpressionContext] = None
@@ -5403,7 +5460,8 @@ class AstBuilder extends DataTypeAstBuilder
       invalidStatement("ALTER TABLE ... PARTITION ... CHANGE COLUMN", ctx)
     }
     val columnNameParts = typedVisit[Seq[String]](ctx.colName)
-    if (!conf.resolver(columnNameParts.last, ctx.colType().colName.getText)) {
+    if (!conf.resolver(columnNameParts.last,
+        getIdentifierText(ctx.colType().colName.identifier.strictIdentifier()))) {
       throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError("Renaming column",
         "ALTER COLUMN", ctx, Some("please run RENAME COLUMN instead"))
     }

@@ -668,8 +668,8 @@ dmlStatementNoWith
     ;
 
 identifierReference
-    : IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
-    | multipartIdentifier
+    : multipartIdentifier
+    | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
     ;
 
 catalogIdentifierReference
@@ -1591,6 +1591,7 @@ identifier
 strictIdentifier
     : IDENTIFIER              #unquotedIdentifier
     | quotedIdentifier        #quotedIdentifierAlternative
+    | IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN  #identifierLiteral
     | {SQL_standard_keyword_behavior}? ansiNonReserved #unquotedIdentifier
     | {!SQL_standard_keyword_behavior}? nonReserved    #unquotedIdentifier
     ;
