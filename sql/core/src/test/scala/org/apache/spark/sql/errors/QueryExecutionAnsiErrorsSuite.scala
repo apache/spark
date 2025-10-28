@@ -17,6 +17,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark._
+import org.apache.spark.SparkBuildInfo
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
@@ -266,6 +267,84 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       parameters = Map(
         "func" -> "`try_to_timestamp`",
         "message" -> "Text 'abc' could not be parsed at index 0")
+    )
+  }
+
+  test("INVALID_DATETIME_PATTERN with constant pattern (constant folding path)") {
+    // Test that invalid pattern letters (like 'I') are properly wrapped with error code
+    // when the pattern is a constant literal. This triggers the formatterOption lazy val
+    // during constant folding optimization phase.
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select to_timestamp('20231225143045', 'yyyyMMddHHMIss')").collect()
+      },
+      condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+      parameters = Map(
+        "pattern" -> "'yyyyMMddHHMIss'",
+        "docroot" -> SparkBuildInfo.spark_doc_root),
+      sqlState = "22007"
+    )
+  }
+
+  test("INVALID_DATETIME_PATTERN with non-constant pattern") {
+    // Test that invalid patterns are properly wrapped when the pattern is NOT a constant
+    // (e.g., from a column or variable). This exercises the runtime getFormatter() path.
+    withTempView("patterns") {
+      sql("select 'yyyyMMddHHMIss' as pattern").createOrReplaceTempView("patterns")
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("select to_timestamp('20231225143045', pattern) from patterns").collect()
+        },
+        condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+        parameters = Map(
+          "pattern" -> "'yyyyMMddHHMIss'",
+          "docroot" -> SparkBuildInfo.spark_doc_root),
+        sqlState = "22007"
+      )
+    }
+  }
+
+  test("INVALID_DATETIME_PATTERN with various invalid pattern letters") {
+    // Test multiple invalid pattern letters that throw IllegalArgumentException
+    // Using clearly invalid letters like I, P, R which are not valid datetime pattern letters
+    val invalidPatterns = Seq(
+      ("yyyyMMddHHMIss", "I"),   // Invalid 'I' - unknown pattern letter
+      ("yyyyMMddHHPmss", "P"),   // Invalid 'P' - unknown pattern letter
+      ("yyyyMMddRHmmss", "R")    // Invalid 'R' - unknown pattern letter
+    )
+
+    invalidPatterns.foreach { case (pattern, _) =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"select to_timestamp('20231225143045', '$pattern')").collect()
+        },
+        condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+        parameters = Map(
+          "pattern" -> s"'$pattern'",
+          "docroot" -> SparkBuildInfo.spark_doc_root),
+        sqlState = "22007"
+      )
+    }
+  }
+
+  test("Valid patterns should still work correctly") {
+    // Ensure our fix doesn't break valid patterns in constant folding path
+    val result = sql("select to_timestamp('20231225143045', 'yyyyMMddHHmmss')").collect()
+    assert(result.length == 1)
+    assert(result(0).getTimestamp(0).toString.startsWith("2023-12-25 14:30:45"))
+  }
+
+  test("CANNOT_PARSE_TIMESTAMP still works for invalid input with valid pattern") {
+    // Verify that parse errors (invalid input) are still properly wrapped
+    // This is different from invalid pattern errors
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        sql("select to_timestamp('invalid_date', 'yyyyMMddHHmmss')").collect()
+      },
+      condition = "CANNOT_PARSE_TIMESTAMP",
+      parameters = Map(
+        "func" -> "`try_to_timestamp`",
+        "message" -> "Text 'invalid_date' could not be parsed at index 0")
     )
   }
 

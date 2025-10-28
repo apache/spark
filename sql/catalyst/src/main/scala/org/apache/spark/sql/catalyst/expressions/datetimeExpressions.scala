@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, Tim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
@@ -90,7 +90,19 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
 
   @transient final protected lazy val formatterOption: Option[TimestampFormatter] =
     if (formatString.foldable) {
-      Option(formatString.eval()).map(fmt => getFormatter(fmt.toString))
+      Option(formatString.eval()).flatMap { fmt =>
+        try {
+          Some(getFormatter(fmt.toString))
+        } catch {
+          case e: IllegalArgumentException =>
+            // Wrap Java's IllegalArgumentException with proper error code.
+            // Spark's SparkIllegalArgumentException should pass through unchanged.
+            e match {
+              case _: SparkIllegalArgumentException => throw e
+              case _ => throw ExecutionErrors.failToRecognizePatternError(fmt.toString, e)
+            }
+        }
+      }
     } else None
 
   final protected def getFormatter(fmt: String): TimestampFormatter = {
