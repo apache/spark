@@ -396,7 +396,7 @@ private[kafka010] class KafkaDataConsumer(
     val taskCtx = TaskContext.get()
     val taskContextInfo = if (taskCtx != null) {
       log" for taskId=${MDC(TASK_ATTEMPT_ID, taskCtx.taskAttemptId())} " +
-        log"partitionId=${MDC(PARTITION_ID, taskCtx.partitionId())}"
+        log"partitionId=${MDC(PARTITION_ID, taskCtx.partitionId())}."
     } else {
       log"."
     }
