@@ -567,7 +567,7 @@ class GeographyType(SpatialType):
         # Algorithm value must be validated, although only SPHERICAL is supported currently.
         if alg != cls.DEFAULT_ALG:
             raise IllegalArgumentException(
-                errorClass="INVALID_ALGORITHM_VALUE",
+                errorClass="ST_INVALID_ALGORITHM_VALUE",
                 messageParameters={
                     "alg": str(alg),
                 },
