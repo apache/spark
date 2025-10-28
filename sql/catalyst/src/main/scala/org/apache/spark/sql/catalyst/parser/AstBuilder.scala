@@ -2580,10 +2580,22 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
     // Get the table parts (may be multiple if using qualified identifier-lite)
-    val tableParts = getIdentifierParts(ctx.table.identifier.strictIdentifier())
+    // Handle null case for error recovery
+    val tableParts = if (ctx.table != null && ctx.table.identifier != null &&
+        ctx.table.identifier.strictIdentifier() != null) {
+      getIdentifierParts(ctx.table.identifier.strictIdentifier())
+    } else {
+      Seq(ctx.table.getText)
+    }
 
     // Get the database parts if present
-    val dbParts = Option(ctx.db).map(db => getIdentifierParts(db.identifier.strictIdentifier()))
+    val dbParts = Option(ctx.db).flatMap { db =>
+      if (db.identifier != null && db.identifier.strictIdentifier() != null) {
+        Some(getIdentifierParts(db.identifier.strictIdentifier()))
+      } else {
+        Some(Seq(db.getText))
+      }
+    }
 
     // Combine db and table parts
     val allParts = dbParts.getOrElse(Seq.empty) ++ tableParts
@@ -2606,10 +2618,22 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitFunctionIdentifier(
       ctx: FunctionIdentifierContext): FunctionIdentifier = withOrigin(ctx) {
     // Get the function parts (may be multiple if using qualified identifier-lite)
-    val functionParts = getIdentifierParts(ctx.function.identifier.strictIdentifier())
+    // Handle null case for error recovery
+    val functionParts = if (ctx.function != null && ctx.function.identifier != null &&
+        ctx.function.identifier.strictIdentifier() != null) {
+      getIdentifierParts(ctx.function.identifier.strictIdentifier())
+    } else {
+      Seq(ctx.function.getText)
+    }
 
     // Get the database parts if present
-    val dbParts = Option(ctx.db).map(db => getIdentifierParts(db.identifier.strictIdentifier()))
+    val dbParts = Option(ctx.db).flatMap { db =>
+      if (db.identifier != null && db.identifier.strictIdentifier() != null) {
+        Some(getIdentifierParts(db.identifier.strictIdentifier()))
+      } else {
+        Some(Seq(db.getText))
+      }
+    }
 
     // Combine db and function parts
     val allParts = dbParts.getOrElse(Seq.empty) ++ functionParts
