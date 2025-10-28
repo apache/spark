@@ -235,4 +235,106 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
       }
     }
   }
+
+  test("SparkConnectDatabaseMetaData getSchemas") {
+
+    def verifyGetSchemas(
+        getSchemas: () => ResultSet)(verify: Seq[(String, String)] => Unit): Unit = {
+      Using.resource(getSchemas()) { rs =>
+        val catalogDatabases = new Iterator[(String, String)] {
+          def hasNext: Boolean = rs.next()
+          def next(): (String, String) =
+            (rs.getString("TABLE_CATALOG"), rs.getString("TABLE_SCHEM"))
+        }.toSeq
+        verify(catalogDatabases)
+      }
+    }
+
+    withConnection { conn =>
+      implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
+
+      registerCatalog("testcat", TEST_IN_MEMORY_CATALOG)
+
+      spark.sql("USE testcat")
+      spark.sql("CREATE DATABASE IF NOT EXISTS testcat.t_db1")
+      spark.sql("CREATE DATABASE IF NOT EXISTS testcat.t_db2")
+      spark.sql("CREATE DATABASE IF NOT EXISTS testcat.test_db3")
+
+      spark.sql("USE spark_catalog")
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db1")
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db2")
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db_")
+
+      val metadata = conn.getMetaData
+      withDatabase("testcat.t_db1", "testcat.t_db2", "testcat.test_db3",
+        "spark_catalog.db1", "spark_catalog.db2", "spark_catalog.db_") {
+
+        // list schemas in all catalogs
+        val getSchemasInAllCatalogs = (() => metadata.getSchemas) ::
+          List(null, "%").map { database => () => metadata.getSchemas(null, database) } ::: Nil
+
+        getSchemasInAllCatalogs.foreach { getSchemas =>
+          verifyGetSchemas(getSchemas) { catalogDatabases =>
+            // results are ordered by TABLE_CATALOG, TABLE_SCHEM
+            assert {
+              catalogDatabases === Seq(
+                ("spark_catalog", "db1"),
+                ("spark_catalog", "db2"),
+                ("spark_catalog", "db_"),
+                ("spark_catalog", "default"),
+                ("testcat", "t_db1"),
+                ("testcat", "t_db2"),
+                ("testcat", "test_db3"))
+            }
+          }
+        }
+
+        // list schemas in current catalog
+        assert(conn.getCatalog === "spark_catalog")
+        val getSchemasInCurrentCatalog =
+          List(null, "%").map { database => () => metadata.getSchemas("", database) }
+        getSchemasInCurrentCatalog.foreach { getSchemas =>
+          verifyGetSchemas(getSchemas) { catalogDatabases =>
+            // results are ordered by TABLE_CATALOG, TABLE_SCHEM
+            assert {
+              catalogDatabases === Seq(
+                ("spark_catalog", "db1"),
+                ("spark_catalog", "db2"),
+                ("spark_catalog", "db_"),
+                ("spark_catalog", "default"))
+            }
+          }
+        }
+
+        // list schemas with SQL pattern
+        verifyGetSchemas { () => metadata.getSchemas(null, "db%") } { catalogDatabases =>
+          // results are ordered by TABLE_CATALOG, TABLE_SCHEM
+          assert {
+            catalogDatabases === Seq(
+              ("spark_catalog", "db1"),
+              ("spark_catalog", "db2"),
+              ("spark_catalog", "db_"))
+          }
+        }
+
+        verifyGetSchemas { () => metadata.getSchemas(null, "db_") } { catalogDatabases =>
+          // results are ordered by TABLE_CATALOG, TABLE_SCHEM
+          assert {
+            catalogDatabases === Seq(
+              ("spark_catalog", "db1"),
+              ("spark_catalog", "db2"),
+              ("spark_catalog", "db_"))
+          }
+        }
+
+        verifyGetSchemas { () => metadata.getSchemas(null, "db\\_") } { catalogDatabases =>
+          // results are ordered by TABLE_CATALOG, TABLE_SCHEM
+          assert {
+            catalogDatabases === Seq(
+              ("spark_catalog", "db_"))
+          }
+        }
+      }
+    }
+  }
 }
