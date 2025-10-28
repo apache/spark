@@ -922,6 +922,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING =
+    buildConf("spark.sql.adaptive.streaming.stateless.enabled")
+      .doc("When true, enable adaptive query execution for stateless streaming query. To " +
+        "enable this config, `spark.sql.adaptive.enabled` needs to be also enabled.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ADAPTIVE_EXECUTION_FORCE_APPLY = buildConf("spark.sql.adaptive.forceApply")
     .internal()
     .doc("Adaptive query execution is skipped when the query does not have exchanges or " +
@@ -6807,6 +6815,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def adaptiveExecutionEnabledInStatelessStreaming: Boolean =
+    getConf(ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING)
 
   def adaptiveExecutionLogLevel: Level = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
 
