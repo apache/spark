@@ -3644,30 +3644,38 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create a String from a string literal context. This supports multiple consecutive string
-   * literals, these are concatenated, for example this expression "'hello' 'world'" will be
-   * converted into "helloworld".
+   * Create a String from a string literal context. This supports:
+   *   - Consecutive string literals: `'hello' 'world'` becomes `'helloworld'`
+   *   - R-strings (raw strings): `R'\n'` preserves the literal backslash
+   *   - Parameter markers: `:param` or `?` can be mixed with literals
    *
-   * Special characters can be escaped by using Hive/C-style escaping.
+   * Special characters can be escaped by using Hive/C-style escaping. The escape processing
+   * behavior depends on SQL configuration:
+   *   - `spark.sql.parser.escapedStringLiterals=true`: No escape processing
+   *   - `spark.sql.legacy.consecutiveStringLiterals.enabled=true`: Ignore `""` and `''`
+   *   - Default: Full escape processing (e.g., `\n` becomes newline)
    *
-   * Note: visitStringLit now returns a Token that already represents the coalesced value of
-   * multiple literals.
+   * Each singleStringLit child is processed individually with the config-appropriate function,
+   * then results are concatenated. This preserves R-string semantics when mixing raw and
+   * regular strings.
    */
   private def createString(ctx: StringLiteralContext): String = {
     // We need to unescape based on configuration.
-    val token = visitStringLit(ctx.stringLit())
-
-    // Check if this is a PreprocessedCoalescedStringToken (escape processing already done)
-    if (token.isInstanceOf[org.apache.spark.sql.catalyst.parser.PreprocessedCoalescedStringToken]) {
-      // Already processed during coalescing, strip quotes and return
-      val text = token.getText
-      text.substring(1, text.length - 1)  // Remove outer quotes
-    } else if (conf.escapedStringLiterals) {
-      stringWithoutUnescape(token)
+    // Process each singleStringLit child individually (respecting R-strings) and concatenate.
+    import scala.jdk.CollectionConverters._
+    val stringLitCtx = ctx.stringLit()
+    if (conf.escapedStringLiterals) {
+      stringLitCtx.singleStringLit.asScala.map { x =>
+        stringWithoutUnescape(visit(x).asInstanceOf[Token])
+      }.mkString
     } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
-      stringIgnoreQuoteQuote(token)
+      stringLitCtx.singleStringLit.asScala.map { x =>
+        stringIgnoreQuoteQuote(visit(x).asInstanceOf[Token])
+      }.mkString
     } else {
-      string(token)
+      stringLitCtx.singleStringLit.asScala.map { x =>
+        string(visit(x).asInstanceOf[Token])
+      }.mkString
     }
   }
 

@@ -808,4 +808,63 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
       sql("SELECT INTERVAL '10-1' YEAR TO MONTH")
     )
   }
+
+  // ========================================================================
+  // Parameter Markers with SQL Configuration Tests
+  // ========================================================================
+
+  test("parameter marker coalescing with escapedStringLiterals") {
+    withSQLConf("spark.sql.parser.escapedStringLiterals" -> "true") {
+      // With escapedStringLiterals=true, escape sequences are NOT processed
+      checkAnswer(
+        spark.sql("SELECT :prefix '\\n' :suffix", Map("prefix" -> "hello", "suffix" -> "world")),
+        Row("hello\\nworld")  // Literal backslash-n, not a newline
+      )
+    }
+  }
+
+  test("parameter marker coalescing with LEGACY_CONSECUTIVE_STRING_LITERALS") {
+    withSQLConf("spark.sql.legacy.consecutiveStringLiterals.enabled" -> "true") {
+      // With legacy mode, "" is treated as escape for " in DOUBLE-quoted strings only
+      checkAnswer(
+        spark.sql(raw"""SELECT :prefix "S""par""k" :suffix""",
+          Map("prefix" -> "hello ", "suffix" -> " world")),
+        Row("hello Spark world")  // "" becomes " in double-quoted strings
+      )
+
+      // With legacy mode, '' is treated as escape for ' in SINGLE-quoted strings only
+      checkAnswer(
+        spark.sql("SELECT :prefix 'S''par''k' :suffix",
+          Map("prefix" -> "hello ", "suffix" -> " world")),
+        Row("hello Spark world")  // '' becomes ' in single-quoted strings
+      )
+    }
+  }
+
+  test("parameter markers at different positions") {
+    // Parameter at start
+    checkAnswer(
+      spark.sql("SELECT :p 'world'", Map("p" -> "hello ")),
+      Row("hello world")
+    )
+
+    // Parameter in middle
+    checkAnswer(
+      spark.sql("SELECT 'hello' :p 'world'", Map("p" -> " ")),
+      Row("hello world")
+    )
+
+    // Parameter at end
+    checkAnswer(
+      spark.sql("SELECT 'hello ' :p", Map("p" -> "world")),
+      Row("hello world")
+    )
+
+    // Multiple parameters mixed with literals
+    checkAnswer(
+      spark.sql("SELECT :p1 'a' :p2 'b' :p3 'c' :p4",
+        Map("p1" -> "1", "p2" -> "2", "p3" -> "3", "p4" -> "4")),
+      Row("1a2b3c4")
+    )
+  }
 }
