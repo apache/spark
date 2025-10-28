@@ -175,12 +175,6 @@ case class HashAggregateExec(
   private var hashMapTerm: String = _
   private var sorterTerm: String = _
 
-  private var adaptivePassthrough: String = ""
-
-  private var iterTermForFastHashMap: String = ""
-  private var iterTerm: String = ""
-  private var finishRegularHashMap: String = ""
-
   /**
    * This is called by generated Java class, should be public.
    */
@@ -467,8 +461,6 @@ case class HashAggregateExec(
       childrenConsumed = ctx.
         addMutableState(CodeGenerator.JAVA_BOOLEAN, "childrenConsumed")
     }
-    val finishedAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "finishedAgg")
-    val childConsumed = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "childConsumed")
     if (conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap()
     } else if (conf.enableVectorizedHashMap) {
@@ -490,8 +482,7 @@ case class HashAggregateExec(
     val thisPlan = ctx.addReferenceObj("plan", this)
 
     // Create a name for the iterator from the fast hash map, and the code to create fast hash map.
-      var createFastHashMap: String = ""
-      if (isFastHashMapEnabled) {
+    val (iterTermForFastHashMap, createFastHashMap) = if (isFastHashMapEnabled) {
       // Generates the fast hash map class and creates the fast hash map term.
       val fastHashMapClassName = ctx.freshName("FastHashMap")
       if (isVectorizedHashMapEnabled) {
@@ -507,8 +498,7 @@ case class HashAggregateExec(
           "vectorizedFastHashMapIter",
           forceInline = true)
         val create = s"$fastHashMapTerm = new $fastHashMapClassName();"
-        iterTermForFastHashMap = iter
-        createFastHashMap = create
+        (iter, create)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
           fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
@@ -523,13 +513,9 @@ case class HashAggregateExec(
         val create = s"$fastHashMapTerm = new $fastHashMapClassName(" +
           s"$thisPlan.getTaskContext().taskMemoryManager(), " +
           s"$thisPlan.getEmptyAggregationBuffer());"
-        iterTermForFastHashMap = iter
-        createFastHashMap = create
+        (iter, create)
        }
-      } else {
-        iterTermForFastHashMap = ""
-        createFastHashMap = ""
-      }
+    } else ("", "")
 
     // Generates the code to register a cleanup task with TaskContext to ensure that memory
     // is guaranteed to be freed at the end of the task. This is necessary to avoid memory
@@ -549,16 +535,12 @@ case class HashAggregateExec(
 
     // Create a name for the iterator from the regular hash map.
     // Inline mutable state since not many aggregation operations in a task
-    iterTerm = ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName,
+    val iterTerm = ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName,
       "mapIter", forceInline = true)
     // create hashMap
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
     hashMapTerm = ctx.addMutableState(hashMapClassName, "hashMap", forceInline = true)
     sorterTerm = ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, "sorter",
-      forceInline = true)
-
-    // adaptivePassthrough
-    adaptivePassthrough = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "adaptivePassthrough",
       forceInline = true)
 
     val doAgg = ctx.freshName("doAggregateWithKeys")
@@ -567,13 +549,13 @@ case class HashAggregateExec(
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
     val numTasksFallBacked = metricTerm(ctx, "numTasksFallBacked")
 
-      val mapCleared = if (skipPartialAggregateEnabled) {
+    val mapCleared = if (skipPartialAggregateEnabled) {
         s"$skipPartialAggTerm"
       } else {
         s"false"
       }
 
-      finishRegularHashMap = s"$iterTerm = $thisPlan.finishAggregate(" +
+    val finishRegularHashMap = s"$iterTerm = $thisPlan.finishAggregate(" +
         s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe," +
         s" $numTasksFallBacked, $mapCleared);"
     val finishHashMap = if (isFastHashMapEnabled) {
@@ -585,14 +567,6 @@ case class HashAggregateExec(
       finishRegularHashMap
     }
 
-    val checkFastHashMap = if (isFastHashMapEnabled) {
-      s"""
-         |  if ($iterTermForFastHashMap == null) {
-         |    $iterTermForFastHashMap = $fastHashMapTerm.rowIterator();
-         |  }
-         |""".stripMargin
-    } else ""
-
     outputFunc = generateResultFunction(ctx)
     val genChildrenConsumedCode = if (skipPartialAggregateEnabled) {
       s"${childrenConsumed} = true;"
@@ -603,9 +577,6 @@ case class HashAggregateExec(
          |private void $doAgg() throws java.io.IOException {
          |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
          |  $genChildrenConsumedCode
-         |  if (shouldStop()) return;
-         |  $childConsumed = true;
-         |  $checkFastHashMap
          |  $finishHashMap
          |}
        """.stripMargin)
@@ -695,8 +666,7 @@ case class HashAggregateExec(
       } else ""
 
       s"""
-       |if (!$finishedAgg) {
-       | if (!$initAgg) {
+       |if (!$initAgg) {
        |  $initAgg = true;
        |  $createFastHashMap
        |  $addHookToCloseFastHashMap
@@ -705,16 +675,11 @@ case class HashAggregateExec(
        |  $doAggFuncName();
        |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
        |  if (shouldStop()) return;
-       | }
        |}
        |$genCodePostInitCode
        |// output the result
        |$outputFromFastHashMap
        |$outputFromRegularHashMap
-       |if (!hashAgg_childConsumed_0) {
-       |  $doAggFuncName();
-       |  if (shouldStop()) return;
-       |}
      """.stripMargin
   }
 
