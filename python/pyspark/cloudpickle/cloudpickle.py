@@ -1301,12 +1301,9 @@ class Pickler(pickle.Pickler):
     def dump(self, obj):
         try:
             return super().dump(obj)
-        except RuntimeError as e:
-            if len(e.args) > 0 and "recursion" in e.args[0]:
-                msg = "Could not pickle object as excessively deep recursion required."
-                raise pickle.PicklingError(msg) from e
-            else:
-                raise
+        except RecursionError as e:
+            msg = "Could not pickle object as excessively deep recursion required."
+            raise pickle.PicklingError(msg) from e
 
     def __init__(self, file, protocol=None, buffer_callback=None):
         if protocol is None:
