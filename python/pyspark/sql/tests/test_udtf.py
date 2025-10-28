@@ -2987,7 +2987,7 @@ class BaseUDTFTestsMixin:
                 self._check_result_or_exception(
                     TestUDTF,
                     "x: string",
-                    "Python worker exited unexpectedly",
+                    "Python worker process terminated due to idle timeout \\(timeout: 1 seconds\\)",
                     err_type=Exception,
                 )
 
@@ -3005,7 +3005,7 @@ class BaseUDTFTestsMixin:
                 self._check_result_or_exception(
                     TestUDTFWithAnalyze,
                     None,
-                    "Python worker exited unexpectedly",
+                    "Python worker process terminated due to idle timeout \\(timeout: 1 seconds\\)",
                     err_type=Exception,
                 )
 
