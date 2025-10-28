@@ -3905,9 +3905,7 @@ object SQLConf {
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
-        "to a single ArrowRecordBatch in memory. This configuration is not effective for the " +
-        "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
-        "becomes each ArrowRecordBatch. If set to zero or negative there is no limit. " +
+        "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit. " +
         "See also spark.sql.execution.arrow.maxBytesPerBatch. If both are set, each batch " +
         "is created when any condition of both is met.")
       .version("2.3.0")
@@ -3950,11 +3948,9 @@ object SQLConf {
     buildConf("spark.sql.execution.arrow.maxBytesPerBatch")
       .internal()
       .doc("When using Apache Arrow, limit the maximum bytes in each batch that can be written " +
-        "to a single ArrowRecordBatch in memory. This configuration is not effective for the " +
-        "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
-        "becomes each ArrowRecordBatch. Unlike 'spark.sql.execution.arrow.maxRecordsPerBatch', " +
-        "this configuration does not work for createDataFrame/toPandas with Arrow/pandas " +
-        "instances. " +
+        "to a single ArrowRecordBatch in memory. " +
+        "Unlike 'spark.sql.execution.arrow.maxRecordsPerBatch', this configuration does not " +
+        "work for createDataFrame/toPandas with Arrow/pandas instances. " +
         "See also spark.sql.execution.arrow.maxRecordsPerBatch. If both are set, each batch " +
         "is created when any condition of both is met.")
       .version("4.0.0")
