@@ -17,28 +17,34 @@
 
 package org.apache.spark.sql.internal.types;
 
-import org.apache.spark.sql.internal.util.SingletonBase;
-
 import java.util.HashMap;
 import java.util.List;
 
 /**
  * Class for maintaining the mappings between supported SRID/CRS values and the corresponding SRS.
  */
-public class SpatialReferenceSystemCache extends SingletonBase<SpatialReferenceSystemCache> {
+public class SpatialReferenceSystemCache {
 
-  // Private constructor to prevent external instantiation.
+  // Private constructor to prevent external instantiation of this singleton class.
   private SpatialReferenceSystemCache() {
     populateSpatialReferenceSystemInformationMapping();
   }
 
-  @Override
-  protected SpatialReferenceSystemCache createInstance() {
-    return new SpatialReferenceSystemCache();
-  }
+  // The singleton `instance` is created lazily, meaning that it is not instantiated until the
+  // `getInstance()` method is called for the first time. Note that this solution is thread-safe.
+  private static volatile SpatialReferenceSystemCache instance = null;
 
+  // The `getInstance` method uses double-checked locking to ensure efficient and safe instance
+  // creation. The singleton instance is created only once, even in a multithreaded environment.
   public static SpatialReferenceSystemCache getInstance() {
-    return SingletonBase.getInstance(new SpatialReferenceSystemCache());
+    if (instance == null) {
+      synchronized (SpatialReferenceSystemCache.class) {
+        if (instance == null) {
+          instance = new SpatialReferenceSystemCache();
+        }
+      }
+    }
+    return instance;
   }
 
   // Hash map for defining the mappings from the integer SRID value to the full SRS information.
