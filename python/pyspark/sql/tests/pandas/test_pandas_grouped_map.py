@@ -1290,6 +1290,7 @@ class ApplyInPandasTestsMixin:
 
     def test_apply_in_pandas_iterator_process_multiple_input_batches(self):
         from typing import Iterator
+        import builtins
         
         # Create large dataset to trigger batch slicing
         df = self.spark.range(100000).select(
@@ -1322,19 +1323,19 @@ class ApplyInPandasTestsMixin:
         # Verify we got multiple batches per group (100000/2 = 50000 rows per group)
         # With maxRecordsPerBatch=10000, should get 5 batches per group
         group_0_batches = [r for r in result if r[0] == 0]
-        group_1_batches = [r for r in result if r[1] == 1]
+        group_1_batches = [r for r in result if r[0] == 1]
         
         # Verify multiple batches were processed
         self.assertGreater(len(group_0_batches), 1)
         self.assertGreater(len(group_1_batches), 1)
         
-        # Verify the sum across all batches equals expected total
-        group_0_sum = sum(r[3] for r in group_0_batches)
-        group_1_sum = sum(r[3] for r in group_1_batches)
+        # Verify the sum across all batches equals expected total (using Python's built-in sum)
+        group_0_sum = builtins.sum(r[3] for r in group_0_batches)
+        group_1_sum = builtins.sum(r[3] for r in group_1_batches)
         
-        # Expected: sum of even numbers 0,2,4,...,99998 = 2 * sum(0,1,2,...,49999)
-        expected_even_sum = sum(range(0, 100000, 2))
-        expected_odd_sum = sum(range(1, 100000, 2))
+        # Expected: sum of even numbers 0,2,4,...,99998
+        expected_even_sum = builtins.sum(range(0, 100000, 2))
+        expected_odd_sum = builtins.sum(range(1, 100000, 2))
         
         self.assertEqual(group_0_sum, expected_even_sum)
         self.assertEqual(group_1_sum, expected_odd_sum)
