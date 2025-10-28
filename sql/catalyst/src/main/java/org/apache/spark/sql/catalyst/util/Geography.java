@@ -22,8 +22,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
-import java.util.Arrays;
-
 // Catalyst-internal server-side execution wrapper for GEOGRAPHY.
 public final class Geography implements Geo {
 
