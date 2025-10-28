@@ -1291,21 +1291,22 @@ class GroupPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == 1:
-                # Read all Arrow batches for this group first (must read from stream synchronously)
-                batches = list(ArrowStreamSerializer.load_stream(self, stream))
+                # Lazily read and convert Arrow batches one at a time from the stream
+                # This avoids loading all batches into memory for the group
+                batch_iter = ArrowStreamSerializer.load_stream(self, stream)
                 
-                # Create a generator that yields each batch as a list of pandas Series
-                def series_batches_gen(arrow_batches):
-                    for batch in arrow_batches:
-                        # Convert each Arrow batch into a list of pandas Series
-                        table = pa.Table.from_batches([batch])
-                        yield [
-                            self.arrow_to_pandas(c, i)
-                            for i, c in enumerate(table.itercolumns())
-                        ]
+                # Convert each Arrow batch to pandas Series list on-demand
+                series_batches_gen = (
+                    [
+                        self.arrow_to_pandas(c, i)
+                        for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
+                    ]
+                    for batch in batch_iter
+                )
                 
                 # Yield the generator for this group
-                yield series_batches_gen(batches)
+                # The generator must be fully consumed before the next group is processed
+                yield series_batches_gen
 
             elif dataframes_in_group != 0:
                 raise PySparkValueError(
