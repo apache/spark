@@ -2692,9 +2692,6 @@ object SQLConf {
         "This is used to detect row level corruption. " +
         "Note: This configuration cannot be changed between query restarts " +
         "from the same checkpoint location.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(false)
 
   val STATE_STORE_ROW_CHECKSUM_READ_VERIFICATION_RATIO =
     buildConf("spark.sql.streaming.stateStore.rowChecksum.readVerificationRatio")
@@ -2709,6 +2706,18 @@ object SQLConf {
       .longConf
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
       .createWithDefault(if (Utils.isTesting) 1 else 0)
+
+  val STATE_STORE_AUTO_SNAPSHOT_FOR_LAGGING_STORES_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.autoSnapshotForLaggingStoresEnabled")
+      .internal()
+      .doc(
+        "When enabled, the state store coordinator will store a list of state stores that are " +
+        "lagging behind in snapshot uploads. The provider will use this information to decide " +
+        "whether to force snapshot creation on commit when creating a new store."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val STATEFUL_SHUFFLE_PARTITIONS_INTERNAL =
     buildConf("spark.sql.streaming.internal.stateStore.partitions")
@@ -6896,6 +6905,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreRowChecksumReadVerificationRatio: Long =
     getConf(STATE_STORE_ROW_CHECKSUM_READ_VERIFICATION_RATIO)
+
+  def stateStoreAutoSnapshotForLaggingStoresEnabled: Boolean =
+    getConf(STATE_STORE_AUTO_SNAPSHOT_FOR_LAGGING_STORES_ENABLED)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 

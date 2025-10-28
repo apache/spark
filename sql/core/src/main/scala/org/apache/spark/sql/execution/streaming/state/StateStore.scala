@@ -620,6 +620,19 @@ case class RangeKeyScanStateEncoderSpec(
  */
 trait StateStoreProvider {
 
+  // Track whether this state store instance is lagging behind in snapshot uploads.
+  // This is set in getStateStoreProvider and can be read by the child class
+  // to decide whether to force snapshot creation on commit when creating a new store.
+  private var shouldForceSnapshotOnCommit: Boolean = false
+
+  /** Set the lagging status of this provider */
+  def setShouldForceSnapshotOnCommit(shouldForceSnapshotOnCommit: Boolean): Unit = {
+    this.shouldForceSnapshotOnCommit = shouldForceSnapshotOnCommit
+  }
+
+  /** Check if this provider is lagging behind in snapshot uploads */
+  def getShouldForceSnapshotOnCommit: Boolean = shouldForceSnapshotOnCommit
+
   /**
    * Initialize the provide with more contextual information from the SQL operator.
    * This method will be called first after creating an instance of the StateStoreProvider by
@@ -1297,11 +1310,12 @@ object StateStore extends Logging {
       // to track which executor has which provider
       if (!storeConf.unloadOnCommit) {
         val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
-        val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+        val storeStatus = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+        provider.setShouldForceSnapshotOnCommit(storeStatus.shouldForceSnapshotUpload)
         val taskContextIdLogLine = Option(TaskContext.get()).map { tc =>
           log"taskId=${MDC(LogKeys.TASK_ID, tc.taskAttemptId())}"
         }.getOrElse(log"")
-        providerIdsToUnload.foreach(id => {
+        storeStatus.providerIdsToUnload.foreach(id => {
           loadedProviders.remove(id).foreach( provider => {
             // Trigger maintenance thread to immediately do maintenance on and close the provider.
             // Doing maintenance first allows us to do maintenance for a constantly-moving state
@@ -1599,20 +1613,25 @@ object StateStore extends Logging {
 
   private def reportActiveStoreInstance(
       storeProviderId: StateStoreProviderId,
-      otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
+      otherProviderIds: Seq[StateStoreProviderId]): ReportActiveInstanceResponse = {
     if (SparkEnv.get != null) {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-      val providerIdsToUnload = coordinatorRef
+      val storeStatus = coordinatorRef
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
-        .getOrElse(Seq.empty[StateStoreProviderId])
+        .getOrElse(ReportActiveInstanceResponse(
+          shouldForceSnapshotUpload = false,
+          providerIdsToUnload = Seq.empty[StateStoreProviderId]))
       logInfo(log"Reported that the loaded instance " +
         log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active")
       logDebug(log"The loaded instances are going to unload: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, providerIdsToUnload)}")
-      providerIdsToUnload
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, storeStatus.providerIdsToUnload)}")
+      logDebug(s"shouldForceSnapshotOnCommit=${storeStatus.shouldForceSnapshotUpload}")
+      storeStatus
     } else {
-      Seq.empty[StateStoreProviderId]
+      ReportActiveInstanceResponse(
+        shouldForceSnapshotUpload = false,
+        providerIdsToUnload = Seq.empty[StateStoreProviderId])
     }
   }
 

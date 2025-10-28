@@ -716,13 +716,15 @@ private[sql] class RocksDBStateStoreProvider
    * @param uniqueId Optional unique identifier for checkpoint
    * @param readOnly Whether to open the store in read-only mode
    * @param existingStore Optional existing store to reuse instead of creating a new one
+   * @param forceSnapshotOnCommit Whether to force a snapshot upload on commit
    * @return The loaded state store
    */
   private def loadStateStore(
       version: Long,
       uniqueId: Option[String] = None,
       readOnly: Boolean,
-      existingStore: Option[RocksDBStateStore] = None): StateStore = {
+      existingStore: Option[RocksDBStateStore] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     var acquiredStamp: Option[Long] = None
     var storeLoaded = false
     try {
@@ -754,7 +756,8 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.load(
         version,
         stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-        readOnly = readOnly)
+        readOnly = readOnly,
+        forceSnapshotOnCommit = forceSnapshotOnCommit)
 
       // Create or reuse store instance
       val store = existingStore match {
@@ -793,7 +796,8 @@ private[sql] class RocksDBStateStoreProvider
 
   override def getStore(
       version: Long, uniqueId: Option[String] = None): StateStore = {
-    loadStateStore(version, uniqueId, readOnly = false)
+    loadStateStore(version, uniqueId, readOnly = false,
+      forceSnapshotOnCommit = getShouldForceSnapshotOnCommit)
   }
 
   override def upgradeReadStoreToWriteStore(
@@ -808,7 +812,8 @@ private[sql] class RocksDBStateStoreProvider
     assert(readStore.isInstanceOf[RocksDBStateStore], "Can only upgrade state store if it is a " +
       "RocksDBStateStore")
     loadStateStore(version, uniqueId, readOnly = false, existingStore =
-      Some(readStore.asInstanceOf[RocksDBStateStore]))
+      Some(readStore.asInstanceOf[RocksDBStateStore]),
+      forceSnapshotOnCommit = getShouldForceSnapshotOnCommit)
   }
 
   override def getReadStore(

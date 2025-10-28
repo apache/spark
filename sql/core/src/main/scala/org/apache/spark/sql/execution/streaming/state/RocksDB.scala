@@ -703,7 +703,8 @@ class RocksDB(
   def load(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      forceSnapshotOnCommit: Boolean = false): RocksDB = {
     val startTime = System.currentTimeMillis()
 
     assert(version >= 0)
@@ -727,6 +728,12 @@ class RocksDB(
     )
     // Register with memory manager after successful load
     updateMemoryUsageIfNeeded()
+
+    // Setting shouldForceSnapshot at the end of load() to avoid other functions, e.g.
+    // loadWithCheckpointId or loadWithoutCheckpointId, setting shouldForceSnapshot to false.
+    if (forceSnapshotOnCommit) {
+      shouldForceSnapshot.set(true)
+    }
 
     this
   }

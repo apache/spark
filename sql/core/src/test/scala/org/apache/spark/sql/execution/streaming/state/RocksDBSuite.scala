@@ -3957,7 +3957,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     override def load(
         version: Long,
         ckptId: Option[String] = None,
-        readOnly: Boolean = false): RocksDB = {
+        readOnly: Boolean = false,
+        shouldForceSnapshotOnCommit: Boolean = false): RocksDB = {
       // When a ckptId is defined, it means the test is explicitly using v2 semantic
       // When it is not, it is possible that implicitly uses it.
       // So still do a versionToUniqueId.get

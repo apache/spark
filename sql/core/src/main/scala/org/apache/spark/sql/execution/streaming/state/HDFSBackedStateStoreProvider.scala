@@ -109,7 +109,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
   class HDFSBackedStateStore(
       val version: Long,
-      private val mapToUpdate: HDFSBackedStateStoreMap)
+      private val mapToUpdate: HDFSBackedStateStoreMap,
+      shouldForceSnapshotOnCommit: Boolean = false)
     extends StateStore {
 
     /** Trait and classes representing the internal state of the store */
@@ -132,6 +133,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     private val finalDeltaFile: Path = deltaFile(newVersion)
     private lazy val deltaFileStream = fm.createAtomic(finalDeltaFile, overwriteIfPossible = true)
     private lazy val compressedStream = compressStream(deltaFileStream)
+    private val saveAsSnapshot = shouldForceSnapshotOnCommit
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
@@ -196,7 +198,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def commit(): Long = {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
-        commitUpdates(newVersion, mapToUpdate, compressedStream)
+        commitUpdates(newVersion, mapToUpdate, compressedStream, saveAsSnapshot)
         state = COMMITTED
         logInfo(log"Committed version ${MDC(LogKeys.COMMITTED_VERSION, newVersion)} " +
           log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)} to file " +
@@ -326,7 +328,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +
       log"of ${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for update")
-    new HDFSBackedStateStore(version, newMap)
+    logInfo(s"shouldForceSnapshotOnCommit=${getShouldForceSnapshotOnCommit}")
+    new HDFSBackedStateStore(version, newMap, getShouldForceSnapshotOnCommit)
   }
 
   /** Get the state store for reading to specific `version` of the store. */
@@ -532,9 +535,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private def commitUpdates(
       newVersion: Long,
       map: HDFSBackedStateStoreMap,
-      output: DataOutputStream): Unit = {
+      output: DataOutputStream,
+      saveAsSnapshot: Boolean = false): Unit = {
     synchronized {
-      finalizeDeltaFile(output)
+      if (saveAsSnapshot) {
+        writeSnapshotFile(newVersion, map, "commit")
+      } else {
+        finalizeDeltaFile(output)
+      }
       putStateIntoStateCacheMap(newVersion, map)
     }
   }
