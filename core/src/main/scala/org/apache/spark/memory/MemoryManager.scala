@@ -261,7 +261,7 @@ private[spark] abstract class MemoryManager(
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
     val chosenPageSize = math.min(maxPageSize, math.max(minPageSize, size))
     if ((Utils.isG1GC || Utils.isZGC || Utils.isShenandoahGC) &&
-      tungstenMemoryMode == MemoryMode.ON_HEAP) {
+        tungstenMemoryMode == MemoryMode.ON_HEAP) {
       chosenPageSize - Platform.LONG_ARRAY_OFFSET
     } else {
       chosenPageSize
