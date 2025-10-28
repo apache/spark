@@ -96,7 +96,12 @@ private[sql] object Catalogs {
     conf.getAllConfs.foreach {
       case (key, value) =>
         val matcher = prefix.matcher(key)
-        if (matcher.matches && matcher.groupCount > 0) options.put(matcher.group(1), value)
+        if (matcher.matches && matcher.groupCount > 0) {
+          // pass config entries through default ConfigReader mechanics,
+          // substituting prefixes from bindings: ${env:XYZ} -> sys.env.get("XYZ")
+          val configEntry = SQLConf.buildConf(key).stringConf.createWithDefault(value)
+          options.put(matcher.group(1), conf.getConf(configEntry))
+        }
     }
     new CaseInsensitiveStringMap(options)
   }

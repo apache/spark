@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.internal.config.ConfigReader;
+import org.apache.spark.internal.config.MapProvider;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -24,6 +26,10 @@ import org.apache.spark.SparkException;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.Utils;
+
+import java.util.HashMap;
+import java.util.Map;
+
 public class CatalogLoadingSuite {
   @Test
   public void testLoad() throws SparkException {
@@ -71,6 +77,22 @@ public class CatalogLoadingSuite {
       "Options should contain correct value for name (not overwritten)");
     Assertions.assertEquals("valUE", testPlugin.options.get("key"),
       "Options should contain correct value for key");
+  }
+
+  @Test
+  public void testInitializationWithSubstituteOptions() throws SparkException {
+    Map<String, String> env = new HashMap<>();
+    env.put("dummy", "dummy-value");
+
+    SQLConf conf = new MockSQLConf(env);
+    conf.setConfString("spark.sql.catalog.test-env", TestCatalogPlugin.class.getCanonicalName());
+    conf.setConfString("spark.sql.catalog.test-env.envy", "${env:dummy}");
+
+    CatalogPlugin plugin = Catalogs.load("test-env", conf);
+    TestCatalogPlugin testPlugin = (TestCatalogPlugin) plugin;
+
+    Assertions.assertEquals("dummy-value", testPlugin.options.get("envy"),
+      "Options should substitute values");
   }
 
   @Test
@@ -228,5 +250,19 @@ class ClassFoundCatalogPlugin implements CatalogPlugin {
   @Override
   public String name() {
     return null;
+  }
+}
+
+class MockSQLConf extends SQLConf {
+  Map<String, String> env;
+
+  MockSQLConf(Map<String, String> env) {
+    this.env = env;
+  }
+
+  @Override
+  public ConfigReader reader() {
+    ConfigReader reader = new ConfigReader(this.settings());
+    return reader.bindEnv(new MapProvider(env));
   }
 }
