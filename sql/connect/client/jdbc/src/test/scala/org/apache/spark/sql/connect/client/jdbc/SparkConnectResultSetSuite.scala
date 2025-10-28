@@ -48,7 +48,7 @@ class SparkConnectResultSetSuite extends ConnectFunSuite with RemoteSparkSession
   test("row position for empty result set") {
     withExecuteQuery("SELECT * FROM range(0)") { rs =>
       assert(rs.getRow === 0)
-      assert(rs.isBeforeFirst)
+      assert(!rs.isBeforeFirst)
       assert(!rs.isFirst)
       assert(!rs.isLast)
       assert(!rs.isAfterLast)
@@ -56,7 +56,7 @@ class SparkConnectResultSetSuite extends ConnectFunSuite with RemoteSparkSession
       assert(!rs.next())
 
       assert(rs.getRow === 0)
-      assert(rs.isBeforeFirst)
+      assert(!rs.isBeforeFirst)
       assert(!rs.isFirst)
       assert(!rs.isLast)
       assert(!rs.isAfterLast)

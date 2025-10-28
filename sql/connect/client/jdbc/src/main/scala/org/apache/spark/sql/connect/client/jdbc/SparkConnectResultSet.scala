@@ -265,7 +265,7 @@ class SparkConnectResultSet(
 
   override def isBeforeFirst: Boolean = {
     checkOpen()
-    cursor < 1
+    cursor < 1 && sparkResult.length > 0
   }
 
   override def isFirst: Boolean = {
