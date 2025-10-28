@@ -186,6 +186,26 @@ class GeometryExecutionTest {
     assertEquals("Geometry EWKB conversion is not yet supported.", exception.getMessage());
   }
 
+  @Test
+  void testToEwkbEndiannessXDRUnsupported() {
+    Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    UnsupportedOperationException exception = assertThrows(
+      UnsupportedOperationException.class,
+      () -> geometry.toEwkb(ByteOrder.BIG_ENDIAN)
+    );
+    assertEquals("Geometry EWKB endianness is not yet supported.", exception.getMessage());
+  }
+
+  @Test
+  void testToEwkbEndiannessNDRUnsupported() {
+    Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    UnsupportedOperationException exception = assertThrows(
+      UnsupportedOperationException.class,
+      () -> geometry.toEwkb(ByteOrder.LITTLE_ENDIAN)
+    );
+    assertEquals("Geometry EWKB endianness is not yet supported.", exception.getMessage());
+  }
+
   /** Tests for Geometry WKT and EWKT converters. */
 
   @Test

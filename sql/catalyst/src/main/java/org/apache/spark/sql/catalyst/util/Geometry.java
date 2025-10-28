@@ -131,8 +131,12 @@ public final class Geometry implements Geo {
 
   @Override
   public byte[] toEwkb() {
-    // Once EWKB conversion is implemented, it should support NDR and XDR endianness.
     throw new UnsupportedOperationException("Geometry EWKB conversion is not yet supported.");
+  }
+
+  @Override
+  public byte[] toEwkb(ByteOrder endianness) {
+    throw new UnsupportedOperationException("Geometry EWKB endianness is not yet supported.");
   }
 
   /** Geometry textual standard format converters: WKT and EWKT. */

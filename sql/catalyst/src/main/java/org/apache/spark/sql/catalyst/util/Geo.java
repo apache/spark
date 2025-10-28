@@ -60,6 +60,7 @@ interface Geo {
 
   // Returns the Extended Well-Known Binary (EWKB) representation of the geo object.
   byte[] toEwkb();
+  byte[] toEwkb(ByteOrder endianness);
 
   /** Textual converters. */
 

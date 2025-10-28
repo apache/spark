@@ -186,6 +186,26 @@ class GeographyExecutionTest {
     assertEquals("Geography EWKB conversion is not yet supported.", exception.getMessage());
   }
 
+  @Test
+  void testToEwkbEndiannessXDRUnsupported() {
+    Geography geography = Geography.fromBytes(testGeographyVal);
+    UnsupportedOperationException exception = assertThrows(
+      UnsupportedOperationException.class,
+      () -> geography.toEwkb(ByteOrder.BIG_ENDIAN)
+    );
+    assertEquals("Geography EWKB endianness is not yet supported.", exception.getMessage());
+  }
+
+  @Test
+  void testToEwkbEndiannessNDRUnsupported() {
+    Geography geography = Geography.fromBytes(testGeographyVal);
+    UnsupportedOperationException exception = assertThrows(
+      UnsupportedOperationException.class,
+      () -> geography.toEwkb(ByteOrder.LITTLE_ENDIAN)
+    );
+    assertEquals("Geography EWKB endianness is not yet supported.", exception.getMessage());
+  }
+
   /** Tests for Geography WKT and EWKT converters. */
 
   @Test

@@ -131,8 +131,12 @@ public final class Geography implements Geo {
 
   @Override
   public byte[] toEwkb() {
-    // Once EWKB conversion is implemented, it should support NDR and XDR endianness.
     throw new UnsupportedOperationException("Geography EWKB conversion is not yet supported.");
+  }
+
+  @Override
+  public byte[] toEwkb(ByteOrder endianness) {
+    throw new UnsupportedOperationException("Geography EWKB endianness is not yet supported.");
   }
 
   /** Geography textual standard format converters: WKT and EWKT. */
