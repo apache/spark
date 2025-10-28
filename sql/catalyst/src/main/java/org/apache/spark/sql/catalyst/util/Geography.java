@@ -153,7 +153,7 @@ public final class Geography implements Geo {
 
   @Override
   public int srid() {
-    // This method gets the SRID value from the in-memory Geometry representation header.
+    // This method gets the SRID value from the in-memory Geography representation header.
     return ByteBuffer.wrap(getBytes()).order(ByteOrder.LITTLE_ENDIAN).getInt(SRID_OFFSET);
   }
 
