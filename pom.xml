@@ -183,6 +183,7 @@
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
+    <!-- Should be consistent with SparkBuild.scala and docs -->
     <fasterxml.jackson.version>2.20.0</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
@@ -219,6 +220,7 @@
     <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit.version>6.0.0</junit.version>
+    <jline.version>2.14.6</jline.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
       also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
@@ -1180,7 +1182,7 @@
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
-        <version>2.14.6</version>
+        <version>${jline.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
