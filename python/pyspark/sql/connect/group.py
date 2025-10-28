@@ -303,7 +303,7 @@ class GroupedData:
             eval_type = infer_group_pandas_eval_type_from_func(func)
         except Exception:
             warnings.warn("Cannot infer the eval type from type hints.", UserWarning)
-        
+
         if eval_type is None:
             eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 

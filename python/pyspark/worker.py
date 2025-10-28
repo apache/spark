@@ -2955,7 +2955,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # Materialize first batch to get keys, then create generator for value batches
         def mapper(a):
             import itertools
-            
+
             series_iter = iter(a)
             # Need to materialize the first series list to get the keys
             first_series_list = next(series_iter)

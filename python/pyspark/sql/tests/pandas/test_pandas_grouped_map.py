@@ -1027,17 +1027,15 @@ class ApplyInPandasTestsMixin:
 
     def test_apply_in_pandas_iterator_basic(self):
         from typing import Iterator
-        
-        df = self.spark.createDataFrame(
-            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-            ("id", "v"))
 
-        def sum_func(
-            batches: Iterator[pd.DataFrame]
-        ) -> Iterator[pd.DataFrame]:
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        def sum_func(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
             total = 0
             for batch in batches:
-                total += batch['v'].sum()
+                total += batch["v"].sum()
             yield pd.DataFrame({"v": [total]})
 
         result = df.groupby("id").applyInPandas(sum_func, schema="v double").orderBy("v").collect()
@@ -1047,21 +1045,25 @@ class ApplyInPandasTestsMixin:
 
     def test_apply_in_pandas_iterator_with_keys(self):
         from typing import Iterator, Tuple, Any
-        
+
         df = self.spark.createDataFrame(
-            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-            ("id", "v"))
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
 
         def sum_func(
             key: Tuple[Any, ...], batches: Iterator[pd.DataFrame]
         ) -> Iterator[pd.DataFrame]:
             total = 0
             for batch in batches:
-                total += batch['v'].sum()
+                total += batch["v"].sum()
             yield pd.DataFrame({"id": [key[0]], "v": [total]})
 
-        result = df.groupby("id").applyInPandas(
-            sum_func, schema="id long, v double").orderBy("id").collect()
+        result = (
+            df.groupby("id")
+            .applyInPandas(sum_func, schema="id long, v double")
+            .orderBy("id")
+            .collect()
+        )
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0][0], 1)
         self.assertEqual(result[0][1], 3.0)
@@ -1070,7 +1072,7 @@ class ApplyInPandasTestsMixin:
 
     def test_apply_in_pandas_iterator_batch_slicing(self):
         from typing import Iterator
-        
+
         df = self.spark.range(10000000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
@@ -1085,10 +1087,10 @@ class ApplyInPandasTestsMixin:
                 all_data.append(batch)
                 if key_val is None:
                     key_val = batch.key.iloc[0]
-            
+
             combined = pd.concat(all_data, ignore_index=True)
             assert len(combined) == 10000000 / 2, len(combined)
-            
+
             yield pd.DataFrame(
                 {
                     "key": [key_val],
@@ -1119,7 +1121,7 @@ class ApplyInPandasTestsMixin:
 
     def test_apply_in_pandas_iterator_with_keys_batch_slicing(self):
         from typing import Iterator, Tuple, Any
-        
+
         df = self.spark.range(10000000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
@@ -1133,10 +1135,10 @@ class ApplyInPandasTestsMixin:
             all_data = []
             for batch in batches:
                 all_data.append(batch)
-            
+
             combined = pd.concat(all_data, ignore_index=True)
             assert len(combined) == 10000000 / 2, len(combined)
-            
+
             yield pd.DataFrame(
                 {
                     "key": [key[0]],
@@ -1167,22 +1169,27 @@ class ApplyInPandasTestsMixin:
 
     def test_apply_in_pandas_iterator_multiple_output_batches(self):
         from typing import Iterator
-        
+
         df = self.spark.createDataFrame(
-            [(1, 1.0), (1, 2.0), (1, 3.0), (2, 4.0), (2, 5.0), (2, 6.0)],
-            ("id", "v"))
+            [(1, 1.0), (1, 2.0), (1, 3.0), (2, 4.0), (2, 5.0), (2, 6.0)], ("id", "v")
+        )
 
         def split_and_yield(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
             # Yield multiple output batches for each input batch
             for batch in batches:
                 for _, row in batch.iterrows():
                     # Yield each row as a separate batch to test multiple yields
-                    yield pd.DataFrame({"id": [row["id"]], "v": [row["v"]], "v_doubled": [row["v"] * 2]})
+                    yield pd.DataFrame(
+                        {"id": [row["id"]], "v": [row["v"]], "v_doubled": [row["v"] * 2]}
+                    )
 
-        result = df.groupby("id").applyInPandas(
-            split_and_yield, schema="id long, v double, v_doubled double"
-        ).orderBy("id", "v").collect()
-        
+        result = (
+            df.groupby("id")
+            .applyInPandas(split_and_yield, schema="id long, v double, v_doubled double")
+            .orderBy("id", "v")
+            .collect()
+        )
+
         # Verify that all rows are present after concatenation
         self.assertEqual(len(result), 6)
         self.assertEqual(result[0][0], 1)
@@ -1206,36 +1213,39 @@ class ApplyInPandasTestsMixin:
 
     def test_apply_in_pandas_iterator_filter_multiple_batches(self):
         from typing import Iterator
-        
+
         df = self.spark.createDataFrame(
-            [(1, i * 1.0) for i in range(20)] + [(2, i * 1.0) for i in range(20)],
-            ("id", "v"))
+            [(1, i * 1.0) for i in range(20)] + [(2, i * 1.0) for i in range(20)], ("id", "v")
+        )
 
         def filter_and_yield(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
             # Yield filtered results from each batch
             for batch in batches:
                 # Filter even values and yield
-                even_batch = batch[batch['v'] % 2 == 0]
+                even_batch = batch[batch["v"] % 2 == 0]
                 if not even_batch.empty:
                     yield even_batch
-                
+
                 # Filter odd values and yield separately
-                odd_batch = batch[batch['v'] % 2 == 1]
+                odd_batch = batch[batch["v"] % 2 == 1]
                 if not odd_batch.empty:
                     yield odd_batch
 
-        result = df.groupby("id").applyInPandas(
-            filter_and_yield, schema="id long, v double"
-        ).orderBy("id", "v").collect()
-        
+        result = (
+            df.groupby("id")
+            .applyInPandas(filter_and_yield, schema="id long, v double")
+            .orderBy("id", "v")
+            .collect()
+        )
+
         # Verify all 40 rows are present (20 per group)
         self.assertEqual(len(result), 40)
-        
+
         # Verify group 1 has all values 0-19
         group1 = [row for row in result if row[0] == 1]
         self.assertEqual(len(group1), 20)
         self.assertEqual([row[1] for row in group1], [float(i) for i in range(20)])
-        
+
         # Verify group 2 has all values 0-19
         group2 = [row for row in result if row[0] == 2]
         self.assertEqual(len(group2), 20)
@@ -1243,11 +1253,18 @@ class ApplyInPandasTestsMixin:
 
     def test_apply_in_pandas_iterator_with_keys_multiple_batches(self):
         from typing import Iterator, Tuple, Any
-        
+
         df = self.spark.createDataFrame(
-            [(1, "a", 1.0), (1, "b", 2.0), (1, "c", 3.0),
-             (2, "d", 4.0), (2, "e", 5.0), (2, "f", 6.0)],
-            ("id", "name", "v"))
+            [
+                (1, "a", 1.0),
+                (1, "b", 2.0),
+                (1, "c", 3.0),
+                (2, "d", 4.0),
+                (2, "e", 5.0),
+                (2, "f", 6.0),
+            ],
+            ("id", "name", "v"),
+        )
 
         def process_with_key(
             key: Tuple[Any, ...], batches: Iterator[pd.DataFrame]
@@ -1257,21 +1274,21 @@ class ApplyInPandasTestsMixin:
                 # Split batch and yield multiple output batches
                 for chunk_size in [1, 2]:
                     for i in range(0, len(batch), chunk_size):
-                        chunk = batch.iloc[i:i + chunk_size]
+                        chunk = batch.iloc[i : i + chunk_size]
                         if not chunk.empty:
-                            result = chunk.assign(
-                                id=key[0],
-                                total=chunk['v'].sum()
-                            )
-                            yield result[['id', 'name', 'total']]
+                            result = chunk.assign(id=key[0], total=chunk["v"].sum())
+                            yield result[["id", "name", "total"]]
 
-        result = df.groupby("id").applyInPandas(
-            process_with_key, schema="id long, name string, total double"
-        ).orderBy("id", "name").collect()
-        
+        result = (
+            df.groupby("id")
+            .applyInPandas(process_with_key, schema="id long, name string, total double")
+            .orderBy("id", "name")
+            .collect()
+        )
+
         # Verify we get results (may have duplicates due to splitting)
         self.assertTrue(len(result) > 6)
-        
+
         # Verify all original names are present
         names = [row[1] for row in result]
         self.assertIn("a", names)
@@ -1280,7 +1297,7 @@ class ApplyInPandasTestsMixin:
         self.assertIn("d", names)
         self.assertIn("e", names)
         self.assertIn("f", names)
-        
+
         # Verify keys are correct
         for row in result:
             if row[1] in ["a", "b", "c"]:
@@ -1291,102 +1308,120 @@ class ApplyInPandasTestsMixin:
     def test_apply_in_pandas_iterator_process_multiple_input_batches(self):
         from typing import Iterator
         import builtins
-        
+
         # Create large dataset to trigger batch slicing
         df = self.spark.range(100000).select(
-            (sf.col("id") % 2).alias("key"), 
-            sf.col("id").alias("v")
+            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
 
-        def process_batches_progressively(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+        def process_batches_progressively(
+            batches: Iterator[pd.DataFrame],
+        ) -> Iterator[pd.DataFrame]:
             # Process each input batch and yield output immediately
             batch_count = 0
             for batch in batches:
                 batch_count += 1
                 # Yield a summary for each input batch processed
-                yield pd.DataFrame({
-                    "key": [batch.key.iloc[0]],
-                    "batch_num": [batch_count],
-                    "count": [len(batch)],
-                    "sum": [batch.v.sum()]
-                })
+                yield pd.DataFrame(
+                    {
+                        "key": [batch.key.iloc[0]],
+                        "batch_num": [batch_count],
+                        "count": [len(batch)],
+                        "sum": [batch.v.sum()],
+                    }
+                )
 
         # Use small batch size to force multiple input batches
-        with self.sql_conf({
-            "spark.sql.execution.arrow.maxRecordsPerBatch": 10000,
-        }):
-            result = df.groupBy("key").applyInPandas(
-                process_batches_progressively, 
-                schema="key long, batch_num long, count long, sum long"
-            ).orderBy("key", "batch_num").collect()
-        
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": 10000,
+            }
+        ):
+            result = (
+                df.groupBy("key")
+                .applyInPandas(
+                    process_batches_progressively,
+                    schema="key long, batch_num long, count long, sum long",
+                )
+                .orderBy("key", "batch_num")
+                .collect()
+            )
+
         # Verify we got multiple batches per group (100000/2 = 50000 rows per group)
         # With maxRecordsPerBatch=10000, should get 5 batches per group
         group_0_batches = [r for r in result if r[0] == 0]
         group_1_batches = [r for r in result if r[0] == 1]
-        
+
         # Verify multiple batches were processed
         self.assertGreater(len(group_0_batches), 1)
         self.assertGreater(len(group_1_batches), 1)
-        
+
         # Verify the sum across all batches equals expected total (using Python's built-in sum)
         group_0_sum = builtins.sum(r[3] for r in group_0_batches)
         group_1_sum = builtins.sum(r[3] for r in group_1_batches)
-        
+
         # Expected: sum of even numbers 0,2,4,...,99998
         expected_even_sum = builtins.sum(range(0, 100000, 2))
         expected_odd_sum = builtins.sum(range(1, 100000, 2))
-        
+
         self.assertEqual(group_0_sum, expected_even_sum)
         self.assertEqual(group_1_sum, expected_odd_sum)
 
     def test_apply_in_pandas_iterator_streaming_aggregation(self):
         from typing import Iterator
-        
+
         # Create dataset with multiple batches per group
         df = self.spark.range(50000).select(
             (sf.col("id") % 3).alias("key"),
             (sf.col("id") % 100).alias("category"),
-            sf.col("id").alias("value")
+            sf.col("id").alias("value"),
         )
 
         def streaming_aggregate(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
             # Maintain running aggregates and yield intermediate results
             running_sum = 0
             running_count = 0
-            
+
             for batch in batches:
                 # Update running aggregates
                 running_sum += batch.value.sum()
                 running_count += len(batch)
-                
+
                 # Yield current stats after processing each batch
-                yield pd.DataFrame({
-                    "key": [batch.key.iloc[0]],
-                    "running_count": [running_count],
-                    "running_avg": [running_sum / running_count]
-                })
+                yield pd.DataFrame(
+                    {
+                        "key": [batch.key.iloc[0]],
+                        "running_count": [running_count],
+                        "running_avg": [running_sum / running_count],
+                    }
+                )
 
         # Force multiple batches with small batch size
-        with self.sql_conf({
-            "spark.sql.execution.arrow.maxRecordsPerBatch": 5000,
-        }):
-            result = df.groupBy("key").applyInPandas(
-                streaming_aggregate,
-                schema="key long, running_count long, running_avg double"
-            ).collect()
-        
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": 5000,
+            }
+        ):
+            result = (
+                df.groupBy("key")
+                .applyInPandas(
+                    streaming_aggregate, schema="key long, running_count long, running_avg double"
+                )
+                .collect()
+            )
+
         # Verify we got multiple rows per group (one per input batch)
         for key_val in [0, 1, 2]:
             key_results = [r for r in result if r[0] == key_val]
             # Should have multiple batches (50000/3 ≈ 16667 rows per group, with 5000 per batch = ~4 batches)
             self.assertGreater(len(key_results), 1, f"Expected multiple batches for key {key_val}")
-            
+
             # Verify running_count increases monotonically
             counts = [r[1] for r in key_results]
             for i in range(1, len(counts)):
-                self.assertGreater(counts[i], counts[i-1], 
-                    "Running count should increase with each batch")
+                self.assertGreater(
+                    counts[i], counts[i - 1], "Running count should increase with each batch"
+                )
 
 
 class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):

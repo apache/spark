@@ -1254,11 +1254,11 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 class GroupPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer for grouped map Pandas iterator UDFs.
-    
+
     Loads grouped data as pandas.Series and serializes results from iterator UDFs.
     Flattens the (dataframes_generator, arrow_type) tuple by iterating over the generator.
     """
-    
+
     def __init__(
         self,
         timezone,
@@ -1294,7 +1294,7 @@ class GroupPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
                 # Lazily read and convert Arrow batches one at a time from the stream
                 # This avoids loading all batches into memory for the group
                 batch_iter = ArrowStreamSerializer.load_stream(self, stream)
-                
+
                 # Convert each Arrow batch to pandas Series list on-demand
                 series_batches_gen = (
                     [
@@ -1303,7 +1303,7 @@ class GroupPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
                     ]
                     for batch in batch_iter
                 )
-                
+
                 # Yield the generator for this group
                 # The generator must be fully consumed before the next group is processed
                 yield series_batches_gen
@@ -1321,14 +1321,12 @@ class GroupPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
         """
         # Flatten: (dataframes_generator, arrow_type) -> (df, arrow_type), (df, arrow_type), ...
         flattened_iter = (
-            (df, arrow_type)
-            for dataframes_gen, arrow_type in iterator
-            for df in dataframes_gen
+            (df, arrow_type) for dataframes_gen, arrow_type in iterator for df in dataframes_gen
         )
-        
+
         # Convert each (df, arrow_type) to the format expected by parent's dump_stream
         series_iter = ([(df, arrow_type)] for df, arrow_type in flattened_iter)
-        
+
         super(GroupPandasIterUDFSerializer, self).dump_stream(series_iter, stream)
 
     def __repr__(self):

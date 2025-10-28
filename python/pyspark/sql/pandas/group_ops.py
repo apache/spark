@@ -293,10 +293,10 @@ class PandasGroupedOpsMixin:
             eval_type = infer_group_pandas_eval_type_from_func(func)
         except Exception as e:
             warnings.warn(f"Cannot infer the eval type from type hints: {e}", UserWarning)
-        
+
         if eval_type is None:
             eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
-        
+
         udf = pandas_udf(func, returnType=schema, functionType=eval_type)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
