@@ -37,7 +37,7 @@ class SparkConnectResultSet(
 
   // cursor is 1-based, range in [0, length + 1]
   // - 0 means beforeFirstRow
-  // - [1, length] means the row number
+  // - value in [1, length] means the row number
   // - length + 1 means afterLastRow
   private var cursor: Int = 0
 
