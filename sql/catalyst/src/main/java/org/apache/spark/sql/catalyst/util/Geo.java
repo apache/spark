@@ -21,6 +21,9 @@ import java.nio.ByteOrder;
 // Helper interface for the APIs expected from top-level GEOMETRY and GEOGRAPHY classes.
 interface Geo {
 
+  // The default endianness for in-memory geo objects is Little Endian (NDR).
+  ByteOrder DEFAULT_ENDIANNESS = ByteOrder.LITTLE_ENDIAN;
+
   /**
    * In-memory representation of a geospatial object:
    * +------------------------------+

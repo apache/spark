@@ -122,7 +122,8 @@ public final class Geometry implements Geo {
 
   @Override
   public byte[] toWkb(ByteOrder endianness) {
-    if (endianness == ByteOrder.LITTLE_ENDIAN) {
+    // The default endianness is Little Endian (NDR).
+    if (endianness == DEFAULT_ENDIANNESS) {
       return toWkb();
     } else {
       throw new UnsupportedOperationException("Geometry WKB endianness is not yet supported.");
@@ -158,7 +159,7 @@ public final class Geometry implements Geo {
   @Override
   public int srid() {
     // This method gets the SRID value from the in-memory Geometry representation header.
-    return ByteBuffer.wrap(getBytes()).order(ByteOrder.LITTLE_ENDIAN).getInt(SRID_OFFSET);
+    return ByteBuffer.wrap(getBytes()).order(DEFAULT_ENDIANNESS).getInt(SRID_OFFSET);
   }
 
 }
