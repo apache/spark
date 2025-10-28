@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalyst.util;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteOrder;
+import java.util.HexFormat;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 
@@ -28,13 +31,15 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class GeographyExecutionTest {
 
-  // A sample Geography byte array for testing purposes.
+  // A sample Geography byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
   private final byte[] testGeographyVal = new byte[] {
+    (byte)0xE6, 0x10, 0x00, 0x00,
     0x01, 0x01, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, (byte)0xF0,
     0x3F, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x40
+    0x00, 0x00, 0x00, 0x00,
+    0x40
   };
 
   /** Tests for Geography factory methods and getters. */
@@ -146,13 +151,29 @@ class GeographyExecutionTest {
   /** Tests for Geography WKB and EWKB converters. */
 
   @Test
-  void testToWkbUnsupported() {
+  void testToWkb() {
+    Geography geography = Geography.fromBytes(testGeographyVal);
+    // WKB value (endianness: NDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("0101000000000000000000f03f0000000000000040");
+    assertArrayEquals(wkb, geography.toWkb());
+  }
+
+  @Test
+  void testToWkbEndiannessNDR() {
+    Geography geography = Geography.fromBytes(testGeographyVal);
+    // WKB value (endianness: NDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("0101000000000000000000f03f0000000000000040");
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.LITTLE_ENDIAN));
+  }
+
+  @Test
+  void testToWkbEndiannessXDR() {
     Geography geography = Geography.fromBytes(testGeographyVal);
     UnsupportedOperationException exception = assertThrows(
       UnsupportedOperationException.class,
-      geography::toWkb
+      () -> geography.toWkb(ByteOrder.BIG_ENDIAN)
     );
-    assertEquals("Geography WKB conversion is not yet supported.", exception.getMessage());
+    assertEquals("Geography WKB endianness is not yet supported.", exception.getMessage());
   }
 
   @Test
@@ -190,12 +211,8 @@ class GeographyExecutionTest {
   /** Tests for other Geography methods. */
 
   @Test
-  void testSridUnsupported() {
+  void testSrid() {
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geography::srid
-    );
-    assertEquals("Geography SRID is not yet supported.", exception.getMessage());
+    assertEquals(4326, geography.srid());
   }
 }
