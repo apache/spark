@@ -37,4 +37,20 @@ private[jdbc] object JdbcErrorUtils {
     case _ =>
       throw new IllegalArgumentException(s"Invalid holdability: $holdability")
   }
+
+  def stringifyResultSetType(typ: Int): String = typ match {
+    case ResultSet.TYPE_FORWARD_ONLY => "FORWARD_ONLY"
+    case ResultSet.TYPE_SCROLL_INSENSITIVE => "SCROLL_INSENSITIVE"
+    case ResultSet.TYPE_SCROLL_SENSITIVE => "SCROLL_SENSITIVE"
+    case _ =>
+      throw new IllegalArgumentException(s"Invalid ResultSet type: $typ")
+  }
+
+  def stringifyFetchDirection(direction: Int): String = direction match {
+    case ResultSet.FETCH_FORWARD => "FETCH_FORWARD"
+    case ResultSet.FETCH_REVERSE => "FETCH_REVERSE"
+    case ResultSet.FETCH_UNKNOWN => "FETCH_UNKNOWN"
+    case _ =>
+      throw new IllegalArgumentException(s"Invalid fetch direction: $direction")
+  }
 }
