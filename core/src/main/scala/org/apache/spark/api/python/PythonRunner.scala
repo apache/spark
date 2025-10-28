@@ -874,7 +874,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
           .map(error => s"$base: $error")
           .getOrElse(base)
-        throw new SparkException(msg)
+        throw new PythonWorkerException(msg)
       }
       n
     }
@@ -1026,6 +1026,12 @@ private[spark] class PythonRunner(
       }
     }
   }
+}
+
+class PythonWorkerException(msg: String, cause: Throwable)
+  extends SparkException(msg, cause) {
+
+  def this(msg: String) = this(msg, cause = null)
 }
 
 private[spark] object SpecialLengths {

@@ -28,7 +28,7 @@ import scala.jdk.CollectionConverters._
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, SparkException}
-import org.apache.spark.api.python.{BasePythonRunner, PythonFunction, PythonWorker, PythonWorkerUtils, SpecialLengths}
+import org.apache.spark.api.python.{BasePythonRunner, PythonFunction, PythonWorker, PythonWorkerException, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
@@ -246,7 +246,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
         val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
           .map(error => s"$base: $error")
           .getOrElse(base)
-        throw new SparkException(msg)
+        throw new PythonWorkerException(msg)
       }
       n
     }
