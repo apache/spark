@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalyst.util;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteOrder;
+import java.util.HexFormat;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 
@@ -28,13 +31,15 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class GeometryExecutionTest {
 
-  // A sample Geometry byte array for testing purposes.
+  // A sample Geometry byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
   private final byte[] testGeometryVal = new byte[] {
+    (byte)0xE6, 0x10, 0x00, 0x00,
     0x01, 0x01, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, (byte)0xF0,
     0x3F, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x40
+    0x00, 0x00, 0x00, 0x00,
+    0x40
   };
 
   /** Tests for Geometry factory methods and getters. */
@@ -146,13 +151,29 @@ class GeometryExecutionTest {
   /** Tests for Geometry WKB and EWKB converters. */
 
   @Test
-  void testToWkbUnsupported() {
+  void testToWkb() {
+    Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    // WKB value (endianness: NDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("0101000000000000000000f03f0000000000000040");
+    assertArrayEquals(wkb, geometry.toWkb());
+  }
+
+  @Test
+  void testToWkbEndiannessNDR() {
+    Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    // WKB value (endianness: NDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("0101000000000000000000f03f0000000000000040");
+    assertArrayEquals(wkb, geometry.toWkb(ByteOrder.LITTLE_ENDIAN));
+  }
+
+  @Test
+  void testToWkbEndiannessXDR() {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
     UnsupportedOperationException exception = assertThrows(
       UnsupportedOperationException.class,
-      geometry::toWkb
+      () -> geometry.toWkb(ByteOrder.BIG_ENDIAN)
     );
-    assertEquals("Geometry WKB conversion is not yet supported.", exception.getMessage());
+    assertEquals("Geometry WKB endianness is not yet supported.", exception.getMessage());
   }
 
   @Test
@@ -163,6 +184,26 @@ class GeometryExecutionTest {
       geometry::toEwkb
     );
     assertEquals("Geometry EWKB conversion is not yet supported.", exception.getMessage());
+  }
+
+  @Test
+  void testToEwkbEndiannessXDRUnsupported() {
+    Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    UnsupportedOperationException exception = assertThrows(
+      UnsupportedOperationException.class,
+      () -> geometry.toEwkb(ByteOrder.BIG_ENDIAN)
+    );
+    assertEquals("Geometry EWKB endianness is not yet supported.", exception.getMessage());
+  }
+
+  @Test
+  void testToEwkbEndiannessNDRUnsupported() {
+    Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    UnsupportedOperationException exception = assertThrows(
+      UnsupportedOperationException.class,
+      () -> geometry.toEwkb(ByteOrder.LITTLE_ENDIAN)
+    );
+    assertEquals("Geometry EWKB endianness is not yet supported.", exception.getMessage());
   }
 
   /** Tests for Geometry WKT and EWKT converters. */
@@ -190,12 +231,8 @@ class GeometryExecutionTest {
   /** Tests for other Geometry methods. */
 
   @Test
-  void testSridUnsupported() {
+  void testSrid() {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geometry::srid
-    );
-    assertEquals("Geometry SRID is not yet supported.", exception.getMessage());
+    assertEquals(4326, geometry.srid());
   }
 }

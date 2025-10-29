@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.unsafe.types.GeographyVal;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 
 // Catalyst-internal server-side execution wrapper for GEOGRAPHY.
@@ -113,14 +115,29 @@ public final class Geography implements Geo {
 
   @Override
   public byte[] toWkb() {
-    // Once WKB conversion is implemented, it should support NDR and XDR endianness.
-    throw new UnsupportedOperationException("Geography WKB conversion is not yet supported.");
+    // This method returns only the WKB portion of the in-memory Geography representation.
+    // Note that the header is skipped, and that the WKB is returned as-is (little-endian).
+    return Arrays.copyOfRange(getBytes(), WKB_OFFSET, getBytes().length);
+  }
+
+  @Override
+  public byte[] toWkb(ByteOrder endianness) {
+    // The default endianness is Little Endian (NDR).
+    if (endianness == DEFAULT_ENDIANNESS) {
+      return toWkb();
+    } else {
+      throw new UnsupportedOperationException("Geography WKB endianness is not yet supported.");
+    }
   }
 
   @Override
   public byte[] toEwkb() {
-    // Once EWKB conversion is implemented, it should support NDR and XDR endianness.
     throw new UnsupportedOperationException("Geography EWKB conversion is not yet supported.");
+  }
+
+  @Override
+  public byte[] toEwkb(ByteOrder endianness) {
+    throw new UnsupportedOperationException("Geography EWKB endianness is not yet supported.");
   }
 
   /** Geography textual standard format converters: WKT and EWKT. */
@@ -141,7 +158,8 @@ public final class Geography implements Geo {
 
   @Override
   public int srid() {
-    throw new UnsupportedOperationException("Geography SRID is not yet supported.");
+    // This method gets the SRID value from the in-memory Geography representation header.
+    return ByteBuffer.wrap(getBytes()).order(DEFAULT_ENDIANNESS).getInt(SRID_OFFSET);
   }
 
 }

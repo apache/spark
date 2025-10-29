@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.unsafe.types.GeometryVal;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 
 // Catalyst-internal server-side execution wrapper for GEOMETRY.
@@ -113,14 +115,29 @@ public final class Geometry implements Geo {
 
   @Override
   public byte[] toWkb() {
-    // Once WKB conversion is implemented, it should support NDR and XDR endianness.
-    throw new UnsupportedOperationException("Geometry WKB conversion is not yet supported.");
+    // This method returns only the WKB portion of the in-memory Geometry representation.
+    // Note that the header is skipped, and that the WKB is returned as-is (little-endian).
+    return Arrays.copyOfRange(getBytes(), WKB_OFFSET, getBytes().length);
+  }
+
+  @Override
+  public byte[] toWkb(ByteOrder endianness) {
+    // The default endianness is Little Endian (NDR).
+    if (endianness == DEFAULT_ENDIANNESS) {
+      return toWkb();
+    } else {
+      throw new UnsupportedOperationException("Geometry WKB endianness is not yet supported.");
+    }
   }
 
   @Override
   public byte[] toEwkb() {
-    // Once EWKB conversion is implemented, it should support NDR and XDR endianness.
     throw new UnsupportedOperationException("Geometry EWKB conversion is not yet supported.");
+  }
+
+  @Override
+  public byte[] toEwkb(ByteOrder endianness) {
+    throw new UnsupportedOperationException("Geometry EWKB endianness is not yet supported.");
   }
 
   /** Geometry textual standard format converters: WKT and EWKT. */
@@ -141,7 +158,8 @@ public final class Geometry implements Geo {
 
   @Override
   public int srid() {
-    throw new UnsupportedOperationException("Geometry SRID is not yet supported.");
+    // This method gets the SRID value from the in-memory Geometry representation header.
+    return ByteBuffer.wrap(getBytes()).order(DEFAULT_ENDIANNESS).getInt(SRID_OFFSET);
   }
 
 }

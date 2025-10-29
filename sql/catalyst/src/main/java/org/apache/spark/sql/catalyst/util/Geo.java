@@ -16,16 +16,54 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import java.nio.ByteOrder;
+
 // Helper interface for the APIs expected from top-level GEOMETRY and GEOGRAPHY classes.
 interface Geo {
+
+  // The default endianness for in-memory geo objects is Little Endian (NDR).
+  ByteOrder DEFAULT_ENDIANNESS = ByteOrder.LITTLE_ENDIAN;
+
+  /**
+   * In-memory representation of a geospatial object:
+   * +------------------------------+
+   * |          Geo Object          |
+   * +------------------------------+
+   * | Header          (Fixed Size) |
+   * | +--------------------------+ |
+   * | | SRID           [4 bytes] | |
+   * | +--------------------------+ |
+   * |                              |
+   * | Payload      (Variable Size) |
+   * | +--------------------------+ |
+   * | | WKB         [byte array] | |
+   * | +--------------------------+ |
+   * +------------------------------+
+   * Byte order: Little Endian (NDR).
+   */
+
+  // Constant defining the size of the header in the geo object in-memory representation.
+  int HEADER_SIZE = 4;
+
+  /** Header offsets. */
+
+  // Constant defining the offset of the Spatial Reference System Identifier (SRID) value.
+  int SRID_OFFSET = 0;
+
+  /** Payload offsets. */
+
+  // Constant defining the offset of the Well-Known Binary (WKB) representation value.
+  int WKB_OFFSET = HEADER_SIZE;
 
   /** Binary converters. */
 
   // Returns the Well-Known Binary (WKB) representation of the geo object.
   byte[] toWkb();
+  byte[] toWkb(ByteOrder endianness);
 
   // Returns the Extended Well-Known Binary (EWKB) representation of the geo object.
   byte[] toEwkb();
+  byte[] toEwkb(ByteOrder endianness);
 
   /** Textual converters. */
 
