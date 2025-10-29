@@ -3637,6 +3637,45 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Visits a stringLit context and coalesces multiple singleStringLit children into a single
+   * token with config-aware escape processing.
+   *
+   * When multiple string literals are present (e.g., 'hello' 'world'), this method:
+   *   1. Processes each token individually using the correct escape function based on SQL config
+   *   2. Concatenates the processed strings
+   *   3. Returns a CoalescedStringToken containing the final value
+   *
+   * This approach correctly handles mixed R-strings and regular strings by processing each
+   * token's escape sequences (or lack thereof) before concatenation.
+   */
+  override def visitStringLit(ctx: StringLitContext): Token = {
+    if (ctx == null) {
+      return null
+    }
+
+    import scala.jdk.CollectionConverters._
+
+    // Collect tokens from all singleStringLit children
+    val tokens = ctx
+      .singleStringLit()
+      .asScala
+      .map { child =>
+        visit(child).asInstanceOf[Token]
+      }
+      .toSeq
+
+    if (tokens.isEmpty) {
+      null
+    } else if (tokens.size == 1) {
+      // Fast path: single token, return unchanged
+      tokens.head
+    } else {
+      // Multiple tokens: coalesce with config-aware processing
+      createCoalescedStringToken(tokens)
+    }
+  }
+
+  /**
    * Create a String literal expression.
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
@@ -3660,23 +3699,63 @@ class AstBuilder extends DataTypeAstBuilder
    * regular strings.
    */
   private def createString(ctx: StringLiteralContext): String = {
-    // We need to unescape based on configuration.
-    // Process each singleStringLit child individually (respecting R-strings) and concatenate.
-    import scala.jdk.CollectionConverters._
-    val stringLitCtx = ctx.stringLit()
-    if (conf.escapedStringLiterals) {
-      stringLitCtx.singleStringLit.asScala.map { x =>
-        stringWithoutUnescape(visit(x).asInstanceOf[Token])
-      }.mkString
-    } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
-      stringLitCtx.singleStringLit.asScala.map { x =>
-        stringIgnoreQuoteQuote(visit(x).asInstanceOf[Token])
-      }.mkString
-    } else {
-      stringLitCtx.singleStringLit.asScala.map { x =>
-        string(visit(x).asInstanceOf[Token])
-      }.mkString
+    val token = visitStringLit(ctx.stringLit())
+    // If it's a CoalescedStringToken, it's already been processed, just extract the value
+    token match {
+      case coalesced: CoalescedStringToken => coalesced.getProcessedValue
+      case _ => string(token)
     }
+  }
+
+  /**
+   * Creates a CoalescedStringToken from multiple string literal tokens with config-aware
+   * escape processing.
+   *
+   * This method processes each token individually using the appropriate escape function based
+   * on SQL configuration, then concatenates the results into a single token. This correctly
+   * handles mixed R-strings and regular strings.
+   *
+   * @param tokens
+   *   A sequence of tokens to coalesce (must contain at least 2 tokens).
+   * @return
+   *   A CoalescedStringToken representing the concatenated processed content.
+   */
+  private def createCoalescedStringToken(tokens: Seq[Token]): Token = {
+    val firstToken = tokens.head
+    val lastToken = tokens.last
+
+    // Process each token with the appropriate escape function based on configuration.
+    val processedStrings = if (conf.escapedStringLiterals) {
+      tokens.map(stringWithoutUnescape)
+    } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
+      tokens.map(stringIgnoreQuoteQuote)
+    } else {
+      tokens.map(string)
+    }
+
+    // Concatenate the processed strings
+    val coalescedValue = processedStrings.mkString
+
+    // Determine quote character from the first token
+    val quoteChar = {
+      val text = firstToken.getText
+      if (text.startsWith("\"") ||
+          (text.length >= 2 && (text.charAt(0) == 'R' || text.charAt(0) == 'r') &&
+           text.charAt(1) == '"')) {
+        '"'
+      } else {
+        '\''
+      }
+    }
+
+    new CoalescedStringToken(
+      new org.antlr.v4.runtime.misc.Pair(firstToken.getTokenSource, firstToken.getInputStream),
+      firstToken.getType,
+      firstToken.getChannel,
+      firstToken.getStartIndex,
+      lastToken.getStopIndex,
+      coalescedValue,
+      quoteChar)
   }
 
   /**
@@ -6815,4 +6894,56 @@ class AstBuilder extends DataTypeAstBuilder
       case child: LogicalPlan => checkInvalidParameter(child, statement)
     }
   }
+}
+
+/**
+ * A synthetic token representing multiple coalesced string literals with processed content.
+ *
+ * When the parser encounters consecutive string literals (e.g., 'hello' 'world'), they are
+ * automatically coalesced into a single logical string. This token class represents such
+ * coalesced strings while maintaining the Token interface.
+ *
+ * Unlike the raw coalescing in DataTypeAstBuilder, this token contains already-processed
+ * content where escape sequences have been handled according to SQL configuration. The
+ * getText() method simply wraps this content in quotes.
+ *
+ * @param source
+ *   The token source and input stream
+ * @param tokenType
+ *   The ANTLR token type (typically STRING_LITERAL)
+ * @param channel
+ *   The token channel
+ * @param start
+ *   The start index of the first literal in the input stream
+ * @param stop
+ *   The stop index of the last literal in the input stream
+ * @param coalescedValue
+ *   The concatenated processed content (escape sequences already handled)
+ * @param quoteChar
+ *   The quote character to use when wrapping the value (' or ")
+ */
+private[parser] class CoalescedStringToken(
+    source: org.antlr.v4.runtime.misc.Pair[
+      org.antlr.v4.runtime.TokenSource,
+      org.antlr.v4.runtime.CharStream],
+    tokenType: Int,
+    channel: Int,
+    start: Int,
+    stop: Int,
+    private val coalescedValue: String,
+    private val quoteChar: Char = '\'')
+    extends org.antlr.v4.runtime.CommonToken(source, tokenType, channel, start, stop) {
+
+  override def getText: String = {
+    // coalescedValue is already processed, just wrap in quotes
+    s"$quoteChar$coalescedValue$quoteChar"
+  }
+
+  // Returns the same text as getText() to maintain transparency of coalescing.
+  // This ensures that debug output, error messages, and logging show the
+  // actual SQL string literal rather than a debug representation.
+  override def toString: String = getText
+
+  /** Returns the processed value without quotes (already escaped/unescaped based on config). */
+  def getProcessedValue: String = coalescedValue
 }
