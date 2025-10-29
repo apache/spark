@@ -77,7 +77,10 @@ public final class Geometry implements Geo {
 
   // Returns a Geometry object with the specified SRID value by parsing the input WKB.
   public static Geometry fromWkb(byte[] wkb, int srid) {
-    throw new UnsupportedOperationException("Geometry WKB parsing is not yet supported.");
+    byte[] bytes = new byte[HEADER_SIZE + wkb.length];
+    ByteBuffer.wrap(bytes).order(DEFAULT_ENDIANNESS).putInt(srid);
+    System.arraycopy(wkb, 0, bytes, WKB_OFFSET, wkb.length);
+    return fromBytes(bytes);
   }
 
   // Overload for the WKB reader where we use the default SRID for Geometry.

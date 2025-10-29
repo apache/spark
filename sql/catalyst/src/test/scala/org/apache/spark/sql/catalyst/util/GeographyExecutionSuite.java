@@ -83,23 +83,25 @@ class GeographyExecutionTest {
   /** Tests for Geography WKB parsing. */
 
   @Test
-  void testFromWkbWithSridUnsupported() {
+  void testFromWkbWithSridRudimentary() {
     byte[] wkb = new byte[]{1, 2, 3};
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> Geography.fromWkb(wkb, 0)
-    );
-    assertEquals("Geography WKB parsing is not yet supported.", exception.getMessage());
+    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
+    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    Geography geography = Geography.fromWkb(wkb, 4326);
+    assertNotNull(geography);
+    assertArrayEquals(wkb, geography.toWkb());
+    assertEquals(4326, geography.srid());
   }
 
   @Test
-  void testFromWkbNoSridUnsupported() {
+  void testFromWkbNoSridRudimentary() {
     byte[] wkb = new byte[]{1, 2, 3};
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> Geography.fromWkb(wkb)
-    );
-    assertEquals("Geography WKB parsing is not yet supported.", exception.getMessage());
+    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
+    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    Geography geography = Geography.fromWkb(wkb);
+    assertNotNull(geography);
+    assertArrayEquals(wkb, geography.toWkb());
+    assertEquals(4326, geography.srid());
   }
 
   /** Tests for Geography EWKB parsing. */
