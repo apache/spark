@@ -1017,7 +1017,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val storeProviderId1 = StateStoreProviderId(StateStoreId(dir1, opId, 0), UUID.randomUUID)
     val sqlConf = getDefaultSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
-    sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
+    sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 30)
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 10L)
     val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
@@ -2418,9 +2418,11 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       isSnapshot: Boolean): Boolean = {
     val method = PrivateMethod[Path](Symbol("baseDir"))
     val basePath = provider invokePrivate method()
-    val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
-    val filePath = new File(basePath.toString, fileName)
-    filePath.exists
+    val fileNameHDFS = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
+    val filePathHDFS = new File(basePath.toString, fileNameHDFS)
+    val fileNameRocks = if (isSnapshot) s"$version.zip" else s"$version.changelog"
+    val filePathRocks = new File(basePath.toString, fileNameRocks)
+    filePathHDFS.exists || filePathRocks.exists
   }
 
   def updateVersionTo(
