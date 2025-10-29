@@ -241,7 +241,7 @@ object SQLConf {
     buildConf("spark.sql.ibm.coalescePartitionsByColumns.enabled")
       .doc(s"When true,Spark will coalesce contiguous shuffle partitions " +
         s"according to the selected columns, to avoid too many small tasks.")
-      .version("3.0.0")
+      .version("3.4.4")
       .booleanConf
       .createWithDefault(false)
 

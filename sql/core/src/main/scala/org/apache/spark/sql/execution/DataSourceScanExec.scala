@@ -681,7 +681,7 @@ case class FileSourceScanExec(
           FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
         }
 
-      // NEW: coalesce by column if enabled
+      // coalesce by column if enabled
       if (coalescePartitionsByColumnsEnabled) {
         val targetPartitions = math.min(rawPartitions.length,
           relation.sparkSession.sessionState.conf.numShufflePartitions)
