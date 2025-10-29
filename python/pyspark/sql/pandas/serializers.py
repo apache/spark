@@ -1303,9 +1303,7 @@ class GroupPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
                     ]
                     for batch in batch_iter
                 )
-
                 # Yield the generator for this group
-                # The generator must be fully consumed before the next group is processed
                 yield series_batches_gen
 
             elif dataframes_in_group != 0:

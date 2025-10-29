@@ -1423,6 +1423,25 @@ class ApplyInPandasTestsMixin:
                     counts[i], counts[i - 1], "Running count should increase with each batch"
                 )
 
+    def test_apply_in_pandas_iterator_partial_iteration(self):
+        from typing import Iterator
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+
+            def func(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+                # Only consume the first batch from the iterator
+                first = next(batches)
+                yield pd.DataFrame({"value": first["id"] % 4})
+
+            df = self.spark.range(20)
+            grouped_df = df.groupBy((col("id") % 4).cast("int"))
+
+            # Should get two records for each group (first batch only)
+            expected = [Row(value=x) for x in [0, 0, 1, 1, 2, 2, 3, 3]]
+
+            actual = grouped_df.applyInPandas(func, "value long").collect()
+            self.assertEqual(actual, expected)
+
 
 class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
     pass
