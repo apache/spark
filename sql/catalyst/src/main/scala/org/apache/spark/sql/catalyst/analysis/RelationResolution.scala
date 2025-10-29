@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PythonWorkerLogs, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
@@ -105,6 +105,8 @@ class RelationResolution(override val catalogManager: CatalogManager)
       u.isStreaming,
       finalTimeTravelSpec.isDefined
     ).orElse {
+      resolveSystemSessionView(u.multipartIdentifier)
+    }.orElse {
       expandIdentifier(u.multipartIdentifier) match {
         case CatalogAndIdentifier(catalog, ident) =>
           val key =
@@ -244,5 +246,21 @@ class RelationResolution(override val catalogManager: CatalogManager)
         case (a, b) => resolver(a, b)
       }
     }
+  }
+
+  private def isSystemSessionIdentifier(identifier: Seq[String]): Boolean = {
+    identifier.length > 2 &&
+      identifier(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      identifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+  }
+
+  private def resolveSystemSessionView(
+      identifier: Seq[String]): Option[LogicalPlan] = {
+    if (isSystemSessionIdentifier(identifier)) {
+      Option(identifier.drop(2)).collect {
+        case Seq(viewName) if viewName.equalsIgnoreCase(PythonWorkerLogs.ViewName) =>
+          PythonWorkerLogs.viewDefinition()
+      }
+    } else None
   }
 }

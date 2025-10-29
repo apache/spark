@@ -50,6 +50,10 @@ class JSONFormatter(logging.Formatter):
 
     default_msec_format = "%s.%03d"
 
+    def __init__(self, ensure_ascii: bool = False):
+        super().__init__()
+        self._ensure_ascii = ensure_ascii
+
     def format(self, record: logging.LogRecord) -> str:
         """
         Format the specified record as a JSON string.
@@ -69,7 +73,7 @@ class JSONFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
-            "context": record.__dict__.get("kwargs", {}),
+            "context": record.__dict__.get("context", {}),
         }
         if record.exc_info:
             exc_type, exc_value, exc_tb = record.exc_info
@@ -89,7 +93,7 @@ class JSONFormatter(logging.Formatter):
                 "msg": str(exc_value),
                 "stacktrace": structured_stacktrace,
             }
-        return json.dumps(log_entry, ensure_ascii=False)
+        return json.dumps(log_entry, ensure_ascii=self._ensure_ascii)
 
 
 class PySparkLogger(logging.Logger):
@@ -291,7 +295,7 @@ class PySparkLogger(logging.Logger):
             msg=msg,
             args=args,
             exc_info=exc_info,
-            extra={"kwargs": kwargs},
+            extra={"context": kwargs},
             stack_info=stack_info,
             stacklevel=stacklevel,
         )

@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 
 import scala.collection.mutable
@@ -2579,6 +2580,56 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val logBlockIds = store
       .getMatchingBlockIds(_.isInstanceOf[TestLogBlockId])
       .distinct
+    assert(logBlockIds.size === 2)
+    assert(logBlockIds.contains(logBlockId1) && logBlockIds.contains(logBlockId2))
+  }
+
+  test("PythonWorkerLog block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+    val logBlockWriter = store.getLogBlockWriter(LogBlockType.PYTHON_WORKER)
+    val logBlockId = PythonWorkerLogBlockId(
+      1L, store.executorId, UUID.randomUUID.toString, "1234")
+
+    assert(BlockId(logBlockId.name) == logBlockId)
+
+    val log1 = PythonWorkerLogLine(0L, 1L, "json1")
+    val log2 = PythonWorkerLogLine(1L, 2L, "json2")
+
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    logBlockWriter.save(logBlockId)
+
+    val status = store.getStatus(logBlockId)
+    assert(status.isDefined)
+
+    assert(store.getMatchingBlockIds(b => logBlockId.equals(b)).nonEmpty)
+
+    val data = store.get[PythonWorkerLogLine](logBlockId).get.data.toSeq
+    assert(data === Seq(log1, log2))
+  }
+
+  test("rolling python worker log block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+
+    val sessionId = UUID.randomUUID.toString
+    val workerId = "1234"
+    val logBlockIdGenerator = new PythonWorkerLogBlockIdGenerator(sessionId, workerId)
+
+    val logBlockWriter = store.getRollingLogWriter(logBlockIdGenerator, 100)
+    val log1 = PythonWorkerLogLine(0L, 1L, "json 1")
+    val log2 = PythonWorkerLogLine(1L, 2L, "json 2")
+    val log3 = PythonWorkerLogLine(2L, 3L, "json 3")
+    val log4 = PythonWorkerLogLine(3L, 4L, "json 4")
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    logBlockWriter.flush()
+    logBlockWriter.writeLog(log3)
+    logBlockWriter.writeLog(log4)
+    logBlockWriter.close()
+
+    val logBlockId1 = PythonWorkerLogBlockId(2L, store.executorId, sessionId, workerId)
+    val logBlockId2 = PythonWorkerLogBlockId(3L, store.executorId, sessionId, workerId)
+    val logBlockIds = store.getMatchingBlockIds(_.isInstanceOf[PythonWorkerLogBlockId]).distinct
     assert(logBlockIds.size === 2)
     assert(logBlockIds.contains(logBlockId1) && logBlockIds.contains(logBlockId2))
   }

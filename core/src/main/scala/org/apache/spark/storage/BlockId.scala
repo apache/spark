@@ -179,6 +179,7 @@ case class PythonStreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
 object LogBlockType extends Enumeration {
   type LogBlockType = Value
   val TEST = Value
+  val PYTHON_WORKER = Value
 }
 
 /**
@@ -188,9 +189,9 @@ object LogBlockType extends Enumeration {
  *                    and log management.
  * @param executorId the ID of the executor that produced this log block.
  */
-abstract sealed class LogBlockId(
-    val lastLogTime: Long,
-    val executorId: String) extends BlockId {
+abstract sealed class LogBlockId extends BlockId {
+  def lastLogTime: Long
+  def executorId: String
   def logBlockType: LogBlockType
 }
 
@@ -198,18 +199,42 @@ object LogBlockId {
   def empty(logBlockType: LogBlockType): LogBlockId = {
     logBlockType match {
       case LogBlockType.TEST => TestLogBlockId(0L, "")
+      case LogBlockType.PYTHON_WORKER => PythonWorkerLogBlockId(0L, "", "", "")
       case _ => throw new SparkException(s"Unsupported log block type: $logBlockType")
     }
   }
 }
 
 // Used for test purpose only.
-case class TestLogBlockId(override val lastLogTime: Long, override val executorId: String)
-  extends LogBlockId(lastLogTime, executorId) {
+case class TestLogBlockId(lastLogTime: Long, executorId: String)
+  extends LogBlockId {
   override def name: String =
     "test_log_" + lastLogTime + "_" + executorId
 
   override def logBlockType: LogBlockType = LogBlockType.TEST
+}
+
+/**
+ * Identifies a block of Python worker log data.
+ *
+ * @param lastLogTime the timestamp of the last log entry in this block, used for filtering
+ *                    and log management.
+ * @param executorId the ID of the executor that produced this log block.
+ * @param sessionId the session ID to isolate the logs.
+ * @param workerId the worker ID to distinguish the Python worker process.
+ */
+@DeveloperApi
+case class PythonWorkerLogBlockId(
+    lastLogTime: Long,
+    executorId: String,
+    sessionId: String,
+    workerId: String)
+  extends LogBlockId {
+  override def name: String = {
+    s"python_worker_log_${lastLogTime}_${executorId}_${sessionId}_$workerId"
+  }
+
+  override def logBlockType: LogBlockType = LogBlockType.PYTHON_WORKER
 }
 
 /** Id associated with temporary local data managed as blocks. Not serializable. */
@@ -260,6 +285,7 @@ object BlockId {
   val TEMP_SHUFFLE = "temp_shuffle_([-A-Fa-f0-9]+)".r
   val TEST = "test_(.*)".r
   val TEST_LOG_BLOCK = "test_log_([0-9]+)_(.*)".r
+  val PYTHON_WORKER_LOG_BLOCK = "python_worker_log_([0-9]+)_([^_]*)_([^_]*)_([^_]*)".r
 
   def apply(name: String): BlockId = name match {
     case RDD(rddId, splitIndex) =>
@@ -302,6 +328,8 @@ object BlockId {
       TempShuffleBlockId(UUID.fromString(uuid))
     case TEST_LOG_BLOCK(lastLogTime, executorId) =>
       TestLogBlockId(lastLogTime.toLong, executorId)
+    case PYTHON_WORKER_LOG_BLOCK(lastLogTime, executorId, sessionId, workerId) =>
+      PythonWorkerLogBlockId(lastLogTime.toLong, executorId, sessionId, workerId)
     case TEST(value) =>
       TestBlockId(value)
     case _ => throw SparkCoreErrors.unrecognizedBlockIdError(name)
