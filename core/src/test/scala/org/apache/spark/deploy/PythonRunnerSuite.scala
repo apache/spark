@@ -66,11 +66,11 @@ class PythonRunnerSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] { PythonRunner.formatPaths("foo.py,hdfs:/some.py") }
   }
 
-  test("PythonErrorUtils should have corresponding methods for default methods in SparkThrowable") {
+  test("SPARK-54052: PythonErrorUtils should have corresponding methods in SparkThrowable") {
     // Find default methods in SparkThrowable
     val defaultMethods = classOf[SparkThrowable]
       .getMethods
-      .filter(m => m.getDeclaringClass == classOf[SparkThrowable] && m.isDefault)
+      .filter(m => m.getDeclaringClass == classOf[SparkThrowable])
       .map(_.getName)
       .toSet
 

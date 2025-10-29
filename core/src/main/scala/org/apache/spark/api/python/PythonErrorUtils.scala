@@ -30,6 +30,7 @@ import org.apache.spark.{BreakingChangeInfo, QueryContext, SparkThrowable}
  * with default methods.
  */
 private[spark] object PythonErrorUtils {
+  def getCondition(e: SparkThrowable): String = e.getCondition
   def getErrorClass(e: SparkThrowable): String = e.getCondition
   def getSqlState(e: SparkThrowable): String = e.getSqlState
   def isInternalError(e: SparkThrowable): Boolean = e.isInternalError

@@ -107,7 +107,7 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return self._origin.getCondition()
+            return SparkContext._jvm.PythonErrorUtils.getCondition(self._origin)
         else:
             return None
 
@@ -138,7 +138,7 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return dict(SparkContext._jvm.PythonErrorUtils.getSqlState(self._origin))
+            return SparkContext._jvm.PythonErrorUtils.getSqlState(self._origin)
         else:
             return None
 
