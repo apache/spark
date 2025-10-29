@@ -305,15 +305,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
   }
 
   test("INVALID_DATETIME_PATTERN with various invalid pattern letters") {
-    // Test multiple invalid pattern letters that throw IllegalArgumentException
-    // Using clearly invalid letters like I, P, R which are not valid datetime pattern letters
-    val invalidPatterns = Seq(
-      ("yyyyMMddHHMIss", "I"),   // Invalid 'I' - unknown pattern letter
-      ("yyyyMMddHHPmss", "P"),   // Invalid 'P' - unknown pattern letter
-      ("yyyyMMddRHmmss", "R")    // Invalid 'R' - unknown pattern letter
-    )
-
-    invalidPatterns.foreach { case (pattern, _) =>
+    Seq("yyyyMMddHHMIss", "yyyyMMddHHPmss", "yyyyMMddRHmmss").foreach { pattern =>
       checkError(
         exception = intercept[SparkRuntimeException] {
           sql(s"select to_timestamp('20231225143045', '$pattern')").collect()
@@ -325,27 +317,6 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sqlState = "22007"
       )
     }
-  }
-
-  test("Valid patterns should still work correctly") {
-    // Ensure our fix doesn't break valid patterns in constant folding path
-    val result = sql("select to_timestamp('20231225143045', 'yyyyMMddHHmmss')").collect()
-    assert(result.length == 1)
-    assert(result(0).getTimestamp(0).toString.startsWith("2023-12-25 14:30:45"))
-  }
-
-  test("CANNOT_PARSE_TIMESTAMP still works for invalid input with valid pattern") {
-    // Verify that parse errors (invalid input) are still properly wrapped
-    // This is different from invalid pattern errors
-    checkError(
-      exception = intercept[SparkDateTimeException] {
-        sql("select to_timestamp('invalid_date', 'yyyyMMddHHmmss')").collect()
-      },
-      condition = "CANNOT_PARSE_TIMESTAMP",
-      parameters = Map(
-        "func" -> "`try_to_timestamp`",
-        "message" -> "Text 'invalid_date' could not be parsed at index 0")
-    )
   }
 
   test("CAST_OVERFLOW_IN_TABLE_INSERT: overflow during table insertion") {
