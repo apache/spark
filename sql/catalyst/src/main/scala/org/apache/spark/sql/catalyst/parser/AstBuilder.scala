@@ -3651,25 +3651,6 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Visits a stringLit context and returns all singleStringLit tokens as an array.
-   *
-   * Returns all tokens without pre-processing. The caller is responsible for applying
-   * config-aware escape processing and concatenation.
-   */
-  override def visitStringLit(ctx: StringLitContext): Array[Token] = {
-    if (ctx == null) {
-      return null
-    }
-
-    import scala.jdk.CollectionConverters._
-
-    // Return all tokens. Processing and coalescing happens in createString.
-    ctx.singleStringLit().asScala.map { child =>
-      visit(child).asInstanceOf[Token]
-    }.toArray
-  }
-
-  /**
    * Create a String literal expression.
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
