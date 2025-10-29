@@ -75,26 +75,27 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
-   * Visits a stringLit context and returns a single token from the first singleStringLit child.
+   * Visits a stringLit context and returns all singleStringLit tokens as an array.
    *
-   * Note: This base implementation does not coalesce multiple string literals. Coalescing is
-   * handled in AstBuilder where SQL configuration is available to determine the correct escape
-   * processing mode.
+   * Note: This base implementation returns all tokens without coalescing. The caller is
+   * responsible for processing and concatenating them. In AstBuilder, coalescing is handled with
+   * SQL configuration-aware escape processing.
    */
-  override def visitStringLit(ctx: StringLitContext): Token = {
+  override def visitStringLit(ctx: StringLitContext): Array[Token] = {
     if (ctx == null) {
       return null
     }
 
     import scala.jdk.CollectionConverters._
 
-    // Just return the first token. Coalescing happens in AstBuilder.
-    val singleStringLits = ctx.singleStringLit().asScala
-    if (singleStringLits.isEmpty) {
-      null
-    } else {
-      visit(singleStringLits.head).asInstanceOf[Token]
-    }
+    // Return all tokens. The caller will process and concatenate them.
+    ctx
+      .singleStringLit()
+      .asScala
+      .map { child =>
+        visit(child).asInstanceOf[Token]
+      }
+      .toArray
   }
 
   /**
