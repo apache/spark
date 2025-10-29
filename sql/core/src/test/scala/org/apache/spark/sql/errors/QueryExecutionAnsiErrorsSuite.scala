@@ -288,9 +288,10 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
 
   test("INVALID_DATETIME_PATTERN with non-constant pattern") {
     // Test that invalid patterns are properly wrapped when the pattern is NOT a constant
-    // (e.g., from a column or variable). This exercises the runtime getFormatter() path.
-    withTempView("patterns") {
-      sql("select 'yyyyMMddHHMIss' as pattern").createOrReplaceTempView("patterns")
+    // This ensures the runtime getFormatter() path is exercised, not constant folding.
+    withTable("patterns") {
+      sql("create table patterns(pattern string) using parquet")
+      sql("insert into patterns values ('yyyyMMddHHMIss')")
       checkError(
         exception = intercept[SparkRuntimeException] {
           sql("select to_timestamp('20231225143045', pattern) from patterns").collect()
