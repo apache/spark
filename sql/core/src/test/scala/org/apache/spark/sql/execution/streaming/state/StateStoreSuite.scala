@@ -1007,6 +1007,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  // Ensure that maintenance is called before unloading
   test("SPARK-40492: maintenance before unload") {
     val conf = new SparkConf()
       .setMaster("local")
@@ -1017,8 +1018,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val sqlConf = getDefaultSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
-    // Make maintenance interval large so that maintenance is called after deactivating instances.
-    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 1.minute.toMillis)
+    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 10L)
     val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
 
@@ -1058,17 +1058,23 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
               assert(snapshotVersions.nonEmpty, "no snapshot file found")
             }
           }
+          // Pause maintenance
+          StateStore.setMaintenancePaused(true)
+
           // Generate more versions such that there is another snapshot.
           generateStoreVersions()
 
           // If driver decides to deactivate all stores related to a query run,
           // then this instance should be unloaded.
           coordinatorRef.deactivateInstances(storeProviderId1.queryRunId)
+
+          // Resume maintenance which should unload the deactivated store
+          StateStore.setMaintenancePaused(false)
           eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeProviderId1))
           }
 
-          // Earliest delta file should be scheduled a cleanup during unload.
+          // Ensure the earliest delta file should be cleaned up during unload.
           tryWithProviderResource(newStoreProvider(storeProviderId1.storeId)) { provider =>
             eventually(timeout(timeoutDuration)) {
               assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")

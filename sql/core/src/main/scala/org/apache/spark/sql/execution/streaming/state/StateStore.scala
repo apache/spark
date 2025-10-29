@@ -1343,6 +1343,13 @@ object StateStore extends Logging {
     }
   }
 
+  // Pause maintenance for testing only.
+  private var maintenancePaused: Boolean = false
+  private[spark] def setMaintenancePaused(maintPaused: Boolean): Unit =
+    loadedProviders.synchronized {
+      maintenancePaused = maintPaused
+    }
+
   /**
    * Execute background maintenance task in all the loaded store providers if they are still
    * the active instances according to the coordinator.
@@ -1351,6 +1358,11 @@ object StateStore extends Logging {
     logDebug("Doing maintenance")
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
+    }
+
+    if (maintenancePaused) {
+      logDebug("Maintenance paused")
+      return
     }
 
     // Providers that couldn't be processed now and need to be added back to the queue
