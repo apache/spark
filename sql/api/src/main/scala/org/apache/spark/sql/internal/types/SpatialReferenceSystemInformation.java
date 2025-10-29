@@ -20,36 +20,11 @@ package org.apache.spark.sql.internal.types;
 /**
  * Class for maintaining information about a spatial reference system (SRS).
  */
-public class SpatialReferenceSystemInformation {
-
+public record SpatialReferenceSystemInformation(
   // Field storing the spatial reference identifier (SRID) value of this SRS.
-  private final int srid;
-
+  int srid,
   // Field storing the string ID of the corresponding coordinate reference system (CRS).
-  private final String stringId;
-
+  String stringId,
   // Field indicating whether the spatial reference system (SRS) is geographic or not.
-  private final boolean isGeographic;
-
-  // Constructor for creating an instance of the spatial reference system information class.
-  public SpatialReferenceSystemInformation(int srid, String stringId, boolean isGeographic) {
-    this.srid = srid;
-    this.stringId = stringId;
-    this.isGeographic = isGeographic;
-  }
-
-  // Specialized getters for each of the spatial reference system (SRS) information fields.
-
-  public int srid() {
-      return srid;
-  }
-
-  public String stringId() {
-      return stringId;
-  }
-
-  public boolean isGeographic() {
-      return isGeographic;
-  }
-
-}
+  boolean isGeographic
+) {}
