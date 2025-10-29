@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.kafka010
 
 import java.nio.file.Files
@@ -45,7 +44,7 @@ class KafkaRealTimeModeE2ESuite extends KafkaSourceTest with StreamRealTimeModeE
     new TestSparkSession(
       new SparkContext(
         "local[15]",
-        "streaming-key-cuj",
+        "streaming-key-cuj"
       )
     )
 
