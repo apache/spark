@@ -74,7 +74,7 @@ abstract class RowBasedChecksum() extends Serializable with Logging {
 object RowBasedChecksum {
   def getAggregatedChecksumValue(rowBasedChecksums: Array[RowBasedChecksum]): Long = {
     Option(rowBasedChecksums)
-      .map(_.foldLeft(0L)((acc, c) => acc * 31L + c.getValue))
+      .map(_.foldLeft(0L)((acc, c) => (acc * 31L + c.getValue) & Long.MaxValue))
       .getOrElse(0L)
   }
 }
