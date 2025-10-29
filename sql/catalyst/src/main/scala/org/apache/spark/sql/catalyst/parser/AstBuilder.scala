@@ -1502,9 +1502,7 @@ class AstBuilder extends DataTypeAstBuilder
         transformClause.inRowFormat,
         transformClause.recordWriter
         transformClause.outRowFormat,
-        if (recordReaderTokens != null && recordReaderTokens.nonEmpty) {
-          recordReaderTokens.head
-        } else null,
+        transformClause.recordReader
         schemaLess
       )
     )
