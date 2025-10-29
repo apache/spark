@@ -89,8 +89,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    *
    * @param attrs table attributes
    * @param assignments insert assignments to align
-   * @param coerceNestedType whether to coerce nested types to match the target type
-   *                         for complex types
+   * @param coerceNestedTypes whether to coerce nested types to match the target type
+   *                          for complex types
    * @return aligned insert assignments that match table attributes
    */
   def alignInsertAssignments(

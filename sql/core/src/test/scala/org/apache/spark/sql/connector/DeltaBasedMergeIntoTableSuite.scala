@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class DeltaBasedMergeIntoTableSuite extends DeltaBasedMergeIntoTableSuiteBase {
 

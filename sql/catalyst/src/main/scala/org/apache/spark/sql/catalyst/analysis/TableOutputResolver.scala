@@ -39,15 +39,15 @@ import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralTyp
 
 object TableOutputResolver extends SQLConfHelper with Logging {
 
+  /**
+   * Modes for filling in default or null values for missing columns.
+   * If FILL, fill missing top-level columns with their default values.
+   * If RECURSE, fill missing top-level columns and also recurse into nested struct
+   * fields to fill null.
+   * If NONE, do not fill any missing columns.
+   */
   object DefaultValueFillMode extends Enumeration {
     val FILL, RECURSE, NONE = Value
-
-    def getChildMode(mode: DefaultValueFillMode.Value): DefaultValueFillMode.Value = {
-      mode match {
-        case RECURSE => RECURSE
-        case _ => NONE
-      }
-    }
   }
 
   def resolveVariableOutputColumns(
@@ -142,6 +142,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       colPath: Seq[String],
       defaultValueFillMode: DefaultValueFillMode.Value): Expression = {
 
+    val fillChildDefaultValue = defaultValueFillMode == RECURSE
     (value.dataType, col.dataType) match {
       // no need to reorder inner fields or cast if types are already compatible
       case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
@@ -156,17 +157,17 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, defaultValueFillMode)
+          byName = true, conf, addError, colPath, fillChildDefaultValue)
         resolvedValue.getOrElse(value)
       case (valueType: ArrayType, colType: ArrayType) =>
         val resolvedValue = resolveArrayType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, defaultValueFillMode)
+          byName = true, conf, addError, colPath, fillChildDefaultValue)
         resolvedValue.getOrElse(value)
       case (valueType: MapType, colType: MapType) =>
         val resolvedValue = resolveMapType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, defaultValueFillMode)
+          byName = true, conf, addError, colPath, fillChildDefaultValue)
         resolvedValue.getOrElse(value)
       case _ =>
         checkUpdate(tableName, value, col, conf, addError, colPath)
@@ -330,20 +331,20 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         val actualExpectedCol = expectedCol.withDataType {
           CharVarcharUtils.getRawType(expectedCol.metadata).getOrElse(expectedCol.dataType)
         }
-        val childDefaultValueMode = DefaultValueFillMode.getChildMode(defaultValueFillMode)
+        val childFillDefaultValue = defaultValueFillMode == RECURSE
         (matchedCol.dataType, actualExpectedCol.dataType) match {
           case (matchedType: StructType, expectedType: StructType) =>
             resolveStructType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childDefaultValueMode)
+              byName = true, conf, addError, newColPath, childFillDefaultValue)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             resolveArrayType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childDefaultValueMode)
+              byName = true, conf, addError, newColPath, childFillDefaultValue)
           case (matchedType: MapType, expectedType: MapType) =>
             resolveMapType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childDefaultValueMode)
+              byName = true, conf, addError, newColPath, childFillDefaultValue)
           case _ =>
             checkField(
               tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath)
@@ -412,15 +413,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         case (inputType: StructType, expectedType: StructType) =>
           resolveStructType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, NONE)
+            byName = false, conf, addError, newColPath, fillDefaultValue = false)
         case (inputType: ArrayType, expectedType: ArrayType) =>
           resolveArrayType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, NONE)
+            byName = false, conf, addError, newColPath, fillDefaultValue = false)
         case (inputType: MapType, expectedType: MapType) =>
           resolveMapType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, NONE)
+            byName = false, conf, addError, newColPath, fillDefaultValue = false)
         case _ =>
           checkField(tableName, expectedCol, inputCol, byName = false, conf, addError, newColPath)
       }
@@ -456,14 +457,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      defaultValueFillMode: DefaultValueFillMode.Value): Option[NamedExpression] = {
+      fillDefaultValue: Boolean): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val fields = inputType.zipWithIndex.map { case (f, i) =>
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
     }
+    val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
     val resolved = if (byName) {
       reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath,
-        DefaultValueFillMode.getChildMode(defaultValueFillMode))
+        defaultValueMode)
     } else {
       resolveColumnsByPosition(
         tableName, fields, toAttributes(expectedType), conf, addError, colPath)
@@ -491,14 +493,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      defaultValueFillMode: DefaultValueFillMode.Value): Option[NamedExpression] = {
+      fillDefaultValue: Boolean): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val param = NamedLambdaVariable("element", inputType.elementType, inputType.containsNull)
     val fakeAttr =
       AttributeReference("element", expectedType.elementType, expectedType.containsNull)()
     val res = if (byName) {
+      val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
       reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath,
-        DefaultValueFillMode.getChildMode(defaultValueFillMode))
+        defaultValueMode)
     } else {
       resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     }
@@ -527,14 +530,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      defaultValueFillMode: DefaultValueFillMode.Value): Option[NamedExpression] = {
+      fillDefaultValue: Boolean): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
 
     val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
     val fakeKeyAttr = AttributeReference("key", expectedType.keyType, nullable = false)()
+    val defaultValueFillMode = if (fillDefaultValue) RECURSE else NONE
     val resKey = if (byName) {
       reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath,
-        DefaultValueFillMode.getChildMode(defaultValueFillMode))
+        defaultValueFillMode)
     } else {
       resolveColumnsByPosition(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
     }
@@ -545,7 +549,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
     val resValue = if (byName) {
       reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath,
-        DefaultValueFillMode.getChildMode(defaultValueFillMode))
+        defaultValueFillMode)
     } else {
       resolveColumnsByPosition(
         tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)

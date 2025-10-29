@@ -81,8 +81,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     }
   }
 
-  private def resolveAssignments(
-      p: LogicalPlan): LogicalPlan = {
+  private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
     p.transformExpressions {
       case assignment: Assignment =>
         val nullHandled = if (!assignment.key.nullable && assignment.value.nullable) {
