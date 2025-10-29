@@ -1500,9 +1500,9 @@ class AstBuilder extends DataTypeAstBuilder
       withScriptIOSchema(
         ctx,
         transformClause.inRowFormat,
-        transformClause.recordWriter
+        transformClause.recordWriter,
         transformClause.outRowFormat,
-        transformClause.recordReader
+        transformClause.recordReader,
         schemaLess
       )
     )
@@ -1664,9 +1664,9 @@ class AstBuilder extends DataTypeAstBuilder
   protected def withScriptIOSchema(
       ctx: ParserRuleContext,
       inRowFormat: RowFormatContext,
-      recordWriter: Token,
+      recordWriter: StringLitContext,
       outRowFormat: RowFormatContext,
-      recordReader: Token,
+      recordReader: StringLitContext,
       schemaLess: Boolean): ScriptInputOutputSchema = {
 
     def format(fmt: RowFormatContext): ScriptIOFormat = fmt match {
