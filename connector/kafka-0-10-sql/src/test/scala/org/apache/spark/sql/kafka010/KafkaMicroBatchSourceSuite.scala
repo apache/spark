@@ -390,7 +390,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "2500")
       .option("maxOffsetsPerTrigger", 5)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
