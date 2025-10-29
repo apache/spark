@@ -1493,16 +1493,6 @@ class AstBuilder extends DataTypeAstBuilder
       isDistinct = false,
       isPipeOperatorSelect = false)
 
-    val recordWriterTokens = visitStringLit(transformClause.recordWriter)
-    val recordReaderTokens = visitStringLit(transformClause.recordReader)
-
-    // Record writer and reader should be single class names, not coalesced strings.
-    // Assert to catch any misuse early while preserving the API.
-    assert(recordWriterTokens == null || recordWriterTokens.length <= 1,
-      s"Record writer must be a single string literal, got ${recordWriterTokens.length} literals")
-    assert(recordReaderTokens == null || recordReaderTokens.length <= 1,
-      s"Record reader must be a single string literal, got ${recordReaderTokens.length} literals")
-
     ScriptTransformation(
       string(visitStringLit(transformClause.script)),
       attributes,
