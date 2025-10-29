@@ -258,24 +258,25 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           val inputData = MemoryStream[Int]
           val query = setUpStatefulQuery(inputData, "query")
           // Add, commit, and wait multiple times to force snapshot versions and time difference
-          // we will detect state store with partition 0 and 1 to be lagged on version 3
+          // we will detect state store with partition 0 and 1 to be lagged on version 5
           // snapshotVersionOnLagDetected =
           //   STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG *
           //   STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT + 1
-          var snapshotVersionOnLagDetected = 2 * 1 + 1
+          val snapshotVersionOnLagDetected = 2 * 1 + 1
           (0 until snapshotVersionOnLagDetected).foreach { _ =>
             inputData.addData(1, 2, 3)
             query.processAllAvailable()
             Thread.sleep(500)
           }
-          // Verify only the partitions in badPartitions are marked as lagging
+          // Verify only the partitions in badPartitions doesn't have a snapshot
           verifySnapshotUploadEvents(coordRef, query, badPartitions)
 
-          // After committing 3 times, the coordinator should detected that lagging stores. So next
+          // The coordinator should detected that lagging stores now. So next
           // commit should automatically trigger snapshot
           inputData.addData(1, 2, 3)
           query.processAllAvailable()
           Thread.sleep(500)
+
           val streamingQuery = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
           val stateCheckpointDir = streamingQuery.lastExecution.checkpointLocation
 
@@ -288,8 +289,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               val providerId = StateStoreProviderId(storeId, query.runId)
               val latestSnapshotVersion = coordRef.getLatestSnapshotVersionForTesting(providerId)
               assert(latestSnapshotVersion.get == snapshotVersionOnLagDetected + 1)
+              // Also verify that the stores are no longer marked as lagging
               val laggingStores = coordRef.getLaggingStoresForTesting(
-                query.runId, latestSnapshotVersion.getOrElse(0))
+                query.runId, snapshotVersionOnLagDetected + 1)
               assert(laggingStores.isEmpty)
           }
           query.stop()

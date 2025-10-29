@@ -2601,7 +2601,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
       store.commit()
-      // An indirect wayt to verify that snapshot is uploaded
+      // Indirectly verify by checking metrics set during uploading snapshot
       val metricPair = store.metrics.customMetrics.find(
         _._1.name == RocksDBStateStoreProvider.CUSTOM_METRIC_BYTES_COPIED.name)
       assert(metricPair.isDefined)

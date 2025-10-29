@@ -825,6 +825,20 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  test("SPARK-54063: force snapshot when shouldForceSnapshotOnCommit is true") {
+      withTempDir { dir =>
+        tryWithProviderResource(newStoreProvider()) { provider =>
+          // Set shouldForceSnapshotOnCommit to true
+          provider.setShouldForceSnapshotOnCommit(true)
+          val store = provider.getStore(0)
+          put(store, "a", 0, 1)
+          store.commit()
+        // Verify that a snapshot file was created for version 1
+        assert(fileExists(provider, 1, isSnapshot = true))
+      }
+    }
+  }
+
   test("SPARK-51291: corrupted file handling") {
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       minDeltasForSnapshot = 5)) { provider =>
