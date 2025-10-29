@@ -38,14 +38,8 @@ object SparkPipelines extends Logging {
   def main(args: Array[String]): Unit = {
     val pipelinesCliFile = args(0)
     val sparkSubmitAndPipelinesArgs = args.slice(1, args.length)
-    val sparkSubmitArgs =
-      constructSparkSubmitArgs(pipelinesCliFile, sparkSubmitAndPipelinesArgs).toArray
-    try {
-      new SparkSubmit().doSubmit(sparkSubmitArgs)
-    } catch {
-      case e: SparkUserAppException =>
-        System.exit(e.exitCode)
-    }
+    SparkSubmit.main(
+      constructSparkSubmitArgs(pipelinesCliFile, sparkSubmitAndPipelinesArgs).toArray)
   }
 
   protected[deploy] def constructSparkSubmitArgs(
