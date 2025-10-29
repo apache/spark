@@ -1776,6 +1776,57 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     changelogReader.closeIfNeeded()
   }
 
+  testWithChangelogCheckpointingDisabled("Verify non empty files during zip file upload") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir) { db =>
+        // create an empty snapshot should succeed
+        db.load(0)
+        db.commit() // empty snapshot
+        assert(new File(remoteDir, "1.zip").exists())
+
+        // snapshot with only 1 key should succeed
+        db.load(1)
+        db.put("a", "1")
+        db.commit()
+        assert(new File(remoteDir, "2.zip").exists())
+      }
+    }
+
+    // Now create snapshot with an empty file
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val fileManager = new RocksDBFileManager(
+        remoteDir, Utils.createTempDir(), hadoopConf)
+        // file name -> size
+      val ckptFiles = Seq(
+        "archive/00002.log" -> 0, // not included in the zip
+        "archive/00003.log" -> 10,
+        "001.sst" -> 10,
+        "002.sst" -> 20,
+        "empty-file" -> 0
+      )
+      // Should throw exception
+      val ex = intercept[SparkException] {
+        saveCheckpointFiles(fileManager, ckptFiles, version = 1,
+          numKeys = 10, new RocksDBFileMapping(),
+          verifyNonEmptyFilesInZip = true)
+      }
+
+      checkError(
+        exception = ex,
+        condition = "STATE_STORE_UNEXPECTED_EMPTY_FILE_IN_ROCKSDB_ZIP",
+        parameters = Map(
+          "fileName" -> "empty-file",
+          "zipFileName" -> s"$remoteDir/1.zip"))
+
+      // Shouldn't throw exception if disabled
+      saveCheckpointFiles(fileManager, ckptFiles, version = 1,
+        numKeys = 10, new RocksDBFileMapping(),
+        verifyNonEmptyFilesInZip = false)
+    }
+  }
+
   testWithChangelogCheckpointingEnabled(
     "RocksDBFileManager: read and write v2 changelog with default col family") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
@@ -3786,7 +3837,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       numKeys: Int,
       fileMapping: RocksDBFileMapping,
       numInternalKeys: Int = 0,
-      checkpointUniqueId: Option[String] = None): Unit = {
+      checkpointUniqueId: Option[String] = None,
+      verifyNonEmptyFilesInZip: Boolean = true): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
     val (dfsFileSuffix, immutableFileMapping) = fileMapping.createSnapshotFileMapping(
@@ -3797,7 +3849,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       numKeys,
       numInternalKeys,
       immutableFileMapping,
-      checkpointUniqueId = checkpointUniqueId)
+      checkpointUniqueId = checkpointUniqueId,
+      verifyNonEmptyFilesInZip = verifyNonEmptyFilesInZip)
 
     val snapshotInfo = RocksDBVersionSnapshotInfo(version, dfsFileSuffix)
     fileMapping.snapshotsPendingUpload.remove(snapshotInfo)
