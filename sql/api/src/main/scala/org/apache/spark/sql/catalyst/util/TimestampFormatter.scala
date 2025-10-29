@@ -555,15 +555,26 @@ object TimestampFormatter {
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
       isParsing: Boolean,
       forTimestampNTZ: Boolean = false): TimestampFormatter = {
-    val formatter = if (SqlApiConf.get.legacyTimeParserPolicy == LEGACY && !forTimestampNTZ) {
-      getLegacyFormatter(format.getOrElse(defaultPattern()), zoneId, locale, legacyFormat)
-    } else {
-      format
-        .map(new Iso8601TimestampFormatter(_, zoneId, locale, legacyFormat, isParsing))
-        .getOrElse(new DefaultTimestampFormatter(zoneId, locale, legacyFormat, isParsing))
+    try {
+      val formatter = if (SqlApiConf.get.legacyTimeParserPolicy == LEGACY && !forTimestampNTZ) {
+        getLegacyFormatter(format.getOrElse(defaultPattern()), zoneId, locale, legacyFormat)
+      } else {
+        format
+          .map(new Iso8601TimestampFormatter(_, zoneId, locale, legacyFormat, isParsing))
+          .getOrElse(new DefaultTimestampFormatter(zoneId, locale, legacyFormat, isParsing))
+      }
+      formatter.validatePatternString(checkLegacy = !forTimestampNTZ)
+      formatter
+    } catch {
+      case e: IllegalArgumentException =>
+        // Wrap Java's IllegalArgumentException with proper Spark Exception.
+        // Spark's SparkIllegalArgumentException should pass through unchanged.
+        e match {
+          case _: SparkIllegalArgumentException => throw e
+          case _ =>
+            throw ExecutionErrors.failToRecognizePatternError(format.getOrElse(defaultPattern()), e)
+        }
     }
-    formatter.validatePatternString(checkLegacy = !forTimestampNTZ)
-    formatter
   }
 
   def getLegacyFormatter(

@@ -90,9 +90,9 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
 
   @transient final protected lazy val formatterOption: Option[TimestampFormatter] =
     if (formatString.foldable) {
-      Option(formatString.eval()).flatMap { fmt =>
+      Option(formatString.eval()).map { fmt =>
         try {
-          Some(getFormatter(fmt.toString))
+          getFormatter(fmt.toString)
         } catch {
           case e: IllegalArgumentException =>
             // Wrap Java's IllegalArgumentException with proper error code.
