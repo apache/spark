@@ -27,7 +27,7 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
   val oracle_password = "Th1s1sThe0racle#Pass"
   override val env = Map(
     "ORACLE_PWD" -> oracle_password, // oracle images uses this
-    "ORACLE_PASSWORD" -> oracle_password // gvenzl/oracle-free uses this
+    "ORACLE_PASSWORD" -> oracle_password, // gvenzl/oracle-free uses this
     "PASSWORD_INIT_TIMEOUT" -> "30"
   )
   override val usesIpc = false
