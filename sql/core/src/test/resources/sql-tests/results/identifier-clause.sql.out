@@ -704,7 +704,15 @@ DROP TABLE IDENTIFIER(var || 'table')
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'var'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -980,7 +988,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "`a`.`b`.`c`.`d`"
+    "identifier" : "`a`.`b`.`c`.`d`",
+    "limit" : "2"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1169,17 +1178,351 @@ struct<max(c1):int>
 
 
 -- !query
+CREATE TABLE IDENTIFIER('id_lite_col_test')(IDENTIFIER('col1') INT, IDENTIFIER('col2') STRING) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO IDENTIFIER('id_lite_col_test') VALUES (1, 'test')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER('col1'), IDENTIFIER('col2') FROM IDENTIFIER('id_lite_col_test')
+-- !query schema
+struct<col1:int,col2:string>
+-- !query output
+1	test
+
+
+-- !query
+DROP TABLE IDENTIFIER('id_lite_col_test')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE IDENTIFIER('id_lite_alter')(c1 INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER TABLE IDENTIFIER('id_lite_alter') RENAME COLUMN IDENTIFIER('c1') TO IDENTIFIER('col1')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "RENAME COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`id_lite_alter`"
+  }
+}
+
+
+-- !query
+ALTER TABLE IDENTIFIER('id_lite_alter') ADD COLUMN IDENTIFIER('c2') INT
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER TABLE IDENTIFIER('id_lite_alter') DROP COLUMN IDENTIFIER('c2')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "DROP COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`id_lite_alter`"
+  }
+}
+
+
+-- !query
+ALTER TABLE IDENTIFIER('id_lite_alter') RENAME TO IDENTIFIER('id_lite_renamed')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IDENTIFIER('id_lite_renamed')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA identifier_lite_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE IDENTIFIER('identifier_lite_schema.qualified_test')(c1 INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO IDENTIFIER('identifier_lite_schema.qualified_test') VALUES(42)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM IDENTIFIER('identifier_lite_schema.qualified_test')
+-- !query schema
+struct<c1:int>
+-- !query output
+42
+
+
+-- !query
+DROP TABLE IDENTIFIER('identifier_lite_schema.qualified_test')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP SCHEMA identifier_lite_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA cat1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE cat1.tab1(c1 INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO IDENTIFIER('cat1').tab1 VALUES(1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM IDENTIFIER('cat1').tab1
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT * FROM IDENTIFIER('cat1.tab1')
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT * FROM IDENTIFIER('cat1').IDENTIFIER('tab1')
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP TABLE cat1.tab1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP SCHEMA cat1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA `schema 1`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SCHEMA_OR_RELATION_NAME",
+  "sqlState" : "42602",
+  "messageParameters" : {
+    "name" : "`schema 1`"
+  }
+}
+
+
+-- !query
+CREATE TABLE `schema 1`.`table 1`(c1 INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SCHEMA_OR_RELATION_NAME",
+  "sqlState" : "42602",
+  "messageParameters" : {
+    "name" : "`table 1`"
+  }
+}
+
+
+-- !query
+INSERT INTO IDENTIFIER('`schema 1`.`table 1`') VALUES(100)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`schema 1`.`table 1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 46,
+    "fragment" : "IDENTIFIER('`schema 1`.`table 1`')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER('`schema 1`.`table 1`')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`schema 1`.`table 1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 48,
+    "fragment" : "IDENTIFIER('`schema 1`.`table 1`')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER('`schema 1`').`table 1`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`schema 1`.`table 1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 48,
+    "fragment" : "IDENTIFIER('`schema 1`').`table 1`"
+  } ]
+}
+
+
+-- !query
+DROP TABLE `schema 1`.`table 1`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`schema 1`.`table 1`"
+  }
+}
+
+
+-- !query
+DROP SCHEMA `schema 1`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+{
+  "errorClass" : "SCHEMA_NOT_FOUND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "schemaName" : "`spark_catalog`.`schema 1`"
+  }
+}
+
+
+-- !query
 SELECT row_number() OVER IDENTIFIER('x.win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
-    "error" : "''x.win''",
-    "hint" : ""
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "IDENTIFIER('x.win')"
   }
 }
 
@@ -1187,17 +1530,9 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT T1.c1 FROM VALUES(1) AS T1(c1) JOIN VALUES(1) AS T2(c1) USING (IDENTIFIER('c1'))
 -- !query schema
-struct<>
+struct<c1:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
-  }
-}
+1
 
 
 -- !query
@@ -1226,17 +1561,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT map('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query schema
-struct<>
+struct<map(a, 1)[IDENTIFIER('a')]:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "''a''",
-    "hint" : ""
-  }
-}
+NULL
 
 
 -- !query
@@ -1244,13 +1571,13 @@ SELECT named_struct('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "FIELD_NOT_FOUND",
+  "sqlState" : "42704",
   "messageParameters" : {
-    "error" : "''a''",
-    "hint" : ""
+    "fieldName" : "`IDENTIFIER('a')`",
+    "fields" : "`a`"
   }
 }
 
@@ -1260,12 +1587,12 @@ SELECT * FROM s.IDENTIFIER('tab')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "funcName" : "`s`.`IDENTIFIER`"
+    "relationName" : "`s`.`tab`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1282,14 +1609,20 @@ SELECT * FROM IDENTIFIER('s').IDENTIFIER('tab')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
+    "relationName" : "`s`.`tab`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 47,
+    "fragment" : "IDENTIFIER('s').IDENTIFIER('tab')"
+  } ]
 }
 
 
@@ -1298,14 +1631,20 @@ SELECT * FROM IDENTIFIER('s').tab
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
+    "relationName" : "`s`.`tab`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 33,
+    "fragment" : "IDENTIFIER('s').tab"
+  } ]
 }
 
 
@@ -1314,13 +1653,13 @@ SELECT row_number() OVER IDENTIFIER('win') FROM VALUES(1) AS T(c1) WINDOW win AS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
-    "error" : "''win''",
-    "hint" : ""
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "IDENTIFIER('win')"
   }
 }
 
@@ -1330,13 +1669,13 @@ SELECT row_number() OVER win FROM VALUES(1) AS T(c1) WINDOW IDENTIFIER('win') AS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
-    "error" : "'WINDOW'",
-    "hint" : ""
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "win"
   }
 }
 
@@ -1346,14 +1685,20 @@ WITH identifier('v')(identifier('c1')) AS (VALUES(1)) (SELECT c1 FROM v)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "error" : "''v''",
-    "hint" : ""
-  }
+    "relationName" : "`v`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 71,
+    "fragment" : "v"
+  } ]
 }
 
 
@@ -1362,14 +1707,20 @@ INSERT INTO tab(IDENTIFIER('c1')) VALUES(1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "error" : "'('",
-    "hint" : ": missing ')'"
-  }
+    "relationName" : "`tab`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 15,
+    "fragment" : "tab"
+  } ]
 }
 
 
@@ -1378,15 +1729,7 @@ CREATE OR REPLACE VIEW v(IDENTIFIER('c1')) AS VALUES(1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
-  }
-}
+
 
 
 -- !query
@@ -1394,12 +1737,130 @@ CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
+
+
+
+-- !query
+CREATE TABLE IDENTIFIER('id_lite_coldef_ok')(IDENTIFIER('c1') INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IDENTIFIER('id_lite_coldef_ok')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE test_qualified_col_error(IDENTIFIER('col1.col2') INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
-  }
+    "identifier" : "col1.col2",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 65,
+    "fragment" : "IDENTIFIER('col1.col2') INT"
+  } ]
 }
+
+
+-- !query
+CREATE TABLE test_qualified_col_error2(id INT, IDENTIFIER('schema.table') STRING) USING CSV
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "identifier" : "schema.table",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 80,
+    "fragment" : "IDENTIFIER('schema.table') STRING"
+  } ]
+}
+
+
+-- !query
+CREATE TABLE test_col_with_dot(IDENTIFIER('`col.with.dot`') INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE test_col_with_dot
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT 1 AS IDENTIFIER('col1')
+-- !query schema
+struct<IDENTIFIER('col1'):int>
+-- !query output
+1
+
+
+-- !query
+SELECT 'hello' AS IDENTIFIER('my_column')
+-- !query schema
+struct<IDENTIFIER('my_column'):string>
+-- !query output
+hello
+
+
+-- !query
+SELECT * FROM VALUES (1, 2) AS IDENTIFIER('my_table')(IDENTIFIER('c1'), IDENTIFIER('c2'))
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+
+
+-- !query
+SELECT * FROM VALUES (10, 20) AS IDENTIFIER('t')(IDENTIFIER('col_a'), IDENTIFIER('col_b'))
+-- !query schema
+struct<col_a:int,col_b:int>
+-- !query output
+10	20
+
+
+-- !query
+SELECT * FROM VALUES (1, 2) AS IDENTIFIER('schema.table')(c1, c2)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+
+
+-- !query
+SELECT 1 AS IDENTIFIER('col1.col2')
+-- !query schema
+struct<IDENTIFIER('col1.col2'):int>
+-- !query output
+1

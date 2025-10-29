@@ -145,12 +145,12 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    * exactly one token without coalescing.
    */
   override def visitSingleStringLiteralValue(ctx: SingleStringLiteralValueContext): Token = {
-    ctx.STRING_LITERAL().getSymbol
+    Option(ctx).map(_.STRING_LITERAL.getSymbol).orNull
   }
 
   override def visitSingleDoubleQuotedStringLiteralValue(
       ctx: SingleDoubleQuotedStringLiteralValueContext): Token = {
-    ctx.DOUBLEQUOTED_STRING().getSymbol
+    Option(ctx).map(_.DOUBLEQUOTED_STRING.getSymbol).orNull
   }
 
   /**
