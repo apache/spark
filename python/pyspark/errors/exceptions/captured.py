@@ -153,7 +153,9 @@ class CapturedException(PySparkException):
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
             errorClass = SparkContext._jvm.PythonErrorUtils.getCondition(self._origin)
-            messageParameters = SparkContext._jvm.PythonErrorUtils.getMessageParameters(self._origin)
+            messageParameters = SparkContext._jvm.PythonErrorUtils.getMessageParameters(
+                self._origin
+            )
 
             error_message = getattr(gw.jvm, "org.apache.spark.SparkThrowableHelper").getMessage(
                 errorClass, messageParameters
