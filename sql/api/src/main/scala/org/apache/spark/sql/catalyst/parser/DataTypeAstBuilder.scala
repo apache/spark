@@ -98,29 +98,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
-   * Visits a stringLitWithoutMarker context and returns a single token from the first
-   * singleStringLitWithoutMarker child.
-   *
-   * Note: This base implementation does not coalesce multiple string literals. Coalescing is
-   * handled in AstBuilder where SQL configuration is available.
-   */
-  override def visitStringLitWithoutMarker(ctx: StringLitWithoutMarkerContext): Token = {
-    if (ctx == null) {
-      return null
-    }
-
-    import scala.jdk.CollectionConverters._
-
-    // Just return the first token. Coalescing happens in AstBuilder.
-    val children = ctx.singleStringLitWithoutMarker().asScala
-    if (children.isEmpty) {
-      null
-    } else {
-      visit(children.head).asInstanceOf[Token]
-    }
-  }
-
-  /**
    * Visits singleStringLitWithoutMarker alternatives and returns the token. Always returns
    * exactly one token without coalescing.
    */
