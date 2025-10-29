@@ -5366,6 +5366,12 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_UNEXPECTED_EMPTY_FILE_IN_ROCKSDB_ZIP" : {
+    "message" : [
+      "Detected an empty file <fileName> when trying to write the RocksDB snapshot zip file <zipFileName>. This is unexpected, please retry."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
