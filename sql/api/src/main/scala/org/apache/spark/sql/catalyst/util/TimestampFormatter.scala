@@ -572,7 +572,9 @@ object TimestampFormatter {
         e match {
           case _: SparkIllegalArgumentException => throw e
           case _ =>
-            throw ExecutionErrors.failToRecognizePatternError(format.getOrElse(defaultPattern()), e)
+            throw ExecutionErrors.failToRecognizePatternError(
+              format.getOrElse(defaultPattern()),
+              e)
         }
     }
   }
