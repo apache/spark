@@ -1500,9 +1500,7 @@ class AstBuilder extends DataTypeAstBuilder
       withScriptIOSchema(
         ctx,
         transformClause.inRowFormat,
-        if (recordWriterTokens != null && recordWriterTokens.nonEmpty) {
-          recordWriterTokens.head
-        } else null,
+        transformClause.recordWriter
         transformClause.outRowFormat,
         if (recordReaderTokens != null && recordReaderTokens.nonEmpty) {
           recordReaderTokens.head
