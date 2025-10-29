@@ -107,7 +107,8 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return SparkContext._jvm.PythonErrorUtils.getCondition(self._origin)
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            return utils.getCondition(self._origin)
         else:
             return None
 
@@ -125,7 +126,8 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return dict(SparkContext._jvm.PythonErrorUtils.getMessageParameters(self._origin))
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            return dict(utils.getMessageParameters(self._origin))
         else:
             return None
 
@@ -138,7 +140,8 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return SparkContext._jvm.PythonErrorUtils.getSqlState(self._origin)
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            return utils.getSqlState(self._origin)
         else:
             return None
 
@@ -152,10 +155,9 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            errorClass = SparkContext._jvm.PythonErrorUtils.getCondition(self._origin)
-            messageParameters = SparkContext._jvm.PythonErrorUtils.getMessageParameters(
-                self._origin
-            )
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            errorClass = utils.getCondition(self._origin)
+            messageParameters = utils.getMessageParameters(self._origin)
 
             error_message = getattr(gw.jvm, "org.apache.spark.SparkThrowableHelper").getMessage(
                 errorClass, messageParameters
@@ -176,7 +178,8 @@ class CapturedException(PySparkException):
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
             contexts: List[BaseQueryContext] = []
-            for q in SparkContext._jvm.PythonErrorUtils.getQueryContext(self._origin):
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            for q in utils.getQueryContext(self._origin):
                 if q.contextType().toString() == "SQL":
                     contexts.append(SQLQueryContext(q))
                 else:
