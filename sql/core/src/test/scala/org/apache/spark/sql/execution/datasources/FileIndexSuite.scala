@@ -680,6 +680,45 @@ class FileIndexSuite extends SharedSparkSession {
       assert(fileIndex2a != fileIndex2b)
     }
   }
+
+  test("InMemoryFileIndex: recursiveFileLookup=false should not list children directories") {
+    withTempDir { dir =>
+      // Create directory structure:
+      // dir/
+      //   file1.txt
+      //   subdir1/
+      //     file2.txt
+      //     subdir2/
+      //       file3.txt
+      
+      val file1 = new File(dir, "file1.txt")
+      stringToFile(file1, "content1")
+      
+      val subdir1 = new File(dir, "subdir1")
+      subdir1.mkdir()
+      val file2 = new File(subdir1, "file2.txt")
+      stringToFile(file2, "content2")
+      
+      val subdir2 = new File(subdir1, "subdir2")
+      subdir2.mkdir()
+      val file3 = new File(subdir2, "file3.txt")
+      stringToFile(file3, "content3")
+
+      val rootPath = new Path(dir.getCanonicalPath)
+
+      // Test with recursiveFileLookup=true (default behavior)
+      val recursiveFileIndex = new InMemoryFileIndex(
+        spark, Seq(rootPath), Map("recursiveFileLookup" -> "true"), None)
+      val recursiveFiles = recursiveFileIndex.allFiles().map(_.getPath.getName).sorted
+      assert(recursiveFiles === Seq("file1.txt", "file2.txt", "file3.txt"))
+
+      // Test with recursiveFileLookup=false (should only list top-level files)
+      val nonRecursiveFileIndex = new InMemoryFileIndex(
+        spark, Seq(rootPath), Map("recursiveFileLookup" -> "false"), None)
+      val nonRecursiveFiles = nonRecursiveFileIndex.allFiles().map(_.getPath.getName).sorted
+      assert(nonRecursiveFiles === Seq("file1.txt"))
+    }
+  }
 }
 
 object DeletionRaceFileSystem {

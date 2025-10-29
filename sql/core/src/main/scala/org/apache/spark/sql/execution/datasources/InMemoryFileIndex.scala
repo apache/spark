@@ -132,7 +132,7 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, parameters)
+      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, parameters, recursiveFileLookup)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -151,7 +151,8 @@ object InMemoryFileIndex extends Logging {
       hadoopConf: Configuration,
       filter: PathFilter,
       sparkSession: SparkSession,
-      parameters: Map[String, String] = Map.empty): Seq[(Path, Seq[FileStatus])] = {
+      parameters: Map[String, String] = Map.empty,
+      recursiveFileLookup: Boolean = true): Seq[(Path, Seq[FileStatus])] = {
     val fileSystemList =
       sparkSession.sessionState.conf.useListFilesFileSystemList.split(",").map(_.trim)
     val ignoreMissingFiles =
@@ -176,7 +177,8 @@ object InMemoryFileIndex extends Logging {
         ignoreMissingFiles = ignoreMissingFiles,
         ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
         parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
-        parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+        parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism,
+        recursiveFileLookup = recursiveFileLookup)
     }
   }
 

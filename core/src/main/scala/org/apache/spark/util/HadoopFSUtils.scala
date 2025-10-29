@@ -67,9 +67,10 @@ private[spark] object HadoopFSUtils extends Logging {
     ignoreMissingFiles: Boolean,
     ignoreLocality: Boolean,
     parallelismThreshold: Int,
-    parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
+    parallelismMax: Int,
+    recursiveFileLookup: Boolean = true): Seq[(Path, Seq[FileStatus])] = {
     parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, isRootLevel = true,
-      ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax)
+      ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax, recursiveFileLookup)
   }
 
   /**
@@ -115,7 +116,8 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
       parallelismThreshold: Int,
-      parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
+      parallelismMax: Int,
+      recursiveFileLookup: Boolean = true): Seq[(Path, Seq[FileStatus])] = {
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= parallelismThreshold) {
@@ -129,7 +131,8 @@ private[spark] object HadoopFSUtils extends Logging {
           ignoreLocality = ignoreLocality,
           isRootPath = isRootLevel,
           parallelismThreshold = parallelismThreshold,
-          parallelismMax = parallelismMax)
+          parallelismMax = parallelismMax,
+          recursiveFileLookup = recursiveFileLookup)
         (path, leafFiles)
       }
     }
@@ -169,7 +172,8 @@ private[spark] object HadoopFSUtils extends Logging {
               ignoreLocality = ignoreLocality,
               isRootPath = isRootLevel,
               parallelismThreshold = Int.MaxValue,
-              parallelismMax = 0)
+              parallelismMax = 0,
+              recursiveFileLookup = recursiveFileLookup)
             (path, leafFiles)
           }
         }.collect().toImmutableArraySeq
@@ -196,7 +200,8 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreLocality: Boolean,
       isRootPath: Boolean,
       parallelismThreshold: Int,
-      parallelismMax: Int): Seq[FileStatus] = {
+      parallelismMax: Int,
+      recursiveFileLookup: Boolean = true): Seq[FileStatus] = {
 
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
@@ -255,7 +260,9 @@ private[spark] object HadoopFSUtils extends Logging {
 
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
-      val filteredNestedFiles: Seq[FileStatus] = contextOpt match {
+      val filteredNestedFiles: Seq[FileStatus] = if (!recursiveFileLookup) {
+        Seq.empty
+      } else contextOpt match {
         case Some(context) if dirs.length > parallelismThreshold =>
           parallelListLeafFilesInternal(
             context,
@@ -266,7 +273,8 @@ private[spark] object HadoopFSUtils extends Logging {
             ignoreMissingFiles = ignoreMissingFiles,
             ignoreLocality = ignoreLocality,
             parallelismThreshold = parallelismThreshold,
-            parallelismMax = parallelismMax
+            parallelismMax = parallelismMax,
+            recursiveFileLookup = recursiveFileLookup
           ).flatMap(_._2)
         case _ =>
           dirs.flatMap { dir =>
@@ -279,7 +287,8 @@ private[spark] object HadoopFSUtils extends Logging {
               ignoreLocality = ignoreLocality,
               isRootPath = false,
               parallelismThreshold = parallelismThreshold,
-              parallelismMax = parallelismMax)
+              parallelismMax = parallelismMax,
+              recursiveFileLookup = recursiveFileLookup)
           }.toImmutableArraySeq
       }
       val filteredTopLevelFiles = if (filter != null) {
