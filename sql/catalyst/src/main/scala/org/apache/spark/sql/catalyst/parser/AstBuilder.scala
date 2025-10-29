@@ -3703,7 +3703,15 @@ class AstBuilder extends DataTypeAstBuilder
     // If it's a CoalescedStringToken, it's already been processed, just extract the value
     token match {
       case coalesced: CoalescedStringToken => coalesced.getProcessedValue
-      case _ => string(token)
+      case _ =>
+        // Apply the config-appropriate string processing function
+        if (conf.escapedStringLiterals) {
+          stringWithoutUnescape(token)
+        } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
+          stringIgnoreQuoteQuote(token)
+        } else {
+          string(token)
+        }
     }
   }
 
