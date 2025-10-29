@@ -282,7 +282,7 @@ class PandasGroupedOpsMixin:
         pyspark.sql.functions.pandas_udf
         """
         from pyspark.sql import GroupedData
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        from pyspark.sql.functions import pandas_udf
         from pyspark.sql.pandas.typehints import infer_group_pandas_eval_type_from_func
 
         assert isinstance(self, GroupedData)

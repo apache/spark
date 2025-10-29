@@ -62,6 +62,7 @@ if typing.TYPE_CHECKING:
         ArrowGroupedMapUDFType,
         ArrowGroupedMapIterUDFType,
         ArrowCogroupedMapUDFType,
+        PandasGroupedMapIterUDFType,
         PandasGroupedMapUDFTransformWithStateType,
         PandasGroupedMapUDFTransformWithStateInitStateType,
         GroupedMapUDFTransformWithStateType,

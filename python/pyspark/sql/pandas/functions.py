@@ -845,8 +845,8 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         raise PySparkValueError(
             errorClass="INVALID_PANDAS_UDF",
             messageParameters={
-                "detail": "the function in groupby.applyInPandas with iterator API must take either "
-                "one argument (batches: Iterator[pandas.DataFrame]) or two arguments "
+                "detail": "the function in groupby.applyInPandas with iterator API must take "
+                "either one argument (batches: Iterator[pandas.DataFrame]) or two arguments "
                 "(key, batches: Iterator[pandas.DataFrame]).",
             },
         )
