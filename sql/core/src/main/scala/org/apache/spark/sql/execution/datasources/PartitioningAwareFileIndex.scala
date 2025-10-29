@@ -117,36 +117,7 @@ abstract class PartitioningAwareFileIndex(
   override def sizeInBytes: Long = allFiles().map(_.getLen).sum
 
   def allFiles(): Seq[FileStatus] = {
-    val files = if (partitionSpec().partitionColumns.isEmpty && !recursiveFileLookup) {
-      // For each of the root input paths, get the list of files inside them
-      rootPaths.flatMap { path =>
-        // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
-        val fs = path.getFileSystem(hadoopConf)
-        val qualifiedPathPre = fs.makeQualified(path)
-        val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
-          // SPARK-17613: Always append `Path.SEPARATOR` to the end of parent directories,
-          // because the `leafFile.getParent` would have returned an absolute path with the
-          // separator at the end.
-          new Path(qualifiedPathPre, Path.SEPARATOR)
-        } else {
-          qualifiedPathPre
-        }
-
-        // There are three cases possible with each path
-        // 1. The path is a directory and has children files in it. Then it must be present in
-        //    leafDirToChildrenFiles as those children files will have been found as leaf files.
-        //    Find its children files from leafDirToChildrenFiles and include them.
-        // 2. The path is a file, then it will be present in leafFiles. Include this path.
-        // 3. The path is a directory, but has no children files. Do not include this path.
-
-        leafDirToChildrenFiles.get(qualifiedPath)
-          .orElse { leafFiles.get(qualifiedPath).map(Array(_)) }
-          .getOrElse(Array.empty)
-      }
-    } else {
-      leafFiles.values.toSeq
-    }
-    files.filter(matchPathPattern)
+    leafFiles.values.toSeq.filter(matchPathPattern)
   }
 
   protected def inferPartitioning(): PartitionSpec = {
