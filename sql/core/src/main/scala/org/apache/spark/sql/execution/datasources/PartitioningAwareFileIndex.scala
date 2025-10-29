@@ -67,7 +67,7 @@ abstract class PartitioningAwareFileIndex(
     pathFilters.forall(_.accept(file))
 
   protected lazy val recursiveFileLookup: Boolean = {
-    caseInsensitiveMap.getOrElse(FileIndexOptions.RECURSIVE_FILE_LOOKUP, "false").toBoolean
+    caseInsensitiveMap.getOrElse(FileIndexOptions.RECURSIVE_FILE_LOOKUP, "true").toBoolean
   }
 
   protected lazy val ignoreInvalidPartitionPaths: Boolean = {
