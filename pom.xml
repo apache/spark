@@ -138,6 +138,8 @@
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>3.4.1</kafka.version>
+    <!-- OpenLineage for Spark lineage tracking - bundled in Affirm custom distribution -->
+    <openlineage.version>1.38.0</openlineage.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.13.1</parquet.version>

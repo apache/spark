@@ -85,6 +85,21 @@
       <artifactId>guava</artifactId>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
+
+    <!--
+      OpenLineage and Kafka dependencies for Affirm custom distribution.
+      These are bundled into /opt/spark/jars/ so all Spark applications have lineage tracking.
+    -->
+    <dependency>
+      <groupId>io.openlineage</groupId>
+      <artifactId>openlineage-spark_${scala.binary.version}</artifactId>
+      <version>${openlineage.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-clients</artifactId>
+      <version>${kafka.version}</version>
+    </dependency>
   </dependencies>
 
   <build>
