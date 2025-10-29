@@ -36,7 +36,7 @@ class STExpressionsSuite
 
   test("ST_AsBinary") {
     // Test data: WKB representation of POINT(1 2).
-    val wkb = Hex.unhex("0101000000000000000000f03f0000000000000040".getBytes())
+    val wkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
     val wkbLiteral = Literal.create(wkb, BinaryType)
     // ST_GeogFromWKB and ST_AsBinary.
     val geographyExpression = ST_GeogFromWKB(wkbLiteral)

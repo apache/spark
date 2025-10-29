@@ -60,7 +60,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "predicate_funcs", "conditional_funcs", "conversion_funcs", "csv_funcs", "datetime_funcs",
       "generator_funcs", "hash_funcs", "json_funcs", "lambda_funcs", "map_funcs", "math_funcs",
       "misc_funcs", "string_funcs", "struct_funcs", "window_funcs", "xml_funcs", "table_funcs",
-      "url_funcs", "variant_funcs").sorted
+      "url_funcs", "variant_funcs", "st_funcs").sorted
     val invalidGroupName = "invalid_group_funcs"
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
