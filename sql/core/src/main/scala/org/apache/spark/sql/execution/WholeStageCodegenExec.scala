@@ -257,7 +257,7 @@ trait CodegenSupport extends SparkPlan {
         // Use constant `false` without passing `isNull` for non-nullable variable.
         FalseLiteral
       } else {
-        val isNull = ctx.freshName(s"paramIsNull_$i")
+        val isNull = ctx.freshName(s"exprIsNull_$i")
         arguments += ev.isNull
         parameters += s"boolean $isNull"
         JavaCode.isNullVariable(isNull)

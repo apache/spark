@@ -2207,7 +2207,7 @@ object SQLConf {
       .internal()
       .doc("Number of records after which aggregate operator checks if " +
         "partial aggregation phase can be avoided")
-      .version("3.1.0")
+      .version("3.4.4")
       .longConf
       .createWithDefault(100000)
 
@@ -2223,7 +2223,7 @@ object SQLConf {
         "This ratio is computed as (number of rows aggregated successfully /" +
         " total number of input rows). " +
         "If the ratio exceeds this value, the partial aggregate stage is skipped.")
-      .version("3.1.0")
+      .version("3.4.4")
       .doubleConf
       .checkValue(ratio => ratio > 0 && ratio <= 1.0,
         "Invalid value for spark.sql.ibm.aggregate.skipPartialAggregate.aggregateRatio. " +
@@ -2244,7 +2244,7 @@ object SQLConf {
         " number of unique grouping keys). " +
         "If the ratio is less than or equal to this value, compaction benefit is minimal and " +
         "the partial aggregate stage is skipped.")
-      .version("3.1.0")
+      .version("3.4.4")
       .doubleConf
       .checkValue(ratio => ratio > 0,
         "Invalid value for spark.sql.ibm.aggregate.skipPartialAggregate.aggregateCompaction. " +
@@ -2259,7 +2259,7 @@ object SQLConf {
         s"than threshold defined by ${SKIP_PARTIAL_AGGREGATE_MINROWS.key} 2. When the ratio" +
         "of record count in map to the total records is less that value defined by " +
         s"${SKIP_PARTIAL_AGGREGATE_RATIO.key}")
-      .version("3.1.0")
+      .version("3.4.4")
       .booleanConf
       .createWithDefault(false)
 
