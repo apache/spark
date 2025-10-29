@@ -709,6 +709,11 @@ class CogroupedApplyInPandasTestsMixin:
 
                     self.assertEqual(expected, result)
 
+    def test_negative_and_zero_batch_size(self):
+        for batch_size in [0, -1]:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
+                CogroupedApplyInPandasTestsMixin.test_with_key_right(self)
+
 
 class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
     pass
