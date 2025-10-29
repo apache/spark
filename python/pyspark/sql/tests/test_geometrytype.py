@@ -89,7 +89,7 @@ class GeometryTypeTestMixin:
             crs_header = "[ST_INVALID_CRS_VALUE] Invalid or unsupported CRS"
             self.assertEqual(
                 str(error_context.exception),
-                f"{crs_header} (coordinate reference system) value: '{invalid_crs}'."
+                f"{crs_header} (coordinate reference system) value: '{invalid_crs}'.",
             )
 
     def test_geometrytype_from_valid_crs(self):

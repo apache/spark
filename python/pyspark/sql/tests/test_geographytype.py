@@ -87,7 +87,7 @@ class GeographyTypeTestMixin:
             crs_header = "[ST_INVALID_CRS_VALUE] Invalid or unsupported CRS"
             self.assertEqual(
                 str(error_context.exception),
-                f"{crs_header} (coordinate reference system) value: '{invalid_crs}'."
+                f"{crs_header} (coordinate reference system) value: '{invalid_crs}'.",
             )
 
     # The tests below verify GEOGRAPHY type JSON parsing based on CRS and algorithm.
@@ -101,7 +101,7 @@ class GeographyTypeTestMixin:
             alg_header = "[ST_INVALID_ALGORITHM_VALUE] Invalid or unsupported"
             self.assertEqual(
                 str(error_context.exception),
-                f"{alg_header} edge interpolation algorithm value: '{invalid_alg}'."
+                f"{alg_header} edge interpolation algorithm value: '{invalid_alg}'.",
             )
 
     def test_geographytype_from_valid_crs_and_algorithm(self):
