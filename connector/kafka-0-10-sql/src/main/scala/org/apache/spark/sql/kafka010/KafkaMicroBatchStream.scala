@@ -26,7 +26,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{ERROR, OFFSETS, TIP}
+import org.apache.spark.internal.LogKeys.{ERROR, OFFSETS, TIP, TOPIC_PARTITION_OFFSET}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
@@ -254,7 +254,7 @@ private[kafka010] class KafkaMicroBatchStream(
       )
     }
 
-    // This function is used by Low Latency Mode, where we expect 1:1 mapping between a
+    // This function is used by Real-time Mode, where we expect 1:1 mapping between a
     // topic partition and an input partition.
     // We are skipping partition range check for performance reason. We can always try to do
     // it in tasks if needed.
@@ -282,6 +282,7 @@ private[kafka010] class KafkaMicroBatchStream(
         newPartitionOffsets.keys.forall(!startPartitionOffsets.contains(_)),
         "startPartitionOffsets should not contain any key in newPartitionOffsets")
 
+      logInfo(log"Partitions added: ${MDC(TOPIC_PARTITION_OFFSET, newPartitionOffsets)}")
       // Filter out new partition offsets that are not 0 and log a warning
       val nonZeroNewPartitionOffsets = newPartitionOffsets.filter {
         case (_, offset) => offset != 0
@@ -290,9 +291,14 @@ private[kafka010] class KafkaMicroBatchStream(
       if (nonZeroNewPartitionOffsets.nonEmpty) {
         logWarning(log"new partitions should start from offset 0: " +
           log"${MDC(OFFSETS, nonZeroNewPartitionOffsets)}")
+        nonZeroNewPartitionOffsets.foreach {
+          case (p, o) =>
+            reportDataLoss(
+              s"Added partition $p starts from $o instead of 0. Some data may have been missed",
+              () => KafkaExceptions.addedPartitionDoesNotStartFromZero(p, o))
+        }
       }
 
-      logInfo(log"Added new partition offsets: ${MDC(OFFSETS, newPartitionOffsets)}")
       startPartitionOffsets ++ newPartitionOffsets
     }
 
