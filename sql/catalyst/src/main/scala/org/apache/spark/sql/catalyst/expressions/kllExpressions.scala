@@ -245,17 +245,13 @@ case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
   override def prettyName: String = "kll_sketch_get_quantile_bigint"
   override def outputDataType: DataType = LongType
   override def kllSketchGetQuantile(memory: Memory, rank: Double): Any = {
-    try {
+    withQuantileErrorHandling(rank) {
       KllLongsSketch.wrap(memory).getQuantile(rank)
-    } catch {
-      case e: org.apache.datasketches.common.SketchesArgumentException =>
-        if (e.getMessage.contains("normalized rank")) {
-          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName, rank)
-        } else {
-          throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
-        }
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+    }
+  }
+  override def kllSketchGetQuantiles(memory: Memory, ranks: Array[Double]): Array[Any] = {
+    withQuantileErrorHandling(if (ranks.length > 0) ranks(0) else 0.0) {
+      KllLongsSketch.wrap(memory).getQuantiles(ranks).map(_.asInstanceOf[Any])
     }
   }
 }
@@ -281,17 +277,13 @@ case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
   override def prettyName: String = "kll_sketch_get_quantile_float"
   override def outputDataType: DataType = FloatType
   override def kllSketchGetQuantile(memory: Memory, rank: Double): Any = {
-    try {
+    withQuantileErrorHandling(rank) {
       KllFloatsSketch.wrap(memory).getQuantile(rank)
-    } catch {
-      case e: org.apache.datasketches.common.SketchesArgumentException =>
-        if (e.getMessage.contains("normalized rank")) {
-          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName, rank)
-        } else {
-          throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
-        }
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+    }
+  }
+  override def kllSketchGetQuantiles(memory: Memory, ranks: Array[Double]): Array[Any] = {
+    withQuantileErrorHandling(if (ranks.length > 0) ranks(0) else 0.0) {
+      KllFloatsSketch.wrap(memory).getQuantiles(ranks).map(_.asInstanceOf[Any])
     }
   }
 }
@@ -317,25 +309,22 @@ case class KllSketchGetQuantileDouble(left: Expression, right: Expression)
   override def prettyName: String = "kll_sketch_get_quantile_double"
   override def outputDataType: DataType = DoubleType
   override def kllSketchGetQuantile(memory: Memory, rank: Double): Any = {
-    try {
+    withQuantileErrorHandling(rank) {
       KllDoublesSketch.wrap(memory).getQuantile(rank)
-    } catch {
-      case e: org.apache.datasketches.common.SketchesArgumentException =>
-        if (e.getMessage.contains("normalized rank")) {
-          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName, rank)
-        } else {
-          throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
-        }
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+    }
+  }
+  override def kllSketchGetQuantiles(memory: Memory, ranks: Array[Double]): Array[Any] = {
+    withQuantileErrorHandling(if (ranks.length > 0) ranks(0) else 0.0) {
+      KllDoublesSketch.wrap(memory).getQuantiles(ranks).map(_.asInstanceOf[Any])
     }
   }
 }
 
 /**
  * This is a base class for the above expressions to reduce boilerplate.
- * Each implementor is expected to define two methods, one to specify the output data type,
- * and another to compute the quantile of an input sketch buffer given the input rank.
+ * Each implementor is expected to define three methods: one to specify the output data type,
+ * one to compute the quantile of an input sketch buffer given a single input rank,
+ * and one to compute multiple quantiles given an array of ranks (batch API for performance).
  */
 abstract class KllSketchGetQuantileBase
     extends BinaryExpression
@@ -349,6 +338,36 @@ abstract class KllSketchGetQuantileBase
    * @return The result quantile
    */
   protected def kllSketchGetQuantile(memory: Memory, rank: Double): Any
+
+  /**
+   * This method accepts a KLL quantiles Memory segment, wraps it with the corresponding
+   * Kll*Sketch.wrap method, and then calls getQuantiles on the result (batch API).
+   * @param memory The input KLL quantiles sketch buffer to extract the quantiles from
+   * @param ranks The input ranks array to use to compute the quantiles
+   * @return The result quantiles as an array
+   */
+  protected def kllSketchGetQuantiles(memory: Memory, ranks: Array[Double]): Array[Any]
+
+  /**
+   * Helper method to wrap quantile operations with consistent error handling.
+   * @param rankForError The rank value to include in error messages
+   * @param operation The operation to execute
+   * @return The result of the operation
+   */
+  protected def withQuantileErrorHandling[T](rankForError: Double)(operation: => T): T = {
+    try {
+      operation
+    } catch {
+      case e: org.apache.datasketches.common.SketchesArgumentException =>
+        if (e.getMessage.contains("normalized rank")) {
+          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName, rankForError)
+        } else {
+          throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+        }
+      case e: Exception =>
+        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+    }
+  }
 
   /** The output data type for a single value (not array) */
   protected def outputDataType: DataType
@@ -378,9 +397,9 @@ abstract class KllSketchGetQuantileBase
         // Single value case
         kllSketchGetQuantile(memory, num)
       case arrayData: ArrayData =>
-        // Array case
+        // Array case - use batch API for better performance
         val ranks = arrayData.toDoubleArray()
-        val results = ranks.map(rank => kllSketchGetQuantile(memory, rank))
+        val results = kllSketchGetQuantiles(memory, ranks)
         new GenericArrayData(results)
     }
   }
@@ -408,11 +427,8 @@ case class KllSketchGetRankBigint(left: Expression, right: Expression)
   override def prettyName: String = "kll_sketch_get_rank_bigint"
   override def inputDataType: DataType = LongType
   override def kllSketchGetRank(memory: Memory, quantile: Any): Double = {
-    try {
+    withRankErrorHandling {
       KllLongsSketch.wrap(memory).getRank(quantile.asInstanceOf[Long])
-    } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
     }
   }
 }
@@ -439,11 +455,8 @@ case class KllSketchGetRankFloat(left: Expression, right: Expression)
   override def prettyName: String = "kll_sketch_get_rank_float"
   override def inputDataType: DataType = FloatType
   override def kllSketchGetRank(memory: Memory, quantile: Any): Double = {
-    try {
+    withRankErrorHandling {
       KllFloatsSketch.wrap(memory).getRank(quantile.asInstanceOf[Float])
-    } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
     }
   }
 }
@@ -470,11 +483,8 @@ case class KllSketchGetRankDouble(left: Expression, right: Expression)
   override def prettyName: String = "kll_sketch_get_rank_double"
   override def inputDataType: DataType = DoubleType
   override def kllSketchGetRank(memory: Memory, quantile: Any): Double = {
-    try {
+    withRankErrorHandling {
       KllDoublesSketch.wrap(memory).getRank(quantile.asInstanceOf[Double])
-    } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
     }
   }
 }
@@ -488,6 +498,20 @@ abstract class KllSketchGetRankBase
     extends BinaryExpression
         with CodegenFallback
         with ImplicitCastInputTypes {
+  /**
+   * Helper method to wrap rank operations with consistent error handling.
+   * @param operation The operation to execute
+   * @return The result of the operation
+   */
+  protected def withRankErrorHandling[T](operation: => T): T = {
+    try {
+      operation
+    } catch {
+      case e: Exception =>
+        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+    }
+  }
+
   protected def inputDataType: DataType
 
   /**
@@ -524,13 +548,27 @@ abstract class KllSketchGetRankBase
         // Single value case
         kllSketchGetRank(memory, value)
       case arrayData: ArrayData =>
-        // Array case - need to convert based on inputDataType
-        val quantiles = inputDataType match {
-          case LongType => arrayData.toLongArray().map(_.asInstanceOf[Any])
-          case FloatType => arrayData.toFloatArray().map(_.asInstanceOf[Any])
-          case DoubleType => arrayData.toDoubleArray().map(_.asInstanceOf[Any])
+        // Array case - use direct iteration to avoid multiple array allocations
+        val numElements = arrayData.numElements()
+        val results = new Array[Double](numElements)
+        var i = 0
+        inputDataType match {
+          case LongType =>
+            while (i < numElements) {
+              results(i) = kllSketchGetRank(memory, arrayData.getLong(i))
+              i += 1
+            }
+          case FloatType =>
+            while (i < numElements) {
+              results(i) = kllSketchGetRank(memory, arrayData.getFloat(i))
+              i += 1
+            }
+          case DoubleType =>
+            while (i < numElements) {
+              results(i) = kllSketchGetRank(memory, arrayData.getDouble(i))
+              i += 1
+            }
         }
-        val results = quantiles.map(q => kllSketchGetRank(memory, q))
         new GenericArrayData(results)
     }
   }

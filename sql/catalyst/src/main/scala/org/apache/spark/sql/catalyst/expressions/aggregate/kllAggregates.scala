@@ -123,14 +123,14 @@ case class KllSketchAggBigint(
         throw KllSketchAgg.unexpectedInputDataTypeError(child)
     }
 
-    KllBufferBigint(sketch)
+    updateBuffer
   }
 
   /** Merges an input sketch into the current aggregation buffer. */
   override def merge(updateBuffer: KllBufferBigint, input: KllBufferBigint): KllBufferBigint = {
     try {
       updateBuffer.sketch.merge(input.sketch)
-      KllBufferBigint(updateBuffer.sketch)
+      updateBuffer
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
@@ -242,14 +242,14 @@ case class KllSketchAggFloat(
         throw KllSketchAgg.unexpectedInputDataTypeError(child)
     }
 
-    KllBufferFloat(sketch)
+    updateBuffer
   }
 
   /** Merges an input sketch into the current aggregation buffer. */
   override def merge(updateBuffer: KllBufferFloat, input: KllBufferFloat): KllBufferFloat = {
     try {
       updateBuffer.sketch.merge(input.sketch)
-      KllBufferFloat(updateBuffer.sketch)
+      updateBuffer
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
@@ -364,14 +364,14 @@ case class KllSketchAggDouble(
         throw KllSketchAgg.unexpectedInputDataTypeError(child)
     }
 
-    KllBufferDouble(sketch)
+    updateBuffer
   }
 
   /** Merges an input sketch into the current aggregation buffer. */
   override def merge(updateBuffer: KllBufferDouble, input: KllBufferDouble): KllBufferDouble = {
     try {
       updateBuffer.sketch.merge(input.sketch)
-      KllBufferDouble(updateBuffer.sketch)
+      updateBuffer
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
