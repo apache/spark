@@ -603,7 +603,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // Spark-created views do not have to be Hive compatible. If the data type is not
         // Hive compatible, we can set schema to empty so that Spark can still read this
         // view as the schema is also encoded in the table properties.
-        case schema if tableDefinition.tableType == CatalogTableType.VIEW &&
+        case schema if
           schema.exists(f => !isHiveCompatibleDataType(f.dataType)) =>
           EMPTY_DATA_SCHEMA
         case other => other
