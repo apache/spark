@@ -135,12 +135,6 @@
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
-        <configuration>
-          <javacArgs combine.children="append">
-            <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
-            <javacArg>-XDignore.symbol.file</javacArg>
-          </javacArgs>
-        </configuration>
       </plugin>
     </plugins>
   </build>

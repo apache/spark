@@ -1075,10 +1075,7 @@ object SparkProtobuf {
 }
 
 object Unsafe {
-  lazy val settings = Seq(
-    // This option is needed to suppress warnings from sun.misc.Unsafe usage
-    (Compile / javacOptions) += "-XDignore.symbol.file"
-  )
+  lazy val settings = Seq()
 }
 
 
