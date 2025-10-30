@@ -51,6 +51,11 @@ class ShuffleNettyEpollSuite extends ShuffleNettySuite {
   override def ioMode: IOMode = IOMode.EPOLL
 }
 
+class ShuffleNettyIoUringSuite extends ShuffleNettySuite {
+  override def shouldRunTests: Boolean = Utils.isLinux
+  override def ioMode: IOMode = IOMode.IO_URING
+}
+
 class ShuffleNettyKQueueSuite extends ShuffleNettySuite {
   override def shouldRunTests: Boolean = Utils.isMac
   override def ioMode: IOMode = IOMode.KQUEUE

@@ -30,6 +30,10 @@ public enum IOMode {
    */
   EPOLL,
   /**
+   * Native IO_URING via JNI, Linux only
+   */
+  IO_URING,
+  /**
    * Native KQUEUE via JNI, MacOS/BSD only
    */
   KQUEUE,
