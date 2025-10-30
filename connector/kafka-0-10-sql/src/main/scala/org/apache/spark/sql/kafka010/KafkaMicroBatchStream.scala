@@ -299,6 +299,14 @@ private[kafka010] class KafkaMicroBatchStream(
         }
       }
 
+      val deletedPartitions = startPartitionOffsets.keySet.diff(latestTopicPartitions)
+      if (deletedPartitions.nonEmpty) {
+        reportDataLoss(
+          s"$deletedPartitions are gone. Some data may have been missed",
+          () =>
+            KafkaExceptions.partitionsDeleted(deletedPartitions, None))
+      }
+
       startPartitionOffsets ++ newPartitionOffsets
     }
 
