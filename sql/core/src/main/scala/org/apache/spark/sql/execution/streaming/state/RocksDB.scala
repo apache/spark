@@ -138,6 +138,12 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
 
+  // We need 2 threads per fm caller to avoid blocking
+  // (one for main file and another for checksum file).
+  // Since this fm is used by both query task and maintenance thread,
+  // then we need 2 * 2 = 4 threads.
+  protected val fileChecksumThreadPoolSize: Option[Int] = Some(4)
+
   protected def createFileManager(
       dfsRootDir: String,
       localTempDir: File,
@@ -149,7 +155,9 @@ class RocksDB(
       localTempDir,
       hadoopConf,
       codecName,
-      loggingId = loggingId
+      loggingId = loggingId,
+      fileChecksumEnabled = conf.checkpointFileChecksumEnabled,
+      fileChecksumThreadPoolSize = fileChecksumThreadPoolSize
     )
   }
 
@@ -1432,6 +1440,7 @@ class RocksDB(
       silentDeleteRecursively(localRootDir, "closing RocksDB")
       // Clear internal maps to reset the state
       clearColFamilyMaps()
+      fileManager.close()
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
@@ -1958,6 +1967,7 @@ case class RocksDBConf(
     allowFAllocate: Boolean,
     compression: String,
     reportSnapshotUploadLag: Boolean,
+    fileChecksumEnabled: Boolean,
     maxVersionsToDeletePerMaintenance: Int)
 
 object RocksDBConf {
@@ -2150,6 +2160,7 @@ object RocksDBConf {
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
       storeConf.reportSnapshotUploadLag,
+      storeConf.checkpointFileChecksumEnabled,
       storeConf.maxVersionsToDeletePerMaintenance)
   }
 

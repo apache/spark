@@ -293,6 +293,10 @@ trait AlsoTestWithRocksDBFeatures
       }
     }
   }
+
+  // The default implementation in SQLTestUtils times out the `withTempDir()` call
+  // after 10 seconds. We don't want that because it causes flakiness in tests.
+  override protected def waitForTasksToFinish(): Unit = {}
 }
 
 class OpenNumCountedTestInputStream(in: InputStream) extends FSDataInputStream(in) {

@@ -41,7 +41,7 @@ import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{DFS_FILE, VERSION_NUM}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumCheckpointFileManager, ChecksumFile}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -122,13 +122,18 @@ import org.apache.spark.util.Utils
  * @param localTempDir Local directory for temporary work
  * @param hadoopConf   Hadoop configuration for talking to DFS
  * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
+ * @param fileChecksumEnabled Whether file checksum generation and verification is enabled
+ * @param fileChecksumThreadPoolSize Number of threads used to concurrently operate on the
+ *                                   main and checksum files
  */
 class RocksDBFileManager(
     dfsRootDir: String,
     localTempDir: File,
     hadoopConf: Configuration,
     codecName: String = CompressionCodec.ZSTD,
-    loggingId: String = "")
+    loggingId: String = "",
+    fileChecksumEnabled: Boolean = false,
+    fileChecksumThreadPoolSize: Option[Int] = None)
   extends Logging {
 
   import RocksDBImmutableFile._
@@ -137,7 +142,19 @@ class RocksDBFileManager(
     new Path(myDfsRootDir).getFileSystem(myHadoopConf)
   }
 
-  private lazy val fm = CheckpointFileManager.create(new Path(dfsRootDir), hadoopConf)
+  private lazy val fm = {
+    val mgr = CheckpointFileManager.create(new Path(dfsRootDir), hadoopConf)
+    if (fileChecksumEnabled) {
+      new ChecksumCheckpointFileManager(
+        mgr,
+        // Allowing this for perf, since we do orphan checksum file cleanup in maintenance anyway
+        allowConcurrentDelete = true,
+        numThreads = fileChecksumThreadPoolSize.get)
+    } else {
+      mgr
+    }
+  }
+
   private val fs = getFileSystem(dfsRootDir, hadoopConf)
   private val onlyZipFiles = new PathFilter {
     override def accept(path: Path): Boolean = path.toString.endsWith(".zip")
@@ -160,6 +177,11 @@ class RocksDBFileManager(
   // (version, checkpointUniqueId) -> immutable files
   private val versionToRocksDBFiles =
     new ConcurrentHashMap[(Long, Option[String]), Seq[RocksDBImmutableFile]]()
+
+  /** Close this file manager and release underlying resources. */
+  def close(): Unit = {
+    fm.close()
+  }
 
   /**
    * Get the changelog version based on rocksDB features.
@@ -351,6 +373,8 @@ class RocksDBFileManager(
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
       listRocksDBFiles(localDir)._2.foreach(_.delete())
+      // TODO(SPARK-51988): We are using fs here to read the file, checksum verification
+      //  wouldn't happen for the file if enabled, since it is not using fm to open it.
       Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localDir)
 
       // Copy the necessary immutable files
@@ -717,6 +741,30 @@ class RocksDBFileManager(
       .filter(_._1 < minVersionToRetain)
 
     deleteChangelogFiles(changelogVersionsAndUniqueIdsToDelete)
+
+    // Delete orphan checksum files
+    val checksumFiles = allFiles
+      .filter(ChecksumCheckpointFileManager.isChecksumFile)
+      .map(ChecksumFile)
+
+    // Do this only if we see checksum files in the initial dir listing
+    // To avoid checking for orphan checksum files, if there is no checksum files
+    // (e.g. file checksum was never enabled)
+    if (checksumFiles.nonEmpty) {
+      // Set of changelog and zip files that were deleted.
+      // They were deleted using fm, hence their checksum files were deleted too.
+      val deletedStoreFiles =
+        changelogVersionsAndUniqueIdsToDelete.map { case (v, id) => dfsChangelogFile(v, id) } ++
+          snapshotVersionsAndUniqueIdsToDelete.map { case (v, id) => dfsBatchZipFile(v, id) }
+
+      StateStoreProvider.deleteOrphanChecksumFiles(
+        fm,
+        checksumFiles.toSeq,
+        deletedStoreFiles.toSeq,
+        minVersionToRetain,
+        fileChecksumEnabled
+      )
+    }
 
     // Always set minSeenVersion for regular deletion frequency even if deletion fails.
     // This is safe because subsequent calls retry deleting old version files
