@@ -2267,6 +2267,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
                 s"$providerName/$opName/state"
             ).getPath
 
+            val conf = new Configuration()
+            conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
             provider.init(
               StateStoreId(checkpointPath, 0, 0, storeName),
               keySchema,
@@ -2274,7 +2276,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
               NoPrefixKeyStateEncoderSpec(keySchema),
               useColumnFamilies = false,
               new StateStoreConf(cloneSQLConf()),
-              new Configuration()
+              conf
             )
             val store = provider.getStore(version)
             store.abort()
