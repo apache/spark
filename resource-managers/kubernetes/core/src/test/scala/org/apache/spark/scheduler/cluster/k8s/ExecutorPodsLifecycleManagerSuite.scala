@@ -219,6 +219,31 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
   }
 
+  test("Don't delete pod from K8s if deletionTimestamp is already set.") {
+    // Create a failed pod with deletionTimestamp already in the past
+    val basePod = failedExecutorWithoutDeletion(1)
+    val failedPodWithDeletionTimestamp = new PodBuilder(basePod)
+      .editOrNewMetadata()
+        .withDeletionTimestamp("1970-01-01T00:00:00Z")
+      .endMetadata()
+      .build()
+
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPodWithDeletionTimestamp)
+
+    snapshotsStore.updatePod(failedPodWithDeletionTimestamp)
+    snapshotsStore.notifySubscribers()
+
+    // Verify executor is removed from Spark
+    val msg = exitReasonMessage(1, failedPodWithDeletionTimestamp, 1)
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
+
+    // Verify delete() is NOT called since deletionTimestamp is already set
+    verify(mockPodResource, never()).delete()
+  }
+
   private def exitReasonMessage(execId: Int, failedPod: Pod, exitCode: Int): String = {
     val reason = Option(failedPod.getStatus.getReason)
     val message = Option(failedPod.getStatus.getMessage)
