@@ -98,7 +98,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
   private val maxRecordsPerPartition =
     readerOptions.get(KafkaSourceProvider.MAX_RECORDS_PER_PARTITION_OPTION_KEY).map(_.toLong)
 
-  private val rangeCalculator =
+  override protected val rangeCalculator =
     new KafkaOffsetRangeCalculator(minPartitions, maxRecordsPerPartition)
 
   private[kafka010] val offsetFetchAttemptIntervalMs =
