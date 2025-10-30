@@ -193,9 +193,9 @@ private[kafka010] abstract class KafkaOffsetReaderBase extends KafkaOffsetReader
   }
 
   override def getOffsetRangesFromResolvedOffsets(
-     fromPartitionOffsets: PartitionOffsetMap,
-     untilPartitionOffsets: PartitionOffsetMap,
-     reportDataLoss: (String, () => Throwable) => Unit): Seq[KafkaOffsetRange] = {
+      fromPartitionOffsets: PartitionOffsetMap,
+      untilPartitionOffsets: PartitionOffsetMap,
+      reportDataLoss: (String, () => Throwable) => Unit): Seq[KafkaOffsetRange] = {
     // Find the new partitions, and get their earliest offsets
     val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
     val newPartitionInitialOffsets = fetchEarliestOffsets(newPartitions.toSeq)
@@ -204,8 +204,7 @@ private[kafka010] abstract class KafkaOffsetReaderBase extends KafkaOffsetReader
       val deletedPartitions = newPartitions.diff(newPartitionInitialOffsets.keySet)
       reportDataLoss(
         s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed",
-        () =>
-          KafkaExceptions.initialOffsetNotFoundForPartitions(deletedPartitions))
+        () => KafkaExceptions.initialOffsetNotFoundForPartitions(deletedPartitions))
     }
     logInfo(log"Partitions added: ${MDC(TOPIC_PARTITION_OFFSET, newPartitionInitialOffsets)}")
     newPartitionInitialOffsets.filter(_._2 != 0).foreach { case (p, o) =>
@@ -226,8 +225,7 @@ private[kafka010] abstract class KafkaOffsetReaderBase extends KafkaOffsetReader
 
       reportDataLoss(
         message,
-        () =>
-          KafkaExceptions.partitionsDeleted(deletedPartitions, config))
+        () => KafkaExceptions.partitionsDeleted(deletedPartitions, config))
     }
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have
@@ -249,8 +247,7 @@ private[kafka010] abstract class KafkaOffsetReaderBase extends KafkaOffsetReader
             s"$fromOffset to $untilOffset. This could be either 1) a user error that the start " +
             "offset is set beyond available offset when starting query, or 2) the kafka " +
             "topic-partition is deleted and re-created.",
-          () =>
-            KafkaExceptions.partitionOffsetChanged(tp, fromOffset, untilOffset))
+          () => KafkaExceptions.partitionOffsetChanged(tp, fromOffset, untilOffset))
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
