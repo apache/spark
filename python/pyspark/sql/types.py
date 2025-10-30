@@ -101,6 +101,8 @@ __all__ = [
     "StructType",
     "VariantType",
     "VariantVal",
+    "GeographyType",
+    "GeometryType",
 ]
 
 
