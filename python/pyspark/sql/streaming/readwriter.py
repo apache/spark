@@ -1571,7 +1571,7 @@ class DataStreamWriter:
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
         """
         Sets the output of the streaming query to be processed using the provided
-        function. This is supported only the in the micro-batch execution modes (that is, when the
+        function. This is supported only in a micro-batch execution mode (that is, when the
         trigger is not continuous). In every micro-batch, the provided function will be called in
         every micro-batch with (i) the output rows as a DataFrame and (ii) the batch identifier.
         The batchId can be used deduplicate and transactionally write the output
