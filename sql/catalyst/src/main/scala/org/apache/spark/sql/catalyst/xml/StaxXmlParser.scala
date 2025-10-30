@@ -1008,7 +1008,7 @@ class XmlTokenizer(
   }
 }
 
-object StaxXmlParser extends Logging{
+object StaxXmlParser extends Logging {
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
    */
