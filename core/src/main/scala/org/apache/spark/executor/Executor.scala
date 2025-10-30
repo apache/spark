@@ -380,7 +380,17 @@ private[spark] class Executor(
       tr.kill(killMark._1, killMark._2)
       killMarks.remove(taskId)
     }
-    threadPool.execute(tr)
+    try {
+      threadPool.execute(tr)
+    } catch {
+      case e: Throwable =>
+        log.error(s"Execute task ${taskDescription.taskId} failed", e.getCause)
+        context.statusUpdate(
+          taskDescription.taskId,
+          TaskState.FAILED,
+          env.closureSerializer.newInstance().serialize(
+            new ExceptionFailure(e, Seq.empty)))
+    }
     if (decommissioned) {
       log.error(s"Launching a task while in decommissioned state.")
     }
