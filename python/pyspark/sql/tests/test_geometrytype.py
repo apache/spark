@@ -27,7 +27,7 @@ class GeometryTypeTestMixin:
     def test_geometrytype_specified_valid_srid(self):
         """Test that GeometryType is constructed correctly when a valid SRID is specified."""
 
-        supported_srid = {4326: "OGC:CRS84"}
+        supported_srid = {0: "SRID:0", 3857: "EPSG:3857", 4326: "OGC:CRS84"}
 
         for srid, crs in supported_srid.items():
             geometry_type = GeometryType(srid)
@@ -65,7 +65,7 @@ class GeometryTypeTestMixin:
     def test_geometrytype_same_srid_values(self):
         """Test that two GeometryTypes with specified SRIDs have the same SRID values."""
 
-        for srid in [4326]:
+        for srid in [0, 3857, 4326]:
             geometry_type_1 = GeometryType(srid)
             geometry_type_2 = GeometryType(srid)
             self.assertEqual(geometry_type_1.srid, geometry_type_2.srid)
@@ -73,10 +73,12 @@ class GeometryTypeTestMixin:
     def test_geometrytype_different_srid_values(self):
         """Test that two GeometryTypes with specified SRIDs have different SRID values."""
 
-        for srid in [4326]:
+        for srid in [0, 4326]:
             geometry_type_1 = GeometryType(srid)
             geometry_type_2 = GeometryType("ANY")
             self.assertNotEqual(geometry_type_1.srid, geometry_type_2.srid)
+            geometry_type_3 = GeometryType(3857)
+            self.assertNotEqual(geometry_type_1.srid, geometry_type_3.srid)
 
     # The tests below verify GEOMETRY type JSON parsing based on the CRS value.
 
@@ -89,13 +91,15 @@ class GeometryTypeTestMixin:
             crs_header = "[ST_INVALID_CRS_VALUE] Invalid or unsupported CRS"
             self.assertEqual(
                 str(error_context.exception),
-                f"{crs_header} (coordinate reference system) value: '{invalid_crs}'.",
+                f"{crs_header} (coordinate reference system) value: '{invalid_crs}'."
             )
 
     def test_geometrytype_from_valid_crs(self):
         """Test that GeometryType construction passes when a valid CRS is specified."""
 
         supported_crs = {
+            "SRID:0": 0,
+            "EPSG:3857": 3857,
             "OGC:CRS84": 4326,
         }
         for valid_crs, srid in supported_crs.items():
