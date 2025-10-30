@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning,
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.expressions.Window
@@ -977,6 +978,34 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       val result = df.collect()
       assert(result.length == 1)
     }
+  }
+
+  test("SPARK-53809: scan canonicalization") {
+    val table = new SimpleDataSourceV2().getTable(CaseInsensitiveStringMap.empty())
+
+    def createDsv2ScanRelation(): DataSourceV2ScanRelation = {
+      val relation = DataSourceV2Relation.create(
+        table, None, None, CaseInsensitiveStringMap.empty())
+      val scan = relation.table.asReadable.newScanBuilder(relation.options).build()
+      DataSourceV2ScanRelation(relation, scan, relation.output)
+    }
+
+    // Create two DataSourceV2ScanRelation instances, representing the scan of the same table
+    val scanRelation1 = createDsv2ScanRelation()
+    val scanRelation2 = createDsv2ScanRelation()
+
+    // the two instances should not be the same, as they should have different attribute IDs
+    assert(scanRelation1 != scanRelation2,
+      "Two created DataSourceV2ScanRelation instances should not be the same")
+    assert(scanRelation1.output.map(_.exprId).toSet != scanRelation2.output.map(_.exprId).toSet,
+      "Output attributes should have different expression IDs before canonicalization")
+    assert(scanRelation1.relation.output.map(_.exprId).toSet !=
+      scanRelation2.relation.output.map(_.exprId).toSet,
+      "Relation output attributes should have different expression IDs before canonicalization")
+
+    // After canonicalization, the two instances should be equal
+    assert(scanRelation1.canonicalized == scanRelation2.canonicalized,
+      "Canonicalized DataSourceV2ScanRelation instances should be equal")
   }
 
   test("SPARK-53809: check mergeScalarSubqueries is effective for DataSourceV2ScanRelation") {
