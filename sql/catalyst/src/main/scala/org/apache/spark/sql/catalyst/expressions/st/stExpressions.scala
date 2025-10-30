@@ -64,8 +64,8 @@ case class ST_AsBinary(geo: Expression)
     with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-      TypeCollection(GeographyType, GeometryType)
-    )
+    TypeCollection(GeographyType, GeometryType)
+  )
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
@@ -80,7 +80,7 @@ case class ST_AsBinary(geo: Expression)
   override def child: Expression = geo
 
   override protected def withNewChildInternal(newChild: Expression): ST_AsBinary =
-      copy(geo = newChild)
+    copy(geo = newChild)
 }
 
 /** ST reader expressions. */
