@@ -3152,4 +3152,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "max" -> toSQLValue(max, IntegerType),
         "value" -> toSQLValue(value, IntegerType)))
   }
+
+  def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
+      messageParameters = Map(
+        "quantile" -> toSQLValue(quantile, DoubleType)))
+  }
+
+  def kllSketchInvalidInputError(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INVALID_INPUT",
+      messageParameters = Map("reason" -> reason))
+  }
+
+  def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INCOMPATIBLE_MERGE",
+      messageParameters = Map("reason" -> reason))
+  }
 }
