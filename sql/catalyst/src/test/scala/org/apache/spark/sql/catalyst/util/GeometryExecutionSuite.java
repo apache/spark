@@ -83,23 +83,25 @@ class GeometryExecutionTest {
   /** Tests for Geometry WKB parsing. */
 
   @Test
-  void testFromWkbWithSridUnsupported() {
+  void testFromWkbWithSridRudimentary() {
     byte[] wkb = new byte[]{1, 2, 3};
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> Geometry.fromWkb(wkb, 0)
-    );
-    assertEquals("Geometry WKB parsing is not yet supported.", exception.getMessage());
+    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
+    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    Geometry geometry = Geometry.fromWkb(wkb, 4326);
+    assertNotNull(geometry);
+    assertArrayEquals(wkb, geometry.toWkb());
+    assertEquals(4326, geometry.srid());
   }
 
   @Test
-  void testFromWkbNoSridUnsupported() {
+  void testFromWkbNoSridRudimentary() {
     byte[] wkb = new byte[]{1, 2, 3};
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> Geometry.fromWkb(wkb)
-    );
-    assertEquals("Geometry WKB parsing is not yet supported.", exception.getMessage());
+    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
+    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    Geometry geometry = Geometry.fromWkb(wkb);
+    assertNotNull(geometry);
+    assertArrayEquals(wkb, geometry.toWkb());
+    assertEquals(0, geometry.srid());
   }
 
   /** Tests for Geometry EWKB parsing. */
