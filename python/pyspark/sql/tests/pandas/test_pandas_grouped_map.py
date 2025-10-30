@@ -1024,7 +1024,6 @@ class ApplyInPandasTestsMixin:
             ],
         )
 
-
     def test_apply_in_pandas_iterator_basic(self):
         df = self.spark.createDataFrame(
             [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
