@@ -164,6 +164,8 @@ private[spark] class TaskSchedulerImpl(
   // in turn is used to decide when we can attain data locality on a given host
   protected val hostToExecutors = new HashMap[String, HashSet[String]]
 
+  protected val availableHostToExecutors = new HashMap[String, HashSet[String]]
+
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
   protected val executorIdToHost = new HashMap[String, String]
@@ -495,8 +497,12 @@ private[spark] class TaskSchedulerImpl(
       if (!hostToExecutors.contains(o.host)) {
         hostToExecutors(o.host) = new HashSet[String]()
       }
+      if (!availableHostToExecutors.contains(o.host)) {
+        availableHostToExecutors(o.host) = new HashSet[String]()
+      }
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
         hostToExecutors(o.host) += o.executorId
+        availableHostToExecutors(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
         executorIdToHost(o.executorId) = o.host
         executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
@@ -589,7 +595,7 @@ private[spark] class TaskSchedulerImpl(
         }
 
         if (!launchedAnyTask) {
-          taskSet.getCompletelyExcludedTaskIfAny(hostToExecutors).foreach { taskIndex =>
+          taskSet.getCompletelyExcludedTaskIfAny(availableHostToExecutors).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle excluded
               // executor and kill the idle executor and kick off an abortTimer which if it doesn't
               // schedule a task within the timeout will abort the taskSet if we were unable to
@@ -605,7 +611,8 @@ private[spark] class TaskSchedulerImpl(
               // If there are no idle executors and dynamic allocation is enabled, then we would
               // notify ExecutorAllocationManager to allocate more executors to schedule the
               // unschedulable tasks else we will abort immediately.
-              executorIdToRunningTaskIds.find(x => !isExecutorBusy(x._1)) match {
+              executorIdToRunningTaskIds.find(
+                x => isExecutorAvailable(x._1) && !isExecutorBusy(x._1)) match {
                 case Some ((executorId, _)) =>
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                     healthTrackerOpt.foreach(blt => blt.killExcludedIdleExecutor(executorId))
@@ -967,6 +974,7 @@ private[spark] class TaskSchedulerImpl(
       if (executorIdToHost.contains(executorId)) {
         executorsPendingDecommission(executorId) =
           ExecutorDecommissionState(clock.getTimeMillis(), decommissionInfo.workerHost)
+        removeAvailableExecutor(executorId)
       }
     }
     rootPool.executorDecommission(executorId)
@@ -1084,6 +1092,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
+    removeAvailableExecutor(executorId)
     executorsPendingDecommission.remove(executorId)
       .foreach(executorsRemovedByDecom.put(executorId, _))
 
@@ -1118,6 +1127,11 @@ private[spark] class TaskSchedulerImpl(
 
   def isExecutorBusy(execId: String): Boolean = synchronized {
     executorIdToRunningTaskIds.get(execId).exists(_.nonEmpty)
+  }
+
+  def isExecutorAvailable(execId: String): Boolean = synchronized {
+    executorIdToHost.get(execId)
+      .exists(availableHostToExecutors.get(_).exists(_.contains(execId)))
   }
 
   // exposed for test
@@ -1188,6 +1202,20 @@ private[spark] class TaskSchedulerImpl(
       manager <- attempts.get(stageAttemptId)
     } yield {
       manager
+    }
+  }
+
+  override def markExecutorPendingToRemove(executorId: String): Unit = synchronized {
+    removeAvailableExecutor(executorId)
+  }
+
+  private def removeAvailableExecutor(executorId: String): Unit = {
+    executorIdToHost.get(executorId).foreach { host =>
+      val execs = availableHostToExecutors.getOrElse(host, new HashSet)
+      execs -= executorId
+      if (execs.isEmpty) {
+        availableHostToExecutors -= host
+      }
     }
   }
 }
@@ -1310,5 +1338,6 @@ private[spark] object TaskSchedulerImpl {
       None
     }
   }
+
 
 }

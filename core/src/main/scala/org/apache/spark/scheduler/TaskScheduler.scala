@@ -121,4 +121,8 @@ private[spark] trait TaskScheduler {
    */
   def applicationAttemptId(): Option[String]
 
+  /**
+   * Mark executor is pending to remove.
+   */
+  def markExecutorPendingToRemove(executorId: String): Unit
 }
