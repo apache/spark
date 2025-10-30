@@ -26,8 +26,8 @@ import test.org.apache.spark.sql.connector._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -979,61 +979,59 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("SPARK-53809: scan canonicalization") {
-    val df = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
-
-    val q1 = df.select($"i", $"j")
-    val q2 = q1
-
-    val optimized1 = q1.queryExecution.optimizedPlan
-    val optimized2 = q2.queryExecution.optimizedPlan
-
-    // Create a rule that reverses the order of DataSourceV2ScanRelation output
-    val reverseOutputRule = new Rule[LogicalPlan] {
-      def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-        case dsv2 @ DataSourceV2ScanRelation(relation, _, output, _, _) =>
-          val reversedOutput = output.reverse
-          val reversedRelationOutput = relation.output.reverse
-          dsv2.copy(
-            relation = relation.copy(output = reversedRelationOutput),
-            output = reversedOutput
-          )
-      }
-    }
-
-    // Apply the rule to q1 to mimic that QO may generate different output ordering
-    // for subqueries on a shared scan
-    val optimized1Reversed = reverseOutputRule(optimized1)
-    // The two plans are not identified as equal, but their canonicalized forms are equal
-    assert(!optimized1Reversed.equals(optimized2))
-    assert(optimized1Reversed.canonicalized == optimized2.canonicalized)
-
-    val dsv2ScanRelation1 = optimized1Reversed.collect {
-      case d: DataSourceV2ScanRelation => d
-    }.head
-    val dsv2ScanRelation2 = optimized2.collect {
-      case d: DataSourceV2ScanRelation => d
-    }.head
-    // Check the effectiveness of canonicalization on DataSourceV2ScanRelation
-    assert(!dsv2ScanRelation1.equals(dsv2ScanRelation2))
-    assert(dsv2ScanRelation1.canonicalized == dsv2ScanRelation2.canonicalized)
-  }
-
-  test("SPARK-53809: check mergeScalarSubqueries") {
+  test("SPARK-53809: check mergeScalarSubqueries is effective for DataSourceV2ScanRelation") {
     val df = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
     df.createOrReplaceTempView("df")
 
     val query = sql("select (select max(i) from df) as max_i, (select min(i) from df) as min_i")
     val optimizedPlan = query.queryExecution.optimizedPlan
 
-    // check optimizedPlan merged scalar subqueries select max(i), min(i) from df
-    val aggregation = optimizedPlan.collect {
-      case a: Aggregate => a
+    // check optimizedPlan merged scalar subqueries `select max(i), min(i) from df`
+    val sub1 = optimizedPlan.asInstanceOf[Project].projectList.head.collect {
+      case s: ScalarSubquery => s
+    }
+    val sub2 = optimizedPlan.asInstanceOf[Project].projectList(1).collect {
+      case s: ScalarSubquery => s
     }
 
-    query.collect()
-    val plan = query.queryExecution.stringWithStats
-    assert(1==1)
+    // Both subqueries should reference the same merged plan `select max(i), min(i) from df`
+    assert(sub1.nonEmpty && sub2.nonEmpty, "Both scalar subqueries should exist")
+    assert(sub1.head.plan == sub2.head.plan,
+      "Both subqueries should reference the same merged plan")
+
+    // Extract the aggregate from the merged plan
+    val agg = sub1.head.plan.collect {
+      case a: Aggregate => a
+    }.head
+
+    // Check that the aggregate contains both max(i) and min(i)
+    val aggExprs = agg.aggregateExpressions
+
+    val hasMax = aggExprs.exists { expr =>
+      expr.collect {
+        case ae: org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression =>
+          ae.aggregateFunction match {
+            case _: org.apache.spark.sql.catalyst.expressions.aggregate.Max => true
+            case _ => false
+          }
+      }.nonEmpty
+    }
+
+    val hasMin = aggExprs.exists { expr =>
+      expr.collect {
+        case ae: org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression =>
+          ae.aggregateFunction match {
+            case _: org.apache.spark.sql.catalyst.expressions.aggregate.Min => true
+            case _ => false
+          }
+      }.nonEmpty
+    }
+
+    assert(hasMax, "Aggregate should contain max(i)")
+    assert(hasMin, "Aggregate should contain min(i)")
+
+    // Verify the query produces correct results
+    checkAnswer(query, Row(9, 0))
   }
 }
 
