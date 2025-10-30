@@ -21,7 +21,7 @@ import logging
 
 from collections import OrderedDict
 from decimal import Decimal
-from typing import cast
+from typing import cast,Iterator, Tuple, Any
 
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import (
@@ -1120,7 +1120,6 @@ class ApplyInPandasTestsMixin:
                     self.assertEqual(expected, result)
 
     def test_apply_in_pandas_iterator_with_keys_batch_slicing(self):
-        from typing import Iterator, Tuple, Any
 
         df = self.spark.range(10000000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
@@ -1190,26 +1189,15 @@ class ApplyInPandasTestsMixin:
             .collect()
         )
 
-        # Verify that all rows are present after concatenation
-        self.assertEqual(len(result), 6)
-        self.assertEqual(result[0][0], 1)
-        self.assertEqual(result[0][1], 1.0)
-        self.assertEqual(result[0][2], 2.0)
-        self.assertEqual(result[1][0], 1)
-        self.assertEqual(result[1][1], 2.0)
-        self.assertEqual(result[1][2], 4.0)
-        self.assertEqual(result[2][0], 1)
-        self.assertEqual(result[2][1], 3.0)
-        self.assertEqual(result[2][2], 6.0)
-        self.assertEqual(result[3][0], 2)
-        self.assertEqual(result[3][1], 4.0)
-        self.assertEqual(result[3][2], 8.0)
-        self.assertEqual(result[4][0], 2)
-        self.assertEqual(result[4][1], 5.0)
-        self.assertEqual(result[4][2], 10.0)
-        self.assertEqual(result[5][0], 2)
-        self.assertEqual(result[5][1], 6.0)
-        self.assertEqual(result[5][2], 12.0)
+        expected = [
+            Row(id=1, v=1.0, v_doubled=2.0),
+            Row(id=1, v=2.0, v_doubled=4.0),
+            Row(id=1, v=3.0, v_doubled=6.0),
+            Row(id=2, v=4.0, v_doubled=8.0),
+            Row(id=2, v=5.0, v_doubled=10.0),
+            Row(id=2, v=6.0, v_doubled=12.0),
+        ]
+        self.assertEqual(result, expected)
 
     def test_apply_in_pandas_iterator_filter_multiple_batches(self):
         from typing import Iterator
@@ -1306,7 +1294,6 @@ class ApplyInPandasTestsMixin:
                 self.assertEqual(row[0], 2)
 
     def test_apply_in_pandas_iterator_process_multiple_input_batches(self):
-        from typing import Iterator
         import builtins
 
         # Create large dataset to trigger batch slicing

@@ -1286,12 +1286,12 @@ class GroupPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
         import pyarrow as pa
 
         def process_group(batches: "Iterator[pa.RecordBatch]"):
-            # Convert each Arrow batch to pandas Series list on-demand, yielding one list per batch   
+            # Convert each Arrow batch to pandas Series list on-demand, yielding one list per batch
             for batch in batches:
                 series = [
-                        self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
-                    ]
+                    self.arrow_to_pandas(c, i)
+                    for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
+                ]
                 yield series
 
         dataframes_in_group = None

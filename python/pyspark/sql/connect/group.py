@@ -295,7 +295,6 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.pandas.typehints import infer_group_pandas_eval_type_from_func
-        import warnings
 
         # Try to infer the eval type from type hints
         eval_type = None
