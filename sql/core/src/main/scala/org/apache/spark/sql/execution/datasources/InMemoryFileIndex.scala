@@ -132,7 +132,7 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, parameters, recursiveFileLookup)
+      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, parameters)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -151,12 +151,13 @@ object InMemoryFileIndex extends Logging {
       hadoopConf: Configuration,
       filter: PathFilter,
       sparkSession: SparkSession,
-      parameters: Map[String, String] = Map.empty,
-      recursiveFileLookup: Boolean = true): Seq[(Path, Seq[FileStatus])] = {
+      parameters: Map[String, String] = Map.empty): Seq[(Path, Seq[FileStatus])] = {
     val fileSystemList =
       sparkSession.sessionState.conf.useListFilesFileSystemList.split(",").map(_.trim)
     val ignoreMissingFiles =
       new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreMissingFiles
+    val recursiveFileLookup = parameters
+      .get(FileIndexOptions.RECURSIVE_FILE_LOOKUP).map(_.toBoolean).getOrElse(true)
     val useListFiles = try {
       val scheme = paths.head.getFileSystem(hadoopConf).getScheme
       paths.size == 1 && fileSystemList.contains(scheme)

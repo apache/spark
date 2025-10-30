@@ -690,15 +690,15 @@ class FileIndexSuite extends SharedSparkSession {
       //     file2.txt
       //     subdir2/
       //       file3.txt
-      
+
       val file1 = new File(dir, "file1.txt")
       stringToFile(file1, "content1")
-      
+
       val subdir1 = new File(dir, "subdir1")
       subdir1.mkdir()
       val file2 = new File(subdir1, "file2.txt")
       stringToFile(file2, "content2")
-      
+
       val subdir2 = new File(subdir1, "subdir2")
       subdir2.mkdir()
       val file3 = new File(subdir2, "file3.txt")
