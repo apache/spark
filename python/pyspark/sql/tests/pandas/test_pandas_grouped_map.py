@@ -21,7 +21,7 @@ import logging
 
 from collections import OrderedDict
 from decimal import Decimal
-from typing import cast,Iterator, Tuple, Any
+from typing import cast, Iterator, Tuple, Any
 
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import (
@@ -1026,8 +1026,6 @@ class ApplyInPandasTestsMixin:
 
 
     def test_apply_in_pandas_iterator_basic(self):
-        from typing import Iterator
-
         df = self.spark.createDataFrame(
             [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
         )
@@ -1044,8 +1042,6 @@ class ApplyInPandasTestsMixin:
         self.assertEqual(result[1][0], 18.0)
 
     def test_apply_in_pandas_iterator_with_keys(self):
-        from typing import Iterator, Tuple, Any
-
         df = self.spark.createDataFrame(
             [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
         )
@@ -1071,8 +1067,6 @@ class ApplyInPandasTestsMixin:
         self.assertEqual(result[1][1], 18.0)
 
     def test_apply_in_pandas_iterator_batch_slicing(self):
-        from typing import Iterator
-
         df = self.spark.range(10000000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
@@ -1120,7 +1114,6 @@ class ApplyInPandasTestsMixin:
                     self.assertEqual(expected, result)
 
     def test_apply_in_pandas_iterator_with_keys_batch_slicing(self):
-
         df = self.spark.range(10000000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
@@ -1167,8 +1160,6 @@ class ApplyInPandasTestsMixin:
                     self.assertEqual(expected, result)
 
     def test_apply_in_pandas_iterator_multiple_output_batches(self):
-        from typing import Iterator
-
         df = self.spark.createDataFrame(
             [(1, 1.0), (1, 2.0), (1, 3.0), (2, 4.0), (2, 5.0), (2, 6.0)], ("id", "v")
         )
@@ -1200,8 +1191,6 @@ class ApplyInPandasTestsMixin:
         self.assertEqual(result, expected)
 
     def test_apply_in_pandas_iterator_filter_multiple_batches(self):
-        from typing import Iterator
-
         df = self.spark.createDataFrame(
             [(1, i * 1.0) for i in range(20)] + [(2, i * 1.0) for i in range(20)], ("id", "v")
         )
@@ -1240,8 +1229,6 @@ class ApplyInPandasTestsMixin:
         self.assertEqual([row[1] for row in group2], [float(i) for i in range(20)])
 
     def test_apply_in_pandas_iterator_with_keys_multiple_batches(self):
-        from typing import Iterator, Tuple, Any
-
         df = self.spark.createDataFrame(
             [
                 (1, "a", 1.0),
@@ -1355,8 +1342,6 @@ class ApplyInPandasTestsMixin:
         self.assertEqual(group_1_sum, expected_odd_sum)
 
     def test_apply_in_pandas_iterator_streaming_aggregation(self):
-        from typing import Iterator
-
         # Create dataset with multiple batches per group
         df = self.spark.range(50000).select(
             (sf.col("id") % 3).alias("key"),
@@ -1411,8 +1396,6 @@ class ApplyInPandasTestsMixin:
                 )
 
     def test_apply_in_pandas_iterator_partial_iteration(self):
-        from typing import Iterator
-
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
 
             def func(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
