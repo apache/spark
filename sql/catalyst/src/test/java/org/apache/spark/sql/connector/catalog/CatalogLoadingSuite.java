@@ -25,7 +25,6 @@ import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.Utils;
 
-
 public class CatalogLoadingSuite {
   @Test
   public void testLoad() throws SparkException {
