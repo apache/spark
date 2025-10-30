@@ -50,7 +50,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    *
    * @param attrs table attributes
    * @param assignments assignments to align
-   * @param coerceNestedType whether to coerce nested types to match the target type
+   * @param coerceNestedTypes whether to coerce nested types to match the target type
    *                         for complex types
    * @return aligned update assignments that match table attributes
    */
