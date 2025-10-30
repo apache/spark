@@ -156,7 +156,7 @@ class RocksDB(
       hadoopConf,
       codecName,
       loggingId = loggingId,
-      fileChecksumEnabled = conf.checkpointFileChecksumEnabled,
+      fileChecksumEnabled = conf.fileChecksumEnabled,
       fileChecksumThreadPoolSize = fileChecksumThreadPoolSize
     )
   }
