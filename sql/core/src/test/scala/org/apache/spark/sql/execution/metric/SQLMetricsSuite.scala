@@ -184,6 +184,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("Aggregate metrics: track avg probe") {
+    if (spark.sessionState.conf.getConf(SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED)) {
+      logInfo("Skipping, since partial Aggregation is disabled")
+    } else {
     // The executed plan looks like:
     // HashAggregate(keys=[a#61], functions=[count(1)], output=[a#61, count#71L])
     // +- Exchange hashpartitioning(a#61, 5)
@@ -229,6 +232,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           }
         }
       }
+     }
     }
   }
 

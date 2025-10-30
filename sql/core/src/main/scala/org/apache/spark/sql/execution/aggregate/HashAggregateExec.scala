@@ -58,20 +58,38 @@ case class HashAggregateExec(
     child: SparkPlan)
   extends AggregateCodegenSupport {
 
+  private val skipPartialAggregateEnabled = {
+    conf.skipPartialAggregateEnabled &&
+      modes.nonEmpty && modes.forall(_ == Partial) &&
+      find(_.isInstanceOf[ExpandExec]).isEmpty
+  }
+
+  override def needStopCheck: Boolean = skipPartialAggregateEnabled
+
   require(Aggregate.supportsHashAggregate(aggregateBufferAttributes))
 
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
-    "avgHashProbe" ->
-      SQLMetrics.createAverageMetric(sparkContext, "avg hash probes per key"),
-    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks"))
+  override lazy val metrics = {
+    val metrics = Map(
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
+      "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+      "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
+      "avgHashProbe" ->
+        SQLMetrics.createAverageMetric(sparkContext, "avg hash probes per key"),
+      "numTasksFallBacked" ->
+        SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks")
+    )
+    if (skipPartialAggregateEnabled) {
+      metrics + ("partialAggSkipped" -> SQLMetrics.createMetric(sparkContext,
+        "number of skipped records for partial aggregates"))
+    } else {
+      metrics
+    }
+  }
 
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
@@ -144,6 +162,10 @@ case class HashAggregateExec(
   private var fastHashMapTerm: String = _
   private var isFastHashMapEnabled: Boolean = false
 
+  private var skipPartialAggTerm: String = _
+  private var rowCountTerm: String = _
+  private var outputFunc: String = _
+
   // whether a vectorized hashmap is used instead
   // we have decided to always use the row-based hashmap,
   // but the vectorized hashmap can still be switched on for testing and benchmarking purposes.
@@ -198,7 +220,8 @@ case class HashAggregateExec(
       peakMemory: SQLMetric,
       spillSize: SQLMetric,
       avgHashProbe: SQLMetric,
-      numTasksFallBacked: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
+      numTasksFallBacked: SQLMetric,
+      skipPartialAggTerm: Boolean): KVIterator[UnsafeRow, UnsafeRow] = {
 
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
@@ -218,8 +241,10 @@ case class HashAggregateExec(
 
     // merge the final hashMap into sorter
     numTasksFallBacked += 1
-    sorter.merge(hashMap.destructAndCreateExternalSorter())
-    hashMap.free()
+    if (!skipPartialAggTerm) {
+      sorter.merge(hashMap.destructAndCreateExternalSorter())
+      hashMap.free()
+    }
     val sortedIter = sorter.sortedIterator()
 
     // Create a KVIterator based on the sorted iterator.
@@ -425,6 +450,17 @@ case class HashAggregateExec(
 
   protected override def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
+    var childrenConsumed: String = null
+    skipPartialAggTerm = ctx.
+      addMutableState(CodeGenerator.JAVA_BOOLEAN,
+        "skipPartialAgg",
+        term => s"$term = ${Utils.isTesting};")
+    if (skipPartialAggregateEnabled) {
+      rowCountTerm = ctx.
+        addMutableState(CodeGenerator.JAVA_LONG, "inputRowCount")
+      childrenConsumed = ctx.
+        addMutableState(CodeGenerator.JAVA_BOOLEAN, "childrenConsumed")
+    }
     if (conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap()
     } else if (conf.enableVectorizedHashMap) {
@@ -513,8 +549,15 @@ case class HashAggregateExec(
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
     val numTasksFallBacked = metricTerm(ctx, "numTasksFallBacked")
 
+    val mapCleared = if (skipPartialAggregateEnabled) {
+        s"$skipPartialAggTerm"
+      } else {
+        s"false"
+      }
+
     val finishRegularHashMap = s"$iterTerm = $thisPlan.finishAggregate(" +
-      s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe, $numTasksFallBacked);"
+        s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe," +
+        s" $numTasksFallBacked, $mapCleared);"
     val finishHashMap = if (isFastHashMapEnabled) {
       s"""
          |$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();
@@ -524,10 +567,16 @@ case class HashAggregateExec(
       finishRegularHashMap
     }
 
+    outputFunc = generateResultFunction(ctx)
+    val genChildrenConsumedCode = if (skipPartialAggregateEnabled) {
+      s"${childrenConsumed} = true;"
+    } else ""
+
     val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
          |private void $doAgg() throws java.io.IOException {
          |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+         |  $genChildrenConsumedCode
          |  $finishHashMap
          |}
        """.stripMargin)
@@ -535,7 +584,6 @@ case class HashAggregateExec(
     // generate code for output
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
-    val outputFunc = generateResultFunction(ctx)
 
     val limitNotReachedCondition = limitNotReachedCond
 
@@ -606,7 +654,18 @@ case class HashAggregateExec(
 
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
-    s"""
+
+    val genCodePostInitCode =
+      if (skipPartialAggregateEnabled) {
+        s"""
+           |if (!$childrenConsumed) {
+           |  $doAggFuncName();
+           |  if (shouldStop()) return;
+           |}
+        """.stripMargin
+      } else ""
+
+      s"""
        |if (!$initAgg) {
        |  $initAgg = true;
        |  $createFastHashMap
@@ -615,7 +674,9 @@ case class HashAggregateExec(
        |  long $beforeAgg = System.nanoTime();
        |  $doAggFuncName();
        |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
+       |  if (shouldStop()) return;
        |}
+       |$genCodePostInitCode
        |// output the result
        |$outputFromFastHashMap
        |$outputFromRegularHashMap
@@ -632,6 +693,7 @@ case class HashAggregateExec(
     val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
     val fastRowBuffer = ctx.freshName("fastAggBuffer")
+    val skipPartialAgg = ctx.freshName("skipPartialAgg")
 
     // To individually generate code for each aggregate function, an element in `updateExprs` holds
     // all the expressions for the buffer of an aggregation function.
@@ -652,48 +714,133 @@ case class HashAggregateExec(
       case _ => ("true", "", "")
     }
 
+    val skipPartialAggregateThreshold = conf.skipPartialAggregateThreshold
+    val skipPartialAggRatio = conf.skipPartialAggregateRatio
+    val skipPartialAggComp = conf.skipPartialAggregateCompaction
     val oomeClassName = classOf[SparkOutOfMemoryError].getName
 
-    val findOrInsertRegularHashMap: String =
-      s"""
-         |// generate grouping key
-         |${unsafeRowKeyCode.code}
-         |int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();
-         |if ($checkFallbackForBytesToBytesMap) {
-         |  // try to get the buffer from hash map
-         |  $unsafeRowBuffer =
-         |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
-         |}
-         |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
-         |// aggregation after processing all input rows.
-         |if ($unsafeRowBuffer == null) {
-         |  if ($sorterTerm == null) {
-         |    $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
-         |  } else {
-         |    $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
-         |  }
-         |  $resetCounter
-         |  // the hash map had be spilled, it should have enough memory now,
-         |  // try to allocate buffer again.
-         |  $unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
-         |    $unsafeRowKeys, $unsafeRowKeyHash);
-         |  if ($unsafeRowBuffer == null) {
-         |    // failed to allocate the first page
-         |    throw new $oomeClassName("No enough memory for aggregation");
-         |  }
-         |}
+    val findOrInsertRegularHashMap: String = {
+      def getAggBufferFromMap = {
+        s"""
+           |// generate grouping key
+           |${unsafeRowKeyCode.code}
+           |int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();
+           |if ($checkFallbackForBytesToBytesMap) {
+           |  // try to get the buffer from hash map
+           |  $unsafeRowBuffer =
+           |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
+           |}
+          """.stripMargin
+      }
+
+      def addToSorter: String = {
+        s"""
+           |if ($sorterTerm == null) {
+           |  $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
+           |} else {
+           |  $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
+           |}
+           |$resetCounter
+           |// the hash map had be spilled, it should have enough memory now,
+           |// try to allocate buffer again.
+           |$unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
+           |  $unsafeRowKeys, $unsafeRowKeyHash);
+           |if ($unsafeRowBuffer == null) {
+           |  // failed to allocate the first page
+           |  throw new $oomeClassName("No enough memory for aggregation");
+           |}""".stripMargin
+      }
+
+      if (skipPartialAggregateEnabled) {
+        s"""
+           |if (!$skipPartialAggTerm) {
+           |  $getAggBufferFromMap
+           |  // Can't allocate buffer from the hash map.
+           |  // Check if we can avoid partial aggregation.
+           |  //  Otherwise, Spill the map and fallback to sort-based
+           |  // aggregation after processing all input rows.
+           |  if ($unsafeRowBuffer == null) {
+           |     double ratio = (double)
+           |      ($hashMapTerm.getNumRows() + fastHashMapNumRows) / $rowCountTerm;
+           |     double compaction = (double)
+           |       $rowCountTerm / ($hashMapTerm.getKeyCount() + fastHashMapNumRows);
+           |
+           |    if (($rowCountTerm >= $skipPartialAggregateThreshold) &&
+           |      (ratio >= $skipPartialAggRatio|| compaction <= $skipPartialAggComp)) {
+           |      // Aggregation buffer is created later
+           |      $skipPartialAggTerm = true;
+           |      // this is done to clear up off-heap memory sooner and prevent OOMs
+           |      if ($sorterTerm == null) {
+           |        $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
+           |      } else {
+           |        $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
+           |      }
+           |      $hashMapTerm.free();
+           |    } else {
+           |      $addToSorter
+           |    }
+           |  }
+           |}
        """.stripMargin
+      } else {
+        s"""
+           |$getAggBufferFromMap
+           |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
+           |// aggregation after processing all input rows.
+           |if ($unsafeRowBuffer == null) {
+           |  $addToSorter
+           |}
+       """.stripMargin
+      }
+    }
+
+    val createEmptyAggBufferWhenPartialAggSkipped: String = {
+      if (skipPartialAggregateEnabled) {
+        val numAggSkippedRows = metricTerm(ctx, "partialAggSkipped")
+        val initExpr = declFunctions.flatMap(f => f.initialValues)
+        val emptyBufferKeyCode = GenerateUnsafeProjection.createCode(ctx, initExpr)
+        s"""
+           |// Create an empty aggregation buffer
+           |if ($skipPartialAggTerm) {
+           |  ${unsafeRowKeyCode.code}
+           |  ${emptyBufferKeyCode.code}
+           |  $unsafeRowBuffer = ${emptyBufferKeyCode.value};
+           |  $numAggSkippedRows.add(1);
+           |}
+           |""".stripMargin
+      } else ""
+    }
 
     val findOrInsertHashMap: String = {
-      if (isFastHashMapEnabled) {
+      val insertCode = if (isFastHashMapEnabled) {
+        def findOrInsertIntoFastHashMap = {
+          s"""
+             |${fastRowKeys.map(_.code).mkString("\n")}
+             |if (${fastRowKeys.map("!" + _.isNull).mkString(" && ")}) {
+             |  $fastRowBuffer = $fastHashMapTerm.findOrInsert(
+             |    ${fastRowKeys.map(_.value).mkString(", ")});
+             |}
+             |""".stripMargin
+        }
+
+        val insertFastMap =
+          s"""
+             |if (!$skipPartialAggTerm) {
+             |  $findOrInsertIntoFastHashMap
+             |}
+             |""".stripMargin
+
+        val fastHashMapNumRowsCode =
+          s"""
+             |if ($fastHashMapTerm != null) {
+             |  fastHashMapNumRows = (double) $fastHashMapTerm.getNumRows();
+             |}
+             |""".stripMargin
         // If fast hash map is on, we first generate code to probe and update the fast hash map.
         // If the probe is successful the corresponding fast row buffer will hold the mutable row.
         s"""
-           |${fastRowKeys.map(_.code).mkString("\n")}
-           |if (${fastRowKeys.map("!" + _.isNull).mkString(" && ")}) {
-           |  $fastRowBuffer = $fastHashMapTerm.findOrInsert(
-           |    ${fastRowKeys.map(_.value).mkString(", ")});
-           |}
+           |$insertFastMap
+           |$fastHashMapNumRowsCode
            |// Cannot find the key in fast hash map, try regular hash map.
            |if ($fastRowBuffer == null) {
            |  $findOrInsertRegularHashMap
@@ -702,6 +849,10 @@ case class HashAggregateExec(
       } else {
         findOrInsertRegularHashMap
       }
+      s"""
+         |$insertCode
+         |$createEmptyAggBufferWhenPartialAggSkipped
+         |""".stripMargin
     }
 
     val inputAttrs = aggregateBufferAttributes ++ inputAttributes
@@ -768,7 +919,18 @@ case class HashAggregateExec(
     }
 
     val updateRowInHashMap: String = {
-      if (isFastHashMapEnabled) {
+      val outputRow: String = {
+        if (skipPartialAggregateEnabled) {
+          s"""
+             |if ($skipPartialAggTerm) {
+             |  $outputFunc(${unsafeRowKeyCode.value}, $unsafeRowBuffer);
+             |}
+             |$rowCountTerm = $rowCountTerm + 1;
+             |""".stripMargin
+        } else ""
+      }
+
+      val updateRowInMap = if (isFastHashMapEnabled) {
         if (isVectorizedHashMapEnabled) {
           ctx.INPUT_ROW = fastRowBuffer
           val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
@@ -833,6 +995,10 @@ case class HashAggregateExec(
       } else {
         updateRowInRegularHashMap
       }
+      s"""
+         |$updateRowInMap
+         |$outputRow
+         |""".stripMargin
     }
 
     val declareRowBuffer: String = if (isFastHashMapEnabled) {
@@ -843,10 +1009,14 @@ case class HashAggregateExec(
       }
       s"""
          |UnsafeRow $unsafeRowBuffer = null;
+         |double fastHashMapNumRows = 0.0;
          |$fastRowType $fastRowBuffer = null;
        """.stripMargin
     } else {
-      s"UnsafeRow $unsafeRowBuffer = null;"
+      s"""
+         |UnsafeRow $unsafeRowBuffer = null;
+         |double fastHashMapNumRows = 0.0;
+       """.stripMargin
     }
 
     // We try to do hash map based in-memory aggregation first. If there is not enough memory (the
