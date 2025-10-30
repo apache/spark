@@ -265,7 +265,7 @@ case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(kll_sketch_agg_bigint(col), 0.5) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT _FUNC_(kll_sketch_agg_float(col), 0.5) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -297,7 +297,7 @@ case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(kll_sketch_agg_bigint(col), 0.5) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT _FUNC_(kll_sketch_agg_double(col), 0.5) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -415,7 +415,7 @@ abstract class KllSketchGetQuantileBase
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(kll_sketch_agg_bigint(col), 3) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT _FUNC_(kll_sketch_agg_bigint(col), 3) > 0.3 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -443,7 +443,7 @@ case class KllSketchGetRankBigint(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(kll_sketch_agg_float(col), 3) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT _FUNC_(kll_sketch_agg_float(col), 3.0) > 0.3 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -471,7 +471,7 @@ case class KllSketchGetRankFloat(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(kll_sketch_agg_double(col), 3) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT _FUNC_(kll_sketch_agg_double(col), 3.0) > 0.3 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
   group = "misc_funcs",
