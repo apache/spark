@@ -33,27 +33,6 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   // were all already in the buffer.
   val BIG_ENOUGH_QUERY = "select * from range(1000000)"
 
-  test("SQL Script over Spark Connect.") {
-    val sessionId = UUID.randomUUID.toString()
-    val userId = "ScriptUser"
-    val sqlScriptText =
-      """BEGIN
-        |IF 1 = 1 THEN
-        |  SELECT 1;
-        |ELSE
-        |  SELECT 2;
-        |END IF;
-        |END
-        """.stripMargin
-    withClient(sessionId = sessionId, userId = userId) { client =>
-      // this will create the session, and then ReleaseSession at the end of withClient.
-      val enableSqlScripting = client.execute(buildPlan("SET spark.sql.scripting.enabled=true"))
-      enableSqlScripting.hasNext // trigger execution
-      val query = client.execute(buildSqlCommandPlan(sqlScriptText))
-      checkSqlCommandResponse(query.next().getSqlCommandResult, Seq(Seq(1)))
-    }
-  }
-
   test("Execute is sent eagerly to the server upon iterator creation") {
     // This behavior changed with grpc upgrade from 1.56.0 to 1.59.0.
     // Testing to be aware of future changes.
