@@ -34,7 +34,7 @@ if TYPE_CHECKING:
         ArrowGroupedMapFunction,
         PandasGroupedMapFunction,
         PandasGroupedMapUDFType,
-        PandasGroupedMapIterUDFType
+        PandasGroupedMapIterUDFType,
     )
 
 
