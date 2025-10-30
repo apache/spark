@@ -1094,7 +1094,12 @@ class ApplyInPandasTestsMixin:
             )
 
         expected = (
-            df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
+            df.groupby("key")
+            .agg(
+                sf.min("v").alias("min"),
+                sf.max("v").alias("max"),
+            )
+            .sort("key")
         ).collect()
 
         for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
@@ -1385,7 +1390,8 @@ class ApplyInPandasTestsMixin:
         # Verify we got multiple rows per group (one per input batch)
         for key_val in [0, 1, 2]:
             key_results = [r for r in result if r[0] == key_val]
-            # Should have multiple batches (50000/3 ≈ 16667 rows per group, with 5000 per batch = ~4 batches)
+            # Should have multiple batches
+            # (50000/3 ≈ 16667 rows per group, with 5000 per batch = ~4 batches)
             self.assertGreater(len(key_results), 1, f"Expected multiple batches for key {key_val}")
 
             # Verify running_count increases monotonically
