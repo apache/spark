@@ -60,11 +60,18 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
         notMatchedActions = alignActions(m.targetTable.output, m.notMatchedActions,
           coerceNestedTypes),
         notMatchedBySourceActions = alignActions(m.targetTable.output, m.notMatchedBySourceActions,
-          coerceNestedTypes))
+          coerceNestedTypes),
+        preservedSourceActions = Some(m.matchedActions ++ m.notMatchedActions)
+      )
 
     case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && !m.aligned
       && !m.needSchemaEvolution =>
-      resolveAssignments(m)
+      m.copy(
+        matchedActions = m.notMatchedActions.map(resolveMergeAction),
+        notMatchedActions = m.notMatchedActions.map(resolveMergeAction),
+        notMatchedBySourceActions = m.matchedActions.map(resolveMergeAction),
+        preservedSourceActions = Some(m.matchedActions ++ m.notMatchedActions)
+      )
   }
 
   private def validateStoreAssignmentPolicy(): Unit = {
@@ -83,33 +90,51 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
   private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
     p.transformExpressions {
-      case assignment: Assignment =>
-        val nullHandled = if (!assignment.key.nullable && assignment.value.nullable) {
-          AssertNotNull(assignment.value)
-        } else {
-          assignment.value
-        }
-        val casted = if (assignment.key.dataType != nullHandled.dataType) {
-          val cast = Cast(nullHandled, assignment.key.dataType, ansiEnabled = true)
-          cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-          cast
-        } else {
-          nullHandled
-        }
-        val rawKeyType = assignment.key.transform {
-          case a: AttributeReference =>
-            CharVarcharUtils.getRawType(a.metadata).map(a.withDataType).getOrElse(a)
-        }.dataType
-        val finalValue = if (CharVarcharUtils.hasCharVarchar(rawKeyType)) {
-          CharVarcharUtils.stringLengthCheck(casted, rawKeyType)
-        } else {
-          casted
-        }
-        val cleanedKey = assignment.key.transform {
-          case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
-        }
-        Assignment(cleanedKey, finalValue)
+      case assignment: Assignment => resolveAssignment(assignment)
     }
+  }
+
+  private def resolveMergeAction(mergeAction: MergeAction) = {
+    mergeAction match {
+      case u @ UpdateAction(_, assignments) =>
+        u.copy(assignments = assignments.map(resolveAssignment))
+      case i @ InsertAction(_, assignments) =>
+        i.copy(assignments = assignments.map(resolveAssignment))
+      case d: DeleteAction =>
+        d
+      case other =>
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3053",
+          messageParameters = Map("other" -> other.toString))
+    }
+  }
+
+  private def resolveAssignment(assignment: Assignment) = {
+    val nullHandled = if (!assignment.key.nullable && assignment.value.nullable) {
+      AssertNotNull(assignment.value)
+    } else {
+      assignment.value
+    }
+    val casted = if (assignment.key.dataType != nullHandled.dataType) {
+      val cast = Cast(nullHandled, assignment.key.dataType, ansiEnabled = true)
+      cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+      cast
+    } else {
+      nullHandled
+    }
+    val rawKeyType = assignment.key.transform {
+      case a: AttributeReference =>
+        CharVarcharUtils.getRawType(a.metadata).map(a.withDataType).getOrElse(a)
+    }.dataType
+    val finalValue = if (CharVarcharUtils.hasCharVarchar(rawKeyType)) {
+      CharVarcharUtils.stringLengthCheck(casted, rawKeyType)
+    } else {
+      casted
+    }
+    val cleanedKey = assignment.key.transform {
+      case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
+    }
+    Assignment(cleanedKey, finalValue)
   }
 
   private def alignActions(

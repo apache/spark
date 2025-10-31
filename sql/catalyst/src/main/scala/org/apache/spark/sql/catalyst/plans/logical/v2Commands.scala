@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -860,7 +860,10 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
-    withSchemaEvolution: Boolean) extends BinaryCommand with SupportsSubquery {
+    withSchemaEvolution: Boolean,
+    // Preserves original pre-aligned actions for source matches
+    preservedSourceActions: Option[Seq[MergeAction]] = None)
+  extends BinaryCommand with SupportsSubquery {
 
   lazy val aligned: Boolean = {
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
@@ -892,9 +895,13 @@ case class MergeIntoTable(
     case _ => false
   }
 
-  lazy val needSchemaEvolution: Boolean =
+  private lazy val migrationSchema: StructType =
+    MergeIntoTable.referencedSourceSchema(this)
+
+  lazy val needSchemaEvolution: Boolean = {
     schemaEvolutionEnabled &&
-      MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
+      MergeIntoTable.schemaChanges(targetTable.schema, migrationSchema).nonEmpty
+  }
 
   private def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
     EliminateSubqueryAliases(targetTable) match {
@@ -948,11 +955,12 @@ object MergeIntoTable {
             case currentField: StructField if newFieldMap.contains(currentField.name) =>
               schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
                 originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
-          }}.flatten
+          }
+        }.flatten
 
         // Identify the newly added fields and append to the end
         val currentFieldMap = toFieldMap(currentFields)
-        val adds = newFields.filterNot (f => currentFieldMap.contains (f.name))
+        val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
           .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
 
         updates ++ adds
@@ -990,7 +998,80 @@ object MergeIntoTable {
       CaseInsensitiveMap(fieldMap)
     }
   }
+
+  // Filter the source schema to retain only fields that are referenced
+  // by at least one merge action
+  def referencedSourceSchema(merge: MergeIntoTable): StructType = {
+
+    val actions = merge.preservedSourceActions match {
+      case Some(preserved) => preserved
+      case None => merge.matchedActions ++ merge.notMatchedActions
+    }
+
+    val assignments = actions.collect {
+      case a: UpdateAction => a.assignments.map(_.key)
+      case a: InsertAction => a.assignments.map(_.key)
+    }.flatten
+
+    val containsStarAction = actions.exists {
+      case _: UpdateStarAction => true
+      case _: InsertStarAction => true
+      case _ => false
+    }
+
+    def filterSchema(sourceSchema: StructType, basePath: Seq[String]): StructType =
+      StructType(sourceSchema.flatMap { field =>
+        val fieldPath = basePath :+ field.name
+
+        field.dataType match {
+          // Specifically assigned to in one clause:
+          // always keep, including all nested attributes
+          case _ if assignments.exists(isEqual(_, fieldPath)) => Some(field)
+          // If this is a struct and one of the children is being assigned to in a merge clause,
+          // keep it and continue filtering children.
+          case struct: StructType if assignments.exists(assign =>
+            isPrefix(fieldPath, extractFieldPath(assign))) =>
+            Some(field.copy(dataType = filterSchema(struct, fieldPath)))
+          // The field isn't assigned to directly or indirectly (i.e. its children) in any non-*
+          // clause. Check if it should be kept with any * action.
+          case struct: StructType if containsStarAction =>
+            Some(field.copy(dataType = filterSchema(struct, fieldPath)))
+          case _ if containsStarAction => Some(field)
+          // The field and its children are not assigned to in any * or non-* action, drop it.
+          case _ => None
+        }
+      })
+
+    val sourceSchema = merge.sourceTable.schema
+    val targetSchema = merge.targetTable.schema
+    val res = filterSchema(merge.sourceTable.schema, Seq.empty)
+    res
+  }
+
+  // Helper method to extract field path from an Expression.
+  private def extractFieldPath(expr: Expression): Seq[String] = expr match {
+    case UnresolvedAttribute(nameParts) => nameParts
+    case a: AttributeReference => Seq(a.name)
+    case GetStructField(child, ordinal, nameOpt) =>
+      extractFieldPath(child) :+ nameOpt.getOrElse(s"col$ordinal")
+    case _ => Seq.empty
+  }
+
+  // Helper method to check if a given field path is a prefix of another path. Delegates
+  // equality to conf.resolver to correctly handle case sensitivity.
+  private def isPrefix(prefix: Seq[String], path: Seq[String]): Boolean =
+    prefix.length <= path.length && prefix.zip(path).forall {
+      case (prefixNamePart, pathNamePart) =>
+        SQLConf.get.resolver(prefixNamePart, pathNamePart)
+    }
+
+  // Helper method to check if an assignment Expression's field path is equal to a path.
+  def isEqual(assignmentExpr: Expression, path: Seq[String]): Boolean = {
+    val exprPath = extractFieldPath(assignmentExpr)
+    exprPath.length == path.length && isPrefix(exprPath, path)
+  }
 }
+
 
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]

@@ -34,24 +34,26 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case m @ MergeIntoTable(_, _, _, _, _, _, _)
+    case m @ MergeIntoTable(_, _, _, _, _, _, _, _)
       if m.needSchemaEvolution =>
         val newTarget = m.targetTable.transform {
-          case r : DataSourceV2Relation => performSchemaEvolution(r, m.sourceTable)
+          case r : DataSourceV2Relation => performSchemaEvolution(r, m)
         }
         m.copy(targetTable = newTarget)
   }
 
-  private def performSchemaEvolution(relation: DataSourceV2Relation, source: LogicalPlan)
+  private def performSchemaEvolution(relation: DataSourceV2Relation, m: MergeIntoTable)
     : DataSourceV2Relation = {
     (relation.catalog, relation.identifier) match {
       case (Some(c: TableCatalog), Some(i)) =>
-        val changes = MergeIntoTable.schemaChanges(relation.schema, source.schema)
+        val referencedSourceSchema = MergeIntoTable.referencedSourceSchema(m)
+
+        val changes = MergeIntoTable.schemaChanges(relation.schema, referencedSourceSchema)
         c.alterTable(i, changes: _*)
         val newTable = c.loadTable(i)
         val newSchema = CatalogV2Util.v2ColumnsToStructType(newTable.columns())
         // Check if there are any remaining changes not applied.
-        val remainingChanges = MergeIntoTable.schemaChanges(newSchema, source.schema)
+        val remainingChanges = MergeIntoTable.schemaChanges(newSchema, referencedSourceSchema)
         if (remainingChanges.nonEmpty) {
           throw QueryCompilationErrors.unsupportedTableChangesInAutoSchemaEvolutionError(
             remainingChanges, i.toQualifiedNameParts(c))
