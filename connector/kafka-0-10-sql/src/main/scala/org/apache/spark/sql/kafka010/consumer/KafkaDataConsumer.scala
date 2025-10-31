@@ -300,15 +300,15 @@ private[kafka010] class KafkaDataConsumer(
    * out-of-bound check in this function. Since there is no endOffset given, we assume anything
    * record is valid to return as long as it is at or after `offset`.
    *
-   * @param startOffsets, the starting positions to read from, inclusive.
+   * @param startOffset, the starting positions to read from, inclusive.
    */
-  def getIterator(offset: Long): KafkaDataConsumerIterator = {
+  def getIterator(startOffset: Long): KafkaDataConsumerIterator = {
     new KafkaDataConsumerIterator {
       private var fetchedRecordList
           : Option[ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]]] = None
       private val consumer = getOrRetrieveConsumer()
       private var firstRecord = true
-      private var _currentOffset: Long = offset - 1
+      private var _currentOffset: Long = startOffset - 1
 
       private def fetchedRecordListHasNext(): Boolean = {
         fetchedRecordList.map(_.hasNext).getOrElse(false)
@@ -330,7 +330,7 @@ private[kafka010] class KafkaDataConsumer(
 
         if (firstRecord) {
           timeAndDeductFromTimeLeftMs {
-            consumer.seek(offset)
+            consumer.seek(startOffset)
             firstRecord = false
           }
         }
@@ -349,8 +349,8 @@ private[kafka010] class KafkaDataConsumer(
                   throw ex
                 } else {
                   Thread.sleep(10) // retry until the source partition is populated
-                  assert(offset == 0)
-                  consumer.seek(offset)
+                  assert(startOffset == 0)
+                  consumer.seek(startOffset)
                 }
             }
           }

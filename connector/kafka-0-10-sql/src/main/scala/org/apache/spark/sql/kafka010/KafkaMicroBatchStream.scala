@@ -345,7 +345,6 @@ private[kafka010] class KafkaMicroBatchStream(
   override def toString(): String = s"KafkaV2[$kafkaOffsetReader]"
 
   override def metrics(latestConsumedOffset: Optional[Offset]): ju.Map[String, String] = {
-    var rtmFetchLatestOffsetsTimeMs = Option.empty[Long]
     val reCalculatedLatestPartitionOffsets =
       if (inRealTimeMode) {
         if (!latestConsumedOffset.isPresent) {
@@ -353,12 +352,8 @@ private[kafka010] class KafkaMicroBatchStream(
           None
         } else {
           Some {
-            val startTime = System.currentTimeMillis()
-            val latestOffsets = kafkaOffsetReader.fetchLatestOffsets(
+            kafkaOffsetReader.fetchLatestOffsets(
               Some(latestConsumedOffset.get.asInstanceOf[KafkaSourceOffset].partitionToOffsets))
-            val endTime = System.currentTimeMillis()
-            rtmFetchLatestOffsetsTimeMs = Some(endTime - startTime)
-            latestOffsets
           }
         }
       } else {
