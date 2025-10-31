@@ -29,6 +29,7 @@ from pyspark.sql.pandas._typing import (
     PandasGroupedAggFunction,
     PandasGroupedAggUDFType,
     PandasGroupedMapFunction,
+    PandasGroupedMapIterUDFType,
     PandasGroupedMapUDFType,
     PandasScalarIterFunction,
     PandasScalarIterUDFType,
@@ -145,19 +146,24 @@ def pandas_udf(
 def pandas_udf(
     f: PandasGroupedMapFunction,
     returnType: Union[StructType, str],
-    functionType: PandasGroupedMapUDFType,
+    functionType: Union[PandasGroupedMapUDFType, PandasGroupedMapIterUDFType],
 ) -> GroupedMapPandasUserDefinedFunction: ...
 @overload
 def pandas_udf(
-    f: Union[StructType, str], returnType: PandasGroupedMapUDFType
+    f: Union[StructType, str],
+    returnType: Union[PandasGroupedMapUDFType, PandasGroupedMapIterUDFType],
 ) -> Callable[[PandasGroupedMapFunction], GroupedMapPandasUserDefinedFunction]: ...
 @overload
 def pandas_udf(
-    *, returnType: Union[StructType, str], functionType: PandasGroupedMapUDFType
+    *,
+    returnType: Union[StructType, str],
+    functionType: Union[PandasGroupedMapUDFType, PandasGroupedMapIterUDFType],
 ) -> Callable[[PandasGroupedMapFunction], GroupedMapPandasUserDefinedFunction]: ...
 @overload
 def pandas_udf(
-    f: Union[StructType, str], *, functionType: PandasGroupedMapUDFType
+    f: Union[StructType, str],
+    *,
+    functionType: Union[PandasGroupedMapUDFType, PandasGroupedMapIterUDFType],
 ) -> Callable[[PandasGroupedMapFunction], GroupedMapPandasUserDefinedFunction]: ...
 @overload
 def pandas_udf(

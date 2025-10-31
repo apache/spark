@@ -123,12 +123,13 @@ class PandasGroupedOpsMixin:
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
         as a `DataFrame`.
 
-        The function should take a `pandas.DataFrame` and return another
-        `pandas.DataFrame`. Alternatively, the user can pass a function that takes
-        a tuple of the grouping key(s) and a `pandas.DataFrame`.
-        For each group, all columns are passed together as a `pandas.DataFrame`
-        to the user-function and the returned `pandas.DataFrame` are combined as a
-        :class:`DataFrame`.
+        The function can take one of two forms: It can take a `pandas.DataFrame` and return a
+        `pandas.DataFrame`, or it can take an iterator of `pandas.DataFrame` and yield
+        `pandas.DataFrame`. Alternatively each form can take a tuple of grouping keys
+        as the first argument in addition to the input type above.
+        For each group, all columns are passed together as a `pandas.DataFrame` or iterator of
+        `pandas.DataFrame`, and the returned `pandas.DataFrame` or iterator of `pandas.DataFrame`
+        are combined as a :class:`DataFrame`.
 
         The `schema` should be a :class:`StructType` describing the schema of the returned
         `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
@@ -141,12 +142,17 @@ class PandasGroupedOpsMixin:
         .. versionchanged:: 3.4.0
             Support Spark Connect.
 
+        .. versionchanged:: 4.1.0
+            Added support for an iterator of `pandas.DataFrame` API.
+
         Parameters
         ----------
         func : function
-            a Python native function that takes a `pandas.DataFrame` and outputs a
-            `pandas.DataFrame`, or that takes one tuple (grouping keys) and a
-            `pandas.DataFrame` and outputs a `pandas.DataFrame`.
+            a Python native function that either takes a `pandas.DataFrame` and outputs a
+            `pandas.DataFrame` or takes an iterator of `pandas.DataFrame` and yields
+            `pandas.DataFrame`. Additionally, each form can take a tuple of grouping keys
+            as the first argument, with the `pandas.DataFrame` or iterator of `pandas.DataFrame`
+            as the second argument.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
@@ -214,22 +220,84 @@ class PandasGroupedOpsMixin:
         |  2|          2| 3.0|
         +---+-----------+----+
 
+        The function can also take and return an iterator of `pandas.DataFrame` using type
+        hints.
+
+        >>> from typing import Iterator  # doctest: +SKIP
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ...     ("id", "v"))  # doctest: +SKIP
+        >>> def filter_func(
+        ...     batches: Iterator[pd.DataFrame]
+        ... ) -> Iterator[pd.DataFrame]:  # doctest: +SKIP
+        ...     for batch in batches:
+        ...         # Process and yield each batch independently
+        ...         filtered = batch[batch['v'] > 2.0]
+        ...         if not filtered.empty:
+        ...             yield filtered[['v']]
+        >>> df.groupby("id").applyInPandas(
+        ...     filter_func, schema="v double").show()  # doctest: +SKIP
+        +----+
+        |   v|
+        +----+
+        | 3.0|
+        | 5.0|
+        |10.0|
+        +----+
+
+        Alternatively, the user can pass a function that takes two arguments.
+        In this case, the grouping key(s) will be passed as the first argument and the data will
+        be passed as the second argument. The grouping key(s) will be passed as a tuple of numpy
+        data types. The data will still be passed in as an iterator of `pandas.DataFrame`.
+
+        >>> from typing import Iterator, Tuple, Any  # doctest: +SKIP
+        >>> def transform_func(
+        ...     key: Tuple[Any, ...], batches: Iterator[pd.DataFrame]
+        ... ) -> Iterator[pd.DataFrame]:  # doctest: +SKIP
+        ...     for batch in batches:
+        ...         # Yield transformed results for each batch
+        ...         result = batch.assign(id=key[0], v_doubled=batch['v'] * 2)
+        ...         yield result[['id', 'v_doubled']]
+        >>> df.groupby("id").applyInPandas(
+        ...     transform_func, schema="id long, v_doubled double").show()  # doctest: +SKIP
+        +---+----------+
+        | id|v_doubled |
+        +---+----------+
+        |  1|       2.0|
+        |  1|       4.0|
+        |  2|       6.0|
+        |  2|      10.0|
+        |  2|      20.0|
+        +---+----------+
+
         Notes
         -----
-        This function requires a full shuffle. All the data of a group will be loaded
-        into memory, so the user should be aware of the potential OOM risk if data is skewed
-        and certain groups are too large to fit in memory.
+        This function requires a full shuffle. If using the `pandas.DataFrame` API, all data of a
+        group will be loaded into memory, so the user should be aware of the potential OOM risk if
+        data is skewed and certain groups are too large to fit in memory, and can use the
+        iterator of `pandas.DataFrame` API to mitigate this.
 
         See Also
         --------
         pyspark.sql.functions.pandas_udf
         """
         from pyspark.sql import GroupedData
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.pandas.typehints import infer_group_pandas_eval_type_from_func
 
         assert isinstance(self, GroupedData)
 
-        udf = pandas_udf(func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
+        # Try to infer the eval type from type hints
+        eval_type = None
+        try:
+            eval_type = infer_group_pandas_eval_type_from_func(func)
+        except Exception as e:
+            warnings.warn(f"Cannot infer the eval type from type hints: {e}", UserWarning)
+
+        if eval_type is None:
+            eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
+        udf = pandas_udf(func, returnType=schema, functionType=eval_type)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc)
