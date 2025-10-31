@@ -30,7 +30,7 @@ import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModul
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
-import org.apache.spark.util.SparkClassUtils
+import org.apache.spark.util.{SparkClassUtils, SparkErrorUtils}
 
 /**
  * The collection of functions for rebasing days and microseconds from/to the hybrid calendar
@@ -288,7 +288,9 @@ object RebaseDateTime {
   // `JsonRebaseRecord`. Mutable HashMap is used here instead of AnyRefMap due to SPARK-49491.
   private[sql] def loadRebaseRecords(fileName: String): HashMap[String, RebaseInfo] = {
     val file = SparkClassUtils.getSparkClassLoader.getResource(fileName)
-    val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)
+    val jsonRebaseRecords = SparkErrorUtils.tryWithResource(file.openStream()) { inputStream =>
+      mapper.readValue[Seq[JsonRebaseRecord]](inputStream)
+    }
     val hashMap = new HashMap[String, RebaseInfo]
     hashMap.sizeHint(jsonRebaseRecords.size)
     jsonRebaseRecords.foreach { jsonRecord =>

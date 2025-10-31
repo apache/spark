@@ -33,7 +33,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.SparkThrowableHelper._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 /**
  * Test suite for Spark Throwables.
@@ -75,7 +75,9 @@ class SparkThrowableSuite extends SparkFunSuite {
       .addModule(DefaultScalaModule)
       .enable(STRICT_DUPLICATE_DETECTION)
       .build()
-    mapper.readValue(errorJsonFilePath.toUri.toURL, new TypeReference[Map[String, ErrorInfo]]() {})
+    SparkErrorUtils.tryWithResource(errorJsonFilePath.toUri.toURL.openStream()) { inputStream =>
+      mapper.readValue(inputStream, new TypeReference[Map[String, ErrorInfo]]() {})
+    }
   }
 
   test("Error conditions are correctly formatted") {
@@ -88,7 +90,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val prettyPrinter = new DefaultPrettyPrinter()
       .withArrayIndenter(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE)
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
-      .setSerializationInclusion(Include.NON_ABSENT)
+      .setDefaultPropertyInclusion(Include.NON_ABSENT)
       .writer(prettyPrinter)
       .writeValueAsString(errorReader.errorInfoMap)
 
@@ -123,10 +125,14 @@ class SparkThrowableSuite extends SparkFunSuite {
       .addModule(DefaultScalaModule)
       .enable(STRICT_DUPLICATE_DETECTION)
       .build()
-    val errorClasses = mapper.readValue(
-      errorClassesJson, new TypeReference[Map[String, String]]() {})
-    val errorStates = mapper.readValue(
-      errorStatesJson, new TypeReference[Map[String, ErrorStateInfo]]() {})
+    val errorClasses =
+      SparkErrorUtils.tryWithResource(errorClassesJson.openStream()) { inputStream =>
+        mapper.readValue(inputStream, new TypeReference[Map[String, String]]() {})
+      }
+    val errorStates =
+      SparkErrorUtils.tryWithResource(errorStatesJson.openStream()) { inputStream =>
+        mapper.readValue(inputStream, new TypeReference[Map[String, ErrorStateInfo]]() {})
+      }
     val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
     assert(Set("22012", "22003", "42601").subsetOf(errorStates.keySet))
     assert(errorClasses.keySet.filter(!_.matches("[A-Z0-9]{2}")).isEmpty)
