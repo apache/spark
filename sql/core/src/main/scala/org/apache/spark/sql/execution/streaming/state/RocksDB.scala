@@ -218,6 +218,9 @@ class RocksDB(
   @volatile private var numInternalKeysOnLoadedVersion = 0L
   @volatile private var numInternalKeysOnWritingVersion = 0L
 
+  // Was snapshot auto repair performed when loading the current version
+  @volatile private var performedSnapshotAutoRepair = false
+
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
@@ -540,24 +543,9 @@ class RocksDB(
     try {
       if (loadedVersion != version) {
         closeDB(ignoreException = false)
-        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-        val metadata = fileManager.loadCheckpointFromDfs(
-          latestSnapshotVersion,
-          workingDir,
-          rocksDBFileMapping)
 
-        loadedVersion = latestSnapshotVersion
-
-        // reset the last snapshot version to the latest available snapshot version
-        lastSnapshotVersion = latestSnapshotVersion
-
-        // Initialize maxVersion upon successful load from DFS
-        fileManager.setMaxSeenVersion(version)
-
-        // Report this snapshot version to the coordinator
-        reportSnapshotUploadToCoordinator(latestSnapshotVersion)
-
-        openLocalRocksDB(metadata)
+        // load the latest snapshot
+        loadSnapshotWithoutCheckpointId(version)
 
         if (loadedVersion != version) {
           val versionsAndUniqueIds: Array[(Long, Option[String])] =
@@ -586,6 +574,54 @@ class RocksDB(
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
     this
+  }
+
+  private def loadSnapshotWithoutCheckpointId(versionToLoad: Long): Long = {
+    // Don't allow auto snapshot repair if changelog checkpointing is not enabled
+    // since it relies on changelog to rebuild state.
+    val allowAutoSnapshotRepair = if (enableChangelogCheckpointing) {
+      conf.stateStoreConf.autoSnapshotRepairEnabled
+    } else {
+      false
+    }
+    val snapshotLoader = new AutoSnapshotLoader(
+      allowAutoSnapshotRepair,
+      conf.stateStoreConf.autoSnapshotRepairNumFailuresBeforeActivating,
+      conf.stateStoreConf.autoSnapshotRepairMaxChangeFileReplay,
+      loggingId) {
+      override protected def beforeLoad(): Unit = closeDB(ignoreException = false)
+
+      override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
+        val remoteMetaData = fileManager.loadCheckpointFromDfs(snapshotVersion,
+          workingDir, rocksDBFileMapping)
+
+        loadedVersion = snapshotVersion
+        // Initialize maxVersion upon successful load from DFS
+        fileManager.setMaxSeenVersion(snapshotVersion)
+
+        openLocalRocksDB(remoteMetaData)
+
+        // By setting this to the snapshot version we successfully loaded,
+        // if auto snapshot repair is enabled, and we end up skipping the latest snapshot
+        // and used an older one, we will create a new snapshot at commit time
+        // if the loaded one is old enough.
+        lastSnapshotVersion = snapshotVersion
+        // Report this snapshot version to the coordinator
+        reportSnapshotUploadToCoordinator(snapshotVersion)
+      }
+
+      override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {
+        loadedVersion = -1  // invalidate loaded data
+      }
+
+      override protected def getEligibleSnapshots(version: Long): Seq[Long] = {
+        fileManager.getEligibleSnapshotsForVersion(version)
+      }
+    }
+
+    val (version, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
+    performedSnapshotAutoRepair = autoRepairCompleted
+    version
   }
 
   /**
@@ -656,6 +692,7 @@ class RocksDB(
 
     assert(version >= 0)
     recordedMetrics = None
+    performedSnapshotAutoRepair = false
     // Reset the load metrics before loading
     loadMetrics.clear()
 
@@ -1525,7 +1562,8 @@ class RocksDB(
       filesReused = fileManagerMetrics.filesReused,
       lastUploadedSnapshotVersion = lastUploadedSnapshotVersion.get(),
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
-      nativeOpsMetrics = nativeOpsMetrics)
+      nativeOpsMetrics = nativeOpsMetrics,
+      numSnapshotsAutoRepaired = if (performedSnapshotAutoRepair) 1 else 0)
   }
 
   /**
@@ -1970,7 +2008,8 @@ case class RocksDBConf(
     compression: String,
     reportSnapshotUploadLag: Boolean,
     fileChecksumEnabled: Boolean,
-    maxVersionsToDeletePerMaintenance: Int)
+    maxVersionsToDeletePerMaintenance: Int,
+    stateStoreConf: StateStoreConf)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -2170,7 +2209,8 @@ object RocksDBConf {
       getStringConf(COMPRESSION_CONF),
       storeConf.reportSnapshotUploadLag,
       storeConf.checkpointFileChecksumEnabled,
-      storeConf.maxVersionsToDeletePerMaintenance)
+      storeConf.maxVersionsToDeletePerMaintenance,
+      storeConf)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
@@ -2192,7 +2232,8 @@ case class RocksDBMetrics(
     filesReused: Long,
     zipFileBytesUncompressed: Option[Long],
     nativeOpsMetrics: Map[String, Long],
-    lastUploadedSnapshotVersion: Long) {
+    lastUploadedSnapshotVersion: Long,
+    numSnapshotsAutoRepaired: Long) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 

@@ -505,7 +505,8 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage,
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS -> rocksDBMetrics.numInternalKeys,
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
-          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt()
+          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
+          CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED -> rocksDBMetrics.numSnapshotsAutoRepaired
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -1214,6 +1215,9 @@ object RocksDBStateStoreProvider {
   // Total SST file size
   val CUSTOM_METRIC_SST_FILE_SIZE = StateStoreCustomSizeMetric(
     "rocksdbSstFileSize", "RocksDB: size of all SST files")
+  val CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED = StateStoreCustomSumMetric(
+    "rocksdbNumSnapshotsAutoRepaired",
+    "RocksDB: number of snapshots that were automatically repaired during store load")
 
   val ALL_CUSTOM_METRICS = Seq(
     CUSTOM_METRIC_SST_FILE_SIZE, CUSTOM_METRIC_GET_TIME, CUSTOM_METRIC_PUT_TIME,
@@ -1229,7 +1233,7 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS,
     CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES,
     CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME, CUSTOM_METRIC_LOAD_TIME, CUSTOM_METRIC_REPLAY_CHANGE_LOG,
-    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES)
+    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES, CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED)
 
   val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreSnapshotLastUploadInstanceMetric()
 
