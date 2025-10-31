@@ -486,6 +486,69 @@ Aggregate [(length(kll_sketch_to_string_double(kll_sketch_agg_double(col1#x, Som
 
 
 -- !query
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1)) AS n_bigint
+FROM t_long_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1#xL, None, 0, 0)) AS n_bigint#xL]
++- SubqueryAlias spark_catalog.default.t_long_1_5_through_7_11
+   +- Relation spark_catalog.default.t_long_1_5_through_7_11[col1#xL,col2#xL] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1)) AS n_byte
+FROM t_byte_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1#x, None, 0, 0)) AS n_byte#xL]
++- SubqueryAlias spark_catalog.default.t_byte_1_5_through_7_11
+   +- Relation spark_catalog.default.t_byte_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1)) AS n_short
+FROM t_short_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1#x, None, 0, 0)) AS n_short#xL]
++- SubqueryAlias spark_catalog.default.t_short_1_5_through_7_11
+   +- Relation spark_catalog.default.t_short_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1)) AS n_int
+FROM t_int_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1#x, None, 0, 0)) AS n_int#xL]
++- SubqueryAlias spark_catalog.default.t_int_1_5_through_7_11
+   +- Relation spark_catalog.default.t_int_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_float(kll_sketch_agg_float(col1)) AS n_float
+FROM t_float_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_float(kll_sketch_agg_float(col1#x, None, 0, 0)) AS n_float#xL]
++- SubqueryAlias spark_catalog.default.t_float_1_5_through_7_11
+   +- Relation spark_catalog.default.t_float_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_double(kll_sketch_agg_double(col1)) AS n_double
+FROM t_double_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_double(kll_sketch_agg_double(col1#x, None, 0, 0)) AS n_double#xL]
++- SubqueryAlias spark_catalog.default.t_double_1_5_through_7_11
+   +- Relation spark_catalog.default.t_double_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1, 100)) AS n_k_100
+FROM t_long_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1#xL, Some(100), 0, 0)) AS n_k_100#xL]
++- SubqueryAlias spark_catalog.default.t_long_1_5_through_7_11
+   +- Relation spark_catalog.default.t_long_1_5_through_7_11[col1#xL,col2#xL] parquet
+
+
+-- !query
 SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
@@ -996,6 +1059,54 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "kll_sketch_agg_bigint(col1, '100')"
   } ]
 }
+
+
+-- !query
+SELECT kll_sketch_get_n_bigint(X'deadbeef') AS invalid_binary_bigint
+-- !query analysis
+Project [kll_sketch_get_n_bigint(0xDEADBEEF) AS invalid_binary_bigint#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT kll_sketch_get_n_float(X'cafebabe') AS invalid_binary_float
+-- !query analysis
+Project [kll_sketch_get_n_float(0xCAFEBABE) AS invalid_binary_float#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT kll_sketch_get_n_double(X'12345678') AS invalid_binary_double
+-- !query analysis
+Project [kll_sketch_get_n_double(0x12345678) AS invalid_binary_double#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_float(col1)) AS type_mismatch_bigint_float
+FROM t_float_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_bigint(kll_sketch_agg_float(col1#x, None, 0, 0)) AS type_mismatch_bigint_float#xL]
++- SubqueryAlias spark_catalog.default.t_float_1_5_through_7_11
+   +- Relation spark_catalog.default.t_float_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_float(kll_sketch_agg_bigint(col1)) AS type_mismatch_float_bigint
+FROM t_long_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_float(kll_sketch_agg_bigint(col1#xL, None, 0, 0)) AS type_mismatch_float_bigint#xL]
++- SubqueryAlias spark_catalog.default.t_long_1_5_through_7_11
+   +- Relation spark_catalog.default.t_long_1_5_through_7_11[col1#xL,col2#xL] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_double(kll_sketch_agg_bigint(col1)) AS type_mismatch_double_bigint
+FROM t_long_1_5_through_7_11
+-- !query analysis
+Aggregate [kll_sketch_get_n_double(kll_sketch_agg_bigint(col1#xL, None, 0, 0)) AS type_mismatch_double_bigint#xL]
++- SubqueryAlias spark_catalog.default.t_long_1_5_through_7_11
+   +- Relation spark_catalog.default.t_long_1_5_through_7_11[col1#xL,col2#xL] parquet
 
 
 -- !query

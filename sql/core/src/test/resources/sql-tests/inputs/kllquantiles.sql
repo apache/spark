@@ -238,6 +238,32 @@ FROM t_float_1_5_through_7_11;
 SELECT LENGTH(kll_sketch_to_string_double(kll_sketch_agg_double(col1, 300))) > 0 AS k_double_sketch
 FROM t_double_1_5_through_7_11;
 
+-- Tests for kll_sketch_get_n functions
+-- BIGINT sketches
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1)) AS n_bigint
+FROM t_long_1_5_through_7_11;
+
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1)) AS n_byte
+FROM t_byte_1_5_through_7_11;
+
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1)) AS n_short
+FROM t_short_1_5_through_7_11;
+
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1)) AS n_int
+FROM t_int_1_5_through_7_11;
+
+-- FLOAT sketches
+SELECT kll_sketch_get_n_float(kll_sketch_agg_float(col1)) AS n_float
+FROM t_float_1_5_through_7_11;
+
+-- DOUBLE sketches
+SELECT kll_sketch_get_n_double(kll_sketch_agg_double(col1)) AS n_double
+FROM t_double_1_5_through_7_11;
+
+-- Test with different k values
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(col1, 100)) AS n_k_100
+FROM t_long_1_5_through_7_11;
+
 -- Negative tests
 -- These queries should fail with type mismatch or validation errors
 
@@ -377,6 +403,35 @@ FROM t_double_1_5_through_7_11;
 
 -- k parameter has wrong type (STRING instead of INT)
 SELECT kll_sketch_agg_bigint(col1, '100') AS k_wrong_type
+FROM t_long_1_5_through_7_11;
+
+-- Negative tests for kll_sketch_get_n functions
+-- Invalid binary data
+SELECT kll_sketch_get_n_bigint(X'deadbeef') AS invalid_binary_bigint;
+
+SELECT kll_sketch_get_n_float(X'cafebabe') AS invalid_binary_float;
+
+SELECT kll_sketch_get_n_double(X'12345678') AS invalid_binary_double;
+
+-- Note: get_n functions cannot detect sketch type mismatches because they just
+-- read the count from the binary data. This query succeeds even though we're using
+-- a BIGINT get_n function on a FLOAT sketch. The count is stored the same way
+-- regardless of the sketch's data type, so it returns the correct count value.
+SELECT kll_sketch_get_n_bigint(kll_sketch_agg_float(col1)) AS type_mismatch_bigint_float
+FROM t_float_1_5_through_7_11;
+
+-- Note: get_n functions cannot detect sketch type mismatches because they just
+-- read the count from the binary data. This query succeeds even though we're using
+-- a FLOAT get_n function on a BIGINT sketch. The count is stored the same way
+-- regardless of the sketch's data type, so it returns the correct count value.
+SELECT kll_sketch_get_n_float(kll_sketch_agg_bigint(col1)) AS type_mismatch_float_bigint
+FROM t_long_1_5_through_7_11;
+
+-- Note: get_n functions cannot detect sketch type mismatches because they just
+-- read the count from the binary data. This query succeeds even though we're using
+-- a DOUBLE get_n function on a BIGINT sketch. The count is stored the same way
+-- regardless of the sketch's data type, so it returns the correct count value.
+SELECT kll_sketch_get_n_double(kll_sketch_agg_bigint(col1)) AS type_mismatch_double_bigint
 FROM t_long_1_5_through_7_11;
 
 -- Clean up

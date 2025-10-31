@@ -123,6 +123,100 @@ abstract class KllSketchToStringBase
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
+    _FUNC_(expr) - Returns the number of items collected in the sketch.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(kll_sketch_agg_bigint(col)) FROM VALUES (1), (2), (3), (4), (5) tab(col);
+       5
+  """,
+  group = "misc_funcs",
+  since = "4.1.0")
+case class KllSketchGetNBigint(child: Expression) extends KllSketchGetNBase {
+  override protected def withNewChildInternal(newChild: Expression): KllSketchGetNBigint =
+    copy(child = newChild)
+  override def prettyName: String = "kll_sketch_get_n_bigint"
+  override def nullSafeEval(input: Any): Any = {
+    try {
+      val buffer = input.asInstanceOf[Array[Byte]]
+      val sketch = KllLongsSketch.wrap(Memory.wrap(buffer))
+      sketch.getN()
+    } catch {
+      case e: Exception =>
+        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the number of items collected in the sketch.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(kll_sketch_agg_float(col)) FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
+       5
+  """,
+  group = "misc_funcs",
+  since = "4.1.0")
+case class KllSketchGetNFloat(child: Expression) extends KllSketchGetNBase {
+  override protected def withNewChildInternal(newChild: Expression): KllSketchGetNFloat =
+    copy(child = newChild)
+  override def prettyName: String = "kll_sketch_get_n_float"
+  override def nullSafeEval(input: Any): Any = {
+    try {
+      val buffer = input.asInstanceOf[Array[Byte]]
+      val sketch = KllFloatsSketch.wrap(Memory.wrap(buffer))
+      sketch.getN()
+    } catch {
+      case e: Exception =>
+        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the number of items collected in the sketch.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(kll_sketch_agg_double(col)) FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
+       5
+  """,
+  group = "misc_funcs",
+  since = "4.1.0")
+case class KllSketchGetNDouble(child: Expression) extends KllSketchGetNBase {
+  override protected def withNewChildInternal(newChild: Expression): KllSketchGetNDouble =
+    copy(child = newChild)
+  override def prettyName: String = "kll_sketch_get_n_double"
+  override def nullSafeEval(input: Any): Any = {
+    try {
+      val buffer = input.asInstanceOf[Array[Byte]]
+      val sketch = KllDoublesSketch.wrap(Memory.wrap(buffer))
+      sketch.getN()
+    } catch {
+      case e: Exception =>
+        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+    }
+  }
+}
+
+/** This is a base class for the above expressions to reduce boilerplate. */
+abstract class KllSketchGetNBase
+    extends UnaryExpression
+        with CodegenFallback
+        with ImplicitCastInputTypes {
+  override def dataType: DataType = LongType
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
+  override def nullIntolerant: Boolean = true
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
     _FUNC_(left, right) - Merges two sketch buffers together into one.
   """,
   examples = """
