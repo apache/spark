@@ -996,12 +996,12 @@ class RocksDB(
    * Convert the given list of value row bytes into a single byte array. The returned array
    * bytes supports additional values to be later merged to it.
    */
-  private def getListValuesInArrayBytes(values: List[Array[Byte]]): Array[Byte] = {
+  private def getListValuesInArrayByte(values: List[Array[Byte]]): Array[Byte] = {
 
     // Delimit each value row bytes with a single byte delimiter, the last
     // value row won't have a delimiter at the end.
     val delimiterNum = values.length - 1
-    // The bytes in valuesWithCheckSum already include the bytes length prefix
+    // The bytes in values already include the bytes length prefix
     val totalSize = values.map(_.length).sum +
       delimiterNum // for each delimiter
 
@@ -1041,7 +1041,7 @@ class RocksDB(
       key
     }
 
-    val valueWithChecksum = getListValuesInArrayBytes(values)
+    val valuesInArrayByte = getListValuesInArrayByte(values)
 
     val columnFamilyName = if (deriveCfName && useColumnFamilies) {
       val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
@@ -1051,8 +1051,8 @@ class RocksDB(
     }
 
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
-    db.put(writeOptions, keyWithPrefix, valueWithChecksum)
-    changelogWriter.foreach(_.put(keyWithPrefix, valueWithChecksum))
+    db.put(writeOptions, keyWithPrefix, valuesInArrayByte)
+    changelogWriter.foreach(_.put(keyWithPrefix, valuesInArrayByte))
   }
 
 
@@ -1118,11 +1118,11 @@ class RocksDB(
       cfName
     }
 
-    val valueWithChecksum = getListValuesInArrayBytes(values)
+    val valueInArrayByte = getListValuesInArrayByte(values)
 
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
-    db.merge(writeOptions, keyWithPrefix, valueWithChecksum)
-    changelogWriter.foreach(_.merge(keyWithPrefix, valueWithChecksum))
+    db.merge(writeOptions, keyWithPrefix, valueInArrayByte)
+    changelogWriter.foreach(_.merge(keyWithPrefix, valueInArrayByte))
   }
 
   /**
