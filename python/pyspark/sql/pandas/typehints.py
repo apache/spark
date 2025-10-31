@@ -353,6 +353,9 @@ def infer_group_arrow_eval_type(
             return_annotation, parameter_check_func=lambda t: t == pa.RecordBatch
         )
     )
+    if is_iterator_batch:
+        return PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
+
     # Tuple[pa.Scalar, ...], Iterator[pa.RecordBatch] -> Iterator[pa.RecordBatch]
     is_iterator_batch_with_keys = (
         len(parameters_sig) == 2
@@ -364,19 +367,21 @@ def infer_group_arrow_eval_type(
             return_annotation, parameter_check_func=lambda t: t == pa.RecordBatch
         )
     )
-
-    if is_iterator_batch or is_iterator_batch_with_keys:
+    if is_iterator_batch_with_keys:
         return PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
 
     # pa.Table -> pa.Table
     is_table = (
         len(parameters_sig) == 1 and parameters_sig[0] == pa.Table and return_annotation == pa.Table
     )
+    if is_table:
+        return PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+
     # Tuple[pa.Scalar, ...], pa.Table -> pa.Table
     is_table_with_keys = (
         len(parameters_sig) == 2 and parameters_sig[1] == pa.Table and return_annotation == pa.Table
     )
-    if is_table or is_table_with_keys:
+    if is_table_with_keys:
         return PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
 
     return None
@@ -441,6 +446,9 @@ def infer_group_pandas_eval_type(
             return_annotation, parameter_check_func=lambda t: t == pd.DataFrame
         )
     )
+    if is_iterator_dataframe:
+        return PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
+
     # Tuple[Any, ...], Iterator[pd.DataFrame] -> Iterator[pd.DataFrame]
     is_iterator_dataframe_with_keys = (
         len(parameters_sig) == 2
@@ -452,8 +460,7 @@ def infer_group_pandas_eval_type(
             return_annotation, parameter_check_func=lambda t: t == pd.DataFrame
         )
     )
-
-    if is_iterator_dataframe or is_iterator_dataframe_with_keys:
+    if is_iterator_dataframe_with_keys:
         return PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
 
     # pd.DataFrame -> pd.DataFrame
@@ -462,13 +469,16 @@ def infer_group_pandas_eval_type(
         and parameters_sig[0] == pd.DataFrame
         and return_annotation == pd.DataFrame
     )
+    if is_dataframe:
+        return PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
     # Tuple[Any, ...], pd.DataFrame -> pd.DataFrame
     is_dataframe_with_keys = (
         len(parameters_sig) == 2
         and parameters_sig[1] == pd.DataFrame
         and return_annotation == pd.DataFrame
     )
-    if is_dataframe or is_dataframe_with_keys:
+    if is_dataframe_with_keys:
         return PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 
     return None
