@@ -16,9 +16,10 @@
 #
 
 import unittest
+import logging
 from typing import cast
 
-from pyspark.util import PythonEvalType
+from pyspark.util import PythonEvalType, is_remote_only
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import (
     array,
@@ -825,6 +826,40 @@ class GroupedAggPandasUDFTestsMixin:
                     ).collect()
 
                     self.assertEqual(expected, result)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_grouped_agg_pandas_udf_with_logging(self):
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def my_grouped_agg_pandas_udf(x):
+            assert isinstance(x, pd.Series)
+            logger = logging.getLogger("test_grouped_agg_pandas")
+            logger.warning(f"grouped agg pandas udf: {len(x)}")
+            return x.sum()
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                df.groupby("id").agg(my_grouped_agg_pandas_udf("v").alias("result")),
+                [Row(id=1, result=3.0), Row(id=2, result=18.0)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"grouped agg pandas udf: {n}",
+                    context={"func_name": my_grouped_agg_pandas_udf.__name__},
+                    logger="test_grouped_agg_pandas",
+                )
+                for n in [2, 3]
+            ],
+        )
 
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):

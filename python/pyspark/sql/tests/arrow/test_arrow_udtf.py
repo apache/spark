@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+import logging
 from typing import Iterator, Optional
 
 from pyspark.errors import PySparkAttributeError
@@ -23,6 +24,7 @@ from pyspark.sql.functions import arrow_udtf, lit
 from pyspark.sql.types import Row, StructType, StructField, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pyarrow, pyarrow_requirement_message
 from pyspark.testing import assertDataFrameEqual
+from pyspark.util import is_remote_only
 
 if have_pyarrow:
     import pyarrow as pa
@@ -1684,6 +1686,55 @@ class ArrowUDTFTestsMixin:
         """
         )
         assertDataFrameEqual(sql_result_df2, expected_df2)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_arrow_udtf_with_logging(self):
+        import pyarrow as pa
+
+        @arrow_udtf(returnType="id bigint, doubled bigint")
+        class TestArrowUDTFWithLogging:
+            def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
+                assert isinstance(
+                    table_data, pa.RecordBatch
+                ), f"Expected pa.RecordBatch, got {type(table_data)}"
+
+                logger = logging.getLogger("test_arrow_udtf")
+                logger.warning(f"arrow udtf: {table_data.to_pydict()}")
+
+                # Convert record batch to table
+                table = pa.table(table_data)
+
+                # Get the id column and create doubled values
+                id_column = table.column("id")
+                doubled_values = pa.compute.multiply(id_column, pa.scalar(2))
+
+                yield pa.table({"id": id_column, "doubled": doubled_values})
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "3",
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                TestArrowUDTFWithLogging(self.spark.range(9, numPartitions=2).asTable()),
+                [Row(id=i, doubled=i * 2) for i in range(9)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"arrow udtf: {dict(id=lst)}",
+                    context={"class_name": "TestArrowUDTFWithLogging", "func_name": "eval"},
+                    logger="test_arrow_udtf",
+                )
+                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+            ],
+        )
 
 
 class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):

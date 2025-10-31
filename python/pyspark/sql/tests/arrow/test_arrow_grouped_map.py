@@ -17,6 +17,7 @@
 import inspect
 import os
 import time
+import logging
 from typing import Iterator, Tuple
 import unittest
 
@@ -29,6 +30,8 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.util import is_remote_only
 
 if have_pyarrow:
     import pyarrow as pa
@@ -393,6 +396,80 @@ class ApplyInArrowTestsMixin:
         for batch_size in [0, -1]:
             with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
                 ApplyInArrowTestsMixin.test_apply_in_arrow(self)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_apply_in_arrow_with_logging(self):
+        import pyarrow as pa
+
+        def func_with_logging(group):
+            assert isinstance(group, pa.Table)
+            logger = logging.getLogger("test_arrow_grouped_map")
+            logger.warning(f"arrow grouped map: {group.to_pydict()}")
+            return group
+
+        df = self.spark.range(9).withColumn("value", col("id") * 10)
+        grouped_df = df.groupBy((col("id") % 2).cast("int"))
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                grouped_df.applyInArrow(func_with_logging, "id long, value long"),
+                df,
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                    context={"func_name": func_with_logging.__name__},
+                    logger="test_arrow_grouped_map",
+                )
+                for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
+            ],
+        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_apply_in_arrow_iter_with_logging(self):
+        import pyarrow as pa
+
+        def func_with_logging(group: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            logger = logging.getLogger("test_arrow_grouped_map")
+            for batch in group:
+                assert isinstance(batch, pa.RecordBatch)
+                logger.warning(f"arrow grouped map: {batch.to_pydict()}")
+                yield batch
+
+        df = self.spark.range(9).withColumn("value", col("id") * 10)
+        grouped_df = df.groupBy((col("id") % 2).cast("int"))
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": 3,
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                grouped_df.applyInArrow(func_with_logging, "id long, value long"),
+                df,
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                    context={"func_name": func_with_logging.__name__},
+                    logger="test_arrow_grouped_map",
+                )
+                for lst in [[0, 2, 4], [6, 8], [1, 3, 5], [7]]
+            ],
+        )
 
 
 class ApplyInArrowTests(ApplyInArrowTestsMixin, ReusedSQLTestCase):
