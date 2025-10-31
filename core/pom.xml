@@ -313,6 +313,16 @@
       <artifactId>netty-transport-native-kqueue</artifactId>
       <classifier>osx-x86_64</classifier>
     </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-io_uring</artifactId>
+      <classifier>linux-x86_64</classifier>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-io_uring</artifactId>
+      <classifier>linux-aarch_64</classifier>
+    </dependency>
     <!-- Netty End -->
     <dependency>
       <groupId>com.clearspring.analytics</groupId>
