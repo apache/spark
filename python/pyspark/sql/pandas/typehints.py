@@ -522,11 +522,9 @@ def check_iterator_annotation(
 def check_union_annotation(
     annotation: Any, parameter_check_func: Optional[Callable[[Any], bool]] = None
 ) -> bool:
-    import typing
-
     # Note that we cannot rely on '__origin__' in other type hints as it has changed from version
     # to version.
     origin = getattr(annotation, "__origin__", None)
-    return origin == typing.Union and (
+    return origin == Union and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__))
     )
