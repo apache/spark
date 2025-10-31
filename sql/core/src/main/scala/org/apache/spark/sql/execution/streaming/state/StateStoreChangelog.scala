@@ -30,7 +30,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumFSDataInputStream}
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.state.RecordType.RecordType
 import org.apache.spark.util.NextIterator
@@ -394,6 +394,15 @@ class StateStoreChangelogReaderFactory(
       }
     } finally {
       if (input != null) {
+        sourceStream match {
+          case c: ChecksumFSDataInputStream =>
+            // No need to do checksum verification since the reader is still going to read the
+            // entire file. To avoid double verification and since we only read version here.
+            // When input.close() below is called, nothing happens for sourceStream
+            // since it is already closed here.
+            c.closeWithoutChecksumVerification()
+          case _ =>
+        }
         input.close()
         // input is not set to null because it is effectively lazy.
       }
