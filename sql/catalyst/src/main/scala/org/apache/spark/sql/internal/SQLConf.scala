@@ -3430,6 +3430,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED =
+    buildConf("spark.sql.streaming.checkpoint.fileChecksum.enabled")
+      .internal()
+      .doc("When true, checksum would be generated and verified for checkpoint files. " +
+        "This is used to detect file corruption.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
@@ -6727,6 +6736,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
+
+  def checkpointFileChecksumEnabled: Boolean = getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 

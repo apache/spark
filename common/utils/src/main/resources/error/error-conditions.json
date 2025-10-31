@@ -626,6 +626,13 @@
     ],
     "sqlState" : "42P08"
   },
+  "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
+    "message" : [
+      "Checksum verification failed, the file may be corrupted. File: <fileName>",
+      "Expected (file size: <expectedSize>, checksum: <expectedChecksum>), Computed (file size: <computedSize>, checksum: <computedChecksum>)."
+    ],
+    "sqlState" : "XX000"
+  },
   "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND" : {
     "message" : [
       "Checkpoint block <rddBlockId> not found!",
