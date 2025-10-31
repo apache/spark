@@ -357,10 +357,7 @@ private[kafka010] class KafkaMicroBatchStream(
           }
         }
       } else {
-        // If we are in micro-batch mode, we need to get the latest partition offsets at the
-        // start of the batch and recalculate the latest offsets at the end for backlog
-        // estimation.
-        Some(kafkaOffsetReader.fetchLatestOffsets(Some(latestPartitionOffsets)))
+        Some(latestPartitionOffsets)
       }
 
       KafkaMicroBatchStream.metrics(latestConsumedOffset, reCalculatedLatestPartitionOffsets)
