@@ -1008,7 +1008,7 @@ class XmlTokenizer(
   }
 }
 
-object StaxXmlParser extends Logging {
+object StaxXmlParser {
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
    */
@@ -1279,23 +1279,18 @@ object StaxXmlParser extends Logging {
     // Try parsing the value as decimal
     val decimalParser = ExprUtils.getDecimalParser(options.locale)
     try {
-      allCatch opt decimalParser(value) match {
-        case Some(decimalValue) =>
-          var d = decimalValue
-          if (d.scale() < 0) {
-            d = d.setScale(0)
-          }
-          if (d.scale <= VariantUtil.MAX_DECIMAL16_PRECISION &&
-            d.precision <= VariantUtil.MAX_DECIMAL16_PRECISION) {
-            builder.appendDecimal(d)
-            return
-          }
-        case _ =>
+      var d = decimalParser(value)
+      if (d.scale() < 0) {
+        d = d.setScale(0)
+      }
+      if (d.scale <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+        d.precision <= VariantUtil.MAX_DECIMAL16_PRECISION) {
+        builder.appendDecimal(d)
+        return
       }
     } catch {
-      case NonFatal(e) =>
+      case NonFatal(_) =>
         // Ignore the exception and parse it as a string later
-        logWarning("Failed to parse XML character as decimal.", e)
     }
 
     // If the character is of other primitive types, parse it as a string
