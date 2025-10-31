@@ -21,6 +21,9 @@ import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 
@@ -35,23 +38,27 @@ class STUtilsSuite {
     0x00, 0x00, 0x00, (byte)0xF0, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40};
 
   // A sample Geography byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
-  private final byte[] testGeographySrid = new byte[] {(byte)0xE6, 0x10, 0x00, 0x00};
+  private final int testGeographySrid = 4326;
   private final byte[] testGeographyBytes;
 
   // A sample Geometry byte array for testing purposes, representing a POINT(1 2) with SRID 0.
-  private final byte[] testGeometrySrid = new byte[] {0x00, 0x00, 0x00, 0x00};
+  private final int testGeometrySrid = 0;
   private final byte[] testGeometryBytes;
 
   {
-    int sridLen = testGeographySrid.length;
-    int wkbLen = testWkb.length;
+    // Initialize headers.
+    ByteOrder end = Geo.DEFAULT_ENDIANNESS;
+    int sridLen = Geo.HEADER_SIZE;
+    byte[] geogSrid = ByteBuffer.allocate(sridLen).order(end).putInt(testGeographySrid).array();
+    byte[] geomSrid = ByteBuffer.allocate(sridLen).order(end).putInt(testGeometrySrid).array();
     // Initialize GEOGRAPHY.
+    int wkbLen = testWkb.length;
     testGeographyBytes = new byte[sridLen + wkbLen];
-    System.arraycopy(testGeographySrid, 0, testGeographyBytes, 0, sridLen);
+    System.arraycopy(geogSrid, 0, testGeographyBytes, 0, sridLen);
     System.arraycopy(testWkb, 0, testGeographyBytes, sridLen, wkbLen);
     // Initialize GEOMETRY.
     testGeometryBytes = new byte[sridLen + wkbLen];
-    System.arraycopy(testGeometrySrid, 0, testGeometryBytes, 0, sridLen);
+    System.arraycopy(geomSrid, 0, testGeometryBytes, 0, sridLen);
     System.arraycopy(testWkb, 0, testGeometryBytes, sridLen, wkbLen);
   }
 
@@ -88,6 +95,19 @@ class STUtilsSuite {
     GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkb);
     assertNotNull(geometryVal);
     assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
+  }
+
+  // ST_Srid
+  @Test
+  void testStSridGeography() {
+    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+    assertEquals(testGeographySrid, STUtils.stSrid(geographyVal));
+  }
+
+  @Test
+  void testStSridGeometry() {
+    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
+    assertEquals(testGeometrySrid, STUtils.stSrid(geometryVal));
   }
 
 }
