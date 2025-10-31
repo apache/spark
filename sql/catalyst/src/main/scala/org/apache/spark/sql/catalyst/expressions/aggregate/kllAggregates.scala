@@ -165,7 +165,7 @@ case class KllSketchAggBigint(
   /** Wraps the byte array into a sketch instance. */
   override def deserialize(buffer: Array[Byte]): KllLongsSketch = if (buffer.nonEmpty) {
     try {
-      KllLongsSketch.wrap(Memory.wrap(buffer))
+      KllLongsSketch.heapify(Memory.wrap(buffer))
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
@@ -301,7 +301,7 @@ case class KllSketchAggFloat(
   /** Wraps the byte array into a sketch instance. */
   override def deserialize(buffer: Array[Byte]): KllFloatsSketch = if (buffer.nonEmpty) {
     try {
-      KllFloatsSketch.wrap(Memory.wrap(buffer))
+      KllFloatsSketch.heapify(Memory.wrap(buffer))
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
@@ -439,7 +439,7 @@ case class KllSketchAggDouble(
   /** Wraps the byte array into a sketch instance. */
   override def deserialize(buffer: Array[Byte]): KllDoublesSketch = if (buffer.nonEmpty) {
     try {
-      KllDoublesSketch.wrap(Memory.wrap(buffer))
+      KllDoublesSketch.heapify(Memory.wrap(buffer))
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)

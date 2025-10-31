@@ -45,7 +45,7 @@ case class KllSketchToStringBigint(child: Expression) extends KllSketchToStringB
   override def nullSafeEval(input: Any): Any = {
     try {
       val buffer = input.asInstanceOf[Array[Byte]]
-      val sketch = KllLongsSketch.wrap(Memory.wrap(buffer))
+      val sketch = KllLongsSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
       case e: Exception =>
@@ -73,7 +73,7 @@ case class KllSketchToStringFloat(child: Expression) extends KllSketchToStringBa
   override def nullSafeEval(input: Any): Any = {
     try {
       val buffer = input.asInstanceOf[Array[Byte]]
-      val sketch = KllFloatsSketch.wrap(Memory.wrap(buffer))
+      val sketch = KllFloatsSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
       case e: Exception =>
@@ -101,7 +101,7 @@ case class KllSketchToStringDouble(child: Expression) extends KllSketchToStringB
   override def nullSafeEval(input: Any): Any = {
     try {
       val buffer = input.asInstanceOf[Array[Byte]]
-      val sketch = KllDoublesSketch.wrap(Memory.wrap(buffer))
+      val sketch = KllDoublesSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
       case e: Exception =>
@@ -139,7 +139,7 @@ case class KllSketchGetNBigint(child: Expression) extends KllSketchGetNBase {
   override def nullSafeEval(input: Any): Any = {
     try {
       val buffer = input.asInstanceOf[Array[Byte]]
-      val sketch = KllLongsSketch.wrap(Memory.wrap(buffer))
+      val sketch = KllLongsSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
       case e: Exception =>
@@ -167,7 +167,7 @@ case class KllSketchGetNFloat(child: Expression) extends KllSketchGetNBase {
   override def nullSafeEval(input: Any): Any = {
     try {
       val buffer = input.asInstanceOf[Array[Byte]]
-      val sketch = KllFloatsSketch.wrap(Memory.wrap(buffer))
+      val sketch = KllFloatsSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
       case e: Exception =>
@@ -195,7 +195,7 @@ case class KllSketchGetNDouble(child: Expression) extends KllSketchGetNBase {
   override def nullSafeEval(input: Any): Any = {
     try {
       val buffer = input.asInstanceOf[Array[Byte]]
-      val sketch = KllDoublesSketch.wrap(Memory.wrap(buffer))
+      val sketch = KllDoublesSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
       case e: Exception =>

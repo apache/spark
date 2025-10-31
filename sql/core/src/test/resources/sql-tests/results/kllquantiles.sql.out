@@ -246,7 +246,7 @@ SELECT
 -- !query schema
 struct<result:string>
 -- !query output
-### KllDirectCompactKllLongsSketch Summary:
+### KllKllLongsSketch Summary:
 
 
 -- !query
@@ -1134,9 +1134,16 @@ org.apache.spark.SparkRuntimeException
 SELECT kll_sketch_get_n_bigint(kll_sketch_agg_float(col1)) AS type_mismatch_bigint_float
 FROM t_float_1_5_through_7_11
 -- !query schema
-struct<type_mismatch_bigint_float:bigint>
+struct<>
 -- !query output
-7
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "reason" : "reqOffset: 40, reqLength: 56, (reqOff + reqLen): 96, allocSize: 60"
+  }
+}
 
 
 -- !query
