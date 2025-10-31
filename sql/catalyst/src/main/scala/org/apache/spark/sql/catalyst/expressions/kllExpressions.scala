@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.datasketches.kll._
+import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
