@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Test suite for the Geography server-side execution class.
  */
-class GeographyExecutionTest {
+class GeographyExecutionSuite {
 
   // A sample Geography byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
   private final byte[] testGeographyVal = new byte[] {

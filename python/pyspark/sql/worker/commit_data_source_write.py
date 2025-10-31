@@ -21,6 +21,7 @@ from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError
+from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -91,12 +92,13 @@ def main(infile: IO, outfile: IO) -> None:
         # Receive a boolean to indicate whether to invoke `abort`.
         abort = read_bool(infile)
 
-        # Commit or abort the Python data source write.
-        # Note the commit messages can be None if there are failed tasks.
-        if abort:
-            writer.abort(commit_messages)
-        else:
-            writer.commit(commit_messages)
+        with capture_outputs():
+            # Commit or abort the Python data source write.
+            # Note the commit messages can be None if there are failed tasks.
+            if abort:
+                writer.abort(commit_messages)
+            else:
+                writer.commit(commit_messages)
 
         # Send a status code back to JVM.
         write_int(0, outfile)

@@ -34,7 +34,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumCheckpointFileManager, ChecksumFile}
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SizeEstimator, Utils}
@@ -428,6 +428,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     // `loadedMaps` will be de-referenced and GCed automatically when their reference
     // counts become 0.
     synchronized { loadedMaps.clear() }
+    fm.close()
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
@@ -461,7 +462,22 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     Ordering[Long].reverse)
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
   // Visible to state pkg for testing.
-  private[state] lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
+  private[state] lazy val fm = {
+    val mgr = CheckpointFileManager.create(baseDir, hadoopConf)
+    if (storeConf.checkpointFileChecksumEnabled) {
+      new ChecksumCheckpointFileManager(
+        mgr,
+        // Allowing this for perf, since we do orphan checksum file cleanup in maintenance anyway
+        allowConcurrentDelete = true,
+        // We need 2 threads per fm caller to avoid blocking
+        // (one for main file and another for checksum file).
+        // Since this fm is used by both query task and maintenance thread,
+        // then we need 2 * 2 = 4 threads.
+        numThreads = 4)
+    } else {
+      mgr
+    }
+  }
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
   private val loadedMapCacheHitCount: LongAdder = new LongAdder
@@ -503,7 +519,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    * Note that this will look up the files to determined the latest known version.
    */
   private[state] def latestIterator(): Iterator[UnsafeRowPair] = synchronized {
-    val versionsInFiles = fetchFiles().map(_.version).toSet
+    val storeFiles = fetchFiles()._1
+    val versionsInFiles = storeFiles.map(_.version).toSet
     val versionsLoaded = loadedMaps.keySet.asScala
     val allKnownVersions = versionsInFiles ++ versionsLoaded
     if (allKnownVersions.nonEmpty) {
@@ -908,7 +925,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Perform a snapshot of the store to allow delta files to be consolidated */
   private def doSnapshot(opType: String, throwEx: Boolean = false): Unit = {
     try {
-      val (files, e1) = Utils.timeTakenMs(fetchFiles())
+      val ((files, _), e1) = Utils.timeTakenMs(fetchFiles())
       logDebug(s"fetchFiles() took $e1 ms.")
 
       if (files.nonEmpty) {
@@ -941,7 +958,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    */
   private[state] def cleanup(): Unit = {
     try {
-      val (files, e1) = Utils.timeTakenMs(fetchFiles())
+      val ((files, checksumFiles), e1) = Utils.timeTakenMs(fetchFiles())
       logDebug(s"fetchFiles() took $e1 ms.")
 
       if (files.nonEmpty) {
@@ -959,6 +976,22 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             log"${MDC(LogKeys.FILE_VERSION, earliestFileToRetain.version)} for " +
             log"${MDC(LogKeys.STATE_STORE_PROVIDER, this)}: " +
             log"${MDC(LogKeys.FILE_NAME, filesToDelete.mkString(", "))}")
+
+          // Do this only if we see checksum files in the initial dir listing
+          // To avoid checking for orphan checksum files, if there is no checksum files
+          // (e.g. file checksum was never enabled)
+          if (checksumFiles.nonEmpty) {
+            StateStoreProvider.deleteOrphanChecksumFiles(
+              fm,
+              checksumFiles,
+              // using empty here because the state files were deleted using fs above
+              // (for parallel delete) instead of fm. Hence, checksum files were not
+              // deleted and will need to be deleted here.
+              deletedStoreFiles = Seq.empty,
+              earliestFileToRetain.version,
+              storeConf.checkpointFileChecksumEnabled
+            )
+          }
         }
       }
     } catch {
@@ -995,7 +1028,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /** Fetch all the files that back the store */
-  private def fetchFiles(): Seq[StoreFile] = {
+  private def fetchFiles(): (Seq[StoreFile], Seq[ChecksumFile]) = {
     val files: Seq[FileStatus] = try {
       fm.list(baseDir).toImmutableArraySeq
     } catch {
@@ -1022,8 +1055,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
     }
     val storeFiles = versionToFiles.values.toSeq.sortBy(_.version)
-    logDebug(s"Current set of files for $this: ${storeFiles.mkString(", ")}")
-    storeFiles
+    val checksumFiles = files
+      .filter(f => ChecksumCheckpointFileManager.isChecksumFile(f.getPath))
+      .map(f => ChecksumFile(f.getPath))
+    logDebug(s"Current set of files for $this: ${storeFiles.mkString(", ")}, " +
+      s"checksum files: ${checksumFiles.mkString(", ")}")
+
+    (storeFiles, checksumFiles)
   }
 
   // Visible to state pkg for testing.

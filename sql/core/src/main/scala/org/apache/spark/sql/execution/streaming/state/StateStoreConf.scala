@@ -96,6 +96,9 @@ class StateStoreConf(
   /** The compression codec used to compress delta and snapshot files. */
   val compressionCodec: String = sqlConf.stateStoreCompressionCodec
 
+  /** Whether file checksum generation and verification is enabled. */
+  val checkpointFileChecksumEnabled: Boolean = sqlConf.checkpointFileChecksumEnabled
+
   /** whether to validate state schema during query run. */
   val stateSchemaCheckEnabled = sqlConf.isStateSchemaCheckEnabled
 
