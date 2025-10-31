@@ -456,8 +456,22 @@ def infer_group_pandas_eval_type(
     if is_iterator_dataframe or is_iterator_dataframe_with_keys:
         return PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
 
-    # Default to non-iterator (standard grouped map)
-    return PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+    # pd.DataFrame -> pd.DataFrame
+    is_dataframe = (
+        len(parameters_sig) == 1
+        and parameters_sig[0] == pd.DataFrame
+        and return_annotation == pd.DataFrame
+    )
+    # Tuple[Any, ...], pd.DataFrame -> pd.DataFrame
+    is_dataframe_with_keys = (
+        len(parameters_sig) == 2
+        and parameters_sig[1] == pd.DataFrame
+        and return_annotation == pd.DataFrame
+    )
+    if is_dataframe or is_dataframe_with_keys:
+        return PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
+    return None
 
 
 def infer_group_pandas_eval_type_from_func(

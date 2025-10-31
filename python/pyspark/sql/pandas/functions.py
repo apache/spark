@@ -322,6 +322,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
     pyspark.sql.GroupedData.applyInArrow
     pyspark.sql.PandasCogroupedOps.applyInArrow
     pyspark.sql.UDFRegistration.register
+    pyspark.sql.GroupedData.applyInPandas
     """
     require_minimum_pyarrow_version()
 
@@ -345,6 +346,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     .. versionchanged:: 4.0.0
         Supports keyword-arguments in SCALAR and GROUPED_AGG type.
+
+    .. versionchanged:: 4.1.0
+        Supports iterator API in GROUPED_MAP type.
 
     Parameters
     ----------
