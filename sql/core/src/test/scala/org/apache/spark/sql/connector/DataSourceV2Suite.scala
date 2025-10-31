@@ -1028,36 +1028,26 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     assert(sub1.head.plan == sub2.head.plan,
       "Both subqueries should reference the same merged plan")
 
-    // Extract the aggregate from the merged plan
+    // Extract the aggregate from the merged plan sub1
     val agg = sub1.head.plan.collect {
       case a: Aggregate => a
     }.head
 
     // Check that the aggregate contains both max(i) and min(i)
-    val aggExprs = agg.aggregateExpressions
-
-    val hasMax = aggExprs.exists { expr =>
+    val aggFunctionSet = agg.aggregateExpressions.flatMap { expr =>
       expr.collect {
         case ae: org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression =>
-          ae.aggregateFunction match {
-            case _: org.apache.spark.sql.catalyst.expressions.aggregate.Max => true
-            case _ => false
-          }
-      }.nonEmpty
-    }
+          ae.aggregateFunction
+      }
+    }.toSet
 
-    val hasMin = aggExprs.exists { expr =>
-      expr.collect {
-        case ae: org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression =>
-          ae.aggregateFunction match {
-            case _: org.apache.spark.sql.catalyst.expressions.aggregate.Min => true
-            case _ => false
-          }
-      }.nonEmpty
-    }
-
-    assert(hasMax, "Aggregate should contain max(i)")
-    assert(hasMin, "Aggregate should contain min(i)")
+    assert(aggFunctionSet.size == 2, "Aggregate should contain exactly two aggregate functions")
+    assert(aggFunctionSet
+      .exists(_.isInstanceOf[org.apache.spark.sql.catalyst.expressions.aggregate.Max]),
+      "Aggregate should contain max(i)")
+    assert(aggFunctionSet
+      .exists(_.isInstanceOf[org.apache.spark.sql.catalyst.expressions.aggregate.Min]),
+      "Aggregate should contain min(i)")
 
     // Verify the query produces correct results
     checkAnswer(query, Row(9, 0))
