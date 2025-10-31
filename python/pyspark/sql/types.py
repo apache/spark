@@ -64,7 +64,7 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkKeyError,
 )
-from pyspark.sql._srs import (
+from pyspark.sql.geo_utils import (
     GeographicSpatialReferenceSystemMapper as _GeographicSRSMapper,
     CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
 )
@@ -548,7 +548,7 @@ class GeographyType(SpatialType):
     DEFAULT_ALG = "SPHERICAL"
     DEFAULT_SRID = 4326
 
-    def __init__(self, srid):
+    def __init__(self, srid: int | str):
         # Special string value "ANY" is used to represent the mixed SRID GEOGRAPHY type.
         if srid == "ANY":
             self.srid = GeographyType.MIXED_SRID
@@ -637,7 +637,7 @@ class GeometryType(SpatialType):
     """ The constructor for the GEOMETRY type can accept either a single valid geometric integer
     SRID value, or a special string value "ANY" used to represent a mixed SRID GEOMETRY type."""
 
-    def __init__(self, srid):
+    def __init__(self, srid: int | str):
         # Special string value "ANY" is used to represent the mixed SRID GEOMETRY type.
         if srid == "ANY":
             self.srid = GeometryType.MIXED_SRID
