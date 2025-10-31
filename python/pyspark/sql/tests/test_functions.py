@@ -80,6 +80,10 @@ class FunctionsTestsMixin:
 
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
+        # Temporarily disable Scala/Python parity check for ST geospatial functions, while the
+        # feature is under development. Once the geospatial module is stable, remove this.
+        missing_in_py = {fn for fn in missing_in_py if not fn.startswith("st_")}
+
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = set()
 
