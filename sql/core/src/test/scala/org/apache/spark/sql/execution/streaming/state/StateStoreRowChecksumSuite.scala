@@ -61,7 +61,7 @@ abstract class StateStoreRowChecksumSuite extends SharedSparkSession
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key, true.toString)
       // To avoid file checksum verification since we will be injecting corruption in this suite
-      // .set(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key, false.toString)
+      .set(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key, false.toString)
   }
 
   protected def withStateStoreProvider[T <: StateStoreProvider](
