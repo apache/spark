@@ -2471,6 +2471,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_ARTIFACT_PATH" : {
+    "message" : [
+      "Artifact with name <name> is invalid. The name must be a relative path and cannot reference parent/sibling/nephew directories."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_ATTRIBUTE_NAME_SYNTAX" : {
     "message" : [
       "Syntax error in the attribute name: <name>. Check that backticks appear in pairs, a quoted string is a complete name part and use a backtick only inside quoted name parts."
@@ -3459,6 +3465,16 @@
           "expects an integer literal, but got <invalidValue>."
         ]
       },
+      "INTERRUPT_TYPE_OPERATION_ID_REQUIRES_ID" : {
+        "message" : [
+          "INTERRUPT_TYPE_OPERATION_ID requested, but no operation_id provided."
+        ]
+      },
+      "INTERRUPT_TYPE_TAG_REQUIRES_TAG" : {
+        "message" : [
+          "INTERRUPT_TYPE_TAG requested, but no operation_tag provided."
+        ]
+      },
       "LENGTH" : {
         "message" : [
           "Expects `length` greater than or equal to 0, but got <length>."
@@ -3487,6 +3503,11 @@
       "START" : {
         "message" : [
           "Expects a positive or a negative value for `start`, but got 0."
+        ]
+      },
+      "STREAMING_LISTENER_COMMAND_MISSING" : {
+        "message" : [
+          "Missing command in StreamingQueryListenerBusCommand."
         ]
       },
       "STRING" : {
@@ -6343,6 +6364,11 @@
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
         "message" : [
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
+        ]
+      },
+      "INTERRUPT_TYPE" : {
+        "message" : [
+          "Unsupported interrupt type: <interruptType>."
         ]
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
