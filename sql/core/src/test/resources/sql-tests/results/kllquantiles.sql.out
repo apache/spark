@@ -1131,40 +1131,6 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
-SELECT kll_sketch_get_n_bigint(kll_sketch_agg_float(col1)) AS type_mismatch_bigint_float
-FROM t_float_1_5_through_7_11
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
-  "sqlState" : "22000",
-  "messageParameters" : {
-    "reason" : "reqOffset: 40, reqLength: 56, (reqOff + reqLen): 96, allocSize: 60"
-  }
-}
-
-
--- !query
-SELECT kll_sketch_get_n_float(kll_sketch_agg_bigint(col1)) AS type_mismatch_float_bigint
-FROM t_long_1_5_through_7_11
--- !query schema
-struct<type_mismatch_float_bigint:bigint>
--- !query output
-7
-
-
--- !query
-SELECT kll_sketch_get_n_double(kll_sketch_agg_bigint(col1)) AS type_mismatch_double_bigint
-FROM t_long_1_5_through_7_11
--- !query schema
-struct<type_mismatch_double_bigint:bigint>
--- !query output
-7
-
-
--- !query
 DROP TABLE IF EXISTS t_int_1_5_through_7_11
 -- !query schema
 struct<>

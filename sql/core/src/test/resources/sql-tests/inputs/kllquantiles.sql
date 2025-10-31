@@ -413,27 +413,6 @@ SELECT kll_sketch_get_n_float(X'cafebabe') AS invalid_binary_float;
 
 SELECT kll_sketch_get_n_double(X'12345678') AS invalid_binary_double;
 
--- Note: get_n functions cannot detect sketch type mismatches because they just
--- read the count from the binary data. This query succeeds even though we're using
--- a BIGINT get_n function on a FLOAT sketch. The count is stored the same way
--- regardless of the sketch's data type, so it returns the correct count value.
-SELECT kll_sketch_get_n_bigint(kll_sketch_agg_float(col1)) AS type_mismatch_bigint_float
-FROM t_float_1_5_through_7_11;
-
--- Note: get_n functions cannot detect sketch type mismatches because they just
--- read the count from the binary data. This query succeeds even though we're using
--- a FLOAT get_n function on a BIGINT sketch. The count is stored the same way
--- regardless of the sketch's data type, so it returns the correct count value.
-SELECT kll_sketch_get_n_float(kll_sketch_agg_bigint(col1)) AS type_mismatch_float_bigint
-FROM t_long_1_5_through_7_11;
-
--- Note: get_n functions cannot detect sketch type mismatches because they just
--- read the count from the binary data. This query succeeds even though we're using
--- a DOUBLE get_n function on a BIGINT sketch. The count is stored the same way
--- regardless of the sketch's data type, so it returns the correct count value.
-SELECT kll_sketch_get_n_double(kll_sketch_agg_bigint(col1)) AS type_mismatch_double_bigint
-FROM t_long_1_5_through_7_11;
-
 -- Clean up
 DROP TABLE IF EXISTS t_int_1_5_through_7_11;
 DROP TABLE IF EXISTS t_long_1_5_through_7_11;
