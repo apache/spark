@@ -81,8 +81,6 @@ public class NettyUtils {
       case AUTO -> {
         if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollIoHandler.newFactory();
-        } else if (JavaUtils.isLinux && IoUring.isAvailable()) {
-          yield IoUringIoHandler.newFactory();
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueIoHandler.newFactory();
         } else {
@@ -103,8 +101,6 @@ public class NettyUtils {
       case AUTO -> {
         if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollSocketChannel.class;
-        } else if (JavaUtils.isLinux && IoUring.isAvailable()) {
-          yield IoUringSocketChannel.class;
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueSocketChannel.class;
         } else {
@@ -124,8 +120,6 @@ public class NettyUtils {
       case AUTO -> {
         if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollServerSocketChannel.class;
-        } else if (JavaUtils.isLinux && IoUring.isAvailable()) {
-          yield IoUringServerSocketChannel.class;
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueServerSocketChannel.class;
         } else {
