@@ -104,6 +104,13 @@ object StateStoreErrors {
     new StateStoreInvalidStamp(providedStamp, currentStamp)
   }
 
+  def rowChecksumVerificationFailed(
+      storeId: String,
+      expectedChecksum: Int,
+      computedChecksum: Int): StateStoreRowChecksumVerificationFailed = {
+    new StateStoreRowChecksumVerificationFailed(storeId, expectedChecksum, computedChecksum)
+  }
+
   def incorrectNumOrderingColsForRangeScan(numOrderingCols: String):
     StateStoreIncorrectNumOrderingColsForRangeScan = {
     new StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols)
@@ -569,3 +576,15 @@ class StateStoreCommitValidationFailed(
       "missingCommits" -> missingCommits
     )
   )
+
+class StateStoreRowChecksumVerificationFailed(
+    storeId: String,
+    expectedChecksum: Int,
+    computedChecksum: Int)
+  extends SparkException(
+    errorClass = "STATE_STORE_ROW_CHECKSUM_VERIFICATION_FAILED",
+    messageParameters = Map(
+      "stateStoreId" -> storeId,
+      "expectedChecksum" -> expectedChecksum.toString,
+      "computedChecksum" -> computedChecksum.toString),
+    cause = null)

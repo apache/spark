@@ -1545,4 +1545,3 @@ object StateStore extends Logging {
     }
   }
 }
-
