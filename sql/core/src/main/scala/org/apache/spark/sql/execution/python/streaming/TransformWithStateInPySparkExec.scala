@@ -181,6 +181,7 @@ case class TransformWithStateInPySparkExec(
    */
   override protected def doExecute(): RDD[InternalRow] = {
     metrics
+    validateStateStoreProvider()
 
     if (!hasInitialState) {
       if (isStreaming) {

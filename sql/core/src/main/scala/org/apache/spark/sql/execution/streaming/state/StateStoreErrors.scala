@@ -65,6 +65,11 @@ object StateStoreErrors {
     new StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider)
   }
 
+  def storeBackendNotSupportedForTWS(stateStoreProvider: String):
+    StateStoreBackendNotSupportedForTWSException = {
+    new StateStoreBackendNotSupportedForTWSException(stateStoreProvider)
+  }
+
   def cannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String):
     StateStoreCannotUseColumnFamilyWithInvalidName = {
       new StateStoreCannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
@@ -311,6 +316,11 @@ class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: 
 class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_REMOVING_COLUMN_FAMILIES",
+    messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
+
+class StateStoreBackendNotSupportedForTWSException(stateStoreProvider: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "UNSUPPORTED_FEATURE.STORE_BACKEND_NOT_SUPPORTED_FOR_TWS",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
 
 class StateStoreCannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String)

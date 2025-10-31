@@ -2570,7 +2570,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
 
     testStream(result, OutputMode.Update())(
       AddData(inputData, "a"),
-      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { t =>
+      ExpectFailure[StateStoreBackendNotSupportedForTWSException] { t =>
         assert(t.getMessage.contains("not supported"))
       }
     )
@@ -2836,7 +2836,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
       )
     testStream(result, OutputMode.Update())(
       AddData(inputData, InitInputRow("a", "add", -1.0)),
-      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
+      ExpectFailure[StateStoreBackendNotSupportedForTWSException] {
         (t: Throwable) => {
           assert(t.getMessage.contains("not supported"))
         }

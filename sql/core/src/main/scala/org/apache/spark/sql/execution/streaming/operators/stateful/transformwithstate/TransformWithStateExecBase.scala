@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StateStoreWriter, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, TransformWithStateUserFunctionException}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, RocksDBStateStoreProvider, StateStoreErrors, TransformWithStateUserFunctionException}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.util.NextIterator
@@ -50,6 +51,12 @@ abstract class TransformWithStateExecBase(
   with StateStoreWriter
   with WatermarkSupport
   with TransformWithStateMetadataUtils {
+
+  // Supported state store providers for TransformWithState.
+  // TransformWithState currently supports only RocksDBStateStoreProvider.
+  private val SUPPORTED_STATE_STORE_PROVIDERS = Set(
+    classOf[RocksDBStateStoreProvider].getName
+  )
 
   override def operatorStateMetadataVersion: Int = 2
 
@@ -213,6 +220,14 @@ abstract class TransformWithStateExecBase(
         TransformWithStateVariableUtils.validateTimeMode(timeMode, eventTimeWatermarkForEviction)
 
       case _ =>
+    }
+  }
+
+  /** Validates that the configured state store provider is supported by TransformWithState. */
+  protected def validateStateStoreProvider(): Unit = {
+    val providerName = conf.getConf(SQLConf.STATE_STORE_PROVIDER_CLASS)
+    if (!SUPPORTED_STATE_STORE_PROVIDERS.contains(providerName)) {
+      throw StateStoreErrors.storeBackendNotSupportedForTWS(providerName)
     }
   }
 
