@@ -46,6 +46,15 @@ public final class STUtils {
     return g.getValue();
   }
 
+  /** Utility methods for geospatial type casting. */
+
+  // Cast geography to geography.
+  public static GeographyVal geographyToGeography(GeographyVal geographyVal) {
+    // We don't modify per-row SRID values for geographies. The geographies remain unchanged.
+    // This method is used only for casting fixed GEOGRAPHY(<srid>) to mixed GEOGRAPHY(ANY).
+    return geographyVal;
+  }
+
   /** Methods for implementing ST expressions. */
 
   // ST_AsBinary

@@ -32,6 +32,37 @@ class STExpressionsSuite
   private val defaultGeometryType: DataType =
     GeometryType(ExpressionDefaults.DEFAULT_GEOMETRY_SRID)
 
+  /** Casting geospatial data types. */
+
+  test("Cast with GEOGRAPHY values") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkbString = "0101000000000000000000F03F0000000000000040"
+    val wkb = Hex.unhex(wkbString.getBytes())
+    val wkbLiteral = Literal.create(wkb, BinaryType)
+
+    // Construct the input expressions, using the specified WKB.
+    val geographyExpression = ST_GeogFromWKB(wkbLiteral)
+    // Execute expression-level unit tests and check data type.
+    checkEvaluation(ST_AsBinary(geographyExpression), wkb)
+    assert(geographyExpression.dataType.sameType(defaultGeographyType))
+    // Cast the GEOGRAPHY with concrete SRID to a GEOGRAPHY type with mixed SRID.
+    val castExpression = Cast(geographyExpression, GeographyType("ANY"))
+    // Execute expression-level unit tests and check data type.
+    checkEvaluation(ST_AsBinary(castExpression), wkb)
+    assert(castExpression.dataType.sameType(GeographyType("ANY")))
+
+    // Construct the input SQL query strings, using the specified WKB.
+    val geogQuery: String = s"ST_GeogFromWKB(X'$wkbString')"
+    // Execute end-to-end SQL query test and check data type.
+    checkAnswer(sql(s"SELECT ST_AsBinary($geogQuery)"), Row(wkb))
+    assert(sql(s"SELECT $geogQuery").schema.fields.head.dataType.sameType(defaultGeographyType))
+    // Cast the GEOGRAPHY with concrete SRID to a GEOGRAPHY type with mixed SRID.
+    val castQuery = s"$geogQuery::GEOGRAPHY(ANY)"
+    // Execute end-to-end SQL query test and check data type.
+    checkAnswer(sql(s"SELECT ST_AsBinary($castQuery)"), Row(wkb))
+    assert(sql(s"SELECT $castQuery").schema.fields.head.dataType.sameType(GeographyType("ANY")))
+  }
+
   /** ST reader/writer expressions. */
 
   test("ST_AsBinary") {

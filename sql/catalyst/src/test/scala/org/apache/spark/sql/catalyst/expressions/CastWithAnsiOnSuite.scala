@@ -818,6 +818,21 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkEvaluation(cast(input, StringType), "0.000000123")
   }
 
+  test("Casting GeographyType(<srid>) to GeographyType(ANY)") {
+    // Test explanation: We allow casting from GeographyType(<srid>) to GeographyType(ANY).
+    // Type casting is always safe in this direction, so no additional constraints are imposed.
+
+    // Valid cast test cases.
+    val canCastTestCases: Seq[(DataType, DataType)] = Seq(
+      (GeographyType(4326), GeographyType("ANY"))
+    )
+    // Iterate over the test cases and verify casting.
+    canCastTestCases.foreach { case (fromType, toType) =>
+      // Cast can be performed from `fromType` to `toType`.
+      assert(Cast.canAnsiCast(fromType, toType))
+    }
+  }
+
   test("cast invalid string input to time") {
     Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](

@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, 
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{GeographyVal, UTF8String, VariantVal}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -159,6 +159,10 @@ object Cast extends QueryErrorsBase {
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+
+    // Casts from fixed GEOGRAPHY type to mixed GEOGRAPHY type is allowed.
+    case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+      true
 
     case _ => false
   }
@@ -282,6 +286,10 @@ object Cast extends QueryErrorsBase {
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+
+    // Casts from fixed GEOGRAPHY type to mixed GEOGRAPHY type is allowed.
+    case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+      true
 
     case _ => false
   }
@@ -1132,6 +1140,12 @@ case class Cast(
       b => numeric.toFloat(b)
   }
 
+  // GeographyConverter.
+  private[this] def castToGeography(from: DataType): Any => Any = from match {
+    case _: GeographyType =>
+      buildCast[GeographyVal](_, STUtils.geographyToGeography)
+  }
+
   private[this] def castArray(fromType: DataType, toType: DataType): Any => Any = {
     val elementCast = cast(fromType, toType)
     // TODO: Could be faster?
@@ -1211,6 +1225,7 @@ case class Cast(
         case FloatType => castToFloat(from)
         case LongType => castToLong(from)
         case DoubleType => castToDouble(from)
+        case _: GeographyType => castToGeography(from)
         case array: ArrayType =>
           castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
         case map: MapType => castMap(from.asInstanceOf[MapType], map)
@@ -1319,6 +1334,7 @@ case class Cast(
     case FloatType => castToFloatCode(from, ctx)
     case LongType => castToLongCode(from, ctx)
     case DoubleType => castToDoubleCode(from, ctx)
+    case _: GeographyType => castToGeographyCode(from)
 
     case array: ArrayType =>
       castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
@@ -2162,6 +2178,15 @@ case class Cast(
         (c, evPrim, evNull) => code"$evPrim = $c.toDouble();"
       case x: NumericType =>
         (c, evPrim, evNull) => code"$evPrim = (double) $c;"
+    }
+  }
+
+  // GeographyConverter (codegen).
+  private[this] def castToGeographyCode(from: DataType): CastFunction = {
+    from match {
+      case _: GeographyType =>
+        (c, evPrim, _) => code"""$evPrim = org.apache.spark.sql.catalyst.util.STUtils
+                                 .geographyToGeography($c);"""
     }
   }
 
