@@ -96,15 +96,7 @@ FROM (
     FROM t_short_1_5_through_7_11
 );
 
--- FLOAT sketches
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
-       abs(kll_sketch_get_quantile_float(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
-       abs(kll_sketch_get_rank_float(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
-FROM (
-    SELECT kll_sketch_agg_float(col1) AS agg
-    FROM t_byte_1_5_through_7_11
-);
-
+-- FLOAT sketches (only accepts float types to avoid precision loss)
 SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_float(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_float(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
@@ -113,39 +105,7 @@ FROM (
     FROM t_float_1_5_through_7_11
 );
 
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
-       abs(kll_sketch_get_quantile_float(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
-       abs(kll_sketch_get_rank_float(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
-FROM (
-    SELECT kll_sketch_agg_float(col1) AS agg
-    FROM t_int_1_5_through_7_11
-);
-
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
-       abs(kll_sketch_get_quantile_float(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
-       abs(kll_sketch_get_rank_float(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
-FROM (
-    SELECT kll_sketch_agg_float(col1) AS agg
-    FROM t_long_1_5_through_7_11
-);
-
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
-       abs(kll_sketch_get_quantile_float(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
-       abs(kll_sketch_get_rank_float(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
-FROM (
-    SELECT kll_sketch_agg_float(col1) AS agg
-    FROM t_short_1_5_through_7_11
-);
-
--- DOUBLE sketches
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
-       abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
-       abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
-FROM (
-    SELECT kll_sketch_agg_double(col1) AS agg
-    FROM t_byte_1_5_through_7_11
-);
-
+-- DOUBLE sketches (accepts float and double types to avoid precision loss from integer conversion)
 SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
@@ -154,36 +114,13 @@ FROM (
     FROM t_double_1_5_through_7_11
 );
 
+-- Test float column with double sketch (valid type promotion)
 SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
     SELECT kll_sketch_agg_double(col1) AS agg
-    FROM t_double_1_5_through_7_11
-);
-
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
-       abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
-       abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
-FROM (
-    SELECT kll_sketch_agg_double(col1) AS agg
-    FROM t_int_1_5_through_7_11
-);
-
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
-       abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
-       abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
-FROM (
-    SELECT kll_sketch_agg_double(col1) AS agg
-    FROM t_long_1_5_through_7_11
-);
-
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
-       abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
-       abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
-FROM (
-    SELECT kll_sketch_agg_double(col1) AS agg
-    FROM t_short_1_5_through_7_11
+    FROM t_float_1_5_through_7_11
 );
 
 -- Merging sketches and converting them to strings
@@ -330,6 +267,38 @@ FROM (
     SELECT kll_sketch_agg_float(col1) AS agg
     FROM t_double_1_5_through_7_11
 );
+
+-- Type mismatch: FLOAT sketch does not accept integer types (BIGINT) to avoid precision loss
+SELECT kll_sketch_agg_float(col1) AS invalid_float_bigint
+FROM t_long_1_5_through_7_11;
+
+-- Type mismatch: FLOAT sketch does not accept integer types (INT) to avoid precision loss
+SELECT kll_sketch_agg_float(col1) AS invalid_float_int
+FROM t_int_1_5_through_7_11;
+
+-- Type mismatch: FLOAT sketch does not accept integer types (SMALLINT) to avoid precision loss
+SELECT kll_sketch_agg_float(col1) AS invalid_float_short
+FROM t_short_1_5_through_7_11;
+
+-- Type mismatch: FLOAT sketch does not accept integer types (TINYINT) to avoid precision loss
+SELECT kll_sketch_agg_float(col1) AS invalid_float_byte
+FROM t_byte_1_5_through_7_11;
+
+-- Type mismatch: DOUBLE sketch does not accept integer types (BIGINT) to avoid precision loss
+SELECT kll_sketch_agg_double(col1) AS invalid_double_bigint
+FROM t_long_1_5_through_7_11;
+
+-- Type mismatch: DOUBLE sketch does not accept integer types (INT) to avoid precision loss
+SELECT kll_sketch_agg_double(col1) AS invalid_double_int
+FROM t_int_1_5_through_7_11;
+
+-- Type mismatch: DOUBLE sketch does not accept integer types (SMALLINT) to avoid precision loss
+SELECT kll_sketch_agg_double(col1) AS invalid_double_short
+FROM t_short_1_5_through_7_11;
+
+-- Type mismatch: DOUBLE sketch does not accept integer types (TINYINT) to avoid precision loss
+SELECT kll_sketch_agg_double(col1) AS invalid_double_byte
+FROM t_byte_1_5_through_7_11;
 
 -- Invalid quantile: quantile value must be between 0 and 1 (negative value)
 SELECT kll_sketch_get_quantile_bigint(agg, -0.5) AS invalid_quantile

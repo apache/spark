@@ -61,7 +61,7 @@ case class KllSketchToStringBigint(child: Expression) extends KllSketchToStringB
   """,
   examples = """
     Examples:
-      > SELECT LENGTH(_FUNC_(kll_sketch_agg_float(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT LENGTH(_FUNC_(kll_sketch_agg_float(col))) > 0 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -89,7 +89,7 @@ case class KllSketchToStringFloat(child: Expression) extends KllSketchToStringBa
   """,
   examples = """
     Examples:
-      > SELECT LENGTH(_FUNC_(kll_sketch_agg_double(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT LENGTH(_FUNC_(kll_sketch_agg_double(col))) > 0 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -158,7 +158,7 @@ case class KllSketchMergeBigint(left: Expression, right: Expression) extends Kll
   """,
   examples = """
     Examples:
-      > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(kll_sketch_agg_float(col), kll_sketch_agg_float(col)))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(kll_sketch_agg_float(col), kll_sketch_agg_float(col)))) > 0 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -189,7 +189,7 @@ case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllS
   """,
   examples = """
     Examples:
-      > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(kll_sketch_agg_double(col), kll_sketch_agg_double(col)))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(kll_sketch_agg_double(col), kll_sketch_agg_double(col)))) > 0 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -265,7 +265,7 @@ case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(kll_sketch_agg_float(col), 0.5) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT _FUNC_(kll_sketch_agg_float(col), 0.5) > 1 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -297,7 +297,7 @@ case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(kll_sketch_agg_double(col), 0.5) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT _FUNC_(kll_sketch_agg_double(col), 0.5) > 1 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -443,7 +443,7 @@ case class KllSketchGetRankBigint(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(kll_sketch_agg_float(col), 3.0) > 0.3 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT _FUNC_(kll_sketch_agg_float(col), 3.0) > 0.3 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
   """,
   group = "misc_funcs",
@@ -471,7 +471,7 @@ case class KllSketchGetRankFloat(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(kll_sketch_agg_double(col), 3.0) > 0.3 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT _FUNC_(kll_sketch_agg_double(col), 3.0) > 0.3 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
   """,
   group = "misc_funcs",

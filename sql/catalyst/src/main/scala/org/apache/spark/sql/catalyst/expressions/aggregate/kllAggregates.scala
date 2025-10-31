@@ -203,9 +203,9 @@ case class KllSketchAggBigint(
   """,
   examples = """
     Examples:
-      > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(col))) > 0 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
-      > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(col, 400))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(col, 400))) > 0 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
        true
   """,
   group = "agg_funcs",
@@ -241,14 +241,7 @@ case class KllSketchAggFloat(
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] = {
-    val baseTypes = Seq(
-      TypeCollection(
-        ByteType,
-        FloatType,
-        IntegerType,
-        LongType,
-        ShortType
-      ))
+    val baseTypes = Seq(FloatType)
     if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
   }
   override def nullable: Boolean = false
@@ -267,8 +260,8 @@ case class KllSketchAggFloat(
 
   /**
    * Evaluate the input row and update the KllFloatsSketch instance with the row's value. The update
-   * function only supports a subset of Spark SQL types, and an exception will be thrown for
-   * unsupported types.
+   * function only supports FloatType to avoid precision loss from integer-to-float conversion.
+   * Users should use kll_sketch_agg_bigint for integer types.
    * Note, Null values are ignored.
    */
   override def update(sketch: KllFloatsSketch, input: InternalRow): KllFloatsSketch = {
@@ -279,16 +272,8 @@ case class KllSketchAggFloat(
     }
     // Handle the different data types for sketch updates.
     child.dataType match {
-      case ByteType =>
-        sketch.update(v.asInstanceOf[Byte].toFloat)
-      case IntegerType =>
-        sketch.update(v.asInstanceOf[Int].toFloat)
       case FloatType =>
         sketch.update(v.asInstanceOf[Float])
-      case LongType =>
-        sketch.update(v.asInstanceOf[Long].toFloat)
-      case ShortType =>
-        sketch.update(v.asInstanceOf[Short].toFloat)
       case _ =>
         throw unexpectedInputDataTypeError(child)
     }
@@ -354,9 +339,9 @@ case class KllSketchAggFloat(
   """,
   examples = """
     Examples:
-      > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(col))) > 0 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
-      > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(col, 400))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+      > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(col, 400))) > 0 FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)), (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)) tab(col);
        true
   """,
   group = "agg_funcs",
@@ -392,15 +377,7 @@ case class KllSketchAggDouble(
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] = {
-    val baseTypes = Seq(
-      TypeCollection(
-        ByteType,
-        FloatType,
-        DoubleType,
-        IntegerType,
-        LongType,
-        ShortType
-      ))
+    val baseTypes = Seq(TypeCollection(FloatType, DoubleType))
     if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
   }
   override def nullable: Boolean = false
@@ -419,8 +396,8 @@ case class KllSketchAggDouble(
 
   /**
    * Evaluate the input row and update the KllDoublesSketch instance with the row's value.
-   * The update function only supports a subset of Spark SQL types, and an exception will be
-   * thrown for unsupported types.
+   * The update function only supports FloatType and DoubleType to avoid precision loss from
+   * integer-to-double conversion. Users should use kll_sketch_agg_bigint for integer types.
    * Note, Null values are ignored.
    */
   override def update(sketch: KllDoublesSketch, input: InternalRow): KllDoublesSketch = {
@@ -431,18 +408,10 @@ case class KllSketchAggDouble(
     }
     // Handle the different data types for sketch updates.
     child.dataType match {
-      case ByteType =>
-        sketch.update(v.asInstanceOf[Byte].toDouble)
       case DoubleType =>
         sketch.update(v.asInstanceOf[Double])
       case FloatType =>
         sketch.update(v.asInstanceOf[Float].toDouble)
-      case IntegerType =>
-        sketch.update(v.asInstanceOf[Int].toDouble)
-      case LongType =>
-        sketch.update(v.asInstanceOf[Long].toDouble)
-      case ShortType =>
-        sketch.update(v.asInstanceOf[Short].toDouble)
       case _ =>
         throw unexpectedInputDataTypeError(child)
     }
