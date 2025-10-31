@@ -1726,7 +1726,8 @@ class RocksDB(
           snapshot.fileMapping,
           Some(snapshot.columnFamilyMapping),
           Some(snapshot.maxColumnFamilyId),
-          snapshot.uniqueId
+          snapshot.uniqueId,
+          verifyNonEmptyFilesInZip = conf.verifyNonEmptyFilesInZip
         )
         fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
 
@@ -2056,6 +2057,7 @@ case class RocksDBConf(
     highPriorityPoolRatio: Double,
     memoryUpdateIntervalMs: Long,
     compressionCodec: String,
+    verifyNonEmptyFilesInZip: Boolean,
     allowFAllocate: Boolean,
     compression: String,
     reportSnapshotUploadLag: Boolean,
@@ -2162,6 +2164,12 @@ object RocksDBConf {
   val COMPRESSION_KEY = "compression"
   private val COMPRESSION_CONF = SQLConfEntry(COMPRESSION_KEY, "lz4")
 
+  // Config to determine whether we should verify that the files written
+  // to the RocksDB snapshot zip file are not empty.
+  val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY = "verifyNonEmptyFilesInZip"
+  private val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF =
+    SQLConfEntry(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY, "true")
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -2250,6 +2258,7 @@ object RocksDBConf {
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
       getPositiveLongConf(MEMORY_UPDATE_INTERVAL_MS_CONF),
       storeConf.compressionCodec,
+      getBooleanConf(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF),
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
       storeConf.reportSnapshotUploadLag,

@@ -266,7 +266,8 @@ class RocksDBFileManager(
       fileMapping: Map[String, RocksDBSnapshotFile],
       columnFamilyMapping: Option[Map[String, ColumnFamilyInfo]] = None,
       maxColumnFamilyId: Option[Short] = None,
-      checkpointUniqueId: Option[String] = None): Unit = {
+      checkpointUniqueId: Option[String] = None,
+      verifyNonEmptyFilesInZip: Boolean = false): Unit = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
@@ -312,7 +313,8 @@ class RocksDBFileManager(
           rootDirChecked = true
         }
       }
-      zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version, checkpointUniqueId))
+      zipToDfsFile(localOtherFiles :+ metadataFile,
+        dfsBatchZipFile(version, checkpointUniqueId), verifyNonEmptyFilesInZip)
       logInfo(log"Saved checkpoint file for version ${MDC(LogKeys.VERSION_NUM, version)} " +
         log"checkpointUniqueId: ${MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
     }
@@ -881,7 +883,20 @@ class RocksDBFileManager(
    * Compress files to a single zip file in DFS. Only the file names are embedded in the zip.
    * Any error while writing will ensure that the file is not written.
    */
-  private def zipToDfsFile(files: Seq[File], dfsZipFile: Path): Unit = {
+  private def zipToDfsFile(
+      files: Seq[File],
+      dfsZipFile: Path,
+      verifyNonEmptyFilesInZip: Boolean): Unit = {
+    if (verifyNonEmptyFilesInZip) {
+      // Verify that all files are non-empty
+      files.foreach { file =>
+        // We can have an empty log file, even when WAL is disabled
+        if (!isLogFile(file.getName) && file.length() == 0) {
+          throw StateStoreErrors.unexpectedEmptyFileInRocksDBZip(file.getName, dfsZipFile.toString)
+        }
+      }
+    }
+
     lazy val filesStr = s"$dfsZipFile\n\t${files.mkString("\n\t")}"
     var in: InputStream = null
     val out = fm.createAtomic(dfsZipFile, overwriteIfPossible = true)

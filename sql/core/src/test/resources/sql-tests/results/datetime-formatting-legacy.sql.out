@@ -47,8 +47,15 @@ select col, date_format(col, 'q qq'), to_char(col, 'q qq'), to_varchar(col, 'q q
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character 'q'
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'q qq'"
+  }
+}
 
 
 -- !query
@@ -56,8 +63,15 @@ select col, date_format(col, 'Q QQ QQQ QQQQ'), to_char(col, 'Q QQ QQQ QQQQ'), to
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character 'Q'
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'Q QQ QQQ QQQQ'"
+  }
+}
 
 
 -- !query
@@ -269,8 +283,15 @@ select col, date_format(col, 'VV'), to_char(col, 'VV'), to_varchar(col, 'VV') fr
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character 'V'
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'VV'"
+  }
+}
 
 
 -- !query
@@ -306,8 +327,15 @@ select col, date_format(col, 'XXXX XXXXX'), to_char(col, 'XXXX XXXXX'), to_varch
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-invalid ISO 8601 format: length=4
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'XXXX XXXXX'"
+  }
+}
 
 
 -- !query
@@ -329,8 +357,15 @@ select col, date_format(col, 'O OOOO'), to_char(col, 'O OOOO'), to_varchar(col, 
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character 'O'
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'O OOOO'"
+  }
+}
 
 
 -- !query
@@ -338,8 +373,15 @@ select col, date_format(col, 'x xx xxx xxxx xxxx xxxxx'), to_char(col, 'x xx xxx
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character 'x'
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'x xx xxx xxxx xxxx xxxxx'"
+  }
+}
 
 
 -- !query

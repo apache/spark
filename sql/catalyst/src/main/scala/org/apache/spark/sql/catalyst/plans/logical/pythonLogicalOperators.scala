@@ -18,11 +18,15 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, PythonUDTF}
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, JsonToStructs, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, TimeMode}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.util.LogUtils
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -379,5 +383,43 @@ case class AttachDistributedSequence(
     val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
     val indexColumn = s"Index: $sequenceAttr"
     s"$nodeName$truncatedOutputString $indexColumn"
+  }
+}
+
+case class PythonWorkerLogs(jsonAttr: Attribute)
+  extends LeafNode with MultiInstanceRelation with SQLConfHelper {
+
+  override def output: Seq[Attribute] = Seq(jsonAttr)
+
+  override def newInstance(): PythonWorkerLogs =
+    copy(jsonAttr = jsonAttr.newInstance())
+
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
+
+  override def computeStats(): Statistics = Statistics(
+    // TODO: Instead of returning a default value here, find a way to return a meaningful size
+    // estimate for RDDs. See PR 1238 for more discussions.
+    sizeInBytes = BigInt(conf.defaultSizeInBytes)
+  )
+}
+
+object PythonWorkerLogs {
+  val ViewName = "python_worker_logs"
+
+  def apply(): LogicalPlan = {
+    PythonWorkerLogs(DataTypeUtils.toAttribute(StructField("message", StringType)))
+  }
+
+  def viewDefinition(): LogicalPlan = {
+    Project(
+      Seq(UnresolvedStar(Some(Seq("from_json")))),
+      Project(
+        Seq(Alias(
+          JsonToStructs(
+            schema = StructType.fromDDL(LogUtils.SPARK_LOG_SCHEMA),
+            options = Map.empty,
+            child = UnresolvedAttribute("message")),
+          "from_json")()),
+        PythonWorkerLogs()))
   }
 }
