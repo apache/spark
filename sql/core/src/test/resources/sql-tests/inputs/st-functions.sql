@@ -7,6 +7,12 @@ INSERT INTO geodata VALUES
 (NULL),
 (X'0101000000000000000000F03F0000000000000040');
 
+--- Casting geospatial data types
+
+-- GEOGRAPHY and GEOMETRY data types cannot be cast to/from other data types.
+SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS STRING) AS result;
+SELECT CAST(X'0101000000000000000000f03f0000000000000040' AS GEOMETRY(4326)) AS result;
+
 ---- ST reader/writer expressions
 
 -- WKB (Well-Known Binary) round-trip tests for GEOGRAPHY and GEOMETRY types.
