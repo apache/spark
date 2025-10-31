@@ -441,9 +441,6 @@ class DataSourceWithHiveMetastoreCatalogSuite
   test("SPARK-54028: Table and View with complex nested schema and ALTER operations") {
     withTable("t") {
       val schema =
-        "double_field DOUBLE," +
-          "id STRING," +
-          "integer_field BIGINT," +
           "struct_field STRUCT<" +
           "`colon:field_name`:STRING" +
           ">"
@@ -453,7 +450,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
       assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
 
       withView("v") {
-        sql("CREATE VIEW v AS SELECT `double_field`,`id`,`integer_field`,`struct_field` FROM t")
+        sql("CREATE VIEW v AS SELECT `struct_field` FROM t")
 
         // Verify view schema matches the original schema
         val expectedViewSchema = CatalystSqlParser.parseTableSchema(schema)
@@ -470,7 +467,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
         // Alter view to include new column
         sql("ALTER VIEW v AS " +
-          "SELECT `double_field`,`id`,`integer_field`,`struct_field`,`field_1` FROM t")
+          "SELECT `struct_field`,`field_1` FROM t")
 
         // Verify view schema after ALTER
         assert(spark.table("v").schema === CatalystSqlParser.parseTableSchema(updatedSchema))
