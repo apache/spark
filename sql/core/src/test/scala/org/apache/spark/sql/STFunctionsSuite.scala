@@ -21,6 +21,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 
 class STFunctionsSuite extends QueryTest with SharedSparkSession {
+
   import testImplicits._
 
   /** ST reader/writer expressions. */
@@ -29,20 +30,16 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
     // Test data: Well-Known Binary (WKB) representations.
     val df = Seq[(String)](
       (
-        "0101000000000000000000f03f0000000000000040",
-      )
-    ).toDF("wkb")
+        "0101000000000000000000f03f0000000000000040"
+      )).toDF("wkb")
     // ST_GeogFromWKB/ST_GeomFromWKB and ST_AsBinary.
     checkAnswer(
       df.select(
         lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkb"))))).as("col0"),
-        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkb"))))).as("col1"),
-      ),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkb"))))).as("col1")),
       Row(
         "0101000000000000000000f03f0000000000000040",
-        "0101000000000000000000f03f0000000000000040",
-      )
-    )
+        "0101000000000000000000f03f0000000000000040"))
   }
 
 }
