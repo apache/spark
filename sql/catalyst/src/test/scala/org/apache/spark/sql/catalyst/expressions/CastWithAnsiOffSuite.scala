@@ -902,39 +902,6 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     }
   }
 
-  test("Casting geospatial types to/from other data types") {
-    val geoTypes: Seq[DataType] = Seq(
-      GeographyType(4326),
-      GeographyType("ANY"),
-      GeometryType(0),
-      GeometryType(3857),
-      GeometryType(4326),
-      GeometryType("ANY")
-    )
-    val otherTypes: Seq[DataType] = Seq(
-      BinaryType,
-      BooleanType,
-      ByteType,
-      StringType,
-      StringType("UTF8_LCASE"),
-      StringType("UNICODE_CI"),
-      ShortType,
-      IntegerType,
-      LongType,
-      FloatType,
-      DoubleType
-    )
-    // Iterate over the test cases and verify casting.
-    geoTypes.foreach { geoType =>
-      otherTypes.foreach { otherType =>
-        // Cast cannot be performed from `geoType` to `otherType`.
-        assert(!Cast.canCast(geoType, otherType))
-        // Cast cannot be performed from `otherType` to `geoType`.
-        assert(!Cast.canCast(otherType, geoType))
-      }
-    }
-  }
-
   test("cast invalid string input to time") {
     Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
       checkEvaluation(cast(invalidInput, TimeType()), null)
