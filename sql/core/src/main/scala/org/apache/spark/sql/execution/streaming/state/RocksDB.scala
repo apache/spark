@@ -997,7 +997,6 @@ class RocksDB(
    * bytes supports additional values to be later merged to it.
    */
   private def getListValuesInArrayByte(values: List[Array[Byte]]): Array[Byte] = {
-
     // Delimit each value row bytes with a single byte delimiter, the last
     // value row won't have a delimiter at the end.
     val delimiterNum = values.length - 1

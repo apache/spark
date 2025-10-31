@@ -344,7 +344,7 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       verify(
         kvEncoder._2.supportsMultipleValuesPerKey,
-        "Multiple values put operation requires an encoder" +
+        "Multi-value put operation requires an encoder" +
           " which supports multiple values for a single key")
       rocksDB.putList(
         kvEncoder._1.encodeKey(key),

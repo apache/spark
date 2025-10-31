@@ -209,7 +209,7 @@ trait StateStore extends ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
-   * Put a new list of non-null value for a non-null key. Implementations must be aware that the
+   * Put a new list of non-null values for a non-null key. Implementations must be aware that the
    * UnsafeRows in the params can be reused, and must make copies of the data as needed for
    * persistence.
    */
