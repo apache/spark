@@ -79,10 +79,10 @@ public class NettyUtils {
       case IO_URING -> IoUringIoHandler.newFactory();
       case KQUEUE -> KQueueIoHandler.newFactory();
       case AUTO -> {
-        if (JavaUtils.isLinux && IoUring.isAvailable()) {
-          yield IoUringIoHandler.newFactory();
-        } else if (JavaUtils.isLinux && Epoll.isAvailable()) {
+        if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollIoHandler.newFactory();
+        } else if (JavaUtils.isLinux && IoUring.isAvailable()) {
+          yield IoUringIoHandler.newFactory();
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueIoHandler.newFactory();
         } else {
@@ -101,10 +101,10 @@ public class NettyUtils {
       case IO_URING -> IoUringSocketChannel.class;
       case KQUEUE -> KQueueSocketChannel.class;
       case AUTO -> {
-        if (JavaUtils.isLinux && IoUring.isAvailable()) {
-          yield IoUringSocketChannel.class;
-        } else if (JavaUtils.isLinux && Epoll.isAvailable()) {
+        if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollSocketChannel.class;
+        } else if (JavaUtils.isLinux && IoUring.isAvailable()) {
+          yield IoUringSocketChannel.class;
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueSocketChannel.class;
         } else {
@@ -122,10 +122,10 @@ public class NettyUtils {
       case IO_URING -> IoUringServerSocketChannel.class;
       case KQUEUE -> KQueueServerSocketChannel.class;
       case AUTO -> {
-        if (JavaUtils.isLinux && IoUring.isAvailable()) {
-          yield IoUringServerSocketChannel.class;
-        } else if (JavaUtils.isLinux && Epoll.isAvailable()) {
+        if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollServerSocketChannel.class;
+        } else if (JavaUtils.isLinux && IoUring.isAvailable()) {
+          yield IoUringServerSocketChannel.class;
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueServerSocketChannel.class;
         } else {
