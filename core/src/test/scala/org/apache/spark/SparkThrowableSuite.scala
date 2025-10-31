@@ -33,7 +33,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.SparkThrowableHelper._
-import org.apache.spark.util.{SparkErrorUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Test suite for Spark Throwables.
@@ -75,7 +75,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       .addModule(DefaultScalaModule)
       .enable(STRICT_DUPLICATE_DETECTION)
       .build()
-    SparkErrorUtils.tryWithResource(errorJsonFilePath.toUri.toURL.openStream()) { inputStream =>
+    Utils.tryWithResource(errorJsonFilePath.toUri.toURL.openStream()) { inputStream =>
       mapper.readValue(inputStream, new TypeReference[Map[String, ErrorInfo]]() {})
     }
   }
@@ -126,11 +126,11 @@ class SparkThrowableSuite extends SparkFunSuite {
       .enable(STRICT_DUPLICATE_DETECTION)
       .build()
     val errorClasses =
-      SparkErrorUtils.tryWithResource(errorClassesJson.openStream()) { inputStream =>
+      Utils.tryWithResource(errorClassesJson.openStream()) { inputStream =>
         mapper.readValue(inputStream, new TypeReference[Map[String, String]]() {})
       }
     val errorStates =
-      SparkErrorUtils.tryWithResource(errorStatesJson.openStream()) { inputStream =>
+      Utils.tryWithResource(errorStatesJson.openStream()) { inputStream =>
         mapper.readValue(inputStream, new TypeReference[Map[String, ErrorStateInfo]]() {})
       }
     val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
