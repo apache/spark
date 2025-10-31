@@ -52,13 +52,13 @@ abstract class TransformWithStateExecBase(
   with WatermarkSupport
   with TransformWithStateMetadataUtils {
 
+  override def operatorStateMetadataVersion: Int = 2
+
   // Supported state store providers for TransformWithState.
   // TransformWithState currently supports only RocksDBStateStoreProvider.
   private val SUPPORTED_STATE_STORE_PROVIDERS = Set(
     classOf[RocksDBStateStoreProvider].getName
   )
-
-  override def operatorStateMetadataVersion: Int = 2
 
   override def supportsSchemaEvolution: Boolean = true
 
