@@ -281,6 +281,26 @@ SELECT kll_sketch_get_quantile_bigint(CAST(NULL AS BINARY), 0.5) AS null_sketch;
 -- NULL sketch to get_rank
 SELECT kll_sketch_get_rank_float(CAST(NULL AS BINARY), 5.0) AS null_sketch;
 
+-- Tests for the optional k parameter
+-- Positive tests with valid k values
+SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 8))) > 0 AS k_min_value
+FROM t_long_1_5_through_7_11;
+
+SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 200))) > 0 AS k_default_value
+FROM t_long_1_5_through_7_11;
+
+SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 400))) > 0 AS k_custom_value
+FROM t_long_1_5_through_7_11;
+
+SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 65535))) > 0 AS k_max_value
+FROM t_long_1_5_through_7_11;
+
+SELECT LENGTH(kll_sketch_to_string_float(kll_sketch_agg_float(col1, 100))) > 0 AS k_float_sketch
+FROM t_float_1_5_through_7_11;
+
+SELECT LENGTH(kll_sketch_to_string_double(kll_sketch_agg_double(col1, 300))) > 0 AS k_double_sketch
+FROM t_double_1_5_through_7_11;
+
 -- Negative tests
 -- These queries should fail with type mismatch or validation errors
 
@@ -368,6 +388,27 @@ FROM (
     SELECT kll_sketch_agg_bigint(col1) AS agg
     FROM t_long_1_5_through_7_11
 );
+
+-- Negative tests for k parameter
+-- k parameter too small (minimum is 8)
+SELECT kll_sketch_agg_bigint(col1, 7) AS k_too_small
+FROM t_long_1_5_through_7_11;
+
+-- k parameter too large (maximum is 65535)
+SELECT kll_sketch_agg_bigint(col1, 65536) AS k_too_large
+FROM t_long_1_5_through_7_11;
+
+-- k parameter is NULL
+SELECT kll_sketch_agg_float(col1, CAST(NULL AS INT)) AS k_is_null
+FROM t_float_1_5_through_7_11;
+
+-- k parameter is not foldable (non-constant)
+SELECT kll_sketch_agg_double(col1, CAST(col1 AS INT)) AS k_non_constant
+FROM t_double_1_5_through_7_11;
+
+-- k parameter has wrong type (STRING instead of INT)
+SELECT kll_sketch_agg_bigint(col1, '100') AS k_wrong_type
+FROM t_long_1_5_through_7_11;
 
 -- Clean up
 DROP TABLE IF EXISTS t_int_1_5_through_7_11;

@@ -4126,6 +4126,18 @@
     ],
     "sqlState" : "22003"
   },
+  "KLL_SKETCH_K_MUST_BE_CONSTANT" : {
+    "message" : [
+      "The k parameter must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
+  },
+  "KLL_SKETCH_K_OUT_OF_RANGE" : {
+    "message" : [
+      "The k parameter must be between 8 and 65535 (inclusive), but got <k>."
+    ],
+    "sqlState" : "22003"
+  },
   "KRYO_BUFFER_OVERFLOW" : {
     "message" : [
       "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."

@@ -3171,4 +3171,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "KLL_SKETCH_INCOMPATIBLE_MERGE",
       messageParameters = Map("reason" -> reason))
   }
+
+  def kllSketchKMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_K_MUST_BE_CONSTANT",
+      messageParameters = Map.empty)
+  }
+
+  def kllSketchKOutOfRangeError(function: String, k: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_K_OUT_OF_RANGE",
+      messageParameters = Map("k" -> toSQLValue(k, IntegerType)))
+  }
 }

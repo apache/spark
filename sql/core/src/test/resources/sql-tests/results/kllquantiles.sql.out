@@ -471,6 +471,60 @@ NULL
 
 
 -- !query
+SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 8))) > 0 AS k_min_value
+FROM t_long_1_5_through_7_11
+-- !query schema
+struct<k_min_value:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 200))) > 0 AS k_default_value
+FROM t_long_1_5_through_7_11
+-- !query schema
+struct<k_default_value:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 400))) > 0 AS k_custom_value
+FROM t_long_1_5_through_7_11
+-- !query schema
+struct<k_custom_value:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 65535))) > 0 AS k_max_value
+FROM t_long_1_5_through_7_11
+-- !query schema
+struct<k_max_value:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT LENGTH(kll_sketch_to_string_float(kll_sketch_agg_float(col1, 100))) > 0 AS k_float_sketch
+FROM t_float_1_5_through_7_11
+-- !query schema
+struct<k_float_sketch:boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT LENGTH(kll_sketch_to_string_double(kll_sketch_agg_double(col1, 300))) > 0 AS k_double_sketch
+FROM t_double_1_5_through_7_11
+-- !query schema
+struct<k_double_sketch:boolean>
+-- !query output
+true
+
+
+-- !query
 SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
@@ -699,6 +753,133 @@ FROM (
 struct<contains_kll_header:boolean>
 -- !query output
 true
+
+
+-- !query
+SELECT kll_sketch_agg_bigint(col1, 7) AS k_too_small
+FROM t_long_1_5_through_7_11
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] The k parameter must be between 8 and 65535 (inclusive), but got 7. SQLSTATE: 22003",
+    "sqlExpr" : "\"kll_sketch_agg_bigint(col1, 7)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "kll_sketch_agg_bigint(col1, 7)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_agg_bigint(col1, 65536) AS k_too_large
+FROM t_long_1_5_through_7_11
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] The k parameter must be between 8 and 65535 (inclusive), but got 65536. SQLSTATE: 22003",
+    "sqlExpr" : "\"kll_sketch_agg_bigint(col1, 65536)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "kll_sketch_agg_bigint(col1, 65536)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_agg_float(col1, CAST(NULL AS INT)) AS k_is_null
+FROM t_float_1_5_through_7_11
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "k",
+    "sqlExpr" : "\"kll_sketch_agg_float(col1, CAST(NULL AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "kll_sketch_agg_float(col1, CAST(NULL AS INT))"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_agg_double(col1, CAST(col1 AS INT)) AS k_non_constant
+FROM t_double_1_5_through_7_11
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "CAST(spark_catalog.default.t_double_1_5_through_7_11.col1 AS INT)",
+    "inputName" : "k",
+    "inputType" : "int",
+    "sqlExpr" : "\"kll_sketch_agg_double(col1, CAST(col1 AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "kll_sketch_agg_double(col1, CAST(col1 AS INT))"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_agg_bigint(col1, '100') AS k_wrong_type
+FROM t_long_1_5_through_7_11
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"100\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INT\"",
+    "sqlExpr" : "\"kll_sketch_agg_bigint(col1, 100)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "kll_sketch_agg_bigint(col1, '100')"
+  } ]
+}
 
 
 -- !query

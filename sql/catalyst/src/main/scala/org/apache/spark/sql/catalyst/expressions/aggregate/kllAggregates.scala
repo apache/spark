@@ -22,24 +22,11 @@ import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
-
-/** This represents the aggregation buffer for the below aggregate functions. */
-case class KllBufferBigint(sketch: KllLongsSketch = KllLongsSketch.newHeapInstance()) {
-  def serialize(): Array[Byte] = sketch.toByteArray
-  def eval(): Array[Byte] = sketch.toByteArray
-}
-case class KllBufferFloat(sketch: KllFloatsSketch = KllFloatsSketch.newHeapInstance()) {
-  def serialize(): Array[Byte] = sketch.toByteArray
-  def eval(): Array[Byte] = sketch.toByteArray
-}
-case class KllBufferDouble(sketch: KllDoublesSketch = KllDoublesSketch.newHeapInstance()) {
-  def serialize(): Array[Byte] = sketch.toByteArray
-  def eval(): Array[Byte] = sketch.toByteArray
-}
 
 /**
  * The KllSketchAggBigint function utilizes an Apache DataSketches KllLongsSketch instance to
@@ -50,6 +37,11 @@ case class KllBufferDouble(sketch: KllDoublesSketch = KllDoublesSketch.newHeapIn
  *
  * @param child
  *   child expression against which quantile computation will occur
+ * @param kExpr
+ *   optional expression for the k parameter from the Apache DataSketches library that controls
+ *   the size and accuracy of the sketch. Must be a constant integer between 8 and 65535.
+ *   Default is 200 (normalized rank error ~1.65%). Larger k values provide more accurate
+ *   estimates but result in larger, slower sketches.
  * @param mutableAggBufferOffset
  *   offset for mutable aggregation buffer
  * @param inputAggBufferOffset
@@ -58,43 +50,71 @@ case class KllBufferDouble(sketch: KllDoublesSketch = KllDoublesSketch.newHeapIn
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the KllLongsSketch compact binary representation.
+    _FUNC_(expr[, k]) - Returns the KllLongsSketch compact binary representation.
+      The optional k parameter controls the size and accuracy of the sketch (default 200, range 8-65535).
+      Larger k values provide more accurate quantile estimates but result in larger, slower sketches.
   """,
   examples = """
     Examples:
       > SELECT LENGTH(kll_sketch_to_string_bigint(_FUNC_(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+       true
+      > SELECT LENGTH(kll_sketch_to_string_bigint(_FUNC_(col, 400))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
   group = "agg_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class KllSketchAggBigint(
-    override val child: Expression,
+    child: Expression,
+    kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[KllBufferBigint]
-    with UnaryLike[Expression]
+    extends TypedImperativeAggregate[KllLongsSketch]
+    with KllSketchAggBase
     with ExpectsInputTypes {
-  def this(child: Expression) = this(child, 0, 0)
+  def this(child: Expression) = this(child, None, 0, 0)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): KllSketchAggBigint =
+  override def children: Seq[Expression] = child +: kExpr.toSeq
+
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): KllSketchAggBigint =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): KllSketchAggBigint =
+  override def withNewInputAggBufferOffset(
+      newInputAggBufferOffset: Int): KllSketchAggBigint =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-  override protected def withNewChildInternal(newInput: Expression): KllSketchAggBigint =
-    copy(child = newInput)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): KllSketchAggBigint = {
+    if (newChildren.length == 1) {
+      copy(child = newChildren(0), kExpr = None)
+    } else {
+      copy(child = newChildren(0), kExpr = Some(newChildren(1)))
+    }
+  }
 
   override def dataType: DataType = BinaryType
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
+  override def inputTypes: Seq[AbstractDataType] = {
+    val baseTypes = Seq(
       TypeCollection(
         ByteType,
         IntegerType,
         LongType,
         ShortType))
+    if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
+  }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_bigint"
-  override def createAggregationBuffer(): KllBufferBigint = KllBufferBigint()
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+    checkKInputDataTypes()
+  }
+
+  override def createAggregationBuffer(): KllLongsSketch =
+    KllLongsSketch.newHeapInstance(kValue)
 
   /**
    * Evaluate the input row and update the KllLongsSketch instance with the row's value. The update
@@ -102,14 +122,13 @@ case class KllSketchAggBigint(
    * unsupported types.
    * Note, null values are ignored.
    */
-  override def update(updateBuffer: KllBufferBigint, input: InternalRow): KllBufferBigint = {
+  override def update(sketch: KllLongsSketch, input: InternalRow): KllLongsSketch = {
     // Return early for null values.
     val v = child.eval(input)
     if (v == null) {
-      return updateBuffer
+      return sketch
     }
     // Handle the different data types for sketch updates.
-    val sketch: KllLongsSketch = updateBuffer.sketch
     child.dataType match {
       case ByteType =>
         sketch.update(v.asInstanceOf[Byte].toLong)
@@ -120,16 +139,16 @@ case class KllSketchAggBigint(
       case ShortType =>
         sketch.update(v.asInstanceOf[Short].toLong)
       case _ =>
-        throw KllSketchAgg.unexpectedInputDataTypeError(child)
+        throw unexpectedInputDataTypeError(child)
     }
 
-    updateBuffer
+    sketch
   }
 
   /** Merges an input sketch into the current aggregation buffer. */
-  override def merge(updateBuffer: KllBufferBigint, input: KllBufferBigint): KllBufferBigint = {
+  override def merge(updateBuffer: KllLongsSketch, input: KllLongsSketch): KllLongsSketch = {
     try {
-      updateBuffer.sketch.merge(input.sketch)
+      updateBuffer.merge(input)
       updateBuffer
     } catch {
       case e: Exception =>
@@ -138,15 +157,15 @@ case class KllSketchAggBigint(
   }
 
   /** Returns a sketch derived from the input column or expression. */
-  override def eval(sketchState: KllBufferBigint): Any = sketchState.eval()
+  override def eval(sketch: KllLongsSketch): Any = sketch.toByteArray
 
   /** Converts the underlying sketch state into a byte array. */
-  override def serialize(sketchState: KllBufferBigint): Array[Byte] = sketchState.serialize()
+  override def serialize(sketch: KllLongsSketch): Array[Byte] = sketch.toByteArray
 
   /** Wraps the byte array into a sketch instance. */
-  override def deserialize(buffer: Array[Byte]): KllBufferBigint = if (buffer.nonEmpty) {
+  override def deserialize(buffer: Array[Byte]): KllLongsSketch = if (buffer.nonEmpty) {
     try {
-      KllBufferBigint(KllLongsSketch.wrap(Memory.wrap(buffer)))
+      KllLongsSketch.wrap(Memory.wrap(buffer))
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
@@ -165,6 +184,11 @@ case class KllSketchAggBigint(
  *
  * @param child
  *   child expression against which quantile computation will occur
+ * @param kExpr
+ *   optional expression for the k parameter from the Apache DataSketches library that controls
+ *   the size and accuracy of the sketch. Must be a constant integer between 8 and 65535.
+ *   Default is 200 (normalized rank error ~1.65%). Larger k values provide more accurate
+ *   estimates but result in larger, slower sketches.
  * @param mutableAggBufferOffset
  *   offset for mutable aggregation buffer
  * @param inputAggBufferOffset
@@ -173,35 +197,51 @@ case class KllSketchAggBigint(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the KllFloatsSketch compact binary representation.
+    _FUNC_(expr[, k]) - Returns the KllFloatsSketch compact binary representation.
+      The optional k parameter controls the size and accuracy of the sketch (default 200, range 8-65535).
+      Larger k values provide more accurate quantile estimates but result in larger, slower sketches.
   """,
   examples = """
     Examples:
       > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+       true
+      > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(col, 400))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
   group = "agg_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class KllSketchAggFloat(
-    override val child: Expression,
+    child: Expression,
+    kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[KllBufferFloat]
-        with UnaryLike[Expression]
+    extends TypedImperativeAggregate[KllFloatsSketch]
+        with KllSketchAggBase
         with ExpectsInputTypes {
-  def this(child: Expression) = this(child, 0, 0)
+  def this(child: Expression) = this(child, None, 0, 0)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): KllSketchAggFloat =
+  override def children: Seq[Expression] = child +: kExpr.toSeq
+
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): KllSketchAggFloat =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): KllSketchAggFloat =
+  override def withNewInputAggBufferOffset(
+      newInputAggBufferOffset: Int): KllSketchAggFloat =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-  override protected def withNewChildInternal(newInput: Expression): KllSketchAggFloat =
-    copy(child = newInput)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): KllSketchAggFloat = {
+    if (newChildren.length == 1) {
+      copy(child = newChildren(0), kExpr = None)
+    } else {
+      copy(child = newChildren(0), kExpr = Some(newChildren(1)))
+    }
+  }
 
   override def dataType: DataType = BinaryType
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
+  override def inputTypes: Seq[AbstractDataType] = {
+    val baseTypes = Seq(
       TypeCollection(
         ByteType,
         FloatType,
@@ -209,9 +249,21 @@ case class KllSketchAggFloat(
         LongType,
         ShortType
       ))
+    if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
+  }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_float"
-  override def createAggregationBuffer(): KllBufferFloat = KllBufferFloat()
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+    checkKInputDataTypes()
+  }
+
+  override def createAggregationBuffer(): KllFloatsSketch =
+    KllFloatsSketch.newHeapInstance(kValue)
 
   /**
    * Evaluate the input row and update the KllFloatsSketch instance with the row's value. The update
@@ -219,14 +271,13 @@ case class KllSketchAggFloat(
    * unsupported types.
    * Note, Null values are ignored.
    */
-  override def update(updateBuffer: KllBufferFloat, input: InternalRow): KllBufferFloat = {
+  override def update(sketch: KllFloatsSketch, input: InternalRow): KllFloatsSketch = {
     // Return early for null values.
     val v = child.eval(input)
     if (v == null) {
-      return updateBuffer
+      return sketch
     }
     // Handle the different data types for sketch updates.
-    val sketch: KllFloatsSketch = updateBuffer.sketch
     child.dataType match {
       case ByteType =>
         sketch.update(v.asInstanceOf[Byte].toFloat)
@@ -239,16 +290,16 @@ case class KllSketchAggFloat(
       case ShortType =>
         sketch.update(v.asInstanceOf[Short].toFloat)
       case _ =>
-        throw KllSketchAgg.unexpectedInputDataTypeError(child)
+        throw unexpectedInputDataTypeError(child)
     }
 
-    updateBuffer
+    sketch
   }
 
   /** Merges an input sketch into the current aggregation buffer. */
-  override def merge(updateBuffer: KllBufferFloat, input: KllBufferFloat): KllBufferFloat = {
+  override def merge(updateBuffer: KllFloatsSketch, input: KllFloatsSketch): KllFloatsSketch = {
     try {
-      updateBuffer.sketch.merge(input.sketch)
+      updateBuffer.merge(input)
       updateBuffer
     } catch {
       case e: Exception =>
@@ -257,15 +308,15 @@ case class KllSketchAggFloat(
   }
 
   /** Returns a sketch derived from the input column or expression. */
-  override def eval(sketchState: KllBufferFloat): Any = sketchState.eval()
+  override def eval(sketch: KllFloatsSketch): Any = sketch.toByteArray
 
   /** Converts the underlying sketch state into a byte array. */
-  override def serialize(sketchState: KllBufferFloat): Array[Byte] = sketchState.serialize()
+  override def serialize(sketch: KllFloatsSketch): Array[Byte] = sketch.toByteArray
 
   /** Wraps the byte array into a sketch instance. */
-  override def deserialize(buffer: Array[Byte]): KllBufferFloat = if (buffer.nonEmpty) {
+  override def deserialize(buffer: Array[Byte]): KllFloatsSketch = if (buffer.nonEmpty) {
     try {
-      KllBufferFloat(KllFloatsSketch.wrap(Memory.wrap(buffer)))
+      KllFloatsSketch.wrap(Memory.wrap(buffer))
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
@@ -284,6 +335,11 @@ case class KllSketchAggFloat(
  *
  * @param child
  *   child expression against which quantile computation will occur
+ * @param kExpr
+ *   optional expression for the k parameter from the Apache DataSketches library that controls
+ *   the size and accuracy of the sketch. Must be a constant integer between 8 and 65535.
+ *   Default is 200 (normalized rank error ~1.65%). Larger k values provide more accurate
+ *   estimates but result in larger, slower sketches.
  * @param mutableAggBufferOffset
  *   offset for mutable aggregation buffer
  * @param inputAggBufferOffset
@@ -292,35 +348,51 @@ case class KllSketchAggFloat(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the KllDoublesSketch compact binary representation.
+    _FUNC_(expr[, k]) - Returns the KllDoublesSketch compact binary representation.
+      The optional k parameter controls the size and accuracy of the sketch (default 200, range 8-65535).
+      Larger k values provide more accurate quantile estimates but result in larger, slower sketches.
   """,
   examples = """
     Examples:
       > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
+       true
+      > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(col, 400))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
        true
   """,
   group = "agg_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class KllSketchAggDouble(
-    override val child: Expression,
+    child: Expression,
+    kExpr: Option[Expression] = None,
     override val mutableAggBufferOffset: Int = 0,
     override val inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[KllBufferDouble]
-        with UnaryLike[Expression]
+    extends TypedImperativeAggregate[KllDoublesSketch]
+        with KllSketchAggBase
         with ExpectsInputTypes {
-  def this(child: Expression) = this(child, 0, 0)
+  def this(child: Expression) = this(child, None, 0, 0)
+  def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr), 0, 0)
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): KllSketchAggDouble =
+  override def children: Seq[Expression] = child +: kExpr.toSeq
+
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): KllSketchAggDouble =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): KllSketchAggDouble =
+  override def withNewInputAggBufferOffset(
+      newInputAggBufferOffset: Int): KllSketchAggDouble =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-  override protected def withNewChildInternal(newInput: Expression): KllSketchAggDouble =
-    copy(child = newInput)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): KllSketchAggDouble = {
+    if (newChildren.length == 1) {
+      copy(child = newChildren(0), kExpr = None)
+    } else {
+      copy(child = newChildren(0), kExpr = Some(newChildren(1)))
+    }
+  }
 
   override def dataType: DataType = BinaryType
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
+  override def inputTypes: Seq[AbstractDataType] = {
+    val baseTypes = Seq(
       TypeCollection(
         ByteType,
         FloatType,
@@ -329,9 +401,21 @@ case class KllSketchAggDouble(
         LongType,
         ShortType
       ))
+    if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
+  }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_double"
-  override def createAggregationBuffer(): KllBufferDouble = KllBufferDouble()
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+    checkKInputDataTypes()
+  }
+
+  override def createAggregationBuffer(): KllDoublesSketch =
+    KllDoublesSketch.newHeapInstance(kValue)
 
   /**
    * Evaluate the input row and update the KllDoublesSketch instance with the row's value.
@@ -339,14 +423,13 @@ case class KllSketchAggDouble(
    * thrown for unsupported types.
    * Note, Null values are ignored.
    */
-  override def update(updateBuffer: KllBufferDouble, input: InternalRow): KllBufferDouble = {
+  override def update(sketch: KllDoublesSketch, input: InternalRow): KllDoublesSketch = {
     // Return early for null values.
     val v = child.eval(input)
     if (v == null) {
-      return updateBuffer
+      return sketch
     }
     // Handle the different data types for sketch updates.
-    val sketch: KllDoublesSketch = updateBuffer.sketch
     child.dataType match {
       case ByteType =>
         sketch.update(v.asInstanceOf[Byte].toDouble)
@@ -361,16 +444,16 @@ case class KllSketchAggDouble(
       case ShortType =>
         sketch.update(v.asInstanceOf[Short].toDouble)
       case _ =>
-        throw KllSketchAgg.unexpectedInputDataTypeError(child)
+        throw unexpectedInputDataTypeError(child)
     }
 
-    updateBuffer
+    sketch
   }
 
   /** Merges an input sketch into the current aggregation buffer. */
-  override def merge(updateBuffer: KllBufferDouble, input: KllBufferDouble): KllBufferDouble = {
+  override def merge(updateBuffer: KllDoublesSketch, input: KllDoublesSketch): KllDoublesSketch = {
     try {
-      updateBuffer.sketch.merge(input.sketch)
+      updateBuffer.merge(input)
       updateBuffer
     } catch {
       case e: Exception =>
@@ -379,15 +462,15 @@ case class KllSketchAggDouble(
   }
 
   /** Returns a sketch derived from the input column or expression. */
-  override def eval(sketchState: KllBufferDouble): Any = sketchState.eval()
+  override def eval(sketch: KllDoublesSketch): Any = sketch.toByteArray
 
   /** Converts the underlying sketch state into a byte array. */
-  override def serialize(sketchState: KllBufferDouble): Array[Byte] = sketchState.serialize()
+  override def serialize(sketch: KllDoublesSketch): Array[Byte] = sketch.toByteArray
 
   /** Wraps the byte array into a sketch instance. */
-  override def deserialize(buffer: Array[Byte]): KllBufferDouble = if (buffer.nonEmpty) {
+  override def deserialize(buffer: Array[Byte]): KllDoublesSketch = if (buffer.nonEmpty) {
     try {
-      KllBufferDouble(KllDoublesSketch.wrap(Memory.wrap(buffer)))
+      KllDoublesSketch.wrap(Memory.wrap(buffer))
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
@@ -397,8 +480,63 @@ case class KllSketchAggDouble(
   }
 }
 
-object KllSketchAgg {
-  def unexpectedInputDataTypeError(child: Expression): SparkUnsupportedOperationException =
+/**
+ * Common trait for KLL sketch aggregate functions that support an optional k parameter.
+ */
+trait KllSketchAggBase {
+  def kExpr: Option[Expression]
+  def prettyName: String
+
+  // Constants from the Apache DataSketches library.
+  private val MIN_K = 8
+  private val MAX_K = 65535
+  private val DEFAULT_K = 200
+
+  // Validate and extract k value
+  protected lazy val kValue: Int = {
+    kExpr match {
+      case Some(expr) =>
+        if (!expr.foldable) {
+          throw QueryExecutionErrors.kllSketchKMustBeConstantError(prettyName)
+        }
+        val k = expr.eval().asInstanceOf[Int]
+        if (k < MIN_K || k > MAX_K) {
+          throw QueryExecutionErrors.kllSketchKOutOfRangeError(prettyName, k)
+        }
+        k
+      case None => DEFAULT_K
+    }
+  }
+
+  protected def checkKInputDataTypes(): TypeCheckResult = {
+    kExpr match {
+      case Some(expr) =>
+        if (!expr.foldable) {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "k",
+              "inputType" -> "int",
+              "inputExpr" -> expr.sql))
+        } else if (expr.eval() == null) {
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> "k"))
+        } else {
+          // Trigger validation
+          try {
+            kValue
+            TypeCheckResult.TypeCheckSuccess
+          } catch {
+            case e: Exception => TypeCheckResult.TypeCheckFailure(e.getMessage)
+          }
+        }
+      case None => TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  protected def unexpectedInputDataTypeError(
+      child: Expression): SparkUnsupportedOperationException =
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_3121",
       messageParameters = Map("dataType" -> child.dataType.toString))
