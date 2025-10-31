@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.types.GeographyType;
+import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 
@@ -44,6 +46,36 @@ public final class STUtils {
   // Converts a `Geometry` object to the corresponding GEOMETRY physical value.
   static GeometryVal toPhysVal(Geometry g) {
     return g.getValue();
+  }
+
+  /** Geospatial type encoder/decoder utilities. */
+
+  public static GeometryVal serializeGeomFromWKB(org.apache.spark.sql.types.Geometry geometry, GeometryType gt) {
+    int geometrySrid = geometry.getSrid();
+    gt.assertSridAllowedForType(geometrySrid);
+    return toPhysVal(Geometry.fromWkb(geometry.getBytes(), geometrySrid));
+  }
+
+  public static GeographyVal serializeGeogFromWKB(org.apache.spark.sql.types.Geography geography, GeographyType gt) {
+    int geographySrid = geography.getSrid();
+    gt.assertSridAllowedForType(geographySrid);
+    return toPhysVal(Geography.fromWkb(geography.getBytes(), geographySrid));
+  }
+
+  public static org.apache.spark.sql.types.Geometry deserializeGeom(
+      GeometryVal geometry, GeometryType gt) {
+    int geometrySrid = stSrid(geometry);
+    gt.assertSridAllowedForType(geometrySrid);
+    byte[] wkb = stAsBinary(geometry);
+    return org.apache.spark.sql.types.Geometry.fromWKB(wkb, geometrySrid);
+  }
+
+  public static org.apache.spark.sql.types.Geography deserializeGeog(
+      GeographyVal geography, GeographyType gt) {
+    int geographySrid = stSrid(geography);
+    gt.assertSridAllowedForType(geographySrid);
+    byte[] wkb = stAsBinary(geography);
+    return org.apache.spark.sql.types.Geography.fromWKB(wkb, geographySrid);
   }
 
   /** Methods for implementing ST expressions. */
