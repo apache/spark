@@ -1290,7 +1290,7 @@ object StaxXmlParser {
       }
     } catch {
       case NonFatal(_) =>
-        // Ignore the exception and parse it as a string later
+        // Ignore the exception and parse it as a string below
     }
 
     // If the character is of other primitive types, parse it as a string
