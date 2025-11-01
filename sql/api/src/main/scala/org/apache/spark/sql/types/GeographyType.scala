@@ -142,9 +142,7 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
         messageParameters = Map(
           "type" -> "GEOGRAPHY",
           "valueSrid" -> otherSrid.toString,
-          "typeSrid" -> srid.toString
-        )
-      )
+          "typeSrid" -> srid.toString))
     } else if (isMixedSrid) {
       // For fixed SRID geom types, we have a check that value matches the type srid.
       // For mixed SRID we need to do that check explicitly, as MIXED SRID can accept any SRID.
@@ -152,8 +150,7 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
       if (!GeographyType.isSridSupported(otherSrid)) {
         throw new SparkIllegalArgumentException(
           errorClass = "ST_INVALID_SRID_VALUE",
-          messageParameters = Map("srid" -> otherSrid.toString)
-        )
+          messageParameters = Map("srid" -> otherSrid.toString))
       }
     }
   }

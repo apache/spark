@@ -305,7 +305,8 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i of date type as org.apache.spark.sql.types.Geometry.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getGeometry(i: Int): org.apache.spark.sql.types.Geometry =
     getAs[org.apache.spark.sql.types.Geometry](i)
@@ -313,7 +314,8 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i of date type as org.apache.spark.sql.types.Geography.
    *
-   * @throws ClassCastException when data type does not match.
+   * @throws ClassCastException
+   *   when data type does not match.
    */
   def getGeography(i: Int): org.apache.spark.sql.types.Geography =
     getAs[org.apache.spark.sql.types.Geography](i)
