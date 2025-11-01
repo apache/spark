@@ -428,9 +428,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
  * types (ValueState, ListState, MapState) used in arbitrary stateful operators.
  */
 abstract class StateVariableSuiteBase extends SharedSparkSession
-  with BeforeAndAfter
-  with AlsoTestWithStateStoreRowChecksum
-  with AlsoTestWithEncodingTypes {
+  with BeforeAndAfter with AlsoTestWithEncodingTypes {
 
   before {
     StateStore.stop()
@@ -495,3 +493,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   }
 }
 
+/**
+ * Test suite that runs all ValueStateSuite tests with row checksum enabled.
+ */
+class ValueStateSuiteWithRowChecksum extends ValueStateSuite with EnableStateStoreRowChecksum

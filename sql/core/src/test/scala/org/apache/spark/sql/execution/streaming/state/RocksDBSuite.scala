@@ -148,9 +148,8 @@ trait AlsoTestWithEncodingTypes extends SQLTestUtils {
   }
 }
 
-trait AlsoTestWithRocksDBFeatures extends SQLTestUtils
-  with RocksDBStateStoreChangelogCheckpointingTestUtil
-  with AlsoTestWithStateStoreRowChecksum {
+trait AlsoTestWithRocksDBFeatures
+  extends SQLTestUtils with RocksDBStateStoreChangelogCheckpointingTestUtil {
 
   sealed trait TestMode
   case object TestWithChangelogCheckpointingEnabled extends TestMode
@@ -3917,3 +3916,10 @@ object RocksDBSuite {
     }
   }
 }
+
+/**
+ * Test suite that runs all RocksDBSuite tests with row checksum enabled.
+ * This ensures row checksum works correctly with all RocksDB features.
+ */
+@SlowSQLTest
+class RocksDBSuiteWithRowChecksum extends RocksDBSuite with EnableStateStoreRowChecksum

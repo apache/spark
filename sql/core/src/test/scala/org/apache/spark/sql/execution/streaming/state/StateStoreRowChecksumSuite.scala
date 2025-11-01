@@ -23,8 +23,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.rocksdb.{ReadOptions, RocksDB => NativeRocksDB, WriteOptions}
-import org.scalactic.source.Position
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester, Tag}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.io.CompressionCodec
@@ -32,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -423,42 +422,24 @@ class RocksDBStateStoreRowChecksumSuite extends StateStoreRowChecksumSuite
   }
 }
 
-/** Used to enable testing with and without row checksum enabled in other suites
- * to make sure row checksum works well with other features. */
-trait AlsoTestWithStateStoreRowChecksum extends SQLTestUtils {
-  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
-      (implicit pos: Position): Unit = {
-    testWithRowChecksumEnabled(testName, testTags: _*)(testBody)
-    testWithRowChecksumDisabled(testName, testTags: _*)(testBody)
+/**
+ * Trait that enables state store row checksum in test sparkConf.
+ * Use this to create separate test suites that test with row checksum enabled.
+ *
+ * Example:
+ * {{{
+ * class MyTestSuite extends MyBaseTestSuite {
+ *   // tests without row checksum
+ * }
+ *
+ * class MyTestSuiteWithRowChecksum extends MyTestSuite with EnableStateStoreRowChecksum {
+ *   // inherits all tests from MyTestSuite, but with row checksum enabled
+ * }
+ * }}}
+ */
+trait EnableStateStoreRowChecksum extends SharedSparkSession {
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key, true.toString)
   }
-
-  def testWithRowChecksumEnabled(testName: String, testTags: Tag*)
-      (testBody: => Any): Unit = {
-    super.test(testName + " (with row checksum)", testTags: _*) {
-      // in case tests have any code that needs to execute before every test
-      super.beforeEach()
-      withSQLConf(SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key -> true.toString) {
-        testBody
-      }
-      // in case tests have any code that needs to execute after every test
-      super.afterEach()
-    }
-  }
-
-  def testWithRowChecksumDisabled(testName: String, testTags: Tag*)
-      (testBody: => Any): Unit = {
-    super.test(testName + " (without row checksum)", testTags: _*) {
-      // in case tests have any code that needs to execute before every test
-      super.beforeEach()
-      withSQLConf(SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key -> false.toString) {
-        testBody
-      }
-      // in case tests have any code that needs to execute after every test
-      super.afterEach()
-    }
-  }
-
-  // The default implementation in SQLTestUtils times out the `withTempDir()` call
-  // after 10 seconds. We don't want that because it causes flakiness in tests.
-  override protected def waitForTasksToFinish(): Unit = {}
 }

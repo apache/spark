@@ -256,14 +256,10 @@ private object FakeStateStoreProviderWithMaintenanceError {
 
 @ExtendedSQLTest
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
-  with AlsoTestWithStateStoreRowChecksum
   with SharedSparkSession
   with BeforeAndAfter {
   import StateStoreTestsHelper._
   import StateStoreCoordinatorSuite._
-
-  override def beforeEach(): Unit = {}
-  override def afterEach(): Unit = {}
 
   before {
     StateStore.stop()
@@ -807,7 +803,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  testWithRowChecksumDisabled("SPARK-51291: corrupted file handling") {
+  test("SPARK-51291: corrupted file handling") {
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       minDeltasForSnapshot = 5)) { provider =>
 
@@ -1304,10 +1300,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  // When row checksum is enabled, we store checksum in the map and JVM does some memory
-  // optimization that will cause the memory used to be significantly lower for the
-  // reloadedProvider compared to the initial provider. The test expects it to be higher.
-  testWithRowChecksumDisabled("expose metrics with custom metrics to StateStoreMetrics") {
+  test("expose metrics with custom metrics to StateStoreMetrics") {
     def getCustomMetric(metrics: StateStoreMetrics, name: String): Long = {
       val metricPair = metrics.customMetrics.find(_._1.name == name)
       assert(metricPair.isDefined)
@@ -2861,4 +2854,17 @@ class RenameReturnsFalseFileSystem extends RawLocalFileSystem {
 
 object RenameReturnsFalseFileSystem {
   val scheme = s"StateStoreSuite${math.abs(Random.nextInt())}fs"
+}
+
+/**
+ * Test suite that runs all StateStoreSuite tests with row checksum enabled.
+ */
+@ExtendedSQLTest
+class StateStoreSuiteWithRowChecksum
+  extends StateStoreSuite with EnableStateStoreRowChecksum {
+  override protected def testQuietly(name: String)(f: => Unit): Unit = {
+    // Use the implementation from StateStoreSuiteBase.
+    // There is another in SQLTestUtils. Doing this to avoid conflict error.
+    super[StateStoreSuite].testQuietly(name)(f)
+  }
 }
