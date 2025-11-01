@@ -350,4 +350,13 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekMapState[String, Long]("frequencies", "key1") == Map())
     assert(tester.peekMapState[String, Long]("frequencies", "key2") == Map())
   }
+
+  test("TwsTester should test one row with state") {
+    val processor = new RunningCountProcessor()
+    val tester = new TwsTester(processor)
+
+    val (rows, newState) = tester.testOneRowWithState("key1", ("a", "b"), "count", 10L)
+    assert(rows == List(("key1", 11L)))
+    assert (newState == 11L)
+  }
 }

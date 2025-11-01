@@ -36,8 +36,8 @@ import org.apache.spark.sql.streaming.TimeMode
  * @tparam O the type of output rows
  */
 class TwsTester[K, I, O](
-                          val processor: StatefulProcessor[K, I, O],
-                          val clock: Clock = Clock.systemUTC()) {
+    val processor: StatefulProcessor[K, I, O],
+    val clock: Clock = Clock.systemUTC()) {
   private val timeMode: TimeMode = TimeMode.None
   private val outputMode: OutputMode = OutputMode.Append
   private val handle = new InMemoryStatefulProcessorHandleImpl(timeMode, null, clock)
@@ -69,6 +69,26 @@ class TwsTester[K, I, O](
    * @return all output rows produced by the processor
    */
   def testOneRow(key: K, inputRow: I): List[O] = test(List((key, inputRow)))
+
+  /**
+   * Tests how value state is changed after processing one row.
+   *
+   * @param key the grouping key
+   * @param inputRow the input row to process
+   * @param stateName the name os value state
+   * @param stateIn the old value of the value state
+   * @tparam S the type of value state
+   * @return output rows produced by the processor and new value of the value state
+   */
+  def testOneRowWithValueState[S](
+      key: K,
+      inputRow: I,
+      stateName: String,
+      stateIn: S): (List[O], S) = {
+    setValueState[S](stateName, key, stateIn)
+    val outputRows = testOneRow(key, inputRow)
+    (outputRows, peekValueState[S](stateName, key).get)
+  }
 
   /**
    * Sets the value state for a given key.
