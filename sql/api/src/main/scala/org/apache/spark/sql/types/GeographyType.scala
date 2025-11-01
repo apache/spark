@@ -134,15 +134,15 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
     isMixedSrid || gt.srid == srid
   }
 
-  def assertSridAllowedForType(otherSrid: Int): Unit = {
+  private[sql] def assertSridAllowedForType(otherSrid: Int): Unit = {
     // If SRID is not mixed, SRIDs must match.
     if (!isMixedSrid && otherSrid != srid) {
       throw new SparkRuntimeException(
         errorClass = "GEO_ENCODER_SRID_MISMATCH_ERROR",
         messageParameters = Map(
-          "type"-> "GEOGRAPHY",
+          "type" -> "GEOGRAPHY",
           "valueSrid" -> otherSrid.toString,
-          "typeSrid" -> srid.toString,
+          "typeSrid" -> srid.toString
         )
       )
     } else if (isMixedSrid) {
@@ -182,7 +182,7 @@ object GeographyType extends SpatialType {
     GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
 
   /** Returns whether the given SRID is supported. */
-  def isSridSupported(srid: Int): Boolean = {
+  private[types] def isSridSupported(srid: Int): Boolean = {
     GeographicSpatialReferenceSystemMapper.getStringId(srid) != null
   }
 

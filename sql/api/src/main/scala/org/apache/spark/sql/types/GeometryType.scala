@@ -131,15 +131,15 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
     isMixedSrid || gt.srid == srid
   }
 
-  def assertSridAllowedForType(otherSrid: Int): Unit = {
+  private[sql] def assertSridAllowedForType(otherSrid: Int): Unit = {
     // If SRID is not mixed, SRIDs must match.
     if (!isMixedSrid && otherSrid != srid) {
       throw new SparkRuntimeException(
         errorClass = "GEO_ENCODER_SRID_MISMATCH_ERROR",
         messageParameters = Map(
-          "type"-> "GEOMETRY",
+          "type" -> "GEOMETRY",
           "valueSrid" -> otherSrid.toString,
-          "typeSrid" -> srid.toString,
+          "typeSrid" -> srid.toString
         )
       )
     } else if (isMixedSrid) {
@@ -174,7 +174,7 @@ object GeometryType extends SpatialType {
     GeometryType(MIXED_CRS)
 
   /** Returns whether the given SRID is supported. */
-  def isSridSupported(srid: Int): Boolean = {
+  private[types] def isSridSupported(srid: Int): Boolean = {
     CartesianSpatialReferenceSystemMapper.getStringId(srid) != null
   }
 
