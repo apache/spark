@@ -144,6 +144,26 @@ object SchemaPruning extends SQLConfHelper {
         RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
           derivedFromAtt = true) :: Nil
       case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
+      // SPARK-47230: Handle GetArrayStructFields for generator pruning
+      case GetArrayStructFields(child, field, ordinal, numFields, containsNull) =>
+        // Get root fields from the child (the array)
+        val childRootFields = getRootFields(child)
+        // For each root field, create a pruned version with only the specific field accessed
+        childRootFields.map { rootField =>
+          rootField.field.dataType match {
+            case ArrayType(elementType: StructType, arrContainsNull) =>
+              // Create a pruned struct with only the field we need
+              val prunedElement = StructType(Array(field))
+              val prunedArrayType = ArrayType(prunedElement, arrContainsNull)
+              RootField(
+                StructField(rootField.field.name, prunedArrayType, rootField.field.nullable, rootField.field.metadata),
+                derivedFromAtt = false
+              )
+            case _ =>
+              // Not an array of structs, keep as is
+              rootField
+          }
+        }
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
       // don't actually use any nested fields. These root field accesses might be excluded later
       // if there are any nested fields accesses in the query plan.

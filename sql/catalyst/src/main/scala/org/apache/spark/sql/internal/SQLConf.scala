@@ -1380,6 +1380,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val OPTIMIZER_V2_PENDING_SCAN_ENABLED =
+    buildConf("spark.sql.optimizer.v2.pendingScan.enabled")
+      .internal()
+      .doc("Enable the experimental pending V2 scan finalization path for generator-aware pruning.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val COLUMN_NAME_OF_CORRUPT_RECORD = buildConf("spark.sql.columnNameOfCorruptRecord")
     .doc("The name of internal column for storing raw/un-parsed JSON and CSV records that fail " +
       "to parse.")
@@ -4775,6 +4783,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
+
+  def optimizerV2PendingScanEnabled: Boolean = getConf(OPTIMIZER_V2_PENDING_SCAN_ENABLED)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 

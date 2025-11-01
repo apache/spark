@@ -887,8 +887,9 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning(
     "SPARK-47230: chained POSEXPLODE with SELECT * on session requests prunes to thin schema") {
-    withDataSourceTable(sessions, "sessions_data") {
-      val query = sql(
+    withSQLConf(SQLConf.OPTIMIZER_V2_PENDING_SCAN_ENABLED.key -> "true") {
+      withDataSourceTable(sessions, "sessions_data") {
+        val query = sql(
         """
           |WITH exploded_data AS (
           |  SELECT *,
@@ -908,14 +909,15 @@ abstract class SchemaPruningSuite
           |GROUP BY publisherId
           |""".stripMargin)
 
-      checkScan(query,
-        "struct<publisherId:bigint,endOfSession:bigint," +
-          "requests:array<struct<available:boolean,clientMode:string," +
-          "servedItems:array<struct<clicked:boolean,revenue:double>>>>>")
+        checkScan(query,
+          "struct<publisherId:bigint,endOfSession:bigint," +
+            "requests:array<struct<available:boolean,clientMode:string," +
+            "servedItems:array<struct<clicked:boolean,revenue:double>>>>>")
 
-      checkAnswer(query.orderBy("publisherId"),
-        Row(100L, 1234567890L, 2L, 2L, 2L, 25.0) ::
-        Row(200L, 1234567900L, 1L, 1L, 0L, null) :: Nil)
+        checkAnswer(query.orderBy("publisherId"),
+          Row(100L, 1234567890L, 2L, 2L, 2L, 25.0) ::
+            Row(200L, 1234567900L, 1L, 1L, 0L, null) :: Nil)
+      }
     }
   }
 

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.{GeneratorOrdinalRewriting, PruneFileSourcePartitions, SchemaPruning, V1Writes}
-import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
+import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2PendingScanFinalizer, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
 
@@ -42,6 +42,7 @@ class SparkOptimizer(
       "PartitionPruning",
       "RewriteSubquery",
       "Extract Python UDFs",
+      "Early Filter and Projection Push-Down",
       "Schema Pruning")
 
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
@@ -58,17 +59,27 @@ class SparkOptimizer(
     OptimizeMetadataOnlyDeleteFromTable :: Nil
 
   override def defaultBatches: Seq[Batch] = {
-    val earlyBatches = super.defaultBatches.takeWhile(
-      _.name != "Early Filter and Projection Push-Down")
-    val laterBatches = super.defaultBatches.dropWhile(
-      _.name != "Early Filter and Projection Push-Down")
+    val parentBatches = super.defaultBatches
+    val (preEarly, earlyAndAfter) =
+      parentBatches.span(_.name != "Early Filter and Projection Push-Down")
+    require(earlyAndAfter.nonEmpty,
+      "Expected 'Early Filter and Projection Push-Down' batch in parent optimizer")
+    val earlyPushDownBatch = earlyAndAfter.head
+    val postEarlyBatches = earlyAndAfter.tail
 
-    ((preOptimizationBatches ++ earlyBatches :+
-      // SPARK-47230: Separate batch for SchemaPruning + GeneratorOrdinalRewriting
-      // GeneratorOrdinalRewriting must run IMMEDIATELY AFTER SchemaPruning
-      Batch("Schema Pruning", Once,
-        SchemaPruning, GeneratorOrdinalRewriting)) ++
-      laterBatches :+
+    val reorderedBatches =
+      (preOptimizationBatches ++ preEarly :+
+        earlyPushDownBatch :+
+        // SPARK-47230: Separate batch for SchemaPruning, Pending V2 finalization, and ordinal fixup.
+        // GeneratorOrdinalRewriting must run IMMEDIATELY AFTER schema pruning rewrites complete.
+        Batch("Schema Pruning", Once,
+          SchemaPruning,
+          V2PendingScanFinalizer,
+          ColumnPruning,
+          GeneratorOrdinalRewriting)) ++
+        postEarlyBatches
+
+    (reorderedBatches :+
       Batch("Optimize Metadata Only Query", Once,
         OptimizeMetadataOnlyQuery(catalog)) :+
       Batch("PartitionPruning", Once,
@@ -129,6 +140,7 @@ class SparkOptimizer(
     V2ScanRelationPushDown.ruleName :+
     V2ScanPartitioningAndOrdering.ruleName :+
     V2Writes.ruleName :+
+    V2PendingScanFinalizer.ruleName :+
     ReplaceCTERefWithRepartition.ruleName
 
   /**
@@ -144,5 +156,6 @@ class SparkOptimizer(
    *
    * Note that 'Extract Python UDFs' batch is an exception and ran after the batches defined here.
    */
-   def postHocOptimizationBatches: Seq[Batch] = Nil
+  def postHocOptimizationBatches: Seq[Batch] =
+    Nil
 }

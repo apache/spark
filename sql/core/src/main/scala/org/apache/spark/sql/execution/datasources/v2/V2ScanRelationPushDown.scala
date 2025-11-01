@@ -17,26 +17,31 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.immutable.Map
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.analysis.NamedRelation
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, ExprId, Expression, ExtractValue, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Generate, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort, Statistics, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownV2Filters, V1Scan}
+import org.apache.spark.sql.catalyst.expressions.SchemaPruning
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+import org.apache.spark.sql.execution.datasources.v2.GeneratorInputAnalyzer.GeneratorInputInfo
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegerType, MapType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
-  import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
@@ -67,15 +72,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
         normalizedFilters.partition(SubqueryExpression.hasSubquery)
 
+      sHolder.normalizedFilters = normalizedFiltersWithoutSubquery
+
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
         sHolder.builder, normalizedFiltersWithoutSubquery)
       val pushedFiltersStr = if (pushedFilters.isLeft) {
-        pushedFilters.left.get.mkString(", ")
+        val filtersPushed = pushedFilters.left.get
+        sHolder.pushedDataSourceFilters = filtersPushed
+        sHolder.pushedPredicates = Seq.empty
+        filtersPushed.mkString(", ")
       } else {
         sHolder.pushedPredicates = pushedFilters.right.get
+        sHolder.pushedDataSourceFilters = Seq.empty
         pushedFilters.right.get.mkString(", ")
       }
 
@@ -350,48 +361,261 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       Project(projectList, scanRelation)
   }
 
-  def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
-      // column pruning
-      val normalizedProjects = DataSourceStrategy
-        .normalizeExprs(project, sHolder.output)
-        .asInstanceOf[Seq[NamedExpression]]
-      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
-      val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
-      val (scan, output) = PushDownUtils.pruneColumns(
-        sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
+  def pruneColumns(plan: LogicalPlan): LogicalPlan = {
+    // SPARK-47230: If generators are present in the plan, apply GeneratorNestedColumnAliasing
+    // transformation BEFORE pruning. This creates GetArrayStructFields expressions that allow
+    // V2 pruning logic to correctly identify nested field accesses within generator outputs.
+    val hasGenerators = plan.exists(_.isInstanceOf[Generate])
+    val planWithAliasing = if (hasGenerators) {
+      import org.apache.spark.sql.catalyst.optimizer.GeneratorNestedColumnAliasingRule
+      GeneratorNestedColumnAliasingRule.apply(plan)
+    } else {
+      plan
+    }
 
-      logInfo(
-        s"""
-           |Output: ${output.mkString(", ")}
-         """.stripMargin)
+    // SPARK-47230 Redesign: Analyze the complete plan ONCE to collect ALL schema requirements
+    // for ALL relations. This solves the multiple-invocation problem where each pruneColumns
+    // call only sees a subset of expressions.
+    val pendingEligible =
+      SQLConf.get.optimizerV2PendingScanEnabled && hasGenerators
 
-      val wrappedScan = getWrappedScan(scan, sHolder)
+    val planForPruning = planWithAliasing
 
-      val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
+    val schemaRequirements =
+      Map.empty[Long, Seq[SchemaPruning.RootField]]
 
-      val projectionOverSchema =
-        ProjectionOverSchema(output.toStructType, AttributeSet(output))
-      val projectionFunc = (expr: Expression) => expr transformDown {
-        case projectionOverSchema(newExpr) => newExpr
-      }
-
-      val finalFilters = normalizedFilters.map(projectionFunc)
-      // bottom-most filters are put in the left of the list.
-      val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
-        Filter(cond, plan)
-      })
-
-      if (withFilter.output != project) {
-        val newProjects = normalizedProjects
-          .map(projectionFunc)
+    planForPruning.transform {
+      case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
+        // column pruning
+        val normalizedProjects = DataSourceStrategy
+          .normalizeExprs(project, sHolder.output)
           .asInstanceOf[Seq[NamedExpression]]
-        Project(restoreOriginalOutputNames(newProjects, project.map(_.name)), withFilter)
-      } else {
-        withFilter
-      }
+        val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+        val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
+
+        sHolder.normalizedProjects = normalizedProjects
+        sHolder.normalizedFilters = normalizedFilters
+
+        if (pendingEligible) {
+          val relationId = PendingScanRelationId.nextId()
+          val allGeneratorInfo = GeneratorInputAnalyzer.collectGeneratorInputs(planForPruning)
+          val relationColumns = sHolder.relation.output.map(_.name).toSet
+          val relationExprIds = sHolder.relation.output.map(_.exprId).toSet
+          val allGeneratorInfosSeq = allGeneratorInfo.values.toSeq
+          println(s"[V2ScanRelationPushDown DEBUG] relation=$relationId generators=${allGeneratorInfosSeq.map(_.columnName).mkString(",")}")
+          println(s"[V2ScanRelationPushDown DEBUG] relation=$relationId plan:\n${planForPruning.treeString}")
+          val pendingInfos = mutable.ArrayBuffer[GeneratorInputInfo]()
+          pendingInfos ++= allGeneratorInfosSeq
+          val contextMap = mutable.Map[ExprId, GeneratorContext]()
+
+          var madeProgress = true
+          while (pendingInfos.nonEmpty && madeProgress) {
+            madeProgress = false
+            val remaining = mutable.ArrayBuffer[GeneratorInputInfo]()
+
+            pendingInfos.foreach { info =>
+              val baseExprIdOpt =
+                if (relationExprIds.contains(info.inputAttr.exprId)) {
+                  Some(info.inputAttr.exprId)
+                } else {
+                  contextMap.get(info.inputAttr.exprId).map(_.input)
+                }
+
+              baseExprIdOpt match {
+                case Some(baseExprId) =>
+                  info.outputAttributes.foreach {
+                    case outAttr: AttributeReference =>
+                      contextMap.update(outAttr.exprId, GeneratorContext(outAttr, baseExprId))
+                    case _ =>
+                  }
+                  madeProgress = true
+                case None =>
+                  remaining += info
+              }
+            }
+
+            pendingInfos.clear()
+            pendingInfos ++= remaining
+          }
+
+          val generatorContexts = contextMap.toMap
+
+          val relationGeneratorInfos = allGeneratorInfosSeq
+
+          val generatorInputExprIds = generatorContexts.valuesIterator.map(_.input).toSet
+          val generatorOutputExprIds = generatorContexts.keySet
+
+          val relationAttrSeq = sHolder.relation.output.toVector
+          val relationExprIdSet = relationAttrSeq.map(_.exprId).toSet
+          val relationAttrsByExprId = relationAttrSeq.map(attr => attr.exprId -> attr).toMap
+          val computedDirectAttrExprIds = mutable.Set[ExprId]()
+          val computedDirectGeneratorOutputs = mutable.Set[ExprId]()
+          val passThroughGeneratorOutputs = mutable.Set[ExprId]()
+          val wholeStructGeneratorOutputs = mutable.Set[ExprId]()
+
+          def isComplexType(dataType: DataType): Boolean = dataType match {
+            case _: StructType | _: ArrayType | _: MapType => true
+            case _ => false
+          }
+
+          def traverse(expr: Expression, underAccessor: Boolean): Unit = expr match {
+            case attr: AttributeReference if !underAccessor =>
+              if (relationExprIdSet.contains(attr.exprId)) {
+                computedDirectAttrExprIds += attr.exprId
+              }
+              if (generatorOutputExprIds.contains(attr.exprId)) {
+                computedDirectGeneratorOutputs += attr.exprId
+              }
+            case alias: Alias =>
+              val childAttrOpt = alias.child match {
+                case attr: AttributeReference => Some(attr)
+                case _ => None
+              }
+              val childIsGenerator = childAttrOpt.exists(attr => generatorOutputExprIds.contains(attr.exprId))
+              val childUnderAccessor =
+                underAccessor ||
+                  alias.name.startsWith("_extract_") ||
+                  (childIsGenerator && childAttrOpt.exists(attr => attr.name != alias.name))
+              if (childIsGenerator && childAttrOpt.nonEmpty && alias.child.isInstanceOf[AttributeReference]) {
+                val childAttr = childAttrOpt.get
+                if (isComplexType(childAttr.dataType)) {
+                  wholeStructGeneratorOutputs += childAttr.exprId
+                }
+              }
+              traverse(alias.child, childUnderAccessor)
+            case GetStructField(child, _, _) =>
+              traverse(child, underAccessor = true)
+            case GetArrayStructFields(child, _, _, _, _) =>
+              traverse(child, underAccessor = true)
+            case GetArrayItem(child, _, _) =>
+              traverse(child, underAccessor = true)
+            case GetMapValue(child, _) =>
+              traverse(child, underAccessor = true)
+            case ev: ExtractValue =>
+              ev.children.headOption.foreach(ch => traverse(ch, underAccessor = true))
+              ev.children.drop(1).foreach(ch => traverse(ch, underAccessor = false))
+            case _ =>
+              expr.children.foreach(ch => traverse(ch, underAccessor = false))
+          }
+
+          planForPruning.foreach { node =>
+            val generatorOutputIdSet = node match {
+              case gen: Generate => gen.generatorOutput.collect {
+                case attr: AttributeReference => attr.exprId
+              }.toSet
+              case _ => Set.empty[ExprId]
+            }
+            node match {
+              case project: Project =>
+                val projectIsPassThrough =
+                  project.projectList.nonEmpty &&
+                    project.projectList.forall {
+                      case attr: AttributeReference =>
+                        generatorOutputExprIds.contains(attr.exprId)
+                      case _ => false
+                    }
+                if (projectIsPassThrough) {
+                  project.projectList.foreach {
+                    case attr: AttributeReference if generatorOutputExprIds.contains(attr.exprId) =>
+                      passThroughGeneratorOutputs += attr.exprId
+                    case _ =>
+                  }
+                }
+              case _ =>
+            }
+            node.expressions.foreach {
+              case attr: AttributeReference if generatorOutputIdSet.contains(attr.exprId) =>
+                // Skip bare generator outputs; they don't indicate downstream usage
+              case expr =>
+                traverse(expr, underAccessor = false)
+            }
+          }
+
+          val generatorOutputsUsedAsInputs =
+            relationGeneratorInfos.iterator
+              .map(_.inputAttr.exprId)
+              .filter(generatorOutputExprIds.contains)
+              .toSet
+
+          val planOutputExprIds =
+            planForPruning.outputSet.iterator.map(_.exprId).toSet
+          val directAttrExprIds =
+            (computedDirectAttrExprIds.toSet -- generatorInputExprIds)
+              .intersect(planOutputExprIds)
+          val directGeneratorOutputExprIds =
+            (computedDirectGeneratorOutputs.toSet -- generatorOutputsUsedAsInputs) --
+              passThroughGeneratorOutputs
+          val generatorWholeStructExprIds = wholeStructGeneratorOutputs.toSet -- passThroughGeneratorOutputs
+          val directAttrNames =
+            directAttrExprIds.flatMap(relationAttrsByExprId.get).map(_.name).toSeq.sorted
+          val directGeneratorOutputNames =
+            directGeneratorOutputExprIds.flatMap(generatorContexts.get).map(_.output.name).toSeq.sorted
+          println(s"[V2ScanRelationPushDown DEBUG] relation=$relationId directAttrs=${directAttrExprIds.size}:${directAttrNames.mkString(",")} directGeneratorOutputs=${directGeneratorOutputExprIds.size}:${directGeneratorOutputNames.mkString(",")}")
+          val baselineRootFields =
+            SchemaPruning.identifyRootFields(normalizedProjects, normalizedFilters).toVector
+          // baselineRootFields kept for non-generator columns; generator columns handled separately
+
+          val requirements =
+            EnhancedRequirementCollector.collect(
+              planForPruning,
+              relationId,
+              generatorContexts,
+              relationGeneratorInfos,
+              baselineRootFields,
+              directAttrExprIds,
+              directGeneratorOutputExprIds,
+              generatorWholeStructExprIds,
+              sHolder.relation.output.toVector,
+              sHolder.relation.schema)
+
+          PendingScanPlan(project, filtersStayUp, filtersPushDown,
+            sHolder.toPending(relationId, None, Some(requirements)))
+        } else {
+          // SPARK-47230: Use pre-computed schema requirements from complete plan analysis
+          val requirementsForRelation = schemaRequirements.get(sHolder.relation.hashCode().toLong)
+          val (scan, output) = PushDownUtils.pruneColumns(
+            sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters,
+            requirementsForRelation)
+
+          logInfo(
+            s"""
+               |Output: ${output.mkString(", ")}
+             """.stripMargin)
+
+          val wrappedScan = getWrappedScan(scan, sHolder, None)
+
+          val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
+
+          val projectionOverSchema =
+            ProjectionOverSchema(output.toStructType, AttributeSet(output))
+          val projectionFunc = (expr: Expression) => expr transformDown {
+            case projectionOverSchema(newExpr) => newExpr
+          }
+
+          val finalFilters = normalizedFilters.map(projectionFunc)
+          // bottom-most filters are put in the left of the list.
+          val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
+            Filter(cond, plan)
+          })
+
+          if (withFilter.output != project) {
+            val newProjects = normalizedProjects
+              .map(projectionFunc)
+              .asInstanceOf[Seq[NamedExpression]]
+            Project(restoreOriginalOutputNames(newProjects, project.map(_.name)), withFilter)
+          } else {
+            withFilter
+          }
+        }
+    }
   }
 
+  /**
+   * SPARK-47230 Redesign: Collect schema requirements from the complete transformed plan.
+   * This analyzes ALL expressions in the plan to determine what fields each relation needs,
+   * solving the multiple-invocation problem where individual pruneColumns calls only see
+   * partial information.
+   */
   def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
     case sample: Sample => sample.child match {
       case PhysicalOperation(_, Nil, sHolder: ScanBuilderHolder) =>
@@ -533,14 +757,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
-  private def getWrappedScan(scan: Scan, sHolder: ScanBuilderHolder): Scan = {
+  private def getWrappedScan(
+      scan: Scan,
+      sHolder: ScanBuilderHolder,
+      stateOpt: Option[PendingScanPushdownState] = None): Scan = {
     scan match {
       case v1: V1Scan =>
-        val pushedFilters = sHolder.builder match {
-          case f: SupportsPushDownFilters =>
-            f.pushedFilters()
-          case _ => Array.empty[sources.Filter]
-        }
+        val pushedFilters: Array[sources.Filter] = stateOpt
+          .map(_.pushedDataSourceFilters.toArray)
+          .getOrElse {
+            sHolder.builder match {
+              case f: SupportsPushDownFilters =>
+                f.pushedFilters()
+              case _ => Array.empty[sources.Filter]
+            }
+          }
         val pushedDownOperators = PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
           sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates)
         V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
@@ -553,6 +784,12 @@ case class ScanBuilderHolder(
     var output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
     builder: ScanBuilder) extends LeafNode {
+  var normalizedProjects: Seq[NamedExpression] = Nil
+
+  var normalizedFilters: Seq[Expression] = Nil
+
+  var pushedDataSourceFilters: Seq[sources.Filter] = Seq.empty[sources.Filter]
+
   var pushedLimit: Option[Int] = None
 
   var pushedOffset: Option[Int] = None
@@ -566,6 +803,166 @@ case class ScanBuilderHolder(
   var pushedAggregate: Option[Aggregation] = None
 
   var pushedAggOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
+
+  def snapshotPushdownState(): PendingScanPushdownState = {
+    val topNState = if (sortOrders.nonEmpty && pushedLimit.isDefined) {
+      Some((sortOrders, pushedLimit.get))
+    } else {
+      None
+    }
+    val (capturedPartitionFilters, capturedDataFilters) = builder match {
+      case fileBuilder: FileScanBuilder =>
+        (fileBuilder.currentPartitionFilters, fileBuilder.currentDataFilters)
+      case _ =>
+        (Seq.empty[Expression], Seq.empty[Expression])
+    }
+    PendingScanPushdownState(
+      normalizedProjects,
+      normalizedFilters,
+      pushedDataSourceFilters,
+      pushedPredicates,
+      capturedPartitionFilters,
+      capturedDataFilters,
+      pushedAggregate,
+      pushedLimit,
+      pushedOffset,
+      pushedSample,
+      topNState,
+      pushedAggOutputMap,
+      sortOrders)
+  }
+
+  def toPending(
+      relationId: Long,
+      cachedStats: Option[Statistics],
+      requirements: Option[V2Requirements]): PendingV2ScanRelation = {
+    PendingV2ScanRelation(
+      relation,
+      output,
+      builder,
+      relationId,
+      cachedStats,
+      snapshotPushdownState(),
+      requirements)
+  }
+}
+
+private object PendingScanRelationId {
+  private val counter = new java.util.concurrent.atomic.AtomicLong(0L)
+
+  def nextId(): Long = counter.incrementAndGet()
+}
+
+case class PendingScanPushdownState(
+    normalizedProjects: Seq[NamedExpression],
+    normalizedFilters: Seq[Expression],
+    pushedDataSourceFilters: Seq[sources.Filter],
+    pushedPredicates: Seq[Predicate],
+    partitionFilters: Seq[Expression],
+    dataFilters: Seq[Expression],
+    pushedAggregate: Option[Aggregation],
+    pushedLimit: Option[Int],
+    pushedOffset: Option[Int],
+    pushedSample: Option[TableSampleInfo],
+    pushedTopN: Option[(Seq[V2SortOrder], Int)],
+    pushedAggOutputMap: AttributeMap[Expression],
+    sortOrders: Seq[V2SortOrder])
+
+case class PendingScanPlan(
+    projectList: Seq[NamedExpression],
+    filtersStayUp: Seq[Expression],
+    filtersPushDown: Seq[Expression],
+    pendingScan: PendingV2ScanRelation) extends UnaryNode {
+
+  override def child: LogicalPlan = pendingScan
+
+  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): PendingScanPlan =
+    copy(pendingScan = newChild.asInstanceOf[PendingV2ScanRelation])
+}
+
+case class PendingV2ScanRelation(
+    relation: DataSourceV2Relation,
+    output: Seq[AttributeReference],
+    builder: ScanBuilder,
+    relationId: Long,
+    cachedStats: Option[Statistics],
+    pushdownState: PendingScanPushdownState,
+    requirements: Option[V2Requirements]) extends LeafNode with NamedRelation {
+
+  override def name: String = relation.table.name()
+
+  override def computeStats(): Statistics = cachedStats.getOrElse(relation.computeStats())
+
+  override def simpleString(maxFields: Int): String = {
+    s"PendingV2Scan[${relation.table.name()}](id=$relationId)"
+  }
+
+  def withFreshBuilder(): ScanBuilder = {
+    val newBuilder = relation.table.asReadable.newScanBuilder(relation.options)
+    val replayed = PendingScanPushdownReplay.reapply(pushdownState, newBuilder)
+    if (replayed) {
+      newBuilder
+    } else {
+      builder
+    }
+  }
+}
+
+private[v2] object PendingScanPushdownReplay {
+  def reapply(state: PendingScanPushdownState, builder: ScanBuilder): Boolean = {
+    var success = true
+
+    state.pushedSample.foreach { sample =>
+      success &&= PushDownUtils.pushTableSample(builder, sample)
+    }
+
+    if (state.normalizedFilters.nonEmpty) {
+      PushDownUtils.pushFilters(builder, state.normalizedFilters)
+    } else {
+      builder match {
+        case fileBuilder: FileScanBuilder
+            if state.partitionFilters.nonEmpty || state.dataFilters.nonEmpty =>
+          val remaining = fileBuilder.pushFilters(state.partitionFilters ++ state.dataFilters)
+          success &&= remaining.isEmpty
+        case r: SupportsPushDownFilters if state.pushedDataSourceFilters.nonEmpty =>
+          val remaining = r.pushFilters(state.pushedDataSourceFilters.toArray)
+          success &&= remaining.isEmpty
+        case r: SupportsPushDownV2Filters if state.pushedPredicates.nonEmpty =>
+          val remaining = r.pushPredicates(state.pushedPredicates.toArray)
+          success &&= remaining.isEmpty
+        case _ =>
+      }
+    }
+
+    state.pushedAggregate.foreach { aggregation =>
+      builder match {
+        case aggBuilder: SupportsPushDownAggregates =>
+          success &&= aggBuilder.pushAggregation(aggregation)
+        case _ =>
+          success = false
+      }
+    }
+
+    state.pushedLimit.foreach { limit =>
+      val (pushed, _) = PushDownUtils.pushLimit(builder, limit)
+      success &&= pushed
+    }
+
+    state.pushedOffset.foreach { offset =>
+      success &&= PushDownUtils.pushOffset(builder, offset)
+    }
+
+    state.pushedTopN.foreach { case (orders, limit) =>
+      if (orders.nonEmpty) {
+        val (pushed, _) = PushDownUtils.pushTopN(builder, orders.toArray, limit)
+        success &&= pushed
+      }
+    }
+
+    success
+  }
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with

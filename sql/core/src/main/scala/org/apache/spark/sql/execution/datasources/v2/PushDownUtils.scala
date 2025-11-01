@@ -172,6 +172,14 @@ object PushDownUtils {
   /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.
    *
+   * SPARK-47230: After transformation by GeneratorNestedColumnAliasingRule in V2ScanRelationPushDown,
+   * this method handles GetArrayStructFields expressions via identifyRootFields.
+   *
+   * @param scanBuilder The scan builder to push pruning to
+   * @param relation The data source relation
+   * @param projects The projection expressions
+   * @param filters The filter expressions
+   * @param precomputedRootFields Pre-computed root fields from complete plan analysis (SPARK-47230 Redesign)
    * @return the `Scan` instance (since column pruning is the last step of operator pushdown),
    *         and new output attributes after column pruning.
    */
@@ -179,14 +187,21 @@ object PushDownUtils {
       scanBuilder: ScanBuilder,
       relation: DataSourceV2Relation,
       projects: Seq[NamedExpression],
-      filters: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
+      filters: Seq[Expression],
+      precomputedRootFields: Option[Seq[SchemaPruning.RootField]] = None): (Scan, Seq[AttributeReference]) = {
+
     val exprs = projects ++ filters
     val requiredColumns = AttributeSet(exprs.flatMap(_.references))
     val neededOutput = relation.output.filter(requiredColumns.contains)
 
     scanBuilder match {
       case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
-        val rootFields = SchemaPruning.identifyRootFields(projects, filters)
+        // SPARK-47230 Redesign: Use pre-computed root fields if available (from complete plan analysis),
+        // otherwise fall back to computing from local projects/filters
+        val rootFields = precomputedRootFields.getOrElse {
+          SchemaPruning.identifyRootFields(projects, filters)
+        }
+
         val prunedSchema = if (rootFields.nonEmpty) {
           SchemaPruning.pruneSchema(relation.schema, rootFields)
         } else {
@@ -214,8 +229,17 @@ object PushDownUtils {
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     toAttributes(cleaned).map {
-      // we have to keep the attribute id during transformation
-      a => a.withExprId(nameToAttr(a.name).exprId)
+      // SPARK-47230: Preserve the pruned dataType from the schema while copying ExprId
+      // from the original attribute. We must NOT use withExprId() because it may replace
+      // the pruned nested structure with the original unpruned structure.
+      a =>
+        val originalAttr = nameToAttr(a.name)
+        AttributeReference(
+          a.name,
+          a.dataType,  // Use pruned dataType from schema, NOT from originalAttr!
+          a.nullable,
+          a.metadata
+        )(originalAttr.exprId, originalAttr.qualifier)
     }
   }
 }

@@ -86,21 +86,13 @@ object SchemaPruning extends Rule[LogicalPlan] {
     val transformedPlan = plan transformDown {
       // SPARK-47230: Handle Project over Generate pattern to detect full struct selection
       case p @ Project(projectList, g @ Generate(generator, _, _, _, generatorOutput, _)) =>
-        // scalastyle:off println
-        println("DEBUG: Found Project over Generate pattern")
-        println(s"DEBUG: Project list size: ${projectList.size}")
-        println(s"DEBUG: Generator output size: ${generatorOutput.size}")
-        println(s"DEBUG: Generator: ${generator.getClass.getSimpleName}")
-        // scalastyle:on println
-
         // Check if any generator output attributes are selected directly (not via GetStructField)
         val generatorOutputIds = generatorOutput.map(_.exprId).toSet
-        // scalastyle:off println
-        println(s"DEBUG: Generator output IDs: ${generatorOutputIds.mkString(", ")}")
-        // scalastyle:on println
+        val projectIsPassThrough = projectList.forall(_.isInstanceOf[AttributeReference])
 
         projectList.foreach {
-          case attr: AttributeReference if generatorOutputIds.contains(attr.exprId) =>
+          case attr: AttributeReference
+              if generatorOutputIds.contains(attr.exprId) && !projectIsPassThrough =>
             // SPARK-47230: Check if this struct is used in another generator's child
             // (chained generator pattern) - if so, don't mark for full preservation
             val usedInChildGenerator = plan.exists {
@@ -124,10 +116,12 @@ object SchemaPruning extends Rule[LogicalPlan] {
                 generator match {
                   case e: Explode =>
                     traceArrayAccess(e.child).foreach { case (rootCol, _) =>
+                      println(s"[SchemaPruning DEBUG] marking full struct for $rootCol via direct attr ${attr.name}")
                       columnsNeedingFullPreservation += rootCol
                     }
                   case pe: PosExplode =>
                     traceArrayAccess(pe.child).foreach { case (rootCol, _) =>
+                      println(s"[SchemaPruning DEBUG] marking full struct for $rootCol via direct attr ${attr.name}")
                       columnsNeedingFullPreservation += rootCol
                     }
                   case _ =>
@@ -135,7 +129,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
               case _ =>
             }
 
-          case Alias(attr: AttributeReference, _) if generatorOutputIds.contains(attr.exprId) =>
+          case Alias(attr: AttributeReference, _)
+              if generatorOutputIds.contains(attr.exprId) && !projectIsPassThrough =>
             // SPARK-47230: Check if this struct is used in another generator's child
             // (chained generator pattern) - if so, don't mark for full preservation
             val usedInChildGenerator = plan.exists {
@@ -160,10 +155,12 @@ object SchemaPruning extends Rule[LogicalPlan] {
                 generator match {
                   case e: Explode =>
                     traceArrayAccess(e.child).foreach { case (rootCol, _) =>
+                      println(s"[SchemaPruning DEBUG] marking full struct for $rootCol via alias ${attr.name}")
                       columnsNeedingFullPreservation += rootCol
                     }
                   case pe: PosExplode =>
                     traceArrayAccess(pe.child).foreach { case (rootCol, _) =>
+                      println(s"[SchemaPruning DEBUG] marking full struct for $rootCol via alias ${attr.name}")
                       columnsNeedingFullPreservation += rootCol
                     }
                   case _ =>
@@ -171,17 +168,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
               case _ =>
             }
 
-          case other =>
-            // scalastyle:off println
-            println(s"DEBUG: Project item not a direct AttributeReference: " +
-              s"${other.getClass.getSimpleName}")
-            // scalastyle:on println
+          case _ =>
         }
-
-        // scalastyle:off println
-        println(s"DEBUG: columnsNeedingFullPreservation: " +
-          s"${columnsNeedingFullPreservation.mkString(", ")}")
-        // scalastyle:on println
 
         // Continue with normal processing
         p
@@ -295,6 +283,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       rootAndPath.foreach { case (rootCol, path) =>
         val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
         nestedFieldAccesses(rootCol) = existingPaths + path
+        println(s"[SchemaPruning DEBUG] recorded path for $rootCol -> ${path.mkString(".")}")
         // Track this as an array struct field path
         val existingArrayPaths = arrayStructFieldPaths.getOrElse(rootCol, Set.empty)
         arrayStructFieldPaths(rootCol) = existingArrayPaths + path
@@ -327,12 +316,13 @@ object SchemaPruning extends Rule[LogicalPlan] {
     columnsNeedingFullPreservation.foreach { rootCol =>
       val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
       nestedFieldAccesses(rootCol) = existingPaths + Seq.empty[String]
+      println(s"[SchemaPruning DEBUG] preserving full struct for $rootCol due to direct usage")
     }
 
     // SPARK-47230: Only apply enhanced pruning if we actually traced through Generate nodes
     // This enables pruning for explode/posexplode cases
     if (!tracedThroughGenerate) {
-      return None
+      println(s"[SchemaPruning DEBUG] continuing without generator trace (tracedThroughGenerate=false)")
     }
 
     if (nestedFieldAccesses.isEmpty) {
@@ -361,6 +351,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
     val prunedSchema = pruneNestedArraySchema(
       originalSchema, filteredAccesses.toMap, requiredColumns, filteredArrayPaths.toMap)
+    println(s"[SchemaPruning DEBUG] pruned schema = ${prunedSchema.simpleString}")
 
 
     // Check if we actually pruned anything
@@ -457,26 +448,31 @@ object SchemaPruning extends Rule[LogicalPlan] {
         // Check if this attribute is from a Generate node
         generateMappings.get(attr.exprId) match {
           case Some(gen: UnaryExpression) =>
+            println(s"[SchemaPruning DEBUG] tracing attr ${attr.exprId.id} via generator ${gen.getClass.getSimpleName}")
             // This attribute comes from a unary generator (explode, posexplode, etc.)
             // Extract the child and trace through it
             val (result, _) = traceArrayAccessThroughGenerates(
               gen.child, generateMappings, extractAliases, relationExprIds)
             (result, true)
           case Some(other) =>
+            println(s"[SchemaPruning DEBUG] tracing attr ${attr.exprId.id} via generator ${other.getClass.getSimpleName}")
             // Other generator types without a single child - mark as used Generate
             val (result, _) = traceArrayAccessThroughGenerates(
               other, generateMappings, extractAliases, relationExprIds)
             (result, true)
           case None =>
+            println(s"[SchemaPruning DEBUG] attr ${attr.exprId.id} not found in generateMappings; checking aliases")
             // Not from a Generate node - check if it's an _extract_ alias
             extractAliases.get(attr.exprId) match {
               case Some(aliasChild) =>
+                println(s"[SchemaPruning DEBUG] attr ${attr.exprId.id} resolved via alias")
                 // SPARK-47230: This is an _extract_ attribute created by NestedColumnAliasing
                 // Trace through the alias child expression
                 val (result, usedGen) = traceArrayAccessThroughGenerates(
                   aliasChild, generateMappings, extractAliases, relationExprIds)
                 (result, usedGen)
               case None =>
+                println(s"[SchemaPruning DEBUG] attr ${attr.exprId.id} maps to base relation? ${relationExprIds.contains(attr.exprId)}")
                 // Not from a Generate node or _extract_ alias - this is a regular attribute
                 val isRelation = relationExprIds.contains(attr.exprId)
                 if (isRelation) {
