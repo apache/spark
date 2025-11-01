@@ -1070,7 +1070,9 @@ case class UnresolvedCatalogRelation(
     tableMeta: CatalogTable,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false) extends UnresolvedLeafNode {
-  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.identifier.database.isDefined,
+    "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +
+    "UnresolvedCatalogRelation requires a fully qualified table identifier with database.")
 }
 
 /**
@@ -1097,7 +1099,9 @@ case class HiveTableRelation(
     tableStats: Option[Statistics] = None,
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation with NormalizeableRelation {
-  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.identifier.database.isDefined,
+    "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +
+    "HiveTableRelation requires a fully qualified table identifier with database.")
   assert(DataTypeUtils.sameType(tableMeta.partitionSchema, partitionCols.toStructType))
   assert(DataTypeUtils.sameType(tableMeta.dataSchema, dataCols.toStructType))
 
