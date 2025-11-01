@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.streaming.ExpiredTimerInfo
 import org.apache.spark.sql.streaming.ListState
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.streaming.OutputMode
@@ -135,6 +136,128 @@ class WordFrequencyProcessor(ttl: TTLConfig = TTLConfig.NONE)
     }
 
     results.iterator
+  }
+}
+
+/**
+ * Session timeout processor that demonstrates timer usage.
+ *
+ * Input: (userId, activityType) as (String, String)
+ * Output: (userId, event, count) as (String, String, Long)
+ *
+ * Behavior:
+ * - Tracks activity count per user session
+ * - Registers a timeout timer on first activity (5 seconds from current time)
+ * - Updates timer on each new activity (resets 5-second countdown)
+ * - When timer expires, emits ("userId", "SESSION_TIMEOUT", activityCount) and clears state
+ * - Regular activities emit ("userId", "ACTIVITY", currentCount)
+ */
+class SessionTimeoutProcessor(val timeoutDurationMs: Long = 5000L)
+    extends StatefulProcessor[String, (String, String), (String, String, Long)] {
+
+  @transient private var activityCountState: ValueState[Long] = _
+  @transient private var timerState: ValueState[Long] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    activityCountState =
+      getHandle.getValueState[Long]("activityCount", Encoders.scalaLong, TTLConfig.NONE)
+    timerState = getHandle.getValueState[Long]("timer", Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues
+  ): Iterator[(String, String, Long)] = {
+    val currentCount = if (activityCountState.exists()) activityCountState.get() else 0L
+    val newCount = currentCount + inputRows.size
+    activityCountState.update(newCount)
+
+    // Delete old timer if exists and register new one
+    if (timerState.exists()) {
+      getHandle.deleteTimer(timerState.get())
+    }
+
+    val newTimerMs = timerValues.getCurrentProcessingTimeInMs() + timeoutDurationMs
+    getHandle.registerTimer(newTimerMs)
+    timerState.update(newTimerMs)
+
+    Iterator.single((key, "ACTIVITY", newCount))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo
+  ): Iterator[(String, String, Long)] = {
+    val count = if (activityCountState.exists()) activityCountState.get() else 0L
+
+    // Clear session state
+    activityCountState.clear()
+    timerState.clear()
+
+    Iterator.single((key, "SESSION_TIMEOUT", count))
+  }
+}
+
+/**
+ * Multi-timer processor that registers multiple timers with different delays.
+ *
+ * Input: (userId, command) as (String, String)
+ * Output: (userId, timerType, timestamp) as (String, String, Long)
+ *
+ * On first input, registers three timers: SHORT (1s), MEDIUM (3s), LONG (5s)
+ * When each timer expires, emits the timer type and timestamp
+ */
+class MultiTimerProcessor
+    extends StatefulProcessor[String, (String, String), (String, String, Long)] {
+
+  @transient private var timerTypeMapState: MapState[Long, String] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    timerTypeMapState = getHandle.getMapState[Long, String](
+      "timerTypeMap",
+      Encoders.scalaLong,
+      Encoders.STRING,
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues
+  ): Iterator[(String, String, Long)] = {
+    inputRows.size // consume iterator
+
+    val baseTime = timerValues.getCurrentProcessingTimeInMs()
+    val shortTimer = baseTime + 1000L
+    val mediumTimer = baseTime + 3000L
+    val longTimer = baseTime + 5000L
+
+    getHandle.registerTimer(shortTimer) // SHORT - 1 second
+    getHandle.registerTimer(mediumTimer) // MEDIUM - 3 seconds
+    getHandle.registerTimer(longTimer) // LONG - 5 seconds
+
+    timerTypeMapState.updateValue(shortTimer, "SHORT")
+    timerTypeMapState.updateValue(mediumTimer, "MEDIUM")
+    timerTypeMapState.updateValue(longTimer, "LONG")
+
+    Iterator.empty
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo
+  ): Iterator[(String, String, Long)] = {
+    val expiryTime = expiredTimerInfo.getExpiryTimeInMs()
+    val timerType = timerTypeMapState.getValue(expiryTime)
+
+    // Clean up the timer type from the map
+    timerTypeMapState.removeKey(expiryTime)
+
+    Iterator.single((key, timerType, expiryTime))
   }
 }
 
@@ -351,12 +474,168 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekMapState[String, Long]("frequencies", "key2") == Map())
   }
 
-  test("TwsTester should test one row with state") {
+  test("TwsTester should test one row with value state") {
     val processor = new RunningCountProcessor()
     val tester = new TwsTester(processor)
 
-    val (rows, newState) = tester.testOneRowWithState("key1", ("a", "b"), "count", 10L)
+    val (rows, newState) = tester.testOneRowWithValueState("key1", ("a", "b"), "count", 10L)
     assert(rows == List(("key1", 11L)))
-    assert (newState == 11L)
+    assert(newState == 11L)
+  }
+
+  test("TwsTester should handle session timeout with timer") {
+    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // First activity - should register timer at 15000ms
+    val result1 = tester.test(List(("user1", ("user1", "login"))))
+    assert(result1 == List(("user1", "ACTIVITY", 1L)))
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 1L)
+    assert(tester.peekValueState[Long]("timer", "user1").get == 15000L)
+
+    // Second activity before timeout - should update timer to 20000ms
+    testClock.advanceBy(Duration.ofMillis(3000L)) // now at 13000ms
+    val result2 = tester.test(List(("user1", ("user1", "click"))))
+    assert(result2 == List(("user1", "ACTIVITY", 2L)))
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 2L)
+    assert(tester.peekValueState[Long]("timer", "user1").get == 18000L)
+
+    // Advance time past timeout - timer should fire
+    testClock.advanceBy(Duration.ofMillis(6000L)) // now at 19000ms, timer at 18000ms should fire
+    val result3 = tester.test(List()) // empty input, but timer should fire
+    assert(result3 == List(("user1", "SESSION_TIMEOUT", 2L)))
+    assert(tester.peekValueState[Long]("activityCount", "user1").isEmpty)
+    assert(tester.peekValueState[Long]("timer", "user1").isEmpty)
+  }
+
+  test("TwsTester should process timers before input rows") {
+    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register initial activity and timer
+    tester.test(List(("user1", ("user1", "start"))))
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 1L)
+
+    // Advance past timer expiry
+    testClock.advanceBy(Duration.ofMillis(6000L)) // now at 16000ms, timer at 15000ms expired
+
+    // Process new input - timer should fire BEFORE input is processed
+    val result = tester.test(List(("user1", ("user1", "new_activity"))))
+
+    // First output should be timeout (from expired timer), second should be new activity
+    assert(result.length == 2)
+    assert(result(0) == ("user1", "SESSION_TIMEOUT", 1L)) // Timer fired first
+    assert(result(1) == ("user1", "ACTIVITY", 1L)) // Then new activity (count reset)
+
+    // After processing, should have new state
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 1L)
+  }
+
+  test("TwsTester should handle multiple timers in same batch") {
+    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new MultiTimerProcessor()
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register all three timers (SHORT=11000ms, MEDIUM=13000ms, LONG=15000ms)
+    val result1 = tester.test(List(("user1", ("user1", "start"))))
+    assert(result1.isEmpty)
+
+    // Advance to fire SHORT timer only
+    testClock.advanceBy(Duration.ofMillis(1500L)) // now at 11500ms
+    val result2 = tester.test(List())
+    assert(result2.length == 1)
+    assert(result2(0) == ("user1", "SHORT", 11000L))
+
+    // Advance to fire MEDIUM and LONG timers together
+    testClock.advanceBy(Duration.ofMillis(4000L)) // now at 15500ms
+    val result3 = tester.test(List())
+
+    // Timers should fire in order of expiry time
+    assert(result3.length == 2)
+    assert(result3(0) == ("user1", "MEDIUM", 13000L))
+    assert(result3(1) == ("user1", "LONG", 15000L))
+  }
+
+  test("TwsTester should not process timers twice") {
+    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register timer at 15000ms
+    tester.test(List(("user1", ("user1", "start"))))
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 1L)
+
+    // Advance past timer and process - timer fires
+    testClock.advanceBy(Duration.ofMillis(6000L)) // now at 16000ms
+    val result1 = tester.test(List())
+    assert(result1.length == 1)
+    assert(result1(0) == ("user1", "SESSION_TIMEOUT", 1L))
+    assert(tester.peekValueState[Long]("activityCount", "user1").isEmpty)
+
+    // Process again at same time - timer should NOT fire again
+    val result2 = tester.test(List())
+    assert(result2.isEmpty)
+
+    // Process again with even later time - timer should still not fire
+    testClock.advanceBy(Duration.ofMillis(10000L)) // now at 26000ms
+    val result3 = tester.test(List())
+    assert(result3.isEmpty)
+  }
+
+  test("TwsTester should handle timers for multiple keys independently") {
+    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register activities for two users at different times
+    tester.test(List(("user1", ("user1", "start")))) // timer at 15000ms
+    testClock.advanceBy(Duration.ofMillis(2000L)) // now at 12000ms
+    tester.test(List(("user2", ("user2", "start")))) // timer at 17000ms
+
+    // Advance to fire only user1's timer
+    testClock.advanceBy(Duration.ofMillis(4000L)) // now at 16000ms
+    val result1 = tester.test(List())
+    assert(result1.length == 1)
+    assert(result1(0) == ("user1", "SESSION_TIMEOUT", 1L))
+    assert(tester.peekValueState[Long]("activityCount", "user1").isEmpty)
+    assert(tester.peekValueState[Long]("activityCount", "user2").get == 1L) // user2 still active
+
+    // Advance to fire user2's timer
+    testClock.advanceBy(Duration.ofMillis(2000L)) // now at 18000ms
+    val result2 = tester.test(List())
+    assert(result2.length == 1)
+    assert(result2(0) == ("user2", "SESSION_TIMEOUT", 1L))
+    assert(tester.peekValueState[Long]("activityCount", "user2").isEmpty)
+  }
+
+  test("TwsTester should handle timer deletion correctly") {
+    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register initial timer at 15000ms
+    tester.test(List(("user1", ("user1", "start"))))
+    assert(tester.peekValueState[Long]("timer", "user1").get == 15000L)
+
+    // New activity deletes old timer and registers new one at 18000ms
+    testClock.advanceBy(Duration.ofMillis(3000L)) // now at 13000ms
+    tester.test(List(("user1", ("user1", "activity"))))
+    assert(tester.peekValueState[Long]("timer", "user1").get == 18000L)
+
+    // Advance past original timer time (15000ms) but before new timer (18000ms)
+    testClock.advanceBy(Duration.ofMillis(3000L)) // now at 16000ms
+    val result = tester.test(List())
+    // Old timer at 15000ms should NOT fire since it was deleted
+    assert(result.isEmpty)
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 2L) // still active
+
+    // Advance past new timer time
+    testClock.advanceBy(Duration.ofMillis(3000L)) // now at 19000ms
+    val result2 = tester.test(List())
+    // New timer at 18000ms should fire
+    assert(result2.length == 1)
+    assert(result2(0) == ("user1", "SESSION_TIMEOUT", 2L))
   }
 }

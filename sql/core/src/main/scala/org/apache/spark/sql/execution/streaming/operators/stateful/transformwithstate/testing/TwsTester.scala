@@ -20,6 +20,8 @@ import java.time.Clock
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerValuesImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.ExpiredTimerInfoImpl
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.streaming.StatefulProcessor
@@ -31,15 +33,18 @@ import org.apache.spark.sql.streaming.TimeMode
  *
  * @param processor the StatefulProcessor to test
  * @param clock the clock to use for time-based operations, defaults to system UTC
+ * @param timeMode time mode that will be passed to transformWithState (defaults to TimeMode.None)
+ * @param outputMode output mode that will be passed to transformWithState (defaults to
+ *                   OutputMode.Append).
  * @tparam K the type of grouping key
  * @tparam I the type of input rows
  * @tparam O the type of output rows
  */
 class TwsTester[K, I, O](
     val processor: StatefulProcessor[K, I, O],
-    val clock: Clock = Clock.systemUTC()) {
-  private val timeMode: TimeMode = TimeMode.None
-  private val outputMode: OutputMode = OutputMode.Append
+    val clock: Clock = Clock.systemUTC(),
+    val timeMode: TimeMode = TimeMode.None,
+    val outputMode: OutputMode = OutputMode.Append) {
   private val handle = new InMemoryStatefulProcessorHandleImpl(timeMode, null, clock)
 
   processor.setHandle(handle)
@@ -52,10 +57,35 @@ class TwsTester[K, I, O](
    * @return all output rows produced by the processor
    */
   def test(input: List[(K, I)]): List[O] = {
-    var ans: List[O] = List()
+    val currentTimeMs = clock.instant().toEpochMilli()
+    // TODO: support TimeMode.EventTime.
+    val timerValues = new TimerValuesImpl(Some(currentTimeMs), None)
+    var ans: List[O] = handleExpiredTimers(currentTimeMs)
+
     for ((key, v) <- input.groupBy(_._1)) {
       ImplicitGroupingKeyTracker.setImplicitKey(key)
-      ans = ans ++ processor.handleInputRows(key, v.map(_._2).iterator, null).toList
+      ans = ans ++ processor.handleInputRows(key, v.map(_._2).iterator, timerValues).toList
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+    }
+    ans
+  }
+
+  private def handleExpiredTimers(currentTimeMs: Long): List[O] = {
+    var ans: List[O] = List()
+    for (key <- handle.getAllKeysWithTimers[K]()) {
+      ImplicitGroupingKeyTracker.setImplicitKey(key)
+      var timersToRemove: List[Long] = List()
+      for (expiryTimestampMs <- handle.listTimers()) {
+        if (expiryTimestampMs <= currentTimeMs) {
+          val timerValues = new TimerValuesImpl(Some(currentTimeMs), None)
+          val expiredTimerInfo = new ExpiredTimerInfoImpl(Some(expiryTimestampMs))
+          ans = ans ++ processor.handleExpiredTimer(key, timerValues, expiredTimerInfo).toList
+          timersToRemove = timersToRemove ++ List(expiryTimestampMs)
+        }
+      }
+      for (timerExpiryTimeMs <- timersToRemove) {
+        handle.deleteTimer(timerExpiryTimeMs)
+      }
       ImplicitGroupingKeyTracker.removeImplicitKey()
     }
     ans

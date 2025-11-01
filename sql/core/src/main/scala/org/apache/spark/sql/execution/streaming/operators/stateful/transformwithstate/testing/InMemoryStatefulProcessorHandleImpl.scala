@@ -226,6 +226,9 @@ class InMemoryTimers {
     val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
     if (keyToTimers.contains(groupingKey)) {
       keyToTimers(groupingKey).remove(expiryTimestampMs)
+      if (keyToTimers(groupingKey).isEmpty) {
+        keyToTimers.remove(groupingKey)
+      }
     }
   }
 
@@ -235,6 +238,10 @@ class InMemoryTimers {
       case Some(timers) => timers.iterator
       case None => Iterator.empty
     }
+  }
+
+  def getAllKeysWithTimers(): Iterator[Any] = {
+    keyToTimers.keys.iterator
   }
 }
 
@@ -302,14 +309,17 @@ class InMemoryStatefulProcessorHandleImpl(
   private val timers = new InMemoryTimers()
 
   override def registerTimer(expiryTimestampMs: Long): Unit = {
+    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
     timers.registerTimer(expiryTimestampMs)
   }
 
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
+    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
     timers.deleteTimer(expiryTimestampMs)
   }
 
   override def listTimers(): Iterator[Long] = {
+    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
     timers.listTimers()
   }
 
@@ -348,5 +358,9 @@ class InMemoryStatefulProcessorHandleImpl(
   def peekMapState[MK, MV](stateName: String): Map[MK, MV] = {
     require(states.contains(stateName), s"State $stateName has not been initialized.")
     states(stateName).asInstanceOf[InMemoryMapState[MK, MV]].iterator().toMap
+  }
+
+  def getAllKeysWithTimers[K](): Iterator[K] = {
+    timers.getAllKeysWithTimers().map(_.asInstanceOf[K])
   }
 }
