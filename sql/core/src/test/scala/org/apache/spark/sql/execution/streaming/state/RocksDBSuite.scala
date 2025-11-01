@@ -148,9 +148,8 @@ trait AlsoTestWithEncodingTypes extends SQLTestUtils {
   }
 }
 
-trait AlsoTestWithRocksDBFeatures extends SQLTestUtils
-  with RocksDBStateStoreChangelogCheckpointingTestUtil
-  with AlsoTestWithStateStoreRowChecksum {
+trait AlsoTestWithRocksDBFeatures
+  extends SQLTestUtils with RocksDBStateStoreChangelogCheckpointingTestUtil {
 
   sealed trait TestMode
   case object TestWithChangelogCheckpointingEnabled extends TestMode
