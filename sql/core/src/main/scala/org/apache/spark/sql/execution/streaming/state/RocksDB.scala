@@ -40,6 +40,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
 // RocksDB operations that could acquire/release the instance lock
@@ -1051,6 +1052,69 @@ class RocksDB(
   }
 
   /**
+   * Convert the given list of value row bytes into a single byte array. The returned array
+   * bytes supports additional values to be later merged to it.
+   */
+  private def getListValuesInArrayByte(values: List[Array[Byte]]): Array[Byte] = {
+    // Delimit each value row bytes with a single byte delimiter, the last
+    // value row won't have a delimiter at the end.
+    val delimiterNum = values.length - 1
+    // The bytes in values already include the bytes length prefix
+    val totalSize = values.map(_.length).sum +
+      delimiterNum // for each delimiter
+
+    val result = new Array[Byte](totalSize)
+    var pos = Platform.BYTE_ARRAY_OFFSET
+
+    values.zipWithIndex.foreach { case (rowBytes, idx) =>
+      // Write the data
+      Platform.copyMemory(rowBytes, Platform.BYTE_ARRAY_OFFSET, result, pos, rowBytes.length)
+      pos += rowBytes.length
+
+      // Add the delimiter - we are using "," as the delimiter
+      if (idx < delimiterNum) {
+        result(pos - Platform.BYTE_ARRAY_OFFSET) = 44.toByte
+      }
+      // Move the position for delimiter
+      pos += 1
+    }
+    result
+  }
+
+  /**
+   * Put the given list of values for the given key.
+   * @note
+   *   This update is not committed to disk until commit() is called.
+   */
+  def putList(
+      key: Array[Byte],
+      values: List[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    val valuesInArrayByte = getListValuesInArrayByte(values)
+
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
+    db.put(writeOptions, keyWithPrefix, valuesInArrayByte)
+    changelogWriter.foreach(_.put(keyWithPrefix, valuesInArrayByte))
+  }
+
+
+  /**
    * Merge the given value for the given key. This is equivalent to the Atomic
    * Read-Modify-Write operation in RocksDB, known as the "Merge" operation. The
    * modification is appending the provided value to current list of values for
@@ -1092,6 +1156,39 @@ class RocksDB(
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
     db.merge(writeOptions, keyWithPrefix, valueWithChecksum)
     changelogWriter.foreach(_.merge(keyWithPrefix, valueWithChecksum))
+  }
+
+  /**
+   * Merge the given list of values for the given key.
+   *
+   * This is similar to the merge() function, but allows merging multiple values at once. The
+   * provided values will be appended to the current list of values for the given key.
+   */
+  def mergeList(
+      key: Array[Byte],
+      values: List[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    val valueInArrayByte = getListValuesInArrayByte(values)
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
+    db.merge(writeOptions, keyWithPrefix, valueInArrayByte)
+    changelogWriter.foreach(_.merge(keyWithPrefix, valueInArrayByte))
   }
 
   /**
