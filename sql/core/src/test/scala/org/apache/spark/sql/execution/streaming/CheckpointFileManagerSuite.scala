@@ -40,14 +40,14 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
 
   protected def createManager(path: Path): CheckpointFileManager
 
-  private implicit class RichCancellableStream(stream: CancellableFSDataOutputStream) {
+  protected implicit class RichCancellableStream(stream: CancellableFSDataOutputStream) {
     def writeContent(i: Int): CancellableFSDataOutputStream = {
       stream.writeInt(i)
       stream
     }
   }
 
-  private implicit class RichFSDataInputStream(stream: FSDataInputStream) {
+  protected implicit class RichFSDataInputStream(stream: FSDataInputStream) {
     def readContent(): Int = {
       val res = stream.readInt()
       stream.close()
@@ -112,6 +112,7 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
         fm.open(path)
       }
       fm.delete(path) // should not throw exception
+      fm.close()
     }
   }
 }

@@ -40,6 +40,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
 // RocksDB operations that could acquire/release the instance lock
@@ -138,6 +139,12 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
 
+  // We need 2 threads per fm caller to avoid blocking
+  // (one for main file and another for checksum file).
+  // Since this fm is used by both query task and maintenance thread,
+  // then we need 2 * 2 = 4 threads.
+  protected val fileChecksumThreadPoolSize: Option[Int] = Some(4)
+
   protected def createFileManager(
       dfsRootDir: String,
       localTempDir: File,
@@ -149,7 +156,9 @@ class RocksDB(
       localTempDir,
       hadoopConf,
       codecName,
-      loggingId = loggingId
+      loggingId = loggingId,
+      fileChecksumEnabled = conf.fileChecksumEnabled,
+      fileChecksumThreadPoolSize = fileChecksumThreadPoolSize
     )
   }
 
@@ -223,6 +232,12 @@ class RocksDB(
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
 
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
+
+  // Integrity verifier that is only used when clients read from the db e.g. db.get()
+  private val readVerifier: Option[KeyValueIntegrityVerifier] = KeyValueIntegrityVerifier.create(
+    loggingId,
+    conf.rowChecksumEnabled,
+    conf.rowChecksumReadVerificationRatio)
 
   private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
     colFamilyNameToInfoMap.get(cfName)
@@ -823,31 +838,26 @@ class RocksDB(
       try {
         changelogReader = fileManager.getChangelogReader(v, uniqueId)
 
-        if (useColumnFamilies) {
-          changelogReader.foreach { case (recordType, key, value) =>
-            recordType match {
-              case RecordType.PUT_RECORD =>
-                put(key, value, includesPrefix = true, deriveCfName = true)
+        // If row checksum is enabled, verify every record in the changelog file
+        val kvVerifier = KeyValueIntegrityVerifier
+          .create(loggingId, conf.rowChecksumEnabled, verificationRatio = 1)
 
-              case RecordType.DELETE_RECORD =>
-                remove(key, includesPrefix = true, deriveCfName = true)
+        changelogReader.foreach { case (recordType, key, value) =>
+          recordType match {
+            case RecordType.PUT_RECORD =>
+              verifyChangelogRecord(kvVerifier, key, Some(value))
+              put(key, value, includesPrefix = useColumnFamilies,
+                deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
 
-              case RecordType.MERGE_RECORD =>
-                merge(key, value, includesPrefix = true, deriveCfName = true)
-            }
-          }
-        } else {
-          changelogReader.foreach { case (recordType, key, value) =>
-            recordType match {
-              case RecordType.PUT_RECORD =>
-                put(key, value)
+            case RecordType.DELETE_RECORD =>
+              verifyChangelogRecord(kvVerifier, key, None)
+              remove(key, includesPrefix = useColumnFamilies,
+                deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
 
-              case RecordType.DELETE_RECORD =>
-                remove(key)
-
-              case RecordType.MERGE_RECORD =>
-                merge(key, value)
-            }
+            case RecordType.MERGE_RECORD =>
+              verifyChangelogRecord(kvVerifier, key, Some(value))
+              merge(key, value, includesPrefix = useColumnFamilies,
+                deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
           }
         }
       } finally {
@@ -860,6 +870,28 @@ class RocksDB(
       "replayChangelog" -> Math.max(duration, 1L), // avoid flaky tests
       "numReplayChangeLogFiles" -> versionsAndUniqueIds.length
     )
+  }
+
+  private def verifyChangelogRecord(
+      verifier: Option[KeyValueIntegrityVerifier],
+      keyBytes: Array[Byte],
+      valueBytes: Option[Array[Byte]]): Unit = {
+    verifier match {
+      case Some(v) if v.isInstanceOf[KeyValueChecksumVerifier] =>
+        // Do checksum verification inline using array index without copying bytes
+        valueBytes.map { value =>
+          // Checksum is on the value side for PUT/MERGE record
+          val (valueIndex, checksum) = KeyValueChecksumEncoder
+            .decodeOneValueRowIndexWithChecksum(value)
+          v.verify(ArrayIndexRange(keyBytes, 0, keyBytes.length), Some(valueIndex), checksum)
+        }.getOrElse {
+          // For DELETE valueBytes is None, we only check the key
+          val (keyIndex, checksum) = KeyValueChecksumEncoder
+            .decodeKeyRowIndexWithChecksum(keyBytes)
+          v.verify(keyIndex, None, checksum)
+        }
+      case _ =>
+    }
   }
 
   /**
@@ -896,13 +928,41 @@ class RocksDB(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
     updateMemoryUsageIfNeeded()
+    val (finalKey, value) = getValue(key, cfName)
+    if (conf.rowChecksumEnabled && value != null) {
+      KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+        readVerifier, finalKey, value)
+    } else {
+      value
+    }
+  }
+
+  /**
+   * Get the values for a given key if present, that were merged (via merge).
+   * This returns the values as an iterator of index range, to allow inline access
+   * of each value bytes without copying, for better performance.
+   * Note: This method is currently only supported when row checksum is enabled.
+   * */
+  def multiGet(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ArrayIndexRange[Byte]] = {
+    assert(conf.rowChecksumEnabled, "multiGet is only allowed when row checksum is enabled")
+    updateMemoryUsageIfNeeded()
+
+    val (finalKey, value) = getValue(key, cfName)
+    KeyValueChecksumEncoder.decodeAndVerifyMultiValueRowWithChecksum(
+      readVerifier, finalKey, value)
+  }
+
+  /** Returns a tuple of the final key used to store the value in the db and the value. */
+  private def getValue(key: Array[Byte], cfName: String): (Array[Byte], Array[Byte]) = {
     val keyWithPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
     }
 
-    db.get(readOptions, keyWithPrefix)
+    (keyWithPrefix, db.get(readOptions, keyWithPrefix))
   }
 
   /**
@@ -963,7 +1023,8 @@ class RocksDB(
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false,
-      deriveCfName: Boolean = false): Unit = {
+      deriveCfName: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
@@ -978,10 +1039,80 @@ class RocksDB(
       cfName
     }
 
+    val valueWithChecksum = if (conf.rowChecksumEnabled && !includesChecksum) {
+      KeyValueChecksumEncoder.encodeValueRowWithChecksum(value,
+        KeyValueChecksum.create(keyWithPrefix, Some(value)))
+    } else {
+      value
+    }
+
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
-    db.put(writeOptions, keyWithPrefix, value)
-    changelogWriter.foreach(_.put(keyWithPrefix, value))
+    db.put(writeOptions, keyWithPrefix, valueWithChecksum)
+    changelogWriter.foreach(_.put(keyWithPrefix, valueWithChecksum))
   }
+
+  /**
+   * Convert the given list of value row bytes into a single byte array. The returned array
+   * bytes supports additional values to be later merged to it.
+   */
+  private def getListValuesInArrayByte(values: List[Array[Byte]]): Array[Byte] = {
+    // Delimit each value row bytes with a single byte delimiter, the last
+    // value row won't have a delimiter at the end.
+    val delimiterNum = values.length - 1
+    // The bytes in values already include the bytes length prefix
+    val totalSize = values.map(_.length).sum +
+      delimiterNum // for each delimiter
+
+    val result = new Array[Byte](totalSize)
+    var pos = Platform.BYTE_ARRAY_OFFSET
+
+    values.zipWithIndex.foreach { case (rowBytes, idx) =>
+      // Write the data
+      Platform.copyMemory(rowBytes, Platform.BYTE_ARRAY_OFFSET, result, pos, rowBytes.length)
+      pos += rowBytes.length
+
+      // Add the delimiter - we are using "," as the delimiter
+      if (idx < delimiterNum) {
+        result(pos - Platform.BYTE_ARRAY_OFFSET) = 44.toByte
+      }
+      // Move the position for delimiter
+      pos += 1
+    }
+    result
+  }
+
+  /**
+   * Put the given list of values for the given key.
+   * @note
+   *   This update is not committed to disk until commit() is called.
+   */
+  def putList(
+      key: Array[Byte],
+      values: List[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    val valuesInArrayByte = getListValuesInArrayByte(values)
+
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
+    db.put(writeOptions, keyWithPrefix, valuesInArrayByte)
+    changelogWriter.foreach(_.put(keyWithPrefix, valuesInArrayByte))
+  }
+
 
   /**
    * Merge the given value for the given key. This is equivalent to the Atomic
@@ -999,7 +1130,8 @@ class RocksDB(
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false,
-      deriveCfName: Boolean = false): Unit = {
+      deriveCfName: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
@@ -1014,17 +1146,27 @@ class RocksDB(
       cfName
     }
 
+    val valueWithChecksum = if (conf.rowChecksumEnabled && !includesChecksum) {
+      KeyValueChecksumEncoder.encodeValueRowWithChecksum(value,
+        KeyValueChecksum.create(keyWithPrefix, Some(value)))
+    } else {
+      value
+    }
+
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
-    db.merge(writeOptions, keyWithPrefix, value)
-    changelogWriter.foreach(_.merge(keyWithPrefix, value))
+    db.merge(writeOptions, keyWithPrefix, valueWithChecksum)
+    changelogWriter.foreach(_.merge(keyWithPrefix, valueWithChecksum))
   }
 
   /**
-   * Remove the key if present.
-   * @note This update is not committed to disk until commit() is called.
+   * Merge the given list of values for the given key.
+   *
+   * This is similar to the merge() function, but allows merging multiple values at once. The
+   * provided values will be appended to the current list of values for the given key.
    */
-  def remove(
+  def mergeList(
       key: Array[Byte],
+      values: List[Array[Byte]],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false,
       deriveCfName: Boolean = false): Unit = {
@@ -1042,9 +1184,59 @@ class RocksDB(
       cfName
     }
 
+    val valueInArrayByte = getListValuesInArrayByte(values)
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
+    db.merge(writeOptions, keyWithPrefix, valueInArrayByte)
+    changelogWriter.foreach(_.merge(keyWithPrefix, valueInArrayByte))
+  }
+
+  /**
+   * Remove the key if present.
+   * @note This update is not committed to disk until commit() is called.
+   */
+  def remove(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
+    val originalKey = if (conf.rowChecksumEnabled && includesChecksum) {
+      // When we are replaying changelog record, the delete key in the file includes checksum.
+      // Remove the checksum, so we use the original key for db.delete.
+      KeyValueChecksumEncoder.decodeKeyRowWithChecksum(key)._1
+    } else {
+      key
+    }
+
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(originalKey, cfName)
+    } else {
+      originalKey
+    }
+
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = false)
     db.delete(writeOptions, keyWithPrefix)
-    changelogWriter.foreach(_.delete(keyWithPrefix))
+    changelogWriter match {
+      case Some(writer) =>
+        val keyWithChecksum = if (conf.rowChecksumEnabled) {
+          // For delete, we will write a checksum with the key row only to the changelog file.
+          KeyValueChecksumEncoder.encodeKeyRowWithChecksum(keyWithPrefix,
+            KeyValueChecksum.create(keyWithPrefix, None))
+        } else {
+          keyWithPrefix
+        }
+        writer.delete(keyWithChecksum)
+      case None => // During changelog replay, there is no changelog writer.
+    }
   }
 
   /**
@@ -1071,7 +1263,14 @@ class RocksDB(
             iter.key
           }
 
-          byteArrayPair.set(key, iter.value)
+          val value = if (conf.rowChecksumEnabled) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, iter.key, iter.value)
+          } else {
+            iter.value
+          }
+
+          byteArrayPair.set(key, value)
           iter.next()
           byteArrayPair
         } else {
@@ -1162,7 +1361,14 @@ class RocksDB(
             iter.key
           }
 
-          byteArrayPair.set(key, iter.value)
+          val value = if (conf.rowChecksumEnabled) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, iter.key, iter.value)
+          } else {
+            iter.value
+          }
+
+          byteArrayPair.set(key, value)
           iter.next()
           byteArrayPair
         } else {
@@ -1432,6 +1638,7 @@ class RocksDB(
       silentDeleteRecursively(localRootDir, "closing RocksDB")
       // Clear internal maps to reset the state
       clearColFamilyMaps()
+      fileManager.close()
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
@@ -1960,7 +2167,10 @@ case class RocksDBConf(
     allowFAllocate: Boolean,
     compression: String,
     reportSnapshotUploadLag: Boolean,
-    maxVersionsToDeletePerMaintenance: Int)
+    maxVersionsToDeletePerMaintenance: Int,
+    fileChecksumEnabled: Boolean,
+    rowChecksumEnabled: Boolean,
+    rowChecksumReadVerificationRatio: Long)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -2159,7 +2369,10 @@ object RocksDBConf {
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
       storeConf.reportSnapshotUploadLag,
-      storeConf.maxVersionsToDeletePerMaintenance)
+      storeConf.maxVersionsToDeletePerMaintenance,
+      storeConf.checkpointFileChecksumEnabled,
+      storeConf.rowChecksumEnabled,
+      storeConf.rowChecksumReadVerificationRatio)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

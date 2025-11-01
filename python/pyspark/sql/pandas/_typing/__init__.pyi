@@ -61,6 +61,7 @@ PandasGroupedMapUDFTransformWithStateInitStateType = Literal[212]
 GroupedMapUDFTransformWithStateType = Literal[213]
 GroupedMapUDFTransformWithStateInitStateType = Literal[214]
 ArrowGroupedMapIterUDFType = Literal[215]
+PandasGroupedMapIterUDFType = Literal[216]
 
 # Arrow UDFs
 ArrowScalarUDFType = Literal[250]
@@ -347,6 +348,8 @@ PandasScalarIterFunction = Union[
 PandasGroupedMapFunction = Union[
     Callable[[DataFrameLike], DataFrameLike],
     Callable[[Any, DataFrameLike], DataFrameLike],
+    Callable[[Iterator[DataFrameLike]], Iterator[DataFrameLike]],
+    Callable[[Any, Iterator[DataFrameLike]], Iterator[DataFrameLike]],
 ]
 
 PandasGroupedMapFunctionWithState = Callable[

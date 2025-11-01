@@ -16,6 +16,7 @@
 #
 
 import unittest
+import logging
 from typing import cast
 
 from pyspark.sql import functions as sf
@@ -38,6 +39,8 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.util import is_remote_only
 
 if have_pandas:
     import pandas as pd
@@ -713,6 +716,48 @@ class CogroupedApplyInPandasTestsMixin:
         for batch_size in [0, -1]:
             with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
                 CogroupedApplyInPandasTestsMixin.test_with_key_right(self)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_cogroup_apply_in_pandas_with_logging(self):
+        import pandas as pd
+
+        def func_with_logging(left_pdf, right_pdf):
+            assert isinstance(left_pdf, pd.DataFrame)
+            assert isinstance(right_pdf, pd.DataFrame)
+            logger = logging.getLogger("test_pandas_cogrouped_map")
+            logger.warning(
+                f"pandas cogrouped map: {dict(v1=list(left_pdf['v1']), v2=list(right_pdf['v2']))}"
+            )
+            return pd.merge(left_pdf, right_pdf, on=["id"])
+
+        left_df = self.spark.createDataFrame([(1, 10), (2, 20), (1, 30)], ["id", "v1"])
+        right_df = self.spark.createDataFrame([(1, 100), (2, 200), (1, 300)], ["id", "v2"])
+
+        grouped_left = left_df.groupBy("id")
+        grouped_right = right_df.groupBy("id")
+        cogrouped_df = grouped_left.cogroup(grouped_right)
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                cogrouped_df.applyInPandas(func_with_logging, "id long, v1 long, v2 long"),
+                [Row(id=1, v1=v1, v2=v2) for v1 in [10, 30] for v2 in [100, 300]]
+                + [Row(id=2, v1=20, v2=200)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"pandas cogrouped map: {dict(v1=v1, v2=v2)}",
+                    context={"func_name": func_with_logging.__name__},
+                    logger="test_pandas_cogrouped_map",
+                )
+                for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
+            ],
+        )
 
 
 class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedSQLTestCase):

@@ -273,8 +273,14 @@ private[sql] class RocksDBStateStoreProvider
       verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
       "that supports multiple values for a single key.")
 
-      val encodedValues = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
-      valueEncoder.decodeValues(encodedValues)
+      if (storeConf.rowChecksumEnabled) {
+        // multiGet provides better perf for row checksum, since it avoids copying values
+        val encodedValuesIterator = rocksDB.multiGet(keyEncoder.encodeKey(key), colFamilyName)
+        valueEncoder.decodeValues(encodedValuesIterator)
+      } else {
+        val encodedValues = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
+        valueEncoder.decodeValues(encodedValues)
+      }
     }
 
     override def merge(key: UnsafeRow, value: UnsafeRow,
@@ -294,6 +300,31 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value), colFamilyName)
     }
 
+    override def mergeList(
+        key: UnsafeRow,
+        values: Array[UnsafeRow],
+        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      validateAndTransitionState(UPDATE)
+      verify(state == UPDATING, "Cannot merge after already committed or aborted")
+      verifyColFamilyOperations("merge", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val keyEncoder = kvEncoder._1
+      val valueEncoder = kvEncoder._2
+      verify(
+        valueEncoder.supportsMultipleValuesPerKey,
+        "Merge operation requires an encoder" +
+          " which supports multiple values for a single key")
+      verify(key != null, "Key cannot be null")
+      require(values != null, "Cannot merge a null value")
+      values.foreach(v => require(v != null, "Cannot merge a null value in the array"))
+
+      rocksDB.mergeList(
+        keyEncoder.encodeKey(key),
+        values.map(valueEncoder.encodeValue).toList,
+        colFamilyName)
+    }
+
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot put after already committed or aborted")
@@ -303,6 +334,28 @@ private[sql] class RocksDBStateStoreProvider
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       rocksDB.put(kvEncoder._1.encodeKey(key), kvEncoder._2.encodeValue(value), colFamilyName)
+    }
+
+    override def putList(
+        key: UnsafeRow,
+        values: Array[UnsafeRow],
+        colFamilyName: String): Unit = {
+      validateAndTransitionState(UPDATE)
+      verify(state == UPDATING, "Cannot put after already committed or aborted")
+      verify(key != null, "Key cannot be null")
+      require(values != null, "Cannot put a null value")
+      values.foreach(v => require(v != null, "Cannot put a null value in the array"))
+      verifyColFamilyOperations("put", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Multi-value put operation requires an encoder" +
+          " which supports multiple values for a single key")
+      rocksDB.putList(
+        kvEncoder._1.encodeKey(key),
+        values.map(kvEncoder._2.encodeValue).toList,
+        colFamilyName)
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
@@ -895,6 +948,7 @@ private[sql] class RocksDBStateStoreProvider
     val statePath = stateStoreId.storeCheckpointLocation()
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     new RocksDBStateStoreChangeDataReader(
+      stateStoreId,
       CheckpointFileManager.create(statePath, hadoopConf),
       rocksDB,
       statePath,
@@ -903,6 +957,7 @@ private[sql] class RocksDBStateStoreProvider
       endVersionStateStoreCkptId,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keyValueEncoderMap,
+      storeConf,
       colFamilyNameOpt)
   }
 
@@ -1238,6 +1293,7 @@ object RocksDBStateStoreProvider {
 
 /** [[StateStoreChangeDataReader]] implementation for [[RocksDBStateStoreProvider]] */
 class RocksDBStateStoreChangeDataReader(
+    storeId: StateStoreId,
     fm: CheckpointFileManager,
     rocksDB: RocksDB,
     stateLocation: Path,
@@ -1247,9 +1303,11 @@ class RocksDBStateStoreChangeDataReader(
     compressionCodec: CompressionCodec,
     keyValueEncoderMap:
       ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)],
+    storeConf: StateStoreConf,
     colFamilyNameOpt: Option[String] = None)
   extends StateStoreChangeDataReader(
-    fm, stateLocation, startVersion, endVersion, compressionCodec, colFamilyNameOpt) {
+    storeId, fm, stateLocation, startVersion, endVersion, compressionCodec,
+    storeConf, colFamilyNameOpt) {
 
   override protected val versionsAndUniqueIds: Array[(Long, Option[String])] =
     if (endVersionStateStoreCkptId.isDefined) {
@@ -1285,15 +1343,30 @@ class RocksDBStateStoreChangeDataReader(
         }
 
         val nextRecord = reader.next()
+        val keyBytes = if (storeConf.rowChecksumEnabled
+          && nextRecord._1 == RecordType.DELETE_RECORD) {
+          // remove checksum and decode to the original key
+          KeyValueChecksumEncoder
+            .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
+        } else {
+          nextRecord._2
+        }
         val colFamilyIdBytes: Array[Byte] =
           RocksDBStateStoreProvider.getColumnFamilyIdAsBytes(currEncoder._3)
         val endIndex = colFamilyIdBytes.size
         // Function checks for byte arrays being equal
         // from index 0 to endIndex - 1 (both inclusive)
-        if (java.util.Arrays.equals(nextRecord._2, 0, endIndex,
+        if (java.util.Arrays.equals(keyBytes, 0, endIndex,
           colFamilyIdBytes, 0, endIndex)) {
-          val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(nextRecord._2)
-          val result = (nextRecord._1, extractedKey, nextRecord._3)
+          val valueBytes = if (storeConf.rowChecksumEnabled &&
+            nextRecord._1 != RecordType.DELETE_RECORD) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, keyBytes, nextRecord._3)
+          } else {
+            nextRecord._3
+          }
+          val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(keyBytes)
+          val result = (nextRecord._1, extractedKey, valueBytes)
           currRecord = result
         }
       }
@@ -1302,7 +1375,21 @@ class RocksDBStateStoreChangeDataReader(
       if (reader == null) {
         return null
       }
-      currRecord = reader.next()
+      val nextRecord = reader.next()
+      currRecord = if (storeConf.rowChecksumEnabled) {
+        nextRecord._1 match {
+          case RecordType.DELETE_RECORD =>
+            val key = KeyValueChecksumEncoder
+              .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
+            (nextRecord._1, key, nextRecord._3)
+          case _ =>
+            val value = KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, nextRecord._2, nextRecord._3)
+            (nextRecord._1, nextRecord._2, value)
+        }
+      } else {
+        nextRecord
+      }
     }
 
     val keyRow = currEncoder._1.decodeKey(currRecord._2)

@@ -20,9 +20,11 @@ package org.apache.spark.sql.streaming
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
+import org.apache.spark.sql.execution.streaming.state.AlsoTestWithStateStoreRowChecksum
 import org.apache.spark.util.ArrayImplicits._
 
-trait StateStoreMetricsTest extends StreamTest {
+trait StateStoreMetricsTest extends StreamTest
+  with AlsoTestWithStateStoreRowChecksum {
 
   private var lastCheckedRecentProgressIndex = -1
   private var lastQuery: StreamExecution = null
