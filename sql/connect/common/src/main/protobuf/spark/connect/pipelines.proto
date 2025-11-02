@@ -104,6 +104,9 @@ message PipelineCommand {
         spark.connect.DataType schema_data_type = 4;
         string schema_string = 5;
       }
+
+      // Optional cluster columns for the table.
+      repeated string cluster_cols = 6;
     }
 
     // Metadata that's only applicable to sinks.

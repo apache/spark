@@ -41,10 +41,12 @@ class TestPipelineDefinition(graphId: String) {
       // TODO: Add support for specifiedSchema
       // specifiedSchema: Option[StructType] = None,
       partitionCols: Option[Seq[String]] = None,
+      clusterCols: Option[Seq[String]] = None,
       properties: Map[String, String] = Map.empty): Unit = {
     val tableDetails = sc.PipelineCommand.DefineOutput.TableDetails
       .newBuilder()
       .addAllPartitionCols(partitionCols.getOrElse(Seq()).asJava)
+      .addAllClusterCols(clusterCols.getOrElse(Seq()).asJava)
       .putAllTableProperties(properties.asJava)
       .build()
 

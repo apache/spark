@@ -76,6 +76,7 @@ def _validate_stored_dataset_args(
     name: Optional[str],
     table_properties: Optional[Dict[str, str]],
     partition_cols: Optional[List[str]],
+    cluster_by: Optional[List[str]],
 ) -> None:
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
@@ -91,6 +92,7 @@ def _validate_stored_dataset_args(
             },
         )
     validate_optional_list_of_str_arg(arg_name="partition_cols", arg_value=partition_cols)
+    validate_optional_list_of_str_arg(arg_name="cluster_by", arg_value=cluster_by)
 
 
 @overload
@@ -107,6 +109,7 @@ def table(
     spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
 ) -> Callable[[QueryFunction], None]:
     ...
@@ -120,6 +123,7 @@ def table(
     spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
     format: Optional[str] = None,
 ) -> Union[Callable[[QueryFunction], None], None]:
@@ -142,11 +146,12 @@ def table(
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
+    :param cluster_by: A list containing the column names of the cluster columns.
     :param schema: Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
     :param format: The format of the table, e.g. "parquet".
     """
-    _validate_stored_dataset_args(name, table_properties, partition_cols)
+    _validate_stored_dataset_args(name, table_properties, partition_cols, cluster_by)
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
 
@@ -209,6 +214,7 @@ def materialized_view(
     spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
 ) -> Callable[[QueryFunction], None]:
     ...
@@ -222,6 +228,7 @@ def materialized_view(
     spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
     format: Optional[str] = None,
 ) -> Union[Callable[[QueryFunction], None], None]:
@@ -244,11 +251,12 @@ def materialized_view(
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
+    :param cluster_by: A list containing the column names of the cluster columns.
     :param schema: Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
     :param format: The format of the table, e.g. "parquet".
     """
-    _validate_stored_dataset_args(name, table_properties, partition_cols)
+    _validate_stored_dataset_args(name, table_properties, partition_cols, cluster_by)
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
 
@@ -265,6 +273,7 @@ def materialized_view(
                 name=resolved_name,
                 table_properties=table_properties or {},
                 partition_cols=partition_cols,
+                cluster_cols=cluster_by,
                 schema=schema,
                 source_code_location=source_code_location,
                 format=format,
@@ -403,6 +412,7 @@ def create_streaming_table(
     comment: Optional[str] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
     format: Optional[str] = None,
 ) -> None:
@@ -417,6 +427,7 @@ def create_streaming_table(
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
+    :param cluster_by: A list containing the column names of the cluster columns.
     :param schema Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
     :param format: The format of the table, e.g. "parquet".
@@ -435,6 +446,7 @@ def create_streaming_table(
             },
         )
     validate_optional_list_of_str_arg(arg_name="partition_cols", arg_value=partition_cols)
+    validate_optional_list_of_str_arg(arg_name="cluster_by", arg_value=cluster_by)
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
 
@@ -444,6 +456,7 @@ def create_streaming_table(
         source_code_location=source_code_location,
         table_properties=table_properties or {},
         partition_cols=partition_cols,
+        cluster_cols=cluster_by,
         schema=schema,
         format=format,
     )
