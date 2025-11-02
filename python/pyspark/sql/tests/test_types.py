@@ -2854,6 +2854,17 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.assertEqual(repr(struct_field), "StructField('c1', StringType(), True)")
 
+        with self.assertRaises(PySparkValueError) as pe:
+            StructField.fromJson({"name": "c1", "type": "NewType"})
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_PARSE_DATATYPE",
+            message_parameters={
+                "msg": "NewType",
+            },
+        )
+
 
 class TypesTests(TypesTestsMixin, ReusedSQLTestCase):
     pass
