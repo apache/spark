@@ -42,16 +42,7 @@ object ArrowWriter {
   }
 
   def create(root: VectorSchemaRoot): ArrowWriter = {
-    create(root, None)
-  }
-
-  def create(root: VectorSchemaRoot, initCapacity: Option[Int]): ArrowWriter = {
     val children = root.getFieldVectors().asScala.map { vector =>
-      if (initCapacity.isDefined) {
-        // Set initial capacity if known, to reduce additional memory usage when re-allocating
-        // buffer capacity
-        vector.setInitialCapacity(initCapacity.get)
-      }
       vector.allocateNew()
       createFieldWriter(vector)
     }

@@ -113,17 +113,12 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
 private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
+  protected val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
+
   protected val maxRecordsPerBatch: Int = {
     val v = SQLConf.get.arrowMaxRecordsPerBatch
     if (v > 0) v else Int.MaxValue
   }
-
-  val initCapacity = if (SQLConf.get.arrowMaxRecordsPerBatch > 0) {
-    Some(maxRecordsPerBatch)
-  } else {
-    None
-  }
-  protected val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root, initCapacity)
 
   protected val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
 

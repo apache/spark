@@ -114,13 +114,7 @@ private[sql] object ArrowConverters extends Logging {
           s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
     }
     protected val unloader = new VectorUnloader(root, true, codec, true)
-
-    val initCapacity = if (maxRecordsPerBatch > 0) {
-      Some(maxRecordsPerBatch.toInt)
-    } else {
-      None
-    }
-    protected val arrowWriter = ArrowWriter.create(root, initCapacity)
+    protected val arrowWriter = ArrowWriter.create(root)
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
       close()
