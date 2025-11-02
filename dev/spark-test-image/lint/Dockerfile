@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libssl-dev \
     libtiff5-dev \
+    libwebp-dev \
     libxml2-dev \
     nodejs \
     npm \

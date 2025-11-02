@@ -24,17 +24,7 @@ from decimal import Decimal
 from typing import cast, Iterator, Tuple, Any
 
 from pyspark.sql import Row, functions as sf
-from pyspark.sql.functions import (
-    array,
-    explode,
-    col,
-    lit,
-    udf,
-    sum,
-    pandas_udf,
-    PandasUDFType,
-    window,
-)
+from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import (
     IntegerType,
     DoubleType,
@@ -64,12 +54,9 @@ from pyspark.testing.sqlutils import (
 from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import is_remote_only
 
-if have_pandas:
+if have_pyarrow and have_pandas:
     import pandas as pd
     from pandas.testing import assert_frame_equal
-
-if have_pyarrow:
-    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
@@ -81,8 +68,8 @@ class ApplyInPandasTestsMixin:
     def data(self):
         return (
             self.spark.range(10)
-            .withColumn("vs", array([lit(i) for i in range(20, 30)]))
-            .withColumn("v", explode(col("vs")))
+            .withColumn("vs", sf.array([sf.lit(i) for i in range(20, 30)]))
+            .withColumn("v", sf.explode(sf.col("vs")))
             .drop("vs")
         )
 
@@ -194,7 +181,7 @@ class ApplyInPandasTestsMixin:
         assert_frame_equal(expected3, result3)
 
     def test_array_type_correct(self):
-        df = self.data.withColumn("arr", array(col("id"))).repartition(1, "id")
+        df = self.data.withColumn("arr", sf.array(sf.col("id"))).repartition(1, "id")
 
         output_schema = StructType(
             [
@@ -257,7 +244,7 @@ class ApplyInPandasTestsMixin:
             v = pdf.v
             return pdf.assign(norm=(v - v.mean()) / v.std())
 
-        result = df.groupby(col("id") % 2 == 0).apply(normalize).sort("id", "v").toPandas()
+        result = df.groupby(sf.col("id") % 2 == 0).apply(normalize).sort("id", "v").toPandas()
         pdf = df.toPandas()
         expected = pdf.groupby(pdf["id"] % 2 == 0, as_index=False).apply(normalize.func)
         expected = expected.sort_values(["id", "v"]).reset_index(drop=True)
@@ -459,7 +446,7 @@ class ApplyInPandasTestsMixin:
         with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(udf(lambda x: x, DoubleType()))
         with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
-            df.groupby("id").apply(sum(df.v))
+            df.groupby("id").apply(sf.sum(df.v))
         with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
             df.groupby("id").apply(df.v + 1)
         with self.assertRaisesRegex(PySparkTypeError, "INVALID_UDF_EVAL_TYPE"):
@@ -711,7 +698,7 @@ class ApplyInPandasTestsMixin:
 
         # this was throwing an AnalysisException before SPARK-24208
         res = df_with_pandas.alias("temp0").join(
-            df_with_pandas.alias("temp1"), col("temp0.key") == col("temp1.key")
+            df_with_pandas.alias("temp1"), sf.col("temp0.key") == sf.col("temp1.key")
         )
         self.assertEqual(res.count(), 5)
 
@@ -756,7 +743,9 @@ class ApplyInPandasTestsMixin:
         expected = {0: [0], 1: [1, 2], 2: [1, 2], 3: [3, 4, 5], 4: [3, 4, 5], 5: [3, 4, 5], 6: [6]}
 
         df = self.spark.createDataFrame(data, ["id", "group", "ts", "result"])
-        df = df.select(col("id"), col("group"), col("ts").cast("timestamp"), col("result"))
+        df = df.select(
+            sf.col("id"), sf.col("group"), sf.col("ts").cast("timestamp"), sf.col("result")
+        )
 
         def f(pdf):
             # Assign each result element the ids of the windowed group
@@ -764,7 +753,7 @@ class ApplyInPandasTestsMixin:
             return pdf
 
         result = (
-            df.groupby("group", window("ts", "5 days"))
+            df.groupby("group", sf.window("ts", "5 days"))
             .applyInPandas(f, df.schema)
             .select("id", "result")
             .orderBy("id")
@@ -825,7 +814,9 @@ class ApplyInPandasTestsMixin:
         expected = {0: [1], 1: [2, 2], 2: [2, 2], 3: [3, 3, 3], 4: [3, 3, 3], 5: [3, 3, 3], 6: [3]}
 
         df = self.spark.createDataFrame(data, ["id", "group", "ts", "result"])
-        df = df.select(col("id"), col("group"), col("ts").cast("timestamp"), col("result"))
+        df = df.select(
+            sf.col("id"), sf.col("group"), sf.col("ts").cast("timestamp"), sf.col("result")
+        )
 
         def f(key, pdf):
             group = key[0]
@@ -841,7 +832,7 @@ class ApplyInPandasTestsMixin:
             return pdf.assign(result=[[group] * len(pdf)] * len(pdf))
 
         result = (
-            df.groupby("group", window("ts", "5 days"))
+            df.groupby("group", sf.window("ts", "5 days"))
             .applyInPandas(f, df.schema)
             .select("id", "result")
             .orderBy("id")
@@ -869,7 +860,7 @@ class ApplyInPandasTestsMixin:
         result = (
             df.groupby("id").applyInPandas(f, schema=output_schema).sort("id", "mean").toPandas()
         )
-        expected = df.select("id").distinct().withColumn("mean", lit(24.5)).toPandas()
+        expected = df.select("id").distinct().withColumn("mean", sf.lit(24.5)).toPandas()
 
         assert_frame_equal(expected, result)
 
@@ -1000,8 +991,8 @@ class ApplyInPandasTestsMixin:
             )
             return pdf
 
-        df = self.spark.range(9).withColumn("value", col("id") * 10)
-        grouped_df = df.groupBy((col("id") % 2).cast("int"))
+        df = self.spark.range(9).withColumn("value", sf.col("id") * 10)
+        grouped_df = df.groupBy((sf.col("id") % 2).cast("int"))
 
         with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
             assertDataFrameEqual(
@@ -1285,8 +1276,6 @@ class ApplyInPandasTestsMixin:
                 self.assertEqual(row[0], 2)
 
     def test_apply_in_pandas_iterator_process_multiple_input_batches(self):
-        import builtins
-
         # Create large dataset to trigger batch slicing
         df = self.spark.range(100000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
@@ -1335,12 +1324,12 @@ class ApplyInPandasTestsMixin:
         self.assertGreater(len(group_1_batches), 1)
 
         # Verify the sum across all batches equals expected total (using Python's built-in sum)
-        group_0_sum = builtins.sum(r[3] for r in group_0_batches)
-        group_1_sum = builtins.sum(r[3] for r in group_1_batches)
+        group_0_sum = sum(r[3] for r in group_0_batches)
+        group_1_sum = sum(r[3] for r in group_1_batches)
 
         # Expected: sum of even numbers 0,2,4,...,99998
-        expected_even_sum = builtins.sum(range(0, 100000, 2))
-        expected_odd_sum = builtins.sum(range(1, 100000, 2))
+        expected_even_sum = sum(range(0, 100000, 2))
+        expected_odd_sum = sum(range(1, 100000, 2))
 
         self.assertEqual(group_0_sum, expected_even_sum)
         self.assertEqual(group_1_sum, expected_odd_sum)
@@ -1409,7 +1398,7 @@ class ApplyInPandasTestsMixin:
                 yield pd.DataFrame({"value": first["id"] % 4})
 
             df = self.spark.range(20)
-            grouped_df = df.groupBy((col("id") % 4).cast("int"))
+            grouped_df = df.groupBy((sf.col("id") % 4).cast("int"))
 
             # Should get two records for each group (first batch only)
             expected = [Row(value=x) for x in [0, 0, 1, 1, 2, 2, 3, 3]]

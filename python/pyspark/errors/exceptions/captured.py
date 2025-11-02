@@ -107,7 +107,8 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            return self._origin.getCondition()
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            return utils.getCondition(self._origin)
         else:
             return None
 
@@ -118,7 +119,6 @@ class CapturedException(PySparkException):
     def getMessageParameters(self) -> Optional[Dict[str, str]]:
         from pyspark import SparkContext
         from py4j.java_gateway import is_instance_of
-        from py4j.protocol import Py4JError
 
         assert SparkContext._gateway is not None
 
@@ -126,38 +126,28 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            try:
-                return dict(self._origin.getMessageParameters())
-            except Py4JError as e:
-                if "py4j.Py4JException" in str(e) and "Method getMessageParameters" in str(e):
-                    return None
-                raise e
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            return dict(utils.getMessageParameters(self._origin))
         else:
             return None
 
     def getSqlState(self) -> Optional[str]:
         from pyspark import SparkContext
         from py4j.java_gateway import is_instance_of
-        from py4j.protocol import Py4JError
 
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            try:
-                return self._origin.getSqlState()
-            except Py4JError as e:
-                if "py4j.Py4JException" in str(e) and "Method getSqlState" in str(e):
-                    return None
-                raise e
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            return utils.getSqlState(self._origin)
         else:
             return None
 
     def getMessage(self) -> str:
         from pyspark import SparkContext
         from py4j.java_gateway import is_instance_of
-        from py4j.protocol import Py4JError
 
         assert SparkContext._gateway is not None
         gw = SparkContext._gateway
@@ -165,21 +155,12 @@ class CapturedException(PySparkException):
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            try:
-                error_class = self._origin.getCondition()
-            except Py4JError as e:
-                if "py4j.Py4JException" in str(e) and "Method getCondition" in str(e):
-                    return ""
-                raise e
-            try:
-                message_parameters = self._origin.getMessageParameters()
-            except Py4JError as e:
-                if "py4j.Py4JException" in str(e) and "Method getMessageParameters" in str(e):
-                    return ""
-                raise e
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            errorClass = utils.getCondition(self._origin)
+            messageParameters = utils.getMessageParameters(self._origin)
 
             error_message = getattr(gw.jvm, "org.apache.spark.SparkThrowableHelper").getMessage(
-                error_class, message_parameters
+                errorClass, messageParameters
             )
 
             return error_message
@@ -189,7 +170,6 @@ class CapturedException(PySparkException):
     def getQueryContext(self) -> List[BaseQueryContext]:
         from pyspark import SparkContext
         from py4j.java_gateway import is_instance_of
-        from py4j.protocol import Py4JError
 
         assert SparkContext._gateway is not None
 
@@ -198,13 +178,8 @@ class CapturedException(PySparkException):
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
             contexts: List[BaseQueryContext] = []
-            try:
-                context = self._origin.getQueryContext()
-            except Py4JError as e:
-                if "py4j.Py4JException" in str(e) and "Method getQueryContext" in str(e):
-                    return []
-                raise e
-            for q in context:
+            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            for q in utils.getQueryContext(self._origin):
                 if q.contextType().toString() == "SQL":
                     contexts.append(SQLQueryContext(q))
                 else:
