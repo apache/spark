@@ -50,13 +50,15 @@ public final class STUtils {
 
   /** Geospatial type encoder/decoder utilities. */
 
-  public static GeometryVal serializeGeomFromWKB(org.apache.spark.sql.types.Geometry geometry, GeometryType gt) {
+  public static GeometryVal serializeGeomFromWKB(org.apache.spark.sql.types.Geometry geometry,
+      GeometryType gt) {
     int geometrySrid = geometry.getSrid();
     gt.assertSridAllowedForType(geometrySrid);
     return toPhysVal(Geometry.fromWkb(geometry.getBytes(), geometrySrid));
   }
 
-  public static GeographyVal serializeGeogFromWKB(org.apache.spark.sql.types.Geography geography, GeographyType gt) {
+  public static GeographyVal serializeGeogFromWKB(org.apache.spark.sql.types.Geography geography,
+      GeographyType gt) {
     int geographySrid = geography.getSrid();
     gt.assertSridAllowedForType(geographySrid);
     return toPhysVal(Geography.fromWkb(geography.getBytes(), geographySrid));
