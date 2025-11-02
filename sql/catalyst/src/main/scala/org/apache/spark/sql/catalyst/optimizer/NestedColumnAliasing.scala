@@ -119,19 +119,13 @@ object NestedColumnAliasing {
 
   def hasExtractAliases(plan: LogicalPlan): Boolean = plan match {
     case p: Project =>
-      // SPARK-47230: Check TreeNodeTag first - persists even if aliases are removed by other rules
-      if (p.getTagValue(GENERATOR_ALIASING_APPLIED).isDefined) {
-        true
-      } else {
-        // Use explicit isInstanceOf check instead of pattern matching
-        // because pattern matching with _: ExtractValue fails to match GetArrayStructFields
-        // at runtime despite correct type hierarchy
-        p.projectList.exists {
-          case Alias(child, name) =>
-            child.isInstanceOf[ExtractValue] && name.startsWith("_extract_")
-          case _ => false
-        }
+      val tagged = p.getTagValue(GENERATOR_ALIASING_APPLIED).isDefined
+      val aliasExists = p.projectList.exists {
+        case Alias(child, name) if name.startsWith("_extract_") =>
+          child.isInstanceOf[ExtractValue] || child.isInstanceOf[GetArrayStructFields]
+        case _ => false
       }
+      tagged || aliasExists
     case g: Generate =>
       // SPARK-47230: Check child of Generator for aliases/tag to prevent infinite loop
       hasExtractAliases(g.child)
@@ -411,15 +405,17 @@ object GeneratorNestedColumnAliasing {
       // SPARK-47230: Allow up to 10 iterations per plan node
       val currentCount = p.getTagValue(NestedColumnAliasing.GENERATOR_ALIASING_APPLIED).getOrElse(0)
       val iterationCheck = currentCount < 10
+      val aliasGuard = !hasAliasesCheck || currentCount == 0
 
       generatorDebug(s"[GENERATOR DEBUG] Pattern match for Project(Generate):")
       generatorDebug(s"  Config enabled: $configCheck")
       generatorDebug(s"  Can prune generator: $canPruneCheck (generator: ${g.generator.getClass.getSimpleName})")
       generatorDebug(s"  Has extract aliases: $hasAliasesCheck")
       generatorDebug(s"  Iteration count: $currentCount (max 10): $iterationCheck")
-      generatorDebug(s"  ALL CONDITIONS: ${configCheck && canPruneCheck && !hasAliasesCheck && iterationCheck}")
+      generatorDebug(s"  Alias guard passed: $aliasGuard")
+      generatorDebug(s"  ALL CONDITIONS: ${configCheck && canPruneCheck && aliasGuard && iterationCheck}")
 
-      if (!configCheck || !canPruneCheck || hasAliasesCheck || !iterationCheck) {
+      if (!configCheck || !canPruneCheck || !aliasGuard || !iterationCheck) {
         generatorDebug(s"[GENERATOR DEBUG] Skipping transformation - conditions not met")
         return None
       }
@@ -557,6 +553,8 @@ object GeneratorNestedColumnAliasing {
                   .find(a => attrExprIdsOnGenerator.contains(a.exprId))
                   .getOrElse(f)
             }
+            val newCount = currentCount + 1
+            updatedProject.setTagValue(NestedColumnAliasing.GENERATOR_ALIASING_APPLIED, newCount)
             Some(updatedProject)
 
           case other =>
@@ -701,6 +699,9 @@ object GeneratorNestedColumnAliasing {
                             newG.child.output ++ aliases,
                             newG.child
                           )
+                          projectionBelowGen.setTagValue(
+                            NestedColumnAliasing.GENERATOR_ALIASING_APPLIED,
+                            currentCount + 1)
 
                           generatorDebug(s"\n✓ Created projection below generator:")
                           generatorDebug(s"  Original child outputs: ${newG.child.output.map(_.name).mkString(", ")}")
