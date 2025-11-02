@@ -42,4 +42,20 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
         "0101000000000000000000f03f0000000000000040"))
   }
 
+  /** ST accessor expressions. */
+
+  test("st_srid") {
+    // Test data: Well-Known Binary (WKB) representations.
+    val df = Seq[(String)](
+      (
+        "0101000000000000000000f03f0000000000000040"
+      )).toDF("wkb")
+    // ST_GeogFromWKB/ST_GeomFromWKB and ST_Srid.
+    checkAnswer(
+      df.select(
+        st_srid(st_geogfromwkb(unhex($"wkb"))).as("col0"),
+        st_srid(st_geomfromwkb(unhex($"wkb"))).as("col1")),
+      Row(4326, 0))
+  }
+
 }

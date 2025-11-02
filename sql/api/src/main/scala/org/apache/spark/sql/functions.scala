@@ -9171,6 +9171,15 @@ object functions {
   def st_geomfromwkb(wkb: Column): Column =
     Column.fn("st_geomfromwkb", wkb)
 
+  /**
+   * Returns the SRID of the input GEOGRAPHY or GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_srid(geo: Column): Column =
+    Column.fn("st_srid", geo)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions
   //////////////////////////////////////////////////////////////////////////////////////////////
