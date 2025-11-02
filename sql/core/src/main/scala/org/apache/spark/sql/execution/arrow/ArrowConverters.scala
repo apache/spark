@@ -115,7 +115,12 @@ private[sql] object ArrowConverters extends Logging {
     }
     protected val unloader = new VectorUnloader(root, true, codec, true)
 
-    protected var arrowWriter: ArrowWriter = null
+    val initCapacity = if (maxRecordsPerBatch > 0) {
+      Some(maxRecordsPerBatch.toInt)
+    } else {
+      None
+    }
+    protected val arrowWriter = ArrowWriter.create(root, initCapacity)
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
       close()
@@ -131,13 +136,6 @@ private[sql] object ArrowConverters extends Logging {
       val writeChannel = new WriteChannel(Channels.newChannel(out))
 
       Utils.tryWithSafeFinally {
-        val initCapacity = if (maxRecordsPerBatch > 0) {
-          Some(maxRecordsPerBatch.toInt)
-        } else {
-          None
-        }
-        arrowWriter = ArrowWriter.create(root, initCapacity)
-
         var rowCount = 0L
         while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
           val row = rowIter.next()
@@ -150,7 +148,6 @@ private[sql] object ArrowConverters extends Logging {
         batch.close()
       } {
         arrowWriter.reset()
-        root.clear()
       }
 
       out.toByteArray
@@ -190,8 +187,6 @@ private[sql] object ArrowConverters extends Logging {
       rowCountInLastBatch = 0
       var estimatedBatchSize = arrowSchemaSize
       Utils.tryWithSafeFinally {
-        arrowWriter = ArrowWriter.create(root)
-
         // Always write the schema.
         MessageSerializer.serialize(writeChannel, arrowSchema)
 
@@ -230,7 +225,6 @@ private[sql] object ArrowConverters extends Logging {
         batch.close()
       } {
         arrowWriter.reset()
-        root.clear()
       }
 
       out.toByteArray
@@ -457,22 +451,10 @@ private[sql] object ArrowConverters extends Logging {
       context: TaskContext)
       extends InternalRowIterator(arrowBatchIter, context) {
 
-    // Track the current root so we can clear it between batches
-    private var currentRoot: VectorSchemaRoot = null
-
     override def nextBatch(): (Iterator[InternalRow], StructType) = {
       val arrowSchema =
         ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
-
-      // Clear and close previous root to release memory
-      if (currentRoot != null) {
-        currentRoot.clear()
-        currentRoot.close()
-        resources.remove(resources.size - 1)  // Remove previous root from resources
-      }
-
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
-      currentRoot = root
       resources.append(root)
       val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
       val vectorLoader = new VectorLoader(root)

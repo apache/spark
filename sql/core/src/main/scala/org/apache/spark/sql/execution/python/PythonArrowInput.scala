@@ -118,6 +118,13 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
     if (v > 0) v else Int.MaxValue
   }
 
+  val initCapacity = if (SQLConf.get.arrowMaxRecordsPerBatch > 0) {
+    Some(maxRecordsPerBatch)
+  } else {
+    None
+  }
+  protected val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root, initCapacity)
+
   protected val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
 
   protected def writeNextBatchToArrowStream(
@@ -125,9 +132,8 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
-    if (inputIterator.hasNext) {
-      val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
 
+    if (inputIterator.hasNext) {
       val startData = dataOut.size()
       val nextBatch = inputIterator.next()
 
@@ -138,7 +144,6 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
       arrowWriter.finish()
       writer.writeBatch()
       arrowWriter.reset()
-      root.clear()
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
       true
@@ -166,14 +171,11 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
       }
     }
     if (nextBatchStart.hasNext) {
-      val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
-
       val startData = dataOut.size()
 
       val numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
         arrowWriter, writer, nextBatchStart, maxBytesPerBatch, maxRecordsPerBatch)
       assert(0 < numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
-      root.clear()
 
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
