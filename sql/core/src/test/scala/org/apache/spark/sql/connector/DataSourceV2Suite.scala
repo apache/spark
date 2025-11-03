@@ -1093,6 +1093,18 @@ abstract class SimpleScanBuilder extends ScanBuilder
   override def readSchema(): StructType = TestingV2Source.schema
 
   override def createReaderFactory(): PartitionReaderFactory = SimpleReaderFactory
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case s: Scan =>
+        this.readSchema() == s.readSchema()
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    this.readSchema().hashCode()
+  }
 }
 
 trait TestingV2Source extends TableProvider {
@@ -1156,18 +1168,6 @@ class SimpleDataSourceV2 extends TestingV2Source {
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
       Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
-    }
-
-    override def equals(obj: Any): Boolean = {
-      obj match {
-        case s: Scan =>
-          this.readSchema() == s.readSchema()
-        case _ => false
-      }
-    }
-
-    override def hashCode(): Int = {
-      this.readSchema().hashCode()
     }
   }
 

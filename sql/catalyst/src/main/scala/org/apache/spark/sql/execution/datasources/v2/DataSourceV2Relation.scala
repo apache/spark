@@ -182,7 +182,13 @@ case class DataSourceV2ScanRelation(
       relation = this.relation.copy(
         output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
       ),
-      output = this.output.map(QueryPlan.normalizeExpressions(_, this.output))
+      output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
+      keyGroupedPartitioning = keyGroupedPartitioning.map(
+        _.map(QueryPlan.normalizeExpressions(_, output))
+      ),
+      ordering = ordering.map(
+        _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
+      )
     )
   }
 }
