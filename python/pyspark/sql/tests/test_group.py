@@ -176,9 +176,9 @@ class GroupTestsMixin:
             with self.assertRaises(IndexError):
                 df.orderBy(-3)
 
-        def test_pivot_exceed_max_values(self):
-            with self.assertRaises(AnalysisException):
-                spark.range(100001).groupBy(sf.lit(1)).pivot("id").count().show()
+    def test_pivot_exceed_max_values(self):
+        with self.assertRaises(AnalysisException):
+            self.spark.range(100001).groupBy(sf.lit(1)).pivot("id").count().show()
 
 
 class GroupTests(GroupTestsMixin, ReusedSQLTestCase):
