@@ -4230,3 +4230,242 @@ class CloneSessionResponse(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CloneSessionResponse = CloneSessionResponse
+
+class BatchExecutePlanRequest(google.protobuf.message.Message):
+    """Request to execute multiple plans in a batch."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class PlanExecution(google.protobuf.message.Message):
+        """A single plan execution in the batch"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PLAN_FIELD_NUMBER: builtins.int
+        OPERATION_ID_FIELD_NUMBER: builtins.int
+        TAGS_FIELD_NUMBER: builtins.int
+        @property
+        def plan(self) -> global___Plan:
+            """(Required) The logical plan to be executed"""
+        operation_id: builtins.str
+        """(Optional) Provide an id for this execution. If not provided, it will be generated
+        by the server. The id must be an UUID string of the format
+        `00112233-4455-6677-8899-aabbccddeeff`
+        """
+        @property
+        def tags(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """Repeated field for tags that can be associated with this execution"""
+        def __init__(
+            self,
+            *,
+            plan: global___Plan | None = ...,
+            operation_id: builtins.str | None = ...,
+            tags: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_operation_id", b"_operation_id", "operation_id", b"operation_id", "plan", b"plan"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_operation_id",
+                b"_operation_id",
+                "operation_id",
+                b"operation_id",
+                "plan",
+                b"plan",
+                "tags",
+                b"tags",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_operation_id", b"_operation_id"]
+        ) -> typing_extensions.Literal["operation_id"] | None: ...
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    PLAN_EXECUTIONS_FIELD_NUMBER: builtins.int
+    ROLLBACK_ON_FAILURE_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+    """
+    client_observed_server_side_session_id: builtins.str
+    """(Optional)
+
+    Server-side generated idempotency key from the previous responses (if any). Server
+    can use this to validate that the server side session has not changed.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context"""
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    @property
+    def plan_executions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___BatchExecutePlanRequest.PlanExecution
+    ]:
+        """(Required) List of plans to execute"""
+    rollback_on_failure: builtins.bool
+    """(Required) If true, rollback (cancel) all operations if any submission fails"""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        client_observed_server_side_session_id: builtins.str | None = ...,
+        user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
+        plan_executions: collections.abc.Iterable[global___BatchExecutePlanRequest.PlanExecution]
+        | None = ...,
+        rollback_on_failure: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "plan_executions",
+            b"plan_executions",
+            "rollback_on_failure",
+            b"rollback_on_failure",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_client_observed_server_side_session_id", b"_client_observed_server_side_session_id"
+        ],
+    ) -> typing_extensions.Literal["client_observed_server_side_session_id"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+
+global___BatchExecutePlanRequest = BatchExecutePlanRequest
+
+class BatchExecutePlanResponse(google.protobuf.message.Message):
+    """Response for batch execute plan request."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class ExecutionResult(google.protobuf.message.Message):
+        """Result of a single plan execution in the batch"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        OPERATION_ID_FIELD_NUMBER: builtins.int
+        SUCCESS_FIELD_NUMBER: builtins.int
+        ERROR_MESSAGE_FIELD_NUMBER: builtins.int
+        operation_id: builtins.str
+        """(Required) The operation ID assigned to this execution"""
+        success: builtins.bool
+        """(Required) Whether the operation was successfully submitted"""
+        error_message: builtins.str
+        """(Optional) Error message if submission failed"""
+        def __init__(
+            self,
+            *,
+            operation_id: builtins.str = ...,
+            success: builtins.bool = ...,
+            error_message: builtins.str | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_error_message", b"_error_message", "error_message", b"error_message"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_error_message",
+                b"_error_message",
+                "error_message",
+                b"error_message",
+                "operation_id",
+                b"operation_id",
+                "success",
+                b"success",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_error_message", b"_error_message"]
+        ) -> typing_extensions.Literal["error_message"] | None: ...
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    RESULTS_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id in which the batch was executed."""
+    server_side_session_id: builtins.str
+    """Server-side generated idempotency key for the session."""
+    @property
+    def results(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___BatchExecutePlanResponse.ExecutionResult
+    ]:
+        """Results for each submitted plan in the same order as the request"""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        server_side_session_id: builtins.str = ...,
+        results: collections.abc.Iterable[global___BatchExecutePlanResponse.ExecutionResult]
+        | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "results",
+            b"results",
+            "server_side_session_id",
+            b"server_side_session_id",
+            "session_id",
+            b"session_id",
+        ],
+    ) -> None: ...
+
+global___BatchExecutePlanResponse = BatchExecutePlanResponse

@@ -96,6 +96,12 @@ class SparkConnectServiceStub(object):
             response_deserializer=spark_dot_connect_dot_base__pb2.CloneSessionResponse.FromString,
             _registered_method=True,
         )
+        self.BatchExecutePlan = channel.unary_unary(
+            "/spark.connect.SparkConnectService/BatchExecutePlan",
+            request_serializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.FromString,
+            _registered_method=True,
+        )
 
 
 class SparkConnectServiceServicer(object):
@@ -112,15 +118,6 @@ class SparkConnectServiceServicer(object):
 
     def AnalyzePlan(self, request, context):
         """Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details("Method not implemented!")
-        raise NotImplementedError("Method not implemented!")
-
-    def BatchExecutePlan(self, request, context):
-        """Execute multiple plans in a batch.
-        Submits multiple execute plan requests sequentially and returns the operation IDs
-        and submission status for each. Does not wait for execution results.
-        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -201,6 +198,15 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def BatchExecutePlan(self, request, context):
+        """Execute multiple plans in a batch.
+        Submits multiple execute plan requests sequentially and returns the operation IDs
+        and submission status for each. Does not wait for execution results.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -213,11 +219,6 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.AnalyzePlan,
             request_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.SerializeToString,
-        ),
-        "BatchExecutePlan": grpc.unary_unary_rpc_method_handler(
-            servicer.BatchExecutePlan,
-            request_deserializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanRequest.FromString,
-            response_serializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.SerializeToString,
         ),
         "Config": grpc.unary_unary_rpc_method_handler(
             servicer.Config,
@@ -263,6 +264,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.CloneSession,
             request_deserializer=spark_dot_connect_dot_base__pb2.CloneSessionRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.CloneSessionResponse.SerializeToString,
+        ),
+        "BatchExecutePlan": grpc.unary_unary_rpc_method_handler(
+            servicer.BatchExecutePlan,
+            request_deserializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -325,36 +331,6 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/AnalyzePlan",
             spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True,
-        )
-
-    @staticmethod
-    def BatchExecutePlan(
-        request,
-        target,
-        options=(),
-        channel_credentials=None,
-        call_credentials=None,
-        insecure=False,
-        compression=None,
-        wait_for_ready=None,
-        timeout=None,
-        metadata=None,
-    ):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            "/spark.connect.SparkConnectService/BatchExecutePlan",
-            spark_dot_connect_dot_base__pb2.BatchExecutePlanRequest.SerializeToString,
-            spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -625,6 +601,36 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/CloneSession",
             spark_dot_connect_dot_base__pb2.CloneSessionRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.CloneSessionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def BatchExecutePlan(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/BatchExecutePlan",
+            spark_dot_connect_dot_base__pb2.BatchExecutePlanRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.FromString,
             options,
             channel_credentials,
             insecure,
