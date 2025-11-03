@@ -4786,21 +4786,21 @@ bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
 # Geospatial ST Functions
 
 
-def st_asbinary(geo: "ColumnOrName") -> "Column":
+def st_asbinary(geo: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("st_asbinary", geo)
 
 
 st_asbinary.__doc__ = pysparkfuncs.st_asbinary.__doc__
 
 
-def st_geogfromwkb(wkb: "ColumnOrName") -> "Column":
+def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("st_geogfromwkb", wkb)
 
 
 st_geogfromwkb.__doc__ = pysparkfuncs.st_geogfromwkb.__doc__
 
 
-def st_geomfromwkb(wkb: "ColumnOrName") -> "Column":
+def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("st_geomfromwkb", wkb)
 
 
