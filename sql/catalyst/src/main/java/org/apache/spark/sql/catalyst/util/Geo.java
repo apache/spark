@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 // Helper interface for the APIs expected from top-level GEOMETRY and GEOGRAPHY classes.
@@ -77,5 +78,8 @@ interface Geo {
 
   // Returns the Spatial Reference Identifier (SRID) value of the geo object.
   int srid();
+
+  // Sets the Spatial Reference Identifier (SRID) value of the geo object.
+  void setSrid(int srid);
 
 }

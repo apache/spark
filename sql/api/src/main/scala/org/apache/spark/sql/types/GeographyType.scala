@@ -157,6 +157,11 @@ object GeographyType extends SpatialType {
   private final val GEOGRAPHY_MIXED_TYPE: GeographyType =
     GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
 
+  /** Returns whether the given SRID is supported. */
+  def isSridSupported(srid: Int): Boolean = {
+    GeographicSpatialReferenceSystemMapper.getStringId(srid) != null
+  }
+
   /**
    * Constructors for GeographyType.
    */

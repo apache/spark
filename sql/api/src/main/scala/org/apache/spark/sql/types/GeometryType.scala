@@ -149,6 +149,11 @@ object GeometryType extends SpatialType {
   private final val GEOMETRY_MIXED_TYPE: GeometryType =
     GeometryType(MIXED_CRS)
 
+  /** Returns whether the given SRID is supported. */
+  def isSridSupported(srid: Int): Boolean = {
+    CartesianSpatialReferenceSystemMapper.getStringId(srid) != null
+  }
+
   /**
    * Constructors for GeometryType.
    */
