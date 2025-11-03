@@ -1056,6 +1056,7 @@ class ForStatementExec(
         case ForState.Body => bodyWithVariables.exists(_.getTreeIterator.hasNext)
       })
 
+      @scala.annotation.tailrec
       override def next(): CompoundStatementExec = state match {
 
         case ForState.VariableAssignment =>

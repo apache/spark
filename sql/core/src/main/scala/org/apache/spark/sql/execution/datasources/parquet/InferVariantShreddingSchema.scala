@@ -64,6 +64,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
    * Return the VariantVal at the given path in the schema, or None if the Variant value or any of
    * its containing structs is null.
    */
+  @scala.annotation.tailrec
   private def getValueAtPath(schema: StructType, row: InternalRow, path: Seq[Int]):
       Option[VariantVal] = {
     if (row.isNullAt(path.head)) {
