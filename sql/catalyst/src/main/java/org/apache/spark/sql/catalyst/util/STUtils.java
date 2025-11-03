@@ -101,6 +101,10 @@ public final class STUtils {
     return toPhysVal(Geometry.fromWkb(wkb));
   }
 
+  public static GeometryVal stGeomFromWKB(byte[] wkb, int srid) {
+    return toPhysVal(Geometry.fromWkb(wkb, srid));
+  }
+
   // ST_Srid
   public static int stSrid(GeographyVal geog) {
     return fromPhysVal(geog).srid();
