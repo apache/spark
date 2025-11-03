@@ -25919,11 +25919,11 @@ def st_asbinary(geo: "ColumnOrName") -> Column:
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')).alias('result'))).collect()
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'))).alias('result')).collect()
     [Row(result='0101000000000000000000F03F0000000000000040')]
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')).alias('result'))).collect()
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'))).alias('result')).collect()
     [Row(result='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_asbinary", geo)
@@ -25944,7 +25944,7 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')).alias('result'))).collect()
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'))).alias('result')).collect()
     [Row(result='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_geogfromwkb", wkb)
@@ -25965,7 +25965,7 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')).alias('result'))).collect()
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'))).alias('result')).collect()
     [Row(result='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_geomfromwkb", wkb)
