@@ -2302,7 +2302,7 @@ private[spark] object Utils
       case e: MultiException =>
         e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
-        (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
+        (e.getMessage != null && e.getMessage.matches("bind.*failed.*")) ||
           isBindCollision(e.getCause)
       case e: IOException =>
         (e.getMessage != null && e.getMessage.startsWith("Failed to bind to address")) ||
@@ -3136,9 +3136,31 @@ private[spark] object Utils
   }
 
   /**
+   * Return whether we are using SerialGC or not
+   */
+  lazy val isSerialGC: Boolean = checkUseGC("UseSerialGC")
+
+  /**
+   * Return whether we are using ParallelGC or not
+   */
+  lazy val isParallelGC: Boolean = checkUseGC("UseParallelGC")
+
+  /**
    * Return whether we are using G1GC or not
    */
-  lazy val isG1GC: Boolean = {
+  lazy val isG1GC: Boolean = checkUseGC("UseG1GC")
+
+  /**
+   * Return whether we are using ZGC or not
+   */
+  lazy val isZGC: Boolean = checkUseGC("UseZGC")
+
+  /**
+   * Return whether we are using ShenandoahGC or not
+   */
+  lazy val isShenandoahGC: Boolean = checkUseGC("UseShenandoahGC")
+
+  def checkUseGC(useGCObjectStr: String): Boolean = {
     Try {
       val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
         .asInstanceOf[Class[_ <: PlatformManagedObject]]
@@ -3147,9 +3169,9 @@ private[spark] object Utils
       val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
       val valueMethod = vmOptionClazz.getMethod("getValue")
 
-      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
-      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
-      "true".equals(useG1GC)
+      val useGCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, useGCObjectStr)
+      val useGC = valueMethod.invoke(useGCObject).asInstanceOf[String]
+      "true".equals(useGC)
     }.getOrElse(false)
   }
 

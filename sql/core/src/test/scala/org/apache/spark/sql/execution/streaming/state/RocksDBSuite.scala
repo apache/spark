@@ -293,6 +293,10 @@ trait AlsoTestWithRocksDBFeatures
       }
     }
   }
+
+  // The default implementation in SQLTestUtils times out the `withTempDir()` call
+  // after 10 seconds. We don't want that because it causes flakiness in tests.
+  override protected def waitForTasksToFinish(): Unit = {}
 }
 
 class OpenNumCountedTestInputStream(in: InputStream) extends FSDataInputStream(in) {
@@ -1776,6 +1780,57 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     changelogReader.closeIfNeeded()
   }
 
+  testWithChangelogCheckpointingDisabled("Verify non empty files during zip file upload") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir) { db =>
+        // create an empty snapshot should succeed
+        db.load(0)
+        db.commit() // empty snapshot
+        assert(new File(remoteDir, "1.zip").exists())
+
+        // snapshot with only 1 key should succeed
+        db.load(1)
+        db.put("a", "1")
+        db.commit()
+        assert(new File(remoteDir, "2.zip").exists())
+      }
+    }
+
+    // Now create snapshot with an empty file
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val fileManager = new RocksDBFileManager(
+        remoteDir, Utils.createTempDir(), hadoopConf)
+        // file name -> size
+      val ckptFiles = Seq(
+        "archive/00002.log" -> 0, // not included in the zip
+        "archive/00003.log" -> 10,
+        "001.sst" -> 10,
+        "002.sst" -> 20,
+        "empty-file" -> 0
+      )
+      // Should throw exception
+      val ex = intercept[SparkException] {
+        saveCheckpointFiles(fileManager, ckptFiles, version = 1,
+          numKeys = 10, new RocksDBFileMapping(),
+          verifyNonEmptyFilesInZip = true)
+      }
+
+      checkError(
+        exception = ex,
+        condition = "STATE_STORE_UNEXPECTED_EMPTY_FILE_IN_ROCKSDB_ZIP",
+        parameters = Map(
+          "fileName" -> "empty-file",
+          "zipFileName" -> s"$remoteDir/1.zip"))
+
+      // Shouldn't throw exception if disabled
+      saveCheckpointFiles(fileManager, ckptFiles, version = 1,
+        numKeys = 10, new RocksDBFileMapping(),
+        verifyNonEmptyFilesInZip = false)
+    }
+  }
+
   testWithChangelogCheckpointingEnabled(
     "RocksDBFileManager: read and write v2 changelog with default col family") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
@@ -1956,6 +2011,58 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.load(3)
         assert(db.get("a") === null)
         assert(db.iterator().isEmpty)
+      }
+    }
+  }
+
+  test("RocksDB: ensure putList / mergeList operation correctness") {
+    withTempDir { dir =>
+      val remoteDir = Utils.createTempDir().toString
+      // minDeltasForSnapshot being 5 ensures that only changelog files are created
+      // for the 3 commits below
+      val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+        db.load(0)
+        db.put("a", "1".getBytes)
+        db.mergeList("a", Seq("2", "3", "4").map(_.getBytes).toList)
+        db.commit()
+
+        db.load(1)
+        db.mergeList("a", Seq("5", "6").map(_.getBytes).toList)
+        db.commit()
+
+        db.load(2)
+        db.remove("a")
+        db.commit()
+
+        db.load(3)
+        db.putList("a", Seq("7", "8", "9").map(_.getBytes).toList)
+        db.commit()
+
+        db.load(4)
+        db.putList("a", Seq("10", "11").map(_.getBytes).toList)
+        db.commit()
+
+        db.load(1)
+        assert(new String(db.get("a")) === "1,2,3,4")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4")))
+
+        db.load(2)
+        assert(new String(db.get("a")) === "1,2,3,4,5,6")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1,2,3,4,5,6")))
+
+        db.load(3)
+        assert(db.get("a") === null)
+        assert(db.iterator().isEmpty)
+
+        db.load(4)
+        assert(new String(db.get("a")) === "7,8,9")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "7,8,9")))
+
+        db.load(5)
+        assert(new String(db.get("a")) === "10,11")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "10,11")))
       }
     }
   }
@@ -3786,7 +3893,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       numKeys: Int,
       fileMapping: RocksDBFileMapping,
       numInternalKeys: Int = 0,
-      checkpointUniqueId: Option[String] = None): Unit = {
+      checkpointUniqueId: Option[String] = None,
+      verifyNonEmptyFilesInZip: Boolean = true): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
     val (dfsFileSuffix, immutableFileMapping) = fileMapping.createSnapshotFileMapping(
@@ -3797,7 +3905,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       numKeys,
       numInternalKeys,
       immutableFileMapping,
-      checkpointUniqueId = checkpointUniqueId)
+      checkpointUniqueId = checkpointUniqueId,
+      verifyNonEmptyFilesInZip = verifyNonEmptyFilesInZip)
 
     val snapshotInfo = RocksDBVersionSnapshotInfo(version, dfsFileSuffix)
     fileMapping.snapshotsPendingUpload.remove(snapshotInfo)

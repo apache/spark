@@ -88,21 +88,15 @@ class ListStateImpl[S](
      validateNewState(newState)
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
-     var isFirst = true
      var entryCount = 0L
      TWSMetricsUtils.resetMetric(metrics, "numUpdatedStateRows")
 
-     newState.foreach { v =>
-       val encodedValue = stateTypesEncoder.encodeValue(v)
-       if (isFirst) {
-         store.put(encodedKey, encodedValue, stateName)
-         isFirst = false
-       } else {
-         store.merge(encodedKey, encodedValue, stateName)
-       }
+     val encodedValues = newState.map { v =>
        entryCount += 1
        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+       stateTypesEncoder.encodeValue(v).copy()
      }
+     store.putList(encodedKey, encodedValues, stateName)
      updateEntryCount(encodedKey, entryCount)
    }
 
@@ -123,12 +117,12 @@ class ListStateImpl[S](
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      var entryCount = getEntryCount(encodedKey)
-     newState.foreach { v =>
-       val encodedValue = stateTypesEncoder.encodeValue(v)
-       store.merge(encodedKey, encodedValue, stateName)
+     val encodedValues = newState.map { v =>
        entryCount += 1
        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+       stateTypesEncoder.encodeValue(v).copy()
      }
+     store.mergeList(encodedKey, encodedValues, stateName)
      updateEntryCount(encodedKey, entryCount)
    }
 

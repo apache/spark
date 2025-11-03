@@ -17,18 +17,27 @@
 
 package org.apache.spark.sql.connect.client.jdbc
 
-import java.sql.DriverManager
+import java.sql.{Array => _, _}
+import java.util.Properties
 
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
-class SparkConnectDriverSuite extends AnyFunSuite { // scalastyle:ignore funsuite
+class SparkConnectDriverSuite extends ConnectFunSuite with RemoteSparkSession
+    with JdbcHelper {
 
-  // explicitly load the class to make it known to the DriverManager
-  classOf[SparkConnectDriver].getClassLoader
+  def jdbcUrl: String = s"jdbc:sc://localhost:$serverPort"
 
-  val jdbcUrl: String = s"jdbc:sc://localhost:15002"
-
-  test("test SparkConnectDriver") {
+  test("get Connection from SparkConnectDriver") {
     assert(DriverManager.getDriver(jdbcUrl).isInstanceOf[SparkConnectDriver])
+
+    val cause = intercept[SQLException] {
+      new SparkConnectDriver().connect(null, new Properties())
+    }
+    assert(cause.getMessage === "url must not be null")
+
+    withConnection { conn =>
+      assert(conn.isInstanceOf[SparkConnectConnection])
+    }
   }
 }

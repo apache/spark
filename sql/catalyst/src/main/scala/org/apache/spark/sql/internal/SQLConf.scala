@@ -67,7 +67,7 @@ object SQLConf {
   private[this] val staticConfKeysUpdateLock = new Object
 
   @volatile
-  private[this] var staticConfKeys: java.util.Set[String] = util.Collections.emptySet()
+  private[this] var staticConfKeys: util.Set[String] = util.Set.of()
 
   private def register(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
     require(!sqlConfEntries.containsKey(entry.key),
@@ -877,9 +877,7 @@ object SQLConf {
     .createOptional
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
-    .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
-      "Note: For structured streaming, this configuration cannot be changed between query " +
-      "restarts from the same checkpoint location.")
+    .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
     .version("1.1.0")
     .intConf
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
@@ -923,6 +921,14 @@ object SQLConf {
     .version("1.6.0")
     .booleanConf
     .createWithDefault(true)
+
+  val ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING =
+    buildConf("spark.sql.adaptive.streaming.stateless.enabled")
+      .doc("When true, enable adaptive query execution for stateless streaming query. To " +
+        "enable this config, `spark.sql.adaptive.enabled` needs to be also enabled.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val ADAPTIVE_EXECUTION_FORCE_APPLY = buildConf("spark.sql.adaptive.forceApply")
     .internal()
@@ -2627,6 +2633,22 @@ object SQLConf {
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
       .createWithDefault(5)
 
+  val STATEFUL_SHUFFLE_PARTITIONS_INTERNAL =
+    buildConf("spark.sql.streaming.internal.stateStore.partitions")
+      .doc("WARN: This config is used internally and is not intended to be user-facing. This " +
+        "config can be removed without support of compatibility in any time. " +
+        "DO NOT USE THIS CONFIG DIRECTLY AND USE THE CONFIG `spark.sql.shuffle.partitions`. " +
+        "The default number of partitions to use when shuffling data for stateful operations. " +
+        "If not specified, this config picks up the value of `spark.sql.shuffle.partitions`. " +
+        "Note: For structured streaming, this configuration cannot be changed between query " +
+        "restarts from the same checkpoint location.")
+      .internal()
+      .intConf
+      .checkValue(_ > 0,
+        "The value of spark.sql.streaming.internal.stateStore.partitions must be a positive " +
+          "integer.")
+      .createOptional
+
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
       .internal()
@@ -3002,6 +3024,13 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION = buildConf(
+    "spark.sql.streaming.realTimeMode.minBatchDuration")
+    .doc("The minimum long-running batch duration in milliseconds for real-time mode.")
+    .version("4.1.0")
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefault(5000)
 
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
@@ -3398,6 +3427,15 @@ object SQLConf {
       .doc("Whether to detect a streaming query may pick up an incorrect checkpoint path due " +
         "to SPARK-26824.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED =
+    buildConf("spark.sql.streaming.checkpoint.fileChecksum.enabled")
+      .internal()
+      .doc("When true, checksum would be generated and verified for checkpoint files. " +
+        "This is used to detect file corruption.")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -3843,6 +3881,15 @@ object SQLConf {
       .version("4.1.0")
       .fallbackConf(Python.PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
 
+  val PYTHON_WORKER_LOGGING_ENABLED =
+    buildConf("spark.sql.pyspark.worker.logging.enabled")
+      .doc("When set to true, this configuration enables comprehensive logging within " +
+        "Python worker processes that execute User-Defined Functions (UDFs), " +
+        "User-Defined Table Functions (UDTFs), and other Python-based operations in Spark SQL.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_PLOT_MAX_ROWS =
     buildConf("spark.sql.pyspark.plotting.max_rows")
       .doc("The visual limit on plots. If set to 1000 for top-n-based plots (pie, bar, barh), " +
@@ -3884,9 +3931,7 @@ object SQLConf {
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
-        "to a single ArrowRecordBatch in memory. This configuration is not effective for the " +
-        "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
-        "becomes each ArrowRecordBatch. If set to zero or negative there is no limit. " +
+        "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit. " +
         "See also spark.sql.execution.arrow.maxBytesPerBatch. If both are set, each batch " +
         "is created when any condition of both is met.")
       .version("2.3.0")
@@ -3929,11 +3974,9 @@ object SQLConf {
     buildConf("spark.sql.execution.arrow.maxBytesPerBatch")
       .internal()
       .doc("When using Apache Arrow, limit the maximum bytes in each batch that can be written " +
-        "to a single ArrowRecordBatch in memory. This configuration is not effective for the " +
-        "grouping API such as DataFrame(.cogroup).groupby.applyInPandas because each group " +
-        "becomes each ArrowRecordBatch. Unlike 'spark.sql.execution.arrow.maxRecordsPerBatch', " +
-        "this configuration does not work for createDataFrame/toPandas with Arrow/pandas " +
-        "instances. " +
+        "to a single ArrowRecordBatch in memory. " +
+        "Unlike 'spark.sql.execution.arrow.maxRecordsPerBatch', this configuration does not " +
+        "work for createDataFrame/toPandas with Arrow/pandas instances. " +
         "See also spark.sql.execution.arrow.maxRecordsPerBatch. If both are set, each batch " +
         "is created when any condition of both is met.")
       .version("4.0.0")
@@ -5408,6 +5451,31 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val VARIANT_SHREDDING_MAX_SCHEMA_WIDTH =
+    buildConf("spark.sql.variant.shredding.maxSchemaWidth")
+      .internal()
+      .doc("Maximum number of shredded fields to create when inferring a schema for Variant")
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(300)
+
+  val VARIANT_SHREDDING_MAX_SCHEMA_DEPTH =
+    buildConf("spark.sql.variant.shredding.maxSchemaDepth")
+      .internal()
+      .doc("Maximum depth in Variant value to traverse when inferring a schema. " +
+           "Any array/object below this depth will be shredded as a single binary.")
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(50)
+
+  val VARIANT_INFER_SHREDDING_SCHEMA =
+    buildConf("spark.sql.variant.inferShreddingSchema")
+      .internal()
+      .doc("Infer shredding schema when writing Variant columns in Parquet tables.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
@@ -6427,6 +6495,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED =
+    buildConf("spark.sql.merge.source.nested.type.coercion.enabled")
+      .internal()
+      .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
+        "nested fields than the target table's nested types.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -6660,6 +6737,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
+  def checkpointFileChecksumEnabled: Boolean = getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED)
+
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
   def useDeprecatedKafkaOffsetFetching: Boolean = getConf(USE_DEPRECATED_KAFKA_OFFSET_FETCHING)
@@ -6768,6 +6847,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def adaptiveExecutionEnabledInStatelessStreaming: Boolean =
+    getConf(ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING)
 
   def adaptiveExecutionLogLevel: Level = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
 
@@ -7230,6 +7312,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFWorkerTracebackDumpIntervalSeconds: Long =
     getConf(PYTHON_UDF_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
 
+  def pythonWorkerLoggingEnabled: Boolean = getConf(PYTHON_WORKER_LOGGING_ENABLED)
+
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 
   def pythonUDFArrowFallbackOnUDT: Boolean = getConf(PYTHON_UDF_ARROW_FALLBACK_ON_UDT)
@@ -7554,6 +7638,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyXMLParserEnabled: Boolean =
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
+
+  def coerceMergeNestedTypes: Boolean =
+    getConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

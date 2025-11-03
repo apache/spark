@@ -52,7 +52,9 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       InMemoryScans ::
       SparkScripts ::
       Pipelines ::
-      BasicOperators :: Nil)
+      BasicOperators ::
+      // Need to be here since users can specify withWatermark in stateless streaming query.
+      EventTimeWatermarkStrategy :: Nil)
 
   /**
    * Override to add extra planning strategies to the planner. These strategies are tried after

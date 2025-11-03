@@ -64,6 +64,10 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkKeyError,
 )
+from pyspark.sql.geo_utils import (
+    GeographicSpatialReferenceSystemMapper as _GeographicSRSMapper,
+    CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
+)
 
 if TYPE_CHECKING:
     import numpy as np
@@ -101,6 +105,8 @@ __all__ = [
     "StructType",
     "VariantType",
     "VariantVal",
+    "GeographyType",
+    "GeometryType",
 ]
 
 
@@ -549,8 +555,8 @@ class GeographyType(SpatialType):
         if srid == "ANY":
             self.srid = GeographyType.MIXED_SRID
             self._crs = GeographyType.MIXED_CRS
-        # Otherwise, the parameterized GEOMETRY type syntax requires a valid SRID value.
-        elif not isinstance(srid, int) or srid != GeographyType.DEFAULT_SRID:
+        # Otherwise, the parameterized GEOGRAPHY type requires a valid integer SRID value.
+        elif not isinstance(srid, int) or (crs := _GeographicSRSMapper.get_string_id(srid)) is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_SRID_VALUE",
                 messageParameters={
@@ -559,7 +565,7 @@ class GeographyType(SpatialType):
             )
         else:
             self.srid = srid
-            self._crs = GeographyType.DEFAULT_CRS
+            self._crs = crs
         self._alg = GeographyType.DEFAULT_ALG
 
     @classmethod
@@ -567,7 +573,7 @@ class GeographyType(SpatialType):
         # Algorithm value must be validated, although only SPHERICAL is supported currently.
         if alg != cls.DEFAULT_ALG:
             raise IllegalArgumentException(
-                errorClass="INVALID_ALGORITHM_VALUE",
+                errorClass="ST_INVALID_ALGORITHM_VALUE",
                 messageParameters={
                     "alg": str(alg),
                 },
@@ -577,7 +583,7 @@ class GeographyType(SpatialType):
         if crs.lower() == cls.MIXED_CRS.lower():
             return GeographyType("ANY")
         # Otherwise, JSON parsing for the GEOGRAPHY type requires a valid CRS value.
-        srid = GeographyType.DEFAULT_SRID if crs == "OGC:CRS84" else None
+        srid = _GeographicSRSMapper.get_srid(crs)
         if srid is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_CRS_VALUE",
@@ -638,8 +644,8 @@ class GeometryType(SpatialType):
         if srid == "ANY":
             self.srid = GeometryType.MIXED_SRID
             self._crs = GeometryType.MIXED_CRS
-        # Otherwise, the parameterized GEOMETRY type syntax requires a valid SRID value.
-        elif not isinstance(srid, int) or srid != GeometryType.DEFAULT_SRID:
+        # Otherwise, the parameterized GEOMETRY type requires a valid integer SRID value.
+        elif not isinstance(srid, int) or (crs := _CartesianSRSMapper.get_string_id(srid)) is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_SRID_VALUE",
                 messageParameters={
@@ -649,7 +655,7 @@ class GeometryType(SpatialType):
         # If the SRID is valid, initialize the GEOMETRY type with the corresponding CRS value.
         else:
             self.srid = srid
-            self._crs = GeometryType.DEFAULT_CRS
+            self._crs = crs
 
     """ JSON parsing logic for the GEOMETRY type relies on the CRS value, instead of the SRID.
     The method can accept either a single valid geometric string CRS value, or a special case
@@ -662,7 +668,7 @@ class GeometryType(SpatialType):
         if crs.lower() == cls.MIXED_CRS.lower():
             return GeometryType("ANY")
         # Otherwise, JSON parsing for the GEOMETRY type requires a valid CRS value.
-        srid = GeometryType.DEFAULT_SRID if crs == "OGC:CRS84" else None
+        srid = _CartesianSRSMapper.get_srid(crs)
         if srid is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_CRS_VALUE",

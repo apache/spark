@@ -23,6 +23,7 @@ import org.json4s.JsonAST.JString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalGeographyType}
 
 class GeographyTypeSuite extends SparkFunSuite {
 
@@ -141,13 +142,13 @@ class GeographyTypeSuite extends SparkFunSuite {
     val validGeographies = Seq(
       "\"geography\"",
       "\"geography(OGC:CRS84)\"",
-      "\"geography(ogc:CRS84)\"",
-      "\"geography( ogc:CRS84  )\"",
-      "\"geography(EPSG:4326)\"",
+      "\"geography(   OGC:CRS84 )\"",
       "\"geography(spherical)\"",
+      "\"geography(SPHERICAL)\"",
       "\"geography(  spherical)\"",
       "\"geography(OGC:CRS84,    spherical    )\"",
-      "\"geography( OGC:CRS84   , spherical )\""
+      "\"geography( OGC:CRS84   , spherical )\"",
+      "\"geography( OGC:CRS84   , SPHERICAL )\""
     )
     validGeographies.foreach { geog =>
       DataType.fromJson(geog).isInstanceOf[GeographyType]
@@ -214,6 +215,17 @@ class GeographyTypeSuite extends SparkFunSuite {
         case _ =>
           fail(s"Unexpected exception type: ${exception.getClass.getName}")
       }
+    }
+  }
+
+  test("PhysicalDataType maps GeographyType to PhysicalGeographyType") {
+    val geometryTypes: Seq[DataType] = Seq(
+      GeographyType(4326),
+      GeographyType("ANY")
+    )
+    geometryTypes.foreach { geometryType =>
+      val pdt = PhysicalDataType(geometryType)
+      assert(pdt.isInstanceOf[PhysicalGeographyType])
     }
   }
 }

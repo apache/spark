@@ -16,6 +16,7 @@
 #
 
 import unittest
+import logging
 from typing import cast
 from decimal import Decimal
 
@@ -38,6 +39,8 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.sql import Row
+from pyspark.util import is_remote_only
 
 if have_pandas:
     from pandas.testing import assert_frame_equal
@@ -632,6 +635,49 @@ class WindowPandasUDFTestsMixin:
                         .collect()
                     )
                     self.assertEqual(expected2, result2)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_window_pandas_udf_with_logging(self):
+        import pandas as pd
+
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def my_window_pandas_udf(x):
+            assert isinstance(x, pd.Series)
+            logger = logging.getLogger("test_window_pandas")
+            logger.warning(f"window pandas udf: {list(x)}")
+            return x.sum()
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+        w = Window.partitionBy("id").orderBy("v").rangeBetween(Window.unboundedPreceding, 0)
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                df.select("id", my_window_pandas_udf("v").over(w).alias("result")),
+                [
+                    Row(id=1, result=1.0),
+                    Row(id=1, result=3.0),
+                    Row(id=2, result=3.0),
+                    Row(id=2, result=8.0),
+                    Row(id=2, result=18.0),
+                ],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"window pandas udf: {lst}",
+                    context={"func_name": my_window_pandas_udf.__name__},
+                    logger="test_window_pandas",
+                )
+                for lst in [[1.0], [1.0, 2.0], [3.0], [3.0, 5.0], [3.0, 5.0, 10.0]]
+            ],
+        )
 
 
 class WindowPandasUDFTests(WindowPandasUDFTestsMixin, ReusedSQLTestCase):

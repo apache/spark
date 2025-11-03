@@ -49,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     libpython3-dev \
     libssl-dev \
     libtiff5-dev \
+    libwebp-dev \
     libxml2-dev \
     openjdk-17-jdk-headless \
     pkg-config \
@@ -67,7 +68,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-ARG BASIC_PIP_PKGS="numpy six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.75.1 grpcio-status==1.71.2 protobuf==5.29.5 googleapis-common-protos==1.65.0 graphviz==0.20.3"
 
@@ -75,5 +76,6 @@ ARG CONNECT_PIP_PKGS="grpcio==1.75.1 grpcio-status==1.71.2 protobuf==5.29.5 goog
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.14
 RUN python3.14 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
 RUN python3.14 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
+    python3.14 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.14 -m pip install torcheval && \
     python3.14 -m pip cache purge

@@ -52,7 +52,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParameterContext, ParseException, ParserUtils, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -60,7 +60,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
@@ -690,7 +690,8 @@ class SparkConnectPlanner(
           .groupBy(cols: _*)
 
         pythonUdf.evalType match {
-          case PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF =>
+          case PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF |
+              PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF =>
             group.flatMapGroupsInPandas(Column(pythonUdf)).logicalPlan
 
           case PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF |
@@ -1330,7 +1331,9 @@ class SparkConnectPlanner(
 
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
     val blockManager = session.sparkContext.env.blockManager
-    val blockId = CacheId(sessionHolder.session.sessionUUID, rel.getHash)
+    val blockId = session.artifactManager.getCachedBlockId(rel.getHash).getOrElse {
+      throw InvalidPlanInput(s"Cannot find a cached local relation for hash: ${rel.getHash}")
+    }
     val bytes = blockManager.getLocalBytes(blockId)
     bytes
       .map { blockData =>
@@ -2973,7 +2976,7 @@ class SparkConnectPlanner(
 
     // Check if command or SQL Script has been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
-    val isSqlScript = df.queryExecution.logical.isInstanceOf[CompoundBody]
+    val isSqlScript = df.queryExecution.isSqlScript
     val rows = df.logicalPlan match {
       case lr: LocalRelation => lr.data
       case cr: CommandResult => cr.rows

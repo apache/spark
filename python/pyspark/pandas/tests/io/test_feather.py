@@ -17,6 +17,7 @@
 import unittest
 
 import pandas as pd
+import sys
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
@@ -34,6 +35,7 @@ class FeatherMixin:
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
+    @unittest.skipIf(sys.version_info > (3, 13), "SPARK-54068")
     def test_to_feather(self):
         with self.temp_dir() as dirpath:
             path1 = f"{dirpath}/file1.feather"

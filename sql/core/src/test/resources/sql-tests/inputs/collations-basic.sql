@@ -206,6 +206,9 @@ select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t1;
 select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t1;
 select try_validate_utf8(utf8_binary collate utf8_lcase_rtrim), try_validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t1;
 
+-- Apply CollationTypeCoercion to condition expressions
+SELECT CASE WHEN utf8_lcase = 'XX' THEN 'XX' ELSE utf8_lcase END FROM t1;
+
 drop table t1;
 drop table t2;
 drop table t3;

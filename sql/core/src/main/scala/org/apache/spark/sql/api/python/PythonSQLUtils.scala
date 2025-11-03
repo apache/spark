@@ -22,6 +22,7 @@ import java.nio.channels.{Channels, SocketChannel}
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
@@ -39,6 +40,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.storage.PythonWorkerLogBlockId
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 private[sql] object PythonSQLUtils extends Logging {
@@ -190,6 +192,22 @@ private[sql] object PythonSQLUtils extends Logging {
 
   @scala.annotation.varargs
   def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
+
+  def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {
+    if (!sparkContext.isStopped) {
+      try {
+        val blockManager = sparkContext.env.blockManager.master
+        blockManager.getMatchingBlockIds(
+            id => id.isInstanceOf[PythonWorkerLogBlockId] &&
+              id.asInstanceOf[PythonWorkerLogBlockId].sessionId == sessionUUID,
+            askStorageEndpoints = true)
+          .distinct
+          .foreach(blockManager.removeBlock)
+      } catch {
+        case _ if sparkContext.isStopped => // Ignore when SparkContext is stopped.
+      }
+    }
+  }
 }
 
 /**

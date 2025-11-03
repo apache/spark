@@ -778,6 +778,18 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_MAX_PENDING_PODS_PER_RPID =
+    ConfigBuilder("spark.kubernetes.allocation.maxPendingPodsPerRp")
+      .doc("Maximum number of pending PODs allowed per resource profile ID during executor " +
+        "allocation. This provides finer-grained control over pending pods by limiting them " +
+        "per resource profile rather than globally. When set, this limit is enforced " +
+        "independently for each resource profile ID.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(value => value > 0,
+        "Maximum number of pending pods per rp id should be a positive integer")
+      .createWithDefault(Int.MaxValue)
+
   val KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD =
     ConfigBuilder("spark.kubernetes.executorSnapshotsSubscribersShutdownGracePeriod")
       .doc("Time to wait for graceful shutdown kubernetes-executor-snapshots-subscribers " +
@@ -790,6 +802,14 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
       .createWithDefaultString("20s")
+
+  val KUBERNETES_ANNOTATE_EXIT_EXCEPTION =
+    ConfigBuilder("spark.kubernetes.driver.annotateExitException")
+      .doc("If set to true, Spark will store the exit exception failed applications in" +
+        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."

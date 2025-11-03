@@ -2184,7 +2184,7 @@ private[spark] class BlockManager(
     decommissioner.foreach(_.stop())
     blockTransferService.close()
     if (blockStoreClient ne blockTransferService) {
-      // Closing should be idempotent, but maybe not for the NioBlockTransferService.
+      // Closing should be idempotent
       blockStoreClient.close()
     }
     remoteBlockTempFileManager.stop()

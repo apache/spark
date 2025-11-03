@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.13</artifactId>
-  <version>4.1.0-SNAPSHOT</version>
+  <version>4.2.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -123,7 +123,7 @@
     <maven.version>3.9.11</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <asm.version>9.8</asm.version>
+    <asm.version>9.9</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
     <log4j.version>2.24.3</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
@@ -172,8 +172,6 @@
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
     <commons.math3.version>3.6.1</commons.math3.version>
-    <!-- managed up from 3.2.1 for SPARK-11652 -->
-    <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.5.0</commons.collections4.version>
     <scala.version>2.13.17</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
@@ -185,6 +183,7 @@
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
+    <!-- Should be consistent with SparkBuild.scala and docs -->
     <fasterxml.jackson.version>2.20.0</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
@@ -217,10 +216,11 @@
     <bouncycastle.version>1.82</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.6.Final</netty.version>
+    <netty.version>4.2.7.Final</netty.version>
     <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit.version>6.0.0</junit.version>
+    <jline.version>2.14.6</jline.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
       also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
@@ -539,7 +539,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.27</version>
+        <version>4.28</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -704,11 +704,6 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-math3</artifactId>
         <version>${commons.math3.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-collections</groupId>
-        <artifactId>commons-collections</artifactId>
-        <version>${commons.collections.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -1187,7 +1182,7 @@
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
-        <version>2.14.6</version>
+        <version>${jline.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>

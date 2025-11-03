@@ -495,6 +495,14 @@ class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
         finally:
             super(ArrowPythonUDFTests, cls).tearDownClass()
 
+    @unittest.skip("Duplicate test; it is tested separately in legacy and non-legacy tests")
+    def test_udf_binary_type(self):
+        super(ArrowPythonUDFTests, self).test_udf_binary_type()
+
+    @unittest.skip("Duplicate test; it is tested separately in legacy and non-legacy tests")
+    def test_udf_binary_type_in_nested_structures(self):
+        super(ArrowPythonUDFTests, self).test_udf_binary_type_in_nested_structures()
+
 
 class ArrowPythonUDFLegacyTests(ArrowPythonUDFLegacyTestsMixin, ReusedSQLTestCase):
     @classmethod

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io._
+import java.util
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._
@@ -34,10 +35,18 @@ abstract class BasePythonUDFRunner(
     evalType: Int,
     argOffsets: Array[Array[Int]],
     pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics) {
 
+  override val envVars: util.Map[String, String] = {
+    val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
+    sessionUUID.foreach { uuid =>
+      envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
+    }
+    envVars
+  }
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head._1.funcs.head.pythonExec)
@@ -126,8 +135,10 @@ class PythonUDFRunner(
     argOffsets: Array[Array[Int]],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
+    sessionUUID: Option[String],
     profiler: Option[String])
-  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics, jobArtifactUUID) {
+  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
@@ -140,9 +151,11 @@ class PythonUDFWithNamedArgumentsRunner(
     argMetas: Array[Array[ArgumentMetadata]],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
+    sessionUUID: Option[String],
     profiler: Option[String])
   extends BasePythonUDFRunner(
-    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics, jobArtifactUUID) {
+    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)

@@ -1501,9 +1501,9 @@ class AstBuilder extends DataTypeAstBuilder
       withScriptIOSchema(
         ctx,
         transformClause.inRowFormat,
-        visitStringLit(transformClause.recordWriter),
+        transformClause.recordWriter,
         transformClause.outRowFormat,
-        visitStringLit(transformClause.recordReader),
+        transformClause.recordReader,
         schemaLess
       )
     )
@@ -1665,9 +1665,9 @@ class AstBuilder extends DataTypeAstBuilder
   protected def withScriptIOSchema(
       ctx: ParserRuleContext,
       inRowFormat: RowFormatContext,
-      recordWriter: Token,
+      recordWriter: StringLitContext,
       outRowFormat: RowFormatContext,
-      recordReader: Token,
+      recordReader: StringLitContext,
       schemaLess: Boolean): ScriptInputOutputSchema = {
 
     def format(fmt: RowFormatContext): ScriptIOFormat = fmt match {
@@ -3447,7 +3447,8 @@ class AstBuilder extends DataTypeAstBuilder
    * Currently Date, Timestamp, Interval and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
-    val value = string(visit(ctx.stringLitWithoutMarker).asInstanceOf[Token])
+    // Type constructor uses a single string literal (no coalescing, no parameter markers)
+    val value = string(visit(ctx.singleStringLitWithoutMarker).asInstanceOf[Token])
     val valueType = ctx.literalType.start.getType
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
@@ -3679,19 +3680,31 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create a String from a string literal context. This supports multiple consecutive string
-   * literals, these are concatenated, for example this expression "'hello' 'world'" will be
-   * converted into "helloworld".
+   * Create a String from a string literal context. This supports:
+   *   - Consecutive string literals: `'hello' 'world'` becomes `'helloworld'`
+   *   - R-strings (raw strings): `R'\n'` preserves the literal backslash
+   *   - Parameter markers: `:param` or `?` can be mixed with literals
    *
-   * Special characters can be escaped by using Hive/C-style escaping.
+   * Special characters can be escaped by using Hive/C-style escaping. The escape processing
+   * behavior depends on SQL configuration:
+   *   - `spark.sql.parser.escapedStringLiterals=true`: No escape processing
+   *   - `spark.sql.legacy.consecutiveStringLiterals.enabled=true`: Ignore `""` and `''`
+   *   - Default: Full escape processing (e.g., `\n` becomes newline)
+   *
+   * Each token is processed individually with the config-appropriate function,
+   * then results are concatenated. This preserves R-string semantics when mixing raw and
+   * regular strings.
    */
   private def createString(ctx: StringLiteralContext): String = {
-    if (conf.escapedStringLiterals) {
-      ctx.stringLit.asScala.map(x => stringWithoutUnescape(visitStringLit(x))).mkString
+    val tokens = visitStringLit(ctx.stringLit())
+    if (tokens == null || tokens.isEmpty) {
+      ""
+    } else if (conf.escapedStringLiterals) {
+      tokens.map(stringWithoutUnescape).mkString
     } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
-      ctx.stringLit.asScala.map(x => stringIgnoreQuoteQuote(visitStringLit(x))).mkString
+      tokens.map(stringIgnoreQuoteQuote).mkString
     } else {
-      ctx.stringLit.asScala.map(x => string(visitStringLit(x))).mkString
+      tokens.map(string).mkString
     }
   }
 
@@ -4258,9 +4271,19 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitPropertyList(
       ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.property.asScala.map { property =>
-      val key = visitPropertyKey(property.key)
-      val value = visitPropertyValue(property.value)
-      key -> value
+      property match {
+        case p: PropertyWithKeyAndEqualsContext =>
+          // Key can be identifier or coalesced string literal (via propertyKeyOrStringLit).
+          val key = visitPropertyKeyOrStringLit(p.key)
+          val value = visitPropertyValue(p.value)
+          key -> value
+        case p: PropertyWithKeyNoEqualsContext =>
+          // Key is either identifier or single token that cannot coalesce with the value.
+          val key = visitPropertyKeyOrStringLitNoCoalesce(p.key)
+          // Value supports stringLit with coalescing.
+          val value = Option(p.value).map(visitPropertyValue).orNull
+          key -> value
+      }
     }
     // Check for duplicate property names.
     checkDuplicateKeys(properties.toSeq, ctx)
@@ -4294,15 +4317,39 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * A property key can either be String or a collection of dot separated elements. This
-   * function extracts the property key based on whether its a string literal or a property
-   * identifier.
+   * A property key is a collection of dot separated identifiers.
    */
   override def visitPropertyKey(key: PropertyKeyContext): String = {
-    if (key.stringLit() != null) {
-      string(visitStringLit(key.stringLit()))
+    key.getText
+  }
+
+  /**
+   * A property key or string literal can be either:
+   * - A collection of dot separated identifiers (propertyKey)
+   * - A string literal (potentially coalesced, supports parameter markers)
+   */
+  override def visitPropertyKeyOrStringLit(key: PropertyKeyOrStringLitContext): String = {
+    if (key.stringLit != null) {
+      // String literal key (supports coalescing and parameter markers)
+      string(visitStringLit(key.stringLit))
     } else {
-      key.getText
+      // Identifier key (dot-separated identifiers)
+      visitPropertyKey(key.propertyKey)
+    }
+  }
+
+  /**
+   * A property key that doesn't support coalescing (used when no = sign is present).
+   * Can be an identifier, a single string literal, or a parameterMarker.
+   */
+  override def visitPropertyKeyOrStringLitNoCoalesce(
+      key: PropertyKeyOrStringLitNoCoalesceContext): String = {
+    if (key.propertyKey() != null) {
+      // Identifier key (e.g., compression)
+      visitPropertyKey(key.propertyKey())
+    } else {
+      // singleStringLit which encompasses both singleStringLitWithoutMarker and parameterMarker
+      string(visit(key.singleStringLit()).asInstanceOf[Token])
     }
   }
 
@@ -4329,10 +4376,20 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitExpressionPropertyList(
       ctx: ExpressionPropertyListContext): OptionList = {
     val options = ctx.expressionProperty.asScala.map { property =>
-      val key: String = visitPropertyKey(property.key)
-      val value: Expression = Option(property.value).map(expression).getOrElse {
+      // Extract the key and value using the appropriate visitor based on the property context type.
+      // Both cases require a value, so we can extract it once after the match.
+      val (key, valueCtx) = property match {
+        case p: ExpressionPropertyWithKeyAndEqualsContext =>
+          (visitPropertyKeyOrStringLit(p.key), p.value)
+        case p: ExpressionPropertyWithKeyNoEqualsContext =>
+          (visitPropertyKeyOrStringLitNoCoalesce(p.key), p.value)
+      }
+
+      // Extract the value (same logic for both cases).
+      val value = Option(valueCtx).map(expression(_)).getOrElse {
         operationNotAllowed(s"A value must be specified for the key: $key.", ctx)
       }
+
       key -> value
     }.toSeq
     OptionList(options)
@@ -6204,7 +6261,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
       createUnresolvedTableOrView(ctx.table, "SHOW TBLPROPERTIES"),
-      Option(ctx.key).map(visitPropertyKey))
+      Option(ctx.key).map(visitPropertyKeyOrStringLit))
   }
 
   /**
