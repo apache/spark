@@ -20,9 +20,9 @@ import java.time.Clock
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerValuesImpl
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.ExpiredTimerInfoImpl
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.ExpiredTimerInfoImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerValuesImpl
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.streaming.StatefulProcessor
 import org.apache.spark.sql.streaming.TimeMode
