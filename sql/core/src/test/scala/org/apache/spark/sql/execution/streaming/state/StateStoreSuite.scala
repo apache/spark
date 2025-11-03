@@ -94,7 +94,8 @@ class SignalingStateStoreProvider extends StateStoreProvider with Logging {
    */
   override def getStore(
       version: Long,
-      uniqueId: Option[String]): StateStore = null
+      uniqueId: Option[String],
+      forceSnapshotOnCommit: Boolean = false): StateStore = null
 
   /**
    * Simulates a maintenance operation that blocks until a signal is received.
@@ -173,7 +174,8 @@ class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
 
   override def getStore(
       version: Long,
-      uniqueId: Option[String]): StateStore = null
+      uniqueId: Option[String],
+      forceSnapshotOnCommit: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {}
 }
@@ -242,7 +244,10 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
 
   override def close(): Unit = {}
 
-  override def getStore(version: Long, uniqueId: Option[String]): StateStore = null
+  override def getStore(
+    version: Long,
+    uniqueId: Option[String],
+    forceSnapshotOnCommit: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {
     Thread.currentThread.setUncaughtExceptionHandler(exceptionHandler)
@@ -822,20 +827,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         ),
         matchPVals = true
       )
-    }
-  }
-
-  test("SPARK-54063: force snapshot when shouldForceSnapshotOnCommit is true") {
-      withTempDir { dir =>
-        tryWithProviderResource(newStoreProvider()) { provider =>
-          // Set shouldForceSnapshotOnCommit to true
-          provider.setShouldForceSnapshotOnCommit(true)
-          val store = provider.getStore(0)
-          put(store, "a", 0, 1)
-          store.commit()
-        // Verify that a snapshot file was created for version 1
-        assert(fileExists(provider, 1, isSnapshot = true))
-      }
     }
   }
 
@@ -2742,6 +2733,21 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
     val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("SPARK-54063: force snapshot when shouldForceSnapshotOnCommit is true") {
+    withTempDir { dir =>
+      tryWithProviderResource(newStoreProvider()) { provider =>
+        val store = provider.getStore(0, forceSnapshotOnCommit = true)
+        put(store, "a", 0, 1)
+        store.commit()
+        // Verify that a snapshot file was created for version 1
+        val metricPair = store.metrics.customMetrics.find(
+          _._1.name.contains("forceSnapshotCount"))
+        assert(metricPair.isDefined)
+        assert(metricPair.get._2 == 1L, s"forceSnapshot should be 1 but was ${metricPair.get._2}")
+      }
+    }
   }
 
   /** Return a new provider with a random id */

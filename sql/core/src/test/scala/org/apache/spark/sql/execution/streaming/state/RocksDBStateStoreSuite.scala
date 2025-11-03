@@ -2595,21 +2595,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  test("SPARK-54063: RocksDBStateStoreProvider should force snapshot on commit when lagging") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      provider.setShouldForceSnapshotOnCommit(true)
-      val store = provider.getStore(0)
-      put(store, "a", 0, 1)
-      store.commit()
-      // Indirectly verify by checking metrics set during uploading snapshot
-      val metricPair = store.metrics.customMetrics.find(
-        _._1.name == RocksDBStateStoreProvider.CUSTOM_METRIC_BYTES_COPIED.name)
-      assert(metricPair.isDefined)
-      val bytesCopied = metricPair.get._2
-      assert(bytesCopied > 0L, s"bytesCopied should be greater than 0 but was $bytesCopied")
-    }
-  }
-
   override def newStoreProvider(): RocksDBStateStoreProvider = {
     newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0))
   }

@@ -703,8 +703,7 @@ class RocksDB(
   def load(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      readOnly: Boolean = false,
-      forceSnapshotOnCommit: Boolean = false): RocksDB = {
+      readOnly: Boolean = false): RocksDB = {
     val startTime = System.currentTimeMillis()
 
     assert(version >= 0)
@@ -728,12 +727,6 @@ class RocksDB(
     )
     // Register with memory manager after successful load
     updateMemoryUsageIfNeeded()
-
-    // Setting shouldForceSnapshot at the end of load() to avoid other functions, e.g.
-    // loadWithCheckpointId or loadWithoutCheckpointId, setting shouldForceSnapshot to false.
-    if (forceSnapshotOnCommit) {
-      shouldForceSnapshot.set(true)
-    }
 
     this
   }
@@ -1476,12 +1469,16 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): (Long, StateStoreCheckpointInfo) = {
+  def commit(forceSnapshotOnCommit: Boolean = false): (Long, StateStoreCheckpointInfo) = {
     commitLatencyMs.clear()
     updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
+
+      if (forceSnapshotOnCommit) {
+        shouldForceSnapshot.set(true)
+      }
 
       var snapshot: Option[RocksDBSnapshot] = None
       if (shouldCreateSnapshot() || shouldForceSnapshot.get()) {

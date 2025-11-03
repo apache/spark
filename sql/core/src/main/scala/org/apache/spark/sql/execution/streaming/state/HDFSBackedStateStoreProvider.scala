@@ -133,7 +133,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     private val finalDeltaFile: Path = deltaFile(newVersion)
     private lazy val deltaFileStream = fm.createAtomic(finalDeltaFile, overwriteIfPossible = true)
     private lazy val compressedStream = compressStream(deltaFileStream)
-    private val saveAsSnapshot = shouldForceSnapshotOnCommit
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
@@ -198,7 +197,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def commit(): Long = {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
-        commitUpdates(newVersion, mapToUpdate, compressedStream, saveAsSnapshot)
+        commitUpdates(newVersion, mapToUpdate, compressedStream, shouldForceSnapshotOnCommit)
         state = COMMITTED
         logInfo(log"Committed version ${MDC(LogKeys.COMMITTED_VERSION, newVersion)} " +
           log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)} to file " +
@@ -256,7 +255,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       val customMetrics = metricsFromProvider.flatMap { case (name, value) =>
         // just allow searching from list cause the list is small enough
         supportedCustomMetrics.find(_.name == name).map(_ -> value)
-      } + (metricStateOnCurrentVersionSizeBytes -> SizeEstimator.estimate(mapToUpdate))
+      } + (metricStateOnCurrentVersionSizeBytes -> SizeEstimator.estimate(mapToUpdate)) +
+        (metricForceSnapshot -> (if (shouldForceSnapshotOnCommit) 1L else 0L))
 
       val instanceMetrics = Map(
         instanceMetricSnapshotLastUpload.withNewId(
@@ -319,7 +319,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
-  override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+  override def getStore(
+      version: Long,
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     if (uniqueId.isDefined) {
       throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
         "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
@@ -327,9 +330,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +
-      log"of ${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for update")
-    logInfo(s"shouldForceSnapshotOnCommit=${getShouldForceSnapshotOnCommit}")
-    new HDFSBackedStateStore(version, newMap, getShouldForceSnapshotOnCommit)
+      log"of ${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} " +
+      log"for update, forceSnapshotOnCommit=" +
+      log"${MDC(LogKeys.STREAM_SHOULD_FORCE_SNAPSHOT, forceSnapshotOnCommit)}")
+    new HDFSBackedStateStore(version, newMap, forceSnapshotOnCommit)
   }
 
   /** Get the state store for reading to specific `version` of the store. */
@@ -449,8 +453,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
     metricStateOnCurrentVersionSizeBytes :: metricLoadedMapCacheHit :: metricLoadedMapCacheMiss ::
-    metricNumSnapshotsAutoRepaired ::
-      Nil
+    metricNumSnapshotsAutoRepaired :: metricForceSnapshot :: Nil
   }
 
   override def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] =
@@ -527,6 +530,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     StateStoreCustomSumMetric("numSnapshotsAutoRepaired",
     "number of snapshots that were automatically repaired during store load")
 
+  private lazy val metricForceSnapshot: StateStoreCustomMetric =
+    StateStoreCustomSumMetric("forceSnapshotCount",
+      "number of stores that had forced snapshot")
+
   private lazy val instanceMetricSnapshotLastUpload: StateStoreInstanceMetric =
     StateStoreSnapshotLastUploadInstanceMetric()
 
@@ -536,12 +543,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newVersion: Long,
       map: HDFSBackedStateStoreMap,
       output: DataOutputStream,
-      saveAsSnapshot: Boolean = false): Unit = {
+      shouldForceSnapshotOnCommit: Boolean = false): Unit = {
     synchronized {
-      if (saveAsSnapshot) {
+      finalizeDeltaFile(output)
+      if (shouldForceSnapshotOnCommit) {
         writeSnapshotFile(newVersion, map, "commit")
-      } else {
-        finalizeDeltaFile(output)
       }
       putStateIntoStateCacheMap(newVersion, map)
     }

@@ -47,6 +47,17 @@ private case class ReportActiveInstance(
     providerIdsToCheck: Seq[StateStoreProviderId])
   extends StateStoreCoordinatorMessage
 
+/**
+ * Response from coordinator for ReportActiveInstance
+ * @param shouldForceSnapshotUpload Whether the current provider should force a snapshot
+ * upload on next commit
+ * @param providerIdsToUnload The list of provider IDs that should be unloaded from this executor.
+ */
+case class ReportActiveInstanceResponse(
+    shouldForceSnapshotUpload: Boolean,
+    providerIdsToUnload: Seq[StateStoreProviderId])
+  extends Serializable
+
 private case class VerifyIfInstanceActive(storeId: StateStoreProviderId, executorId: String)
   extends StateStoreCoordinatorMessage
 
@@ -115,17 +126,6 @@ private case class GetLaggingStoresForTesting(
 
 private object StopCoordinator
   extends StateStoreCoordinatorMessage
-
-/**
- * Status information about state stores on this executor.
- * @param shouldForceSnapshotUpload Whether the current provider should force a snapshot
- * upload on next commit
- * @param providerIdsToUnload The list of provider IDs that should be unloaded from this executor.
- */
-case class ReportActiveInstanceResponse(
-    shouldForceSnapshotUpload: Boolean,
-    providerIdsToUnload: Seq[StateStoreProviderId])
-  extends Serializable
 
 /** Helper object used to create reference to [[StateStoreCoordinator]]. */
 object StateStoreCoordinatorRef extends Logging {
@@ -266,7 +266,9 @@ private class StateStoreCoordinator(
     val sqlConf: SQLConf)
   extends ThreadSafeRpcEndpoint with Logging {
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
-  private val snapshotUploadLaggingStores = new mutable.HashSet[StateStoreProviderId]
+  // Key: queryRunId -> Value: HashSet of state store provider IDs
+  private val snapshotUploadLaggingStores =
+    new mutable.HashMap[UUID, mutable.HashSet[StateStoreProviderId]]
 
   // Stores the latest snapshot upload event for a specific state store
   private val stateStoreLatestUploadedSnapshot =
@@ -287,8 +289,8 @@ private class StateStoreCoordinator(
   private def shouldCoordinatorReportSnapshotLag: Boolean =
     sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
 
-  private def shouldAutoSnapshotForLaggingStores: Boolean =
-    sqlConf.stateStoreAutoSnapshotForLaggingStoresEnabled
+  private def stateStoreForceSnapshotUploadOnLag: Boolean =
+    sqlConf.stateStoreForceSnapshotUploadOnLag
 
   private def coordinatorLagReportInterval: Long =
     sqlConf.stateStoreCoordinatorSnapshotLagReportInterval
@@ -306,10 +308,13 @@ private class StateStoreCoordinator(
         providerLoc.map(_ != taskLocation).getOrElse(false)
       }
       // Check if the store is lagging behind in snapshot uploads
-      val isSnapshotLagging = snapshotUploadLaggingStores.contains(id)
-      logDebug(s"State store $id is lagging: $isSnapshotLagging")
+      val shouldForceSnapshotUpload =
+        stateStoreForceSnapshotUploadOnLag && snapshotUploadLaggingStores
+          .getOrElse(id.queryRunId, mutable.HashSet.empty)
+          .contains(id)
+      logDebug(s"State store $id is lagging: $shouldForceSnapshotUpload")
       context.reply(ReportActiveInstanceResponse(
-        isSnapshotLagging && shouldAutoSnapshotForLaggingStores,
+        shouldForceSnapshotUpload,
         providerIdsToUnload))
 
     case VerifyIfInstanceActive(id, execId) =>
@@ -337,6 +342,8 @@ private class StateStoreCoordinator(
       stateStoreLatestUploadedSnapshot --= storeIdsToRemove
       // Remove the corresponding run id entries for report time and starting time
       lastFullSnapshotLagReportTimeMs -= runId
+
+      snapshotUploadLaggingStores.remove(runId)
       logDebug(s"Deactivating instances related to checkpoint location $runId: " +
         storeIdsToRemove.mkString(", "))
       context.reply(true)
@@ -349,8 +356,8 @@ private class StateStoreCoordinator(
       if (!stateStoreLatestUploadedSnapshot.get(providerId).exists(_.version >= version)) {
         stateStoreLatestUploadedSnapshot.put(providerId, SnapshotUploadEvent(version, timestamp))
       }
-      if (shouldAutoSnapshotForLaggingStores) {
-          snapshotUploadLaggingStores.remove(providerId)
+      if (stateStoreForceSnapshotUploadOnLag) {
+        snapshotUploadLaggingStores.get(providerId.queryRunId).foreach(_.remove(providerId))
       }
       context.reply(true)
 
@@ -361,13 +368,12 @@ private class StateStoreCoordinator(
       if (shouldCoordinatorReportSnapshotLag) {
         val laggingStores =
           findLaggingStores(queryRunId, latestVersion, currentTimestamp, isTerminatingTrigger)
+        if (stateStoreForceSnapshotUploadOnLag) {
+          // findLaggingStores will always get a complete list of lagging stores of a query run.
+          // Therefore, we can assign the new set to the snapshotUploadLaggingStores map.
+          snapshotUploadLaggingStores.put(queryRunId, mutable.HashSet(laggingStores: _*))
+        }
         if (laggingStores.nonEmpty) {
-          if (shouldAutoSnapshotForLaggingStores) {
-            // findLaggingStores will always get a complete list of lagging stores from instances.
-            // We need to clear the set here to ensure any deactivated stores are removed.
-            snapshotUploadLaggingStores.clear()
-            snapshotUploadLaggingStores ++= laggingStores
-          }
           logWarning(
             log"StateStoreCoordinator Snapshot Lag Report for " +
             log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, queryRunId)} - " +

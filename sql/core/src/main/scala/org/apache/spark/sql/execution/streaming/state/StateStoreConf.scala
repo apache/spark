@@ -145,10 +145,6 @@ class StateStoreConf(
   val reportSnapshotUploadLag: Boolean =
     sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
 
-  /** Whether to force snapshot when a state store is lagging behind in snapshot uploads. */
-  val stateStoreAutoSnapshotForLaggingStoresEnabled: Boolean =
-    sqlConf.stateStoreAutoSnapshotForLaggingStoresEnabled
-
   /** Whether to unload the store on task completion. */
   val unloadOnCommit = sqlConf.stateStoreUnloadOnCommit
 

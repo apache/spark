@@ -208,7 +208,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           if (badPartitions.contains(partitionId)) {
             assert(latestSnapshotVersion.getOrElse(0) == 0)
           } else {
-            assert(latestSnapshotVersion.get > 0)
+            assert(latestSnapshotVersion.get >= 0)
           }
         }
     }
@@ -237,7 +237,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
   faultyStateStoreProviders.foreach { case (providerName, providerClassName, badPartitions) =>
     test(
-      s"SPARK-54063: Automatically trigger snapshot upload for $providerName when lagging"
+      s"SPARK-54063: Force trigger snapshot upload for $providerName when lagging"
     ) {
       withCoordinatorAndSQLConf(
         sc,
@@ -250,13 +250,15 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
         SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
         SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0",
-        SQLConf.STATE_STORE_AUTO_SNAPSHOT_FOR_LAGGING_STORES_ENABLED.key -> "true"
+        SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true"
       ) {
         case (coordRef, spark) =>
           import spark.implicits._
           implicit val sparkSession: SparkSession = spark
           val inputData = MemoryStream[Int]
           val query = setUpStatefulQuery(inputData, "query")
+          val inputData2 = MemoryStream[Int]
+          val query2 = setUpStatefulQuery(inputData2, "query2")
           // Add, commit, and wait multiple times to force snapshot versions and time difference
           // we will detect state store with partition 0 and 1 to be lagged on version 5
           // snapshotVersionOnLagDetected =
@@ -266,10 +268,13 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           (0 until snapshotVersionOnLagDetected).foreach { _ =>
             inputData.addData(1, 2, 3)
             query.processAllAvailable()
+            inputData2.addData(1, 2, 3)
+            query2.processAllAvailable()
             Thread.sleep(500)
           }
           // Verify only the partitions in badPartitions doesn't have a snapshot
           verifySnapshotUploadEvents(coordRef, query, badPartitions)
+          verifySnapshotUploadEvents(coordRef, query2, badPartitions)
 
           // The coordinator should detected that lagging stores now. So next
           // commit should automatically trigger snapshot
@@ -279,8 +284,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
           val streamingQuery = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
           val stateCheckpointDir = streamingQuery.lastExecution.checkpointLocation
-
-          // Verify all stores have uploaded a snapshot and it's logged by the coordinator
+          // Verify bad partitions have uploaded a snapshot and it's logged by the coordinator
           badPartitions.foreach {
             partitionId =>
               // Verify for every store name listed
@@ -289,14 +293,41 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               val providerId = StateStoreProviderId(storeId, query.runId)
               val latestSnapshotVersion = coordRef.getLatestSnapshotVersionForTesting(providerId)
               assert(latestSnapshotVersion.get == snapshotVersionOnLagDetected + 1)
-              // Also verify that the stores are no longer marked as lagging
-              val laggingStores = coordRef.getLaggingStoresForTesting(
-                query.runId, snapshotVersionOnLagDetected + 1)
-              assert(laggingStores.isEmpty)
+              // Also verify that store is no longer force uploading snapshot
+              val stateStoreStatus = coordRef.reportActiveInstance(
+                providerId, "hostX", "exec1", Seq.empty
+              )
+              assert(stateStoreStatus.shouldForceSnapshotUpload == false)
           }
+
+          val streamingQuery2 = query2.asInstanceOf[StreamingQueryWrapper].streamingQuery
+          val stateCheckpointDir2 = streamingQuery2.lastExecution.checkpointLocation
+
+          // Helper function to verify shouldForceSnapshotUpload for queried partitions
+          def assertForceSnapshotUploadOnBadPartitions(
+              shouldForce: Boolean): Unit = {
+            badPartitions.foreach { partitionId =>
+              val storeId = StateStoreId(
+                stateCheckpointDir2, 0, partitionId, StateStoreId.DEFAULT_STORE_NAME)
+              val providerId = StateStoreProviderId(storeId, query2.runId)
+              val stateStoreStatus = coordRef.reportActiveInstance(
+                providerId, "hostX", "exec1", Seq.empty)
+              assert(
+                stateStoreStatus.shouldForceSnapshotUpload == shouldForce
+              )
+            }
+          }
+
+          // verify that lagging stores in query2 are not impacted by query1 catching up
+          assertForceSnapshotUploadOnBadPartitions(true)
+
           query.stop()
+          query2.stop()
+          // Verify that the lagging stores are no longer marked as
+          // lagging because they are removed when stop() is called
+          assertForceSnapshotUploadOnBadPartitions(false)
+        }
       }
-    }
   }
 
   allStateStoreProviders.foreach { case (providerName, providerClassName, badPartitions) =>

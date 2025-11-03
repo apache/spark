@@ -197,8 +197,11 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
   override def close(): Unit = innerProvider.close()
 
-  override def getStore(version: Long, stateStoreCkptId: Option[String] = None): StateStore = {
-    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId)
+  override def getStore(
+      version: Long,
+      stateStoreCkptId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
+    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId, forceSnapshotOnCommit)
     CkptIdCollectingStateStoreWrapper(innerStateStore)
   }
 

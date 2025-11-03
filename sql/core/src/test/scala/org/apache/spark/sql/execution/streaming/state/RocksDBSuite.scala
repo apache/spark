@@ -3957,8 +3957,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     override def load(
         version: Long,
         ckptId: Option[String] = None,
-        readOnly: Boolean = false,
-        shouldForceSnapshotOnCommit: Boolean = false): RocksDB = {
+        readOnly: Boolean = false): RocksDB = {
       // When a ckptId is defined, it means the test is explicitly using v2 semantic
       // When it is not, it is possible that implicitly uses it.
       // So still do a versionToUniqueId.get
@@ -3968,8 +3967,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
-    override def commit(): (Long, StateStoreCheckpointInfo) = {
-      val ret = super.commit()
+    override def commit(
+        forceSnapshotOnCommit: Boolean = false
+      ): (Long, StateStoreCheckpointInfo) = {
+      val ret = super.commit(forceSnapshotOnCommit)
       // update versionToUniqueId from lineageManager
       lineageManager.getLineageForCurrVersion().foreach {
         case LineageItem(version, id) => versionToUniqueId.getOrElseUpdate(version, id)

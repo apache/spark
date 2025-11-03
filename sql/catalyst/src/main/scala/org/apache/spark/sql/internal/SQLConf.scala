@@ -2707,13 +2707,13 @@ object SQLConf {
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
       .createWithDefault(if (Utils.isTesting) 1 else 0)
 
-  val STATE_STORE_AUTO_SNAPSHOT_FOR_LAGGING_STORES_ENABLED =
-    buildConf("spark.sql.streaming.stateStore.autoSnapshotForLaggingStoresEnabled")
+  val STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG =
+    buildConf("spark.sql.streaming.stateStore.forceSnapshotUploadOnLag")
       .internal()
       .doc(
-        "When enabled, the state store coordinator will store a list of state stores that are " +
-        "lagging behind in snapshot uploads. The provider will use this information to decide " +
-        "whether to force snapshot creation on commit when creating a new store."
+        "When enabled, state stores with lagging snapshot uploads will automatically trigger " +
+        "a snapshot on the next commit. Requires spark.sql.streaming.stateStore.coordinator" +
+        ".reportSnapshotUploadLag.enabled to be enabled."
       )
       .version("4.1.0")
       .booleanConf
@@ -6901,6 +6901,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCoordinatorMaxLaggingStoresToReport: Int =
     getConf(STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT)
 
+<<<<<<< HEAD
   def stateStoreRowChecksumEnabled: Boolean = getConf(STATE_STORE_ROW_CHECKSUM_ENABLED)
 
   def stateStoreRowChecksumReadVerificationRatio: Long =
@@ -6908,6 +6909,18 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreAutoSnapshotForLaggingStoresEnabled: Boolean =
     getConf(STATE_STORE_AUTO_SNAPSHOT_FOR_LAGGING_STORES_ENABLED)
+=======
+  def stateStoreForceSnapshotUploadOnLag: Boolean = {
+    val value = getConf(STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG)
+    if (value && !stateStoreCoordinatorReportSnapshotUploadLag) {
+      throw new IllegalArgumentException(
+        "spark.sql.streaming.stateStore.forceSnapshotUploadOnLag can only be true if " +
+        "spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag is also true."
+      )
+    }
+    value
+  }
+>>>>>>> 10ca5c809e (address comment)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
