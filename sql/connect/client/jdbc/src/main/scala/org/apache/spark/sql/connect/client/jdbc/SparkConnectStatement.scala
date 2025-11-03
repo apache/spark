@@ -81,8 +81,8 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   override def execute(sql: String): Boolean = {
     checkOpen()
 
-    // stmt can be reused to exeute more than one queries,
-    // reset before executinng new query
+    // stmt can be reused to execute more than one queries,
+    // reset before executing new query
     operationId = null
     resultSet = null
 

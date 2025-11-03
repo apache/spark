@@ -37,9 +37,10 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
         assert(stmt.getUpdateCount === 0)
         assert(stmt.getResultSet === null)
 
-        intercept[SQLException] {
+        var se = intercept[SQLException] {
           stmt.executeQuery("CREATE TABLE t2 (id INT) USING Parquet")
         }
+        assert(se.getMessage === "The query does not produce a ResultSet.")
 
         assert(stmt.executeUpdate("CREATE TABLE t3 (id INT) USING Parquet") === 0)
         assert(stmt.getResultSet === null)
@@ -49,9 +50,10 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
         assert(stmt.getUpdateCount === 0)
         assert(stmt.getResultSet === null)
 
-        intercept[SQLException] {
+        se = intercept[SQLException] {
           stmt.executeQuery("INSERT INTO t1 VALUES (1)")
         }
+        assert(se.getMessage === "The query does not produce a ResultSet.")
 
         assert(stmt.executeUpdate("INSERT INTO t1 VALUES (1)") === 0)
         assert(stmt.getResultSet === null)
@@ -68,9 +70,10 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
           assert(rs !== null)
         }
 
-        intercept[SQLException] {
+        se = intercept[SQLException] {
           stmt.executeUpdate("SELECT id FROM t1")
         }
+        assert(se.getMessage === "The query produces a ResultSet.")
       }
     }
   }
