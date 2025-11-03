@@ -25901,6 +25901,79 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return partitioning.bucket(numBuckets, col)
 
 
+# Geospatial ST Functions
+
+
+@_try_remote_functions
+def st_asbinary(geo: "ColumnOrName") -> Column:
+    """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    geo : :class:`~pyspark.sql.Column` or str
+        A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')).alias('result'))).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')).alias('result'))).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    """
+    return _invoke_function_over_columns("st_asbinary", geo)
+
+
+@_try_remote_functions
+def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
+    """Parses the input WKB description and returns the corresponding GEOGRAPHY value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : :class:`~pyspark.sql.Column` or str
+        A BINARY value in WKB format, representing a GEOGRAPHY value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')).alias('result'))).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    """
+    return _invoke_function_over_columns("st_geogfromwkb", wkb)
+
+
+@_try_remote_functions
+def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
+    """Parses the input WKB description and returns the corresponding GEOMETRY value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : :class:`~pyspark.sql.Column` or str
+        A BINARY value in WKB format, representing a GEOMETRY value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')).alias('result'))).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    """
+    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+
+
+# Call Functions
+
+
 @_try_remote_functions
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     """
