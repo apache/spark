@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkConf, SparkContext, SparkMasterRegex}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkMasterRegex}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
@@ -160,9 +160,20 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
   private[k8s] def makeExecutorPodsAllocator(sc: SparkContext, kubernetesClient: KubernetesClient,
       snapshotsStore: ExecutorPodsSnapshotsStore) = {
-    val executorPodsAllocatorName = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) match {
+    val allocator = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
+    if (allocator == "deployment" &&
+        Utils.isDynamicAllocationEnabled(sc.conf) &&
+        sc.conf.get(KUBERNETES_EXECUTOR_POD_DELETION_COST).isEmpty) {
+      throw new SparkException(
+        s"Dynamic allocation with the deployment pods allocator requires " +
+          s"'${KUBERNETES_EXECUTOR_POD_DELETION_COST.key}' to be configured.")
+    }
+
+    val executorPodsAllocatorName = allocator match {
       case "statefulset" =>
         classOf[StatefulSetPodsAllocator].getName
+      case "deployment" =>
+        classOf[DeploymentPodsAllocator].getName
       case "direct" =>
         classOf[ExecutorPodsAllocator].getName
       case fullClass =>

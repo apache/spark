@@ -460,10 +460,19 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_EXECUTOR_POD_DELETION_COST =
+    ConfigBuilder("spark.kubernetes.executor.podDeletionCost")
+      .doc("Value to set for the controller.kubernetes.io/pod-deletion-cost" +
+        " annotation when Spark asks a deployment-based allocator to remove executor pods. This " +
+        "helps Kubernetes pick the same pods Spark selected when the deployment scales down.")
+      .version("3.5.2")
+      .intConf
+      .createOptional
+
   val KUBERNETES_ALLOCATION_PODS_ALLOCATOR =
     ConfigBuilder("spark.kubernetes.allocation.pods.allocator")
-      .doc("Allocator to use for pods. Possible values are direct (the default) and statefulset " +
-        ", or a full class name of a class implementing AbstractPodsAllocator. " +
+      .doc("Allocator to use for pods. Possible values are direct (the default), statefulset," +
+        " deployment, or a full class name of a class implementing AbstractPodsAllocator. " +
         "Future version may add Job or replicaset. This is a developer API and may change " +
       "or be removed at anytime.")
       .version("3.3.0")
