@@ -25,7 +25,7 @@ import java.util.{Locale, Set}
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, TestUtils}
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -2464,9 +2464,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       "spark.sql.hive.metastore.barrierPrefixes").foreach { key =>
       checkError(
         exception = intercept[AnalysisException](sql(s"set $key=abc")),
-        condition = "CANNOT_MODIFY_CONFIG",
-        parameters = Map(
-          "key" -> toSQLConf(key), "docroot" -> SPARK_DOC_ROOT)
+        condition = "CANNOT_MODIFY_STATIC_CONFIG",
+        parameters = Map("key" -> toSQLConf(key))
       )
     }
   }

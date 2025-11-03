@@ -115,6 +115,13 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
   self: BasePythonRunner[Iterator[InternalRow], _] =>
   protected val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
 
+  protected val maxRecordsPerBatch: Int = {
+    val v = SQLConf.get.arrowMaxRecordsPerBatch
+    if (v > 0) v else Int.MaxValue
+  }
+
+  protected val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
+
   protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -145,13 +152,6 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
 
 private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
-  private val arrowMaxRecordsPerBatch = {
-    val v = SQLConf.get.arrowMaxRecordsPerBatch
-    if (v > 0) v else Int.MaxValue
-  }
-
-  private val maxBytesPerBatch = SQLConf.get.arrowMaxBytesPerBatch
-
   // Marker inside the input iterator to indicate the start of the next batch.
   private var nextBatchStart: Iterator[InternalRow] = Iterator.empty
 
@@ -169,7 +169,8 @@ private[python] trait BatchedPythonArrowInput extends BasicPythonArrowInput {
       val startData = dataOut.size()
 
       val numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
-        arrowWriter, writer, nextBatchStart, maxBytesPerBatch, arrowMaxRecordsPerBatch)
+        arrowWriter, writer, nextBatchStart, maxBytesPerBatch, maxRecordsPerBatch)
+      assert(0 < numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
 
       val deltaData = dataOut.size() - startData
       pythonMetrics("pythonDataSent") += deltaData
@@ -219,12 +220,8 @@ private[python] object BatchedPythonArrowInput {
       arrowWriter.write(rowIter.next())
       numRowsInBatch += 1
     }
-
-    assert(numRowsInBatch > 0)
-    assert(numRowsInBatch <= maxRecordsPerBatch)
     arrowWriter.finish()
     writer.writeBatch()
-
     arrowWriter.reset()
     numRowsInBatch
   }
@@ -234,14 +231,6 @@ private[python] object BatchedPythonArrowInput {
  * Enables an optimization that splits each group into the sized batches.
  */
 private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner =>
-
-  val maxRecordsPerBatch: Int = {
-    val v = SQLConf.get.arrowMaxRecordsPerBatch
-    if (v > 0) v else Int.MaxValue
-  }
-
-  val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
-
   protected override def newWriter(
       env: SparkEnv,
       worker: PythonWorker,
@@ -279,8 +268,7 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             // the TaskCompletionListener.
             writer.close()
           }
-          assert(numRowsInBatch > 0)
-          assert(numRowsInBatch <= maxRecordsPerBatch)
+          assert(0 < numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
           val deltaData = dataOut.size() - startData
           pythonMetrics("pythonDataSent") += deltaData
           true

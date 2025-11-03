@@ -62,6 +62,9 @@ class StateStoreConf(
   /** Maximum count of versions a State Store implementation should retain in memory */
   val maxVersionsToRetainInMemory: Int = sqlConf.maxBatchesToRetainInMemory
 
+  /** Maximum number of versions to delete per maintenance operation */
+  val maxVersionsToDeletePerMaintenance: Int = sqlConf.maxVersionsToDeletePerMaintenance
+
   /**
    * Optional fully qualified name of the subclass of [[StateStoreProvider]]
    * managing state data. That is, the implementation of the State Store to use.
@@ -92,6 +95,9 @@ class StateStoreConf(
 
   /** The compression codec used to compress delta and snapshot files. */
   val compressionCodec: String = sqlConf.stateStoreCompressionCodec
+
+  /** Whether file checksum generation and verification is enabled. */
+  val checkpointFileChecksumEnabled: Boolean = sqlConf.checkpointFileChecksumEnabled
 
   /** whether to validate state schema during query run. */
   val stateSchemaCheckEnabled = sqlConf.isStateSchemaCheckEnabled

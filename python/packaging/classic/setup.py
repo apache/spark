@@ -346,7 +346,7 @@ try:
         license="Apache-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=["py4j==0.10.9.9"],
+        install_requires=["py4j>=0.10.9.7,<0.10.9.10"],
         extras_require={
             "ml": ["numpy>=%s" % _minimum_numpy_version],
             "mllib": ["numpy>=%s" % _minimum_numpy_version],
@@ -385,6 +385,7 @@ try:
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
             "Programming Language :: Python :: 3.13",
+            "Programming Language :: Python :: 3.14",
             "Programming Language :: Python :: Implementation :: CPython",
             "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",

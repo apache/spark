@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import unittest
+
 from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
 from pyspark.sql.tests.arrow.test_arrow_python_udf import ArrowPythonUDFTestsMixin
 
@@ -46,6 +48,14 @@ class ArrowPythonUDFParityLegacyTestsMixin(ArrowPythonUDFTestsMixin):
         finally:
             super().tearDownClass()
 
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFLegacyTests.")
+    def test_udf_binary_type(self):
+        super().test_udf_binary_type(self)
+
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFLegacyTests.")
+    def test_udf_binary_type_in_nested_structures(self):
+        super().test_udf_binary_type_in_nested_structures(self)
+
 
 class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
     @classmethod
@@ -61,6 +71,14 @@ class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
         finally:
             super().tearDownClass()
+
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFNonLegacyTests.")
+    def test_udf_binary_type(self):
+        super().test_udf_binary_type(self)
+
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFLegacyTests.")
+    def test_udf_binary_type_in_nested_structures(self):
+        super().test_udf_binary_type_in_nested_structures(self)
 
 
 class ArrowPythonUDFParityLegacyTests(UDFParityTests, ArrowPythonUDFParityLegacyTestsMixin):

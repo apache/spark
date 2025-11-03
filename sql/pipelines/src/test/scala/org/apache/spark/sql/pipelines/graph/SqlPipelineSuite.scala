@@ -109,12 +109,12 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         graphRegistrationContext.toDataflowGraph
       },
-      condition = "PIPELINE_DUPLICATE_IDENTIFIERS.DATASET",
+      condition = "PIPELINE_DUPLICATE_IDENTIFIERS.OUTPUT",
       sqlState = Option("42710"),
       parameters = Map(
-        "datasetName" -> fullyQualifiedIdentifier("table").quotedString,
-        "datasetType1" -> "TABLE",
-        "datasetType2" -> "VIEW"
+        "outputName" -> fullyQualifiedIdentifier("table").quotedString,
+        "outputType1" -> "TABLE",
+        "outputType2" -> "VIEW"
       )
     )
   }
@@ -1005,5 +1005,59 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       sqlState = Option("42617"),
       parameters = Map.empty
     )
+  }
+
+  test("Streaming Table with watermark clause") {
+    withTempDir { tmpDir =>
+      spark.sql("SELECT * FROM RANGE(3)").write.format("parquet").mode("append")
+        .save(tmpDir.getCanonicalPath)
+
+      val externalTableIdent = fullyQualifiedIdentifier("t")
+      spark.sql(s"CREATE TABLE $externalTableIdent (id string, eventTime timestamp)")
+
+      withTable(externalTableIdent.quotedString) {
+        spark.sql(s"INSERT INTO $externalTableIdent VALUES ('a', timestamp_seconds(1))")
+        spark.sql(s"INSERT INTO $externalTableIdent VALUES ('b', timestamp_seconds(2))")
+        spark.sql(s"INSERT INTO $externalTableIdent VALUES ('a', timestamp_seconds(3))")
+
+        val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+          sqlText =
+            s"""
+               |CREATE STREAMING TABLE b
+               |AS
+               |SELECT
+               |    CAST(window.start AS LONG) AS wStart,
+               |    CAST(window.end AS LONG) AS wEnd,
+               |    id,
+               |    count(*) as cnt
+               |FROM
+               |    STREAM $externalTableIdent WATERMARK eventTime DELAY OF INTERVAL 10 seconds
+               |GROUP BY window(eventTime, '5 seconds'), id
+               |""".stripMargin
+        )
+
+        val updateContext = new PipelineUpdateContextImpl(
+          unresolvedDataflowGraph, eventCallback = _ => (),
+          storageRoot = storageRoot)
+        updateContext.pipelineExecution.runPipeline()
+        updateContext.pipelineExecution.awaitCompletion()
+
+        val datasetFullyQualifiedName = fullyQualifiedIdentifier("b").quotedString
+
+        assert(
+          spark.sql(s"SELECT * FROM $datasetFullyQualifiedName").collect().toSet == Set()
+        )
+
+        spark.sql(s"INSERT INTO $externalTableIdent VALUES ('a', timestamp_seconds(20))")
+
+        updateContext.pipelineExecution.runPipeline()
+        updateContext.pipelineExecution.awaitCompletion()
+
+        checkAnswer(
+          spark.sql(s"SELECT * FROM $datasetFullyQualifiedName ORDER BY wStart, wEnd, id"),
+          Seq(Row(0L, 5L, "a", 2L), Row(0L, 5L, "b", 1L))
+        )
+      }
+    }
   }
 }

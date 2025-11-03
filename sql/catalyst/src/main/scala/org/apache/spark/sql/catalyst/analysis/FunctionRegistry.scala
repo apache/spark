@@ -30,6 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
@@ -534,6 +535,7 @@ object FunctionRegistry {
     expression[ThetaUnionAgg]("theta_union_agg"),
     expression[ThetaIntersectionAgg]("theta_intersection_agg"),
     expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
+    expression[ApproxTopKCombine]("approx_top_k_combine"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -853,6 +855,7 @@ object FunctionRegistry {
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
     expression[BitmapCount]("bitmap_count"),
     expression[BitmapOrAgg]("bitmap_or_agg"),
+    expression[BitmapAndAgg]("bitmap_and_agg"),
 
     // json
     expression[StructsToJson]("to_json"),
@@ -870,6 +873,12 @@ object FunctionRegistry {
     expression[SchemaOfVariant]("schema_of_variant"),
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
     expression[ToVariantObject]("to_variant_object"),
+
+    // Spatial
+    expression[ST_AsBinary]("st_asbinary"),
+    expression[ST_GeogFromWKB]("st_geogfromwkb"),
+    expression[ST_GeomFromWKB]("st_geomfromwkb"),
+    expression[ST_Srid]("st_srid"),
 
     // cast
     expression[Cast]("cast"),

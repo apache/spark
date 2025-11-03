@@ -402,68 +402,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
-  test("handler - exit resolve in the same block when if condition fails") {
-    val sqlScript =
-      """
-        |BEGIN
-        |  DECLARE VARIABLE flag INT = -1;
-        |  scope_to_exit: BEGIN
-        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
-        |    BEGIN
-        |      SELECT flag;
-        |      SET flag = 1;
-        |    END;
-        |    SELECT 2;
-        |    SELECT 3;
-        |    IF 1 > 1/0 THEN
-        |      SELECT 10;
-        |    END IF;
-        |    SELECT 4;
-        |    SELECT 5;
-        |  END;
-        |  SELECT flag;
-        |END
-        |""".stripMargin
-    val expected = Seq(
-      Seq(Row(2)),    // select
-      Seq(Row(3)),    // select
-      Seq(Row(-1)),   // select flag
-      Seq(Row(1))     // select flag from the outer body
-    )
-    verifySqlScriptResult(sqlScript, expected = expected)
-  }
-
-  test("continue handler - continue after the if statement when if condition fails") {
-    val sqlScript =
-      """
-        |BEGIN
-        |  DECLARE VARIABLE flag INT = -1;
-        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
-        |  BEGIN
-        |    SELECT flag;
-        |    SET flag = 1;
-        |  END;
-        |  SELECT 2;
-        |  SELECT 3;
-        |  IF (1 > 1/0) THEN
-        |    SELECT 4;
-        |  END IF;
-        |  SELECT 5;
-        |  SELECT 6;
-        |  SELECT flag;
-        |END
-        |""".stripMargin
-    val expected = Seq(
-      Seq(Row(2)),    // select
-      Seq(Row(3)),    // select
-      Seq(Row(-1)),   // select flag
-      Seq(Row(5)),    // select
-      Seq(Row(6)),    // select
-      Seq(Row(1))     // select flag from the outer body
-    )
-    verifySqlScriptResult(sqlScript, expected = expected)
-  }
-
   test("handler - exit resolve in outer block") {
     val sqlScript =
       """
@@ -956,6 +894,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    END;
         |    IF 1 > 1/0 THEN
         |      SELECT 10;
+        |    ELSEIF (1 = 1) THEN
+        |      SELECT 11;
+        |    ELSE
+        |      SELECT 12;
         |    END IF;
         |    SELECT 4;
         |    SELECT 5;
@@ -1012,6 +954,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    END;
         |    CASE 1/0
         |      WHEN flag THEN SELECT 10;
+        |      WHEN 1 THEN SELECT 11;
+        |      ELSE SELECT 12;
         |    END CASE;
         |    SELECT 4;
         |    SELECT 5;
@@ -1068,6 +1012,9 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    END;
         |    CASE flag
         |      WHEN 1/0 THEN SELECT 10;
+        |      WHEN -1 THEN SELECT 11;
+        |      WHEN 1 THEN SELECT 12;
+        |      ELSE SELECT 13;
         |    END CASE;
         |    SELECT 4;
         |    SELECT 5;
@@ -1124,6 +1071,9 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    END;
         |    CASE flag
         |      WHEN 'teststr' THEN SELECT 10;
+        |      WHEN -1 THEN SELECT 11;
+        |      WHEN 1 THEN SELECT 12;
+        |      ELSE SELECT 13;
         |    END CASE;
         |    SELECT 4;
         |    SELECT 5;
@@ -1180,6 +1130,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    END;
         |    CASE
         |      WHEN flag = 1/0 THEN SELECT 10;
+        |      WHEN 1 = 1 THEN SELECT 11;
+        |      ELSE SELECT 12;
         |    END CASE;
         |    SELECT 4;
         |    SELECT 5;
@@ -3111,9 +3063,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       sqlState = "42703",
       parameters = Map("objectName" -> toSQLId("localVar")),
       context = ExpectedContext(
-        fragment = "localVar",
-        start = 7,
-        stop = 14)
+        objectType = "EXECUTE IMMEDIATE",
+        objectName = "",
+        startIndex = 7,
+        stopIndex = 14,
+        fragment = "localVar")
     )
   }
 

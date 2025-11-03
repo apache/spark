@@ -143,7 +143,8 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       inputSchema: StructType,
       outputSchema: StructType,
       metrics: Map[String, SQLMetric],
-      jobArtifactUUID: Option[String]): MapInBatchEvaluatorFactory = {
+      jobArtifactUUID: Option[String],
+      sessionUUID: Option[String]): MapInBatchEvaluatorFactory = {
     val pythonFunc = createPythonFunction(pickledFunc)
 
     val pythonEvalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
@@ -170,7 +171,8 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       conf.arrowUseLargeVarTypes,
       pythonRunnerConf,
       metrics,
-      jobArtifactUUID)
+      jobArtifactUUID,
+      sessionUUID)
   }
 
   def createPythonMetrics(): Array[CustomMetric] = {
@@ -458,6 +460,7 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
 
     // Send configurations
     dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
+    dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
@@ -550,6 +553,7 @@ private class UserDefinedPythonDataSourceReadRunner(
     dataOut.writeBoolean(SQLConf.get.pythonFilterPushDown)
 
     dataOut.writeBoolean(isStreaming)
+    dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceReadInfo = {
@@ -600,6 +604,7 @@ private class UserDefinedPythonDataSourceWriteRunner(
     dataOut.writeBoolean(overwrite)
 
     dataOut.writeBoolean(isStreaming)
+    dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
   }
 
   override protected def receiveFromPython(

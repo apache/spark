@@ -19,9 +19,22 @@ package org.apache.spark.network.util;
 
 /**
  * Selector for which form of low-level IO we should use.
- * NIO is always available, while EPOLL is only available on Linux.
- * AUTO is used to select EPOLL if it's available, or NIO otherwise.
  */
 public enum IOMode {
-  NIO, EPOLL
+  /**
+   * Java NIO (Selector), cross-platform portable
+   */
+  NIO,
+  /**
+   * Native EPOLL via JNI, Linux only
+   */
+  EPOLL,
+  /**
+   * Native KQUEUE via JNI, MacOS/BSD only
+   */
+  KQUEUE,
+  /**
+   * Prefer to use native EPOLL on Linux (or KQUEUE on MacOS) if available. Then, fallback to NIO.
+   */
+  AUTO
 }

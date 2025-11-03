@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
+import java.util
 
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -40,7 +41,8 @@ class ArrowPythonUDTFRunner(
     protected override val largeVarTypes: Boolean,
     protected override val workerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
       Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
       jobArtifactUUID, pythonMetrics)
@@ -65,6 +67,13 @@ class ArrowPythonUDTFRunner(
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
   }
 
+  override val envVars: util.Map[String, String] = {
+    val envVars = new util.HashMap(funcs.head.funcs.head.envVars)
+    sessionUUID.foreach { uuid =>
+      envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
+    }
+    envVars
+  }
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head.funcs.head.pythonExec)

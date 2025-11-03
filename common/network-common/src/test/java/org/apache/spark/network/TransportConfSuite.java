@@ -17,10 +17,12 @@
 package org.apache.spark.network;
 
 import java.io.File;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.ssl.SslSampleConfigs;
 
@@ -84,5 +86,25 @@ public class TransportConfSuite {
   @Test
   public void testSsltrustStoreReloadIntervalMs() {
     assertEquals(10000, transportConf.sslRpctrustStoreReloadIntervalMs());
+  }
+
+  @Test
+  public void testDefaultIOMode() {
+    TransportConf c1 = new TransportConf("m1", new MapConfigProvider(Map.of()));
+    assertEquals("AUTO", c1.ioMode());
+
+    TransportConf c2 = new TransportConf("m1",
+      new MapConfigProvider(Map.of("spark.io.mode.default", "KQUEUE")));
+    assertEquals("KQUEUE", c2.ioMode());
+
+    TransportConf c3 = new TransportConf("m2",
+      new MapConfigProvider(Map.of("spark.io.mode.default", "KQUEUE")));
+    assertEquals("KQUEUE", c3.ioMode());
+
+    TransportConf c4 = new TransportConf("m3",
+      new MapConfigProvider(Map.of(
+        "spark.io.mode.default", "KQUEUE",
+        "spark.m3.io.mode", "EPOLL")));
+    assertEquals("EPOLL", c4.ioMode());
   }
 }

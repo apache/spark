@@ -4081,3 +4081,152 @@ class CheckpointCommandResult(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CheckpointCommandResult = CheckpointCommandResult
+
+class CloneSessionRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    NEW_SESSION_ID_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+    """
+    client_observed_server_side_session_id: builtins.str
+    """(Optional)
+
+    Server-side generated idempotency key from the previous responses (if any). Server
+    can use this to validate that the server side session has not changed.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context
+
+        user_context.user_id and session_id both identify a unique remote spark session on the
+        server side.
+        """
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
+    new_session_id: builtins.str
+    """(Optional)
+    The session_id for the new cloned session. If not provided, a new UUID will be generated.
+    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+    """
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        client_observed_server_side_session_id: builtins.str | None = ...,
+        user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
+        new_session_id: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "_new_session_id",
+            b"_new_session_id",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "new_session_id",
+            b"new_session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "_new_session_id",
+            b"_new_session_id",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "new_session_id",
+            b"new_session_id",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_client_observed_server_side_session_id", b"_client_observed_server_side_session_id"
+        ],
+    ) -> typing_extensions.Literal["client_observed_server_side_session_id"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_new_session_id", b"_new_session_id"]
+    ) -> typing_extensions.Literal["new_session_id"] | None: ...
+
+global___CloneSessionRequest = CloneSessionRequest
+
+class CloneSessionResponse(google.protobuf.message.Message):
+    """Next ID: 5"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    NEW_SESSION_ID_FIELD_NUMBER: builtins.int
+    NEW_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id of the original session that was cloned."""
+    server_side_session_id: builtins.str
+    """Server-side generated idempotency key that the client can use to assert that the server side
+    session (parent of the cloned session) has not changed.
+    """
+    new_session_id: builtins.str
+    """Session id of the new cloned session."""
+    new_server_side_session_id: builtins.str
+    """Server-side session ID of the new cloned session."""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        server_side_session_id: builtins.str = ...,
+        new_session_id: builtins.str = ...,
+        new_server_side_session_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "new_server_side_session_id",
+            b"new_server_side_session_id",
+            "new_session_id",
+            b"new_session_id",
+            "server_side_session_id",
+            b"server_side_session_id",
+            "session_id",
+            b"session_id",
+        ],
+    ) -> None: ...
+
+global___CloneSessionResponse = CloneSessionResponse

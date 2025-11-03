@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.1.0-SNAPSHOT</version>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
@@ -86,6 +86,9 @@
       <version>${guava.failureaccess.version}</version>
       <scope>compile</scope>
     </dependency>
+    <!--
+      When upgrading ammonite, consider upgrading semanticdb-shared too.
+    -->
     <dependency>
       <groupId>com.lihaoyi</groupId>
       <artifactId>ammonite_${scala.version}</artifactId>
@@ -104,7 +107,7 @@
     <dependency>
       <groupId>org.scalameta</groupId>
       <artifactId>semanticdb-shared_${scala.binary.version}</artifactId>
-      <version>4.13.1.1</version>
+      <version>4.13.10</version>
       <exclusions>
         <exclusion>
           <groupId>org.scala-lang</groupId>

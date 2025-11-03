@@ -944,7 +944,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * Reserve a new column.
    */
-  protected abstract WritableColumnVector reserveNewColumn(int capacity, DataType type);
+  public abstract WritableColumnVector reserveNewColumn(int capacity, DataType type);
 
   protected boolean isArray() {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||

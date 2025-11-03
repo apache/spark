@@ -468,7 +468,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1, 'name2' as first
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1 as x, 'name2' as first
 -- !query schema
 struct<>
 -- !query output
@@ -476,6 +476,21 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
   "sqlState" : "42613"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :x = id and :first = name' USING 1, 'name2' as first
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"1\""
+  }
 }
 
 
@@ -508,11 +523,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 28,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa'"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -531,11 +546,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 40,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa' INTO res_id"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -807,11 +822,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 28,
-    "fragment" : "EXECUTE IMMEDIATE sql_string"
+    "stopIndex" : 1,
+    "fragment" : "5"
   } ]
 }
 
@@ -971,3 +986,228 @@ DROP TABLE x
 struct<>
 -- !query output
 
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5 AS p
+-- !query schema
+struct<type:string,val:int>
+-- !query output
+int	5
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5L AS p
+-- !query schema
+struct<type:string,val:bigint>
+-- !query output
+bigint	5
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5S AS p
+-- !query schema
+struct<type:string,val:smallint>
+-- !query output
+smallint	5
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5Y AS p
+-- !query schema
+struct<type:string,val:tinyint>
+-- !query output
+tinyint	5
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14F AS p
+-- !query schema
+struct<type:string,val:float>
+-- !query output
+float	3.14
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14159D AS p
+-- !query schema
+struct<type:string,val:double>
+-- !query output
+double	3.14159
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 123.45BD AS p
+-- !query schema
+struct<type:string,val:decimal(5,2)>
+-- !query output
+decimal(5,2)	123.45
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING true AS p
+-- !query schema
+struct<type:string,val:boolean>
+-- !query output
+boolean	true
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING false AS p
+-- !query schema
+struct<type:string,val:boolean>
+-- !query output
+boolean	false
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'hello world' AS p
+-- !query schema
+struct<type:string,val:string>
+-- !query output
+string	hello world
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'it''s a test' AS p
+-- !query schema
+struct<type:string,val:string>
+-- !query output
+string	it's a test
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING DATE '2023-12-25' AS p
+-- !query schema
+struct<type:string,val:date>
+-- !query output
+date	2023-12-25
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP '2023-12-25 10:30:45' AS p
+-- !query schema
+struct<type:string,val:timestamp>
+-- !query output
+timestamp	2023-12-25 10:30:45
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP_NTZ '2023-12-25 10:30:45' AS p
+-- !query schema
+struct<type:string,val:timestamp_ntz>
+-- !query output
+timestamp_ntz	2023-12-25 10:30:45
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS INT) AS p
+-- !query schema
+struct<type:string,val:int>
+-- !query output
+int	NULL
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS STRING) AS p
+-- !query schema
+struct<type:string,val:string>
+-- !query output
+string	NULL
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, hex(:p) as val' USING X'010203FF' AS p
+-- !query schema
+struct<type:string,val:string>
+-- !query output
+binary	010203FF
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3' DAY AS p
+-- !query schema
+struct<type:string,val:interval day>
+-- !query output
+interval day	3 00:00:00.000000000
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '2' YEAR AS p
+-- !query schema
+struct<type:string,val:interval year>
+-- !query output
+interval year	2-0
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '1-2' YEAR TO MONTH AS p
+-- !query schema
+struct<type:string,val:interval year to month>
+-- !query output
+interval year to month	1-2
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3 4:5:6' DAY TO SECOND AS p
+-- !query schema
+struct<type:string,val:interval day to second>
+-- !query output
+interval day to second	3 04:05:06.000000000
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 999.999BD AS p
+-- !query schema
+struct<type:string,val:decimal(6,3)>
+-- !query output
+decimal(6,3)	999.999
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p1) as type1, :p1 as val1, typeof(:p2) as type2, :p2 as val2' 
+  USING 42 as p1, 'test string' as p2
+-- !query schema
+struct<type1:string,val1:int,type2:string,val2:string>
+-- !query output
+int	42	string	test string
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(1, 2, 3) AS p
+-- !query schema
+struct<type:string,val:array<int>>
+-- !query output
+array<int>	[1,2,3]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY('a', 'b', 'c') AS p
+-- !query schema
+struct<type:string,val:array<string>>
+-- !query output
+array<string>	["a","b","c"]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(ARRAY(1, 2), ARRAY(3, 4)) AS p
+-- !query schema
+struct<type:string,val:array<array<int>>>
+-- !query output
+array<array<int>>	[[1,2],[3,4]]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP('key1', 'value1', 'key2', 'value2') AS p
+-- !query schema
+struct<type:string,val:map<string,string>>
+-- !query output
+map<string,string>	{"key1":"value1","key2":"value2"}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP(1, 'one', 2, 'two') AS p
+-- !query schema
+struct<type:string,val:map<int,string>>
+-- !query output
+map<int,string>	{1:"one",2:"two"}

@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -967,8 +967,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(secs(ts5.getTime)), Row(null)))
 
         // invalid format
+        // Intercept to SparkRuntimeException to check for proper exception handling
         val invalid = df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')")
-        val e = intercept[IllegalArgumentException](invalid.collect())
+        val e = intercept[SparkRuntimeException](invalid.collect())
         assert(e.getMessage.contains('b'))
 
         val df3 = Seq("2016-04-08").toDF("a")

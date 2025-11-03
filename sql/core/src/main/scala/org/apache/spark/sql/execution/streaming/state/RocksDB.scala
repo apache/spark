@@ -40,6 +40,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
 // RocksDB operations that could acquire/release the instance lock
@@ -138,6 +139,12 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
 
+  // We need 2 threads per fm caller to avoid blocking
+  // (one for main file and another for checksum file).
+  // Since this fm is used by both query task and maintenance thread,
+  // then we need 2 * 2 = 4 threads.
+  protected val fileChecksumThreadPoolSize: Option[Int] = Some(4)
+
   protected def createFileManager(
       dfsRootDir: String,
       localTempDir: File,
@@ -149,7 +156,9 @@ class RocksDB(
       localTempDir,
       hadoopConf,
       codecName,
-      loggingId = loggingId
+      loggingId = loggingId,
+      fileChecksumEnabled = conf.fileChecksumEnabled,
+      fileChecksumThreadPoolSize = fileChecksumThreadPoolSize
     )
   }
 
@@ -984,6 +993,69 @@ class RocksDB(
   }
 
   /**
+   * Convert the given list of value row bytes into a single byte array. The returned array
+   * bytes supports additional values to be later merged to it.
+   */
+  private def getListValuesInArrayByte(values: List[Array[Byte]]): Array[Byte] = {
+    // Delimit each value row bytes with a single byte delimiter, the last
+    // value row won't have a delimiter at the end.
+    val delimiterNum = values.length - 1
+    // The bytes in values already include the bytes length prefix
+    val totalSize = values.map(_.length).sum +
+      delimiterNum // for each delimiter
+
+    val result = new Array[Byte](totalSize)
+    var pos = Platform.BYTE_ARRAY_OFFSET
+
+    values.zipWithIndex.foreach { case (rowBytes, idx) =>
+      // Write the data
+      Platform.copyMemory(rowBytes, Platform.BYTE_ARRAY_OFFSET, result, pos, rowBytes.length)
+      pos += rowBytes.length
+
+      // Add the delimiter - we are using "," as the delimiter
+      if (idx < delimiterNum) {
+        result(pos - Platform.BYTE_ARRAY_OFFSET) = 44.toByte
+      }
+      // Move the position for delimiter
+      pos += 1
+    }
+    result
+  }
+
+  /**
+   * Put the given list of values for the given key.
+   * @note
+   *   This update is not committed to disk until commit() is called.
+   */
+  def putList(
+      key: Array[Byte],
+      values: List[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    val valuesInArrayByte = getListValuesInArrayByte(values)
+
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
+    db.put(writeOptions, keyWithPrefix, valuesInArrayByte)
+    changelogWriter.foreach(_.put(keyWithPrefix, valuesInArrayByte))
+  }
+
+
+  /**
    * Merge the given value for the given key. This is equivalent to the Atomic
    * Read-Modify-Write operation in RocksDB, known as the "Merge" operation. The
    * modification is appending the provided value to current list of values for
@@ -1017,6 +1089,39 @@ class RocksDB(
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
     db.merge(writeOptions, keyWithPrefix, value)
     changelogWriter.foreach(_.merge(keyWithPrefix, value))
+  }
+
+  /**
+   * Merge the given list of values for the given key.
+   *
+   * This is similar to the merge() function, but allows merging multiple values at once. The
+   * provided values will be appended to the current list of values for the given key.
+   */
+  def mergeList(
+      key: Array[Byte],
+      values: List[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    val valueInArrayByte = getListValuesInArrayByte(values)
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
+    db.merge(writeOptions, keyWithPrefix, valueInArrayByte)
+    changelogWriter.foreach(_.merge(keyWithPrefix, valueInArrayByte))
   }
 
   /**
@@ -1396,6 +1501,7 @@ class RocksDB(
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(
         numVersionsToRetain = conf.minVersionsToRetain,
+        maxVersionsToDeletePerMaintenance = conf.maxVersionsToDeletePerMaintenance,
         minVersionsToDelete = conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
@@ -1431,6 +1537,7 @@ class RocksDB(
       silentDeleteRecursively(localRootDir, "closing RocksDB")
       // Clear internal maps to reset the state
       clearColFamilyMaps()
+      fileManager.close()
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
@@ -1460,7 +1567,6 @@ class RocksDB(
   private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
-    val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
       "put" -> DB_WRITE,
@@ -1495,6 +1601,10 @@ class RocksDB(
 
     // Use RocksDBMemoryManager to calculate the memory usage accounting
     val memoryUsage = RocksDBMemoryManager.getInstanceMemoryUsage(instanceUniqueId, getMemoryUsage)
+
+    val totalPinnedBlocksMemUsage = lruCache.getPinnedUsage()
+    val pinnedBlocksMemUsage = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+      instanceUniqueId, totalPinnedBlocksMemUsage)
 
     RocksDBMetrics(
       numKeysOnLoadedVersion,
@@ -1621,7 +1731,8 @@ class RocksDB(
           snapshot.fileMapping,
           Some(snapshot.columnFamilyMapping),
           Some(snapshot.maxColumnFamilyId),
-          snapshot.uniqueId
+          snapshot.uniqueId,
+          verifyNonEmptyFilesInZip = conf.verifyNonEmptyFilesInZip
         )
         fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
 
@@ -1951,9 +2062,12 @@ case class RocksDBConf(
     highPriorityPoolRatio: Double,
     memoryUpdateIntervalMs: Long,
     compressionCodec: String,
+    verifyNonEmptyFilesInZip: Boolean,
     allowFAllocate: Boolean,
     compression: String,
-    reportSnapshotUploadLag: Boolean)
+    reportSnapshotUploadLag: Boolean,
+    fileChecksumEnabled: Boolean,
+    maxVersionsToDeletePerMaintenance: Int)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -2054,6 +2168,12 @@ object RocksDBConf {
   val COMPRESSION_KEY = "compression"
   private val COMPRESSION_CONF = SQLConfEntry(COMPRESSION_KEY, "lz4")
 
+  // Config to determine whether we should verify that the files written
+  // to the RocksDB snapshot zip file are not empty.
+  val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY = "verifyNonEmptyFilesInZip"
+  private val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF =
+    SQLConfEntry(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY, "true")
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -2142,9 +2262,12 @@ object RocksDBConf {
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
       getPositiveLongConf(MEMORY_UPDATE_INTERVAL_MS_CONF),
       storeConf.compressionCodec,
+      getBooleanConf(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF),
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
-      storeConf.reportSnapshotUploadLag)
+      storeConf.reportSnapshotUploadLag,
+      storeConf.checkpointFileChecksumEnabled,
+      storeConf.maxVersionsToDeletePerMaintenance)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
