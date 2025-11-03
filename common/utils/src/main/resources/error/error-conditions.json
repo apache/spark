@@ -4110,31 +4110,31 @@
   },
   "KLL_SKETCH_INCOMPATIBLE_MERGE" : {
     "message" : [
-      "Cannot merge KLL sketches: <reason>"
+      "For function <functionName>, cannot merge KLL sketches: <reason>"
     ],
     "sqlState" : "22000"
   },
   "KLL_SKETCH_INVALID_INPUT" : {
     "message" : [
-      "Invalid KLL sketch binary data: <reason>"
+      "For function <functionName>, invalid KLL sketch binary data: <reason>"
     ],
     "sqlState" : "22000"
   },
   "KLL_SKETCH_INVALID_QUANTILE_RANGE" : {
     "message" : [
-      "The quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>."
+      "For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>."
     ],
     "sqlState" : "22003"
   },
   "KLL_SKETCH_K_MUST_BE_CONSTANT" : {
     "message" : [
-      "The k parameter must be a constant value, but got a non-constant expression."
+      "For function <functionName>, the k parameter must be a constant value, but got a non-constant expression."
     ],
     "sqlState" : "42K0E"
   },
   "KLL_SKETCH_K_OUT_OF_RANGE" : {
     "message" : [
-      "The k parameter must be between 8 and 65535 (inclusive), but got <k>."
+      "For function <functionName>, the k parameter must be between 8 and 65535 (inclusive), but got <k>."
     ],
     "sqlState" : "22003"
   },

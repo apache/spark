@@ -837,6 +837,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_QUANTILE_RANGE",
   "sqlState" : "22003",
   "messageParameters" : {
+    "functionName" : "`kll_sketch_get_quantile_bigint`",
     "quantile" : "-0.5D"
   }
 }
@@ -856,6 +857,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_QUANTILE_RANGE",
   "sqlState" : "22003",
   "messageParameters" : {
+    "functionName" : "`kll_sketch_get_quantile_bigint`",
     "quantile" : "1.5D"
   }
 }
@@ -875,6 +877,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_QUANTILE_RANGE",
   "sqlState" : "22003",
   "messageParameters" : {
+    "functionName" : "`kll_sketch_get_quantile_float`",
     "quantile" : "-0.1D"
   }
 }
@@ -894,6 +897,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_INPUT",
   "sqlState" : "22000",
   "messageParameters" : {
+    "functionName" : "`kll_sketch_get_rank_bigint`",
     "reason" : "reqOffset: 40, reqLength: 56, (reqOff + reqLen): 96, allocSize: 60"
   }
 }
@@ -914,6 +918,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INCOMPATIBLE_MERGE",
   "sqlState" : "22000",
   "messageParameters" : {
+    "functionName" : "`kll_sketch_merge_bigint`",
     "reason" : "reqOffset: 40, reqLength: 56, (reqOff + reqLen): 96, allocSize: 60"
   }
 }
@@ -929,6 +934,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_INPUT",
   "sqlState" : "22000",
   "messageParameters" : {
+    "functionName" : "`kll_sketch_get_quantile_bigint`",
     "reason" : "Error combination of PreInts and SerVer: PreInts: 110, SerVer: 111"
   }
 }
@@ -970,7 +976,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] The k parameter must be between 8 and 65535 (inclusive), but got 7. SQLSTATE: 22003",
+    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] For function `kll_sketch_agg_bigint`, the k parameter must be between 8 and 65535 (inclusive), but got 7. SQLSTATE: 22003",
     "sqlExpr" : "\"kll_sketch_agg_bigint(col1, 7)\""
   },
   "queryContext" : [ {
@@ -995,7 +1001,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] The k parameter must be between 8 and 65535 (inclusive), but got 65536. SQLSTATE: 22003",
+    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] For function `kll_sketch_agg_bigint`, the k parameter must be between 8 and 65535 (inclusive), but got 65536. SQLSTATE: 22003",
     "sqlExpr" : "\"kll_sketch_agg_bigint(col1, 65536)\""
   },
   "queryContext" : [ {
@@ -1095,6 +1101,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_INPUT",
   "sqlState" : "22000",
   "messageParameters" : {
+    "functionName" : "`kll_sketch_get_n_bigint`",
     "reason" : "A sketch memory image must be at least 8 bytes. 4"
   }
 }
@@ -1110,6 +1117,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_INPUT",
   "sqlState" : "22000",
   "messageParameters" : {
+    "functionName" : "`kll_sketch_get_n_float`",
     "reason" : "A sketch memory image must be at least 8 bytes. 4"
   }
 }
@@ -1125,6 +1133,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_INPUT",
   "sqlState" : "22000",
   "messageParameters" : {
+    "functionName" : "`kll_sketch_get_n_double`",
     "reason" : "A sketch memory image must be at least 8 bytes. 4"
   }
 }

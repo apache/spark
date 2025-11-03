@@ -954,7 +954,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] The k parameter must be between 8 and 65535 (inclusive), but got 7. SQLSTATE: 22003",
+    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] For function `kll_sketch_agg_bigint`, the k parameter must be between 8 and 65535 (inclusive), but got 7. SQLSTATE: 22003",
     "sqlExpr" : "\"kll_sketch_agg_bigint(col1, 7)\""
   },
   "queryContext" : [ {
@@ -977,7 +977,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] The k parameter must be between 8 and 65535 (inclusive), but got 65536. SQLSTATE: 22003",
+    "msg" : "[KLL_SKETCH_K_OUT_OF_RANGE] For function `kll_sketch_agg_bigint`, the k parameter must be between 8 and 65535 (inclusive), but got 65536. SQLSTATE: 22003",
     "sqlExpr" : "\"kll_sketch_agg_bigint(col1, 65536)\""
   },
   "queryContext" : [ {
