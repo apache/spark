@@ -365,6 +365,12 @@ jobs:
         python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.5'
         python3.11 -m pip list
     # Run the tests.
+    - name: Debug
+      env: ${{ fromJSON(inputs.envs) }}
+      run: |
+        uname -a
+        cat /etc/os-release
+        ./build/sbt clean "core/testOnly *ShuffleNettyIoUringSuite"
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
