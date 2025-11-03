@@ -317,4 +317,52 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       assert(error.getMessage.contains(fixedOperationId))
     }
   }
+
+  test("Interrupt with TAG type without operation_tag throws proper error class") {
+    withRawBlockingStub { stub =>
+      // Create an interrupt request with INTERRUPT_TYPE_TAG but no operation_tag
+      val request = org.apache.spark.connect.proto.InterruptRequest
+        .newBuilder()
+        .setSessionId(UUID.randomUUID().toString)
+        .setUserContext(org.apache.spark.connect.proto.UserContext
+          .newBuilder()
+          .setUserId(defaultUserId))
+        .setInterruptType(
+          org.apache.spark.connect.proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG)
+        .build()
+
+      val error = intercept[io.grpc.StatusRuntimeException] {
+        stub.interrupt(request)
+      }
+
+      // Verify the error is INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_TAG_REQUIRES_TAG
+      assert(error.getMessage.contains("INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_TAG_REQUIRES_TAG"))
+      assert(error.getMessage.contains("operation_tag"))
+    }
+  }
+
+  test("Interrupt with OPERATION_ID type without operation_id throws proper error class") {
+    withRawBlockingStub { stub =>
+      // Create an interrupt request with INTERRUPT_TYPE_OPERATION_ID but no operation_id
+      val request = org.apache.spark.connect.proto.InterruptRequest
+        .newBuilder()
+        .setSessionId(UUID.randomUUID().toString)
+        .setUserContext(org.apache.spark.connect.proto.UserContext
+          .newBuilder()
+          .setUserId(defaultUserId))
+        .setInterruptType(
+          org.apache.spark.connect.proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
+        .build()
+
+      val error = intercept[io.grpc.StatusRuntimeException] {
+        stub.interrupt(request)
+      }
+
+      // Verify the error is INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_OPERATION_ID_REQUIRES_ID
+      assert(
+        error.getMessage.contains(
+          "INVALID_PARAMETER_VALUE.INTERRUPT_TYPE_OPERATION_ID_REQUIRES_ID"))
+      assert(error.getMessage.contains("operation_id"))
+    }
+  }
 }
