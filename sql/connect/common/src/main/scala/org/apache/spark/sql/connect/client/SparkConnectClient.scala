@@ -140,17 +140,19 @@ private[sql] class SparkConnectClient(
       .addAllTags(tags.get.toSeq.asJava)
 
     // Add request option to allow result chunking.
-    val chunkingOptionsBuilder = proto.ResultChunkingOptions
-      .newBuilder()
-      .setAllowArrowBatchChunking(configuration.allowArrowBatchChunking)
-    configuration.preferredArrowChunkSize.foreach { size =>
-      chunkingOptionsBuilder.setPreferredArrowChunkSize(size)
-    }
-    request.addRequestOptions(
-      proto.ExecutePlanRequest.RequestOption
+    if (configuration.allowArrowBatchChunking) {
+      val chunkingOptionsBuilder = proto.ResultChunkingOptions
         .newBuilder()
-        .setResultChunkingOptions(chunkingOptionsBuilder.build())
-        .build())
+        .setAllowArrowBatchChunking(true)
+      configuration.preferredArrowChunkSize.foreach { size =>
+        chunkingOptionsBuilder.setPreferredArrowChunkSize(size)
+      }
+      request.addRequestOptions(
+        proto.ExecutePlanRequest.RequestOption
+          .newBuilder()
+          .setResultChunkingOptions(chunkingOptionsBuilder.build())
+          .build())
+    }
 
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     operationId.foreach { opId =>
