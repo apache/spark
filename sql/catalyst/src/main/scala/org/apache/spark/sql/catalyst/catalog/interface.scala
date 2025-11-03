@@ -278,7 +278,7 @@ case class ClusterBySpec(columnNames: Seq[NamedReference]) {
 object ClusterBySpec {
   private val mapper = {
     val ret = new ObjectMapper() with ClassTagExtensions
-    ret.setSerializationInclusion(Include.NON_ABSENT)
+    ret.setDefaultPropertyInclusion(Include.NON_ABSENT)
     ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     ret.registerModule(DefaultScalaModule)
     ret
