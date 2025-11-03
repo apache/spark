@@ -1107,6 +1107,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       )
     }
     assert(ex.cause.isInstanceOf[AnalysisException])
-    assert(ex.cause.getMessage.contains("cannot have both partition and cluster columns"))
+    val analysisEx = ex.cause.asInstanceOf[AnalysisException]
+    assert(analysisEx.errorClass.get == "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED")
   }
 }

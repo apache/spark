@@ -273,14 +273,8 @@ object DatasetManager extends Logging {
     // Validate that partition and cluster columns don't coexist
     if (partitioning.nonEmpty && clustering.nonEmpty) {
       throw new AnalysisException(
-        message = s"Table ${table.identifier.quotedString} cannot have both partition and " +
-        "cluster columns. Tables can only be organized by partitioning OR clustering, not both.",
-        line = None,
-        startPosition = None,
-        cause = None,
-        errorClass = None,
-        messageParameters = Map.empty,
-        context = Array.empty
+        errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+        messageParameters = Map.empty
       )
     }
 
