@@ -456,7 +456,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Examples
         --------
-        >>> from pyspark.sql import Row
+        >>> from pyspark.sql import Row, functions as sf
         >>> df1 = spark.createDataFrame([
         ...     Row(course="dotNET", year=2012, earnings=10000),
         ...     Row(course="Java", year=2012, earnings=20000),
@@ -517,7 +517,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         >>> df2.groupBy("sales.year").pivot(
         ...     "sales.course"
-        ... ).sum("sales.earnings").sort("year").show()
+        ... ).agg(sf.sum("sales.earnings")).sort("year").show()
         +----+-----+------+
         |year| Java|dotNET|
         +----+-----+------+
