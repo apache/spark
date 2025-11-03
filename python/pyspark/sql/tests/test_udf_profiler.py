@@ -325,12 +325,13 @@ class UDFProfiler2TestsMixin:
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
     )
-    def test_perf_profiler_pandas_udf_iterator_not_supported(self):
+    def test_perf_profiler_pandas_udf_iterator(self):
         import pandas as pd
 
         @pandas_udf("long")
-        def add1(x):
-            return x + 1
+        def add1(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in iter:
+                yield s + 1
 
         @pandas_udf("long")
         def add2(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
@@ -339,22 +340,23 @@ class UDFProfiler2TestsMixin:
 
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             df = self.spark.range(10, numPartitions=2).select(
-                add1("id"), add2("id"), add1("id"), add2(col("id") + 1)
+                add1("id"), add2("id"), add1("id")
             )
             df.collect()
 
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+        self.assertEqual(2, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=2)
+            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=4)
 
     @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-    def test_perf_profiler_arrow_udf_iterator_not_supported(self):
+    def test_perf_profiler_arrow_udf_iterator(self):
         import pyarrow as pa
 
         @arrow_udf("long")
-        def add1(x):
-            return pa.compute.add(x, 1)
+        def add1(iter: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for s in iter:
+                yield pa.compute.add(s, 1)
 
         @arrow_udf("long")
         def add2(iter: Iterator[pa.Array]) -> Iterator[pa.Array]:
@@ -363,21 +365,21 @@ class UDFProfiler2TestsMixin:
 
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             df = self.spark.range(10, numPartitions=2).select(
-                add1("id"), add2("id"), add1("id"), add2(col("id") + 1)
+                add1("id"), add2("id"), add1("id")
             )
             df.collect()
 
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+        self.assertEqual(2, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=2)
+            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=4)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
     )
-    def test_perf_profiler_map_in_pandas_not_supported(self):
-        df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+    def test_perf_profiler_map_in_pandas(self):
+        df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age")).repartition(1)
 
         def filter_func(iterator):
             for pdf in iterator:
@@ -386,7 +388,26 @@ class UDFProfiler2TestsMixin:
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             df.mapInPandas(filter_func, df.schema).show()
 
-        self.assertEqual(0, len(self.profile_results), str(self.profile_results.keys()))
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=2)
+
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_perf_profiler_map_in_arrow(self):
+        import pyarrow as pa
+
+        df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age")).repartition(1)
+
+        def map_func(iterator: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            for batch in iterator:
+                yield pa.RecordBatch.from_arrays([batch.column("id"), pa.compute.add(batch.column("age"), 1)], ["id", "age"])
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df.mapInArrow(map_func, df.schema).show()
+
+        for id in self.profile_results:
+            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=2)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
