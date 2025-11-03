@@ -244,7 +244,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
     val sc = new SparkContext(conf)
     ssc = new StreamingContext(sc, Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
+    inputStream.foreachRDD(_.count())
     startStreamingContextAndCallStop(ssc)
     assert(ExtraStreamingListenerBatchCounter.COMPLETED_BATCH >= 1)
   }
