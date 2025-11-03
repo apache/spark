@@ -1888,6 +1888,12 @@
     ],
     "sqlState" : "42623"
   },
+  "GEO_ENCODER_SRID_MISMATCH_ERROR" : {
+    "message" : [
+      "Failed to encode <type> value because provided SRID <valueSrid> of a value to encode does not match type SRID: <typeSrid>."
+    ],
+    "sqlState" : "42K09"
+  },
   "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
     "message" : [
       "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
@@ -1965,6 +1971,12 @@
       "Invalid call to <function>; the `lgConfigK` value must be between <min> and <max>, inclusive: <value>."
     ],
     "sqlState" : "22546"
+  },
+  "HLL_K_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `K` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
   },
   "HLL_UNION_DIFFERENT_LG_K" : {
     "message" : [
@@ -5750,6 +5762,12 @@
       "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
     ],
     "sqlState" : "22546"
+  },
+  "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
   },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [

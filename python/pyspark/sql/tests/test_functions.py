@@ -2805,6 +2805,23 @@ class FunctionsTestsMixin:
         result_try_validate_utf8 = df.select(F.try_validate_utf8(df.a).alias("r"))
         assertDataFrameEqual([Row(r="abc")], result_try_validate_utf8)
 
+    # Geospatial ST Functions
+
+    def test_st_asbinary(self):
+        df = self.spark.createDataFrame(
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"),)],
+            ["wkb"],
+        )
+        results = df.select(
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"))),
+        ).collect()
+        expected = Row(
+            "0101000000000000000000F03F0000000000000040",
+            "0101000000000000000000F03F0000000000000040",
+        )
+        self.assertEqual(results, [expected])
+
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
     pass
